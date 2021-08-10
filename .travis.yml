@@ -1,6 +1,6 @@
 language: python
 python:
-  - "3.6" # TODO use this version of 3.7?
+  - "3.7"
 install:
   - make develop
 script:
