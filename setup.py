@@ -15,7 +15,8 @@ with open(os.path.join(this_directory, 'dimelo', '_version.py'), 'wt') as fversi
 REQUIRED_PACKAGES=['matplotlib>=3.4.2',
                     'pytest==6.2.4',
                     'pandas',
-                    'pysam==0.15.3']
+                    'pysam==0.15.3',
+                    'numpy>=1.20.3']
 
 # Read in the project description. We define this in the README file.
 with open("README.md", "r") as fh:
