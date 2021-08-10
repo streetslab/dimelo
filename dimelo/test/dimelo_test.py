@@ -5,7 +5,7 @@ from dimelo.functions import *
 import os
 from subprocess import Popen, PIPE, STDOUT
 
-class TestMAPQ(MAPQTestCase):
+class TestMAPQ(DiMeLoTestCase):
 
     def test_PrintDictionaryToTab(self):
 

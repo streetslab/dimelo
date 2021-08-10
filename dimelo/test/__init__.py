@@ -3,7 +3,7 @@ import sys
 import tempfile
 import unittest
 
-class DimeLoTestCase(unittest.TestCase):
+class DiMeLoTestCase(unittest.TestCase):
 
 	def tmpFile(self):
 		tempFile = tempfile.NamedTemporaryFile(delete=True)

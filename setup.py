@@ -12,7 +12,7 @@ with open(os.path.join(this_directory, 'dimelo', '_version.py'), 'wt') as fversi
 
 # Define required packages. Alternatively, these could be defined in a separate
 # file and read in here.
-REQUIRED_PACKAGES=['matplotlib>=3.3.2',
+REQUIRED_PACKAGES=['matplotlib>=3.4.2',
                     'pytest==6.2.4',
                     'pandas',
                     'pysam==0.15.3']
