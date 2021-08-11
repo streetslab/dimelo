@@ -26,7 +26,7 @@ setuptools.setup(
     name="dimelo",                                                  # name of project
     install_requires=REQUIRED_PACKAGES,                             # all requirements used by this package
     version=this_version,                                           # project version, read from version.py
-    author="Annie Maslan & Reet Mishra",                            # Author, shown on PyPI
+    author="Annie Maslan & Reet Mishra & Ryan Keivanfar",           # Author, shown on PyPI
     scripts = ['bin/dimelo-preprocess', 'bin/dimelo-plot'],         # command line scripts installed
     author_email="amaslan@berkeley.edu",                            # Author email
     description="Tool for analyzing modified bases from BAM files", # Short description of project
