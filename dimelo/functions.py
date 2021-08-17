@@ -13,11 +13,8 @@ PlotMAPQHelper functions
 import matplotlib.pyplot as plt
 
 
-def PrintDictionaryToTab(keyHeader,
-                    valueHeader,
-                    dictIn,
-                    filePath):
-    """ Write out dictIn to a tab-delimited file.
+def PrintDictionaryToTab(keyHeader, valueHeader, dictIn, filePath):
+    """Write out dictIn to a tab-delimited file.
     Args:
         :param keyHeader: title of header for keys
         :param valueHeader: title of header for values
@@ -25,15 +22,14 @@ def PrintDictionaryToTab(keyHeader,
         :param filePath: filePath to save results to
     """
 
-    with open(filePath,'w') as f:
+    with open(filePath, "w") as f:
         f.write(keyHeader + "\t" + valueHeader + "\n")
         for key in dictIn.keys():
             f.write(str(key) + "\t" + str(dictIn[key]) + "\n")
 
-def SaveMAPQHistogram(dictIn,
-                    filePath,
-                    title="MAPQ"):
-    """ Plots and saves dictIn to a histogram.
+
+def SaveMAPQHistogram(dictIn, filePath, title="MAPQ"):
+    """Plots and saves dictIn to a histogram.
     Args:
         :param dictIn: dictionary of (k,v) where k indicates mapq and v indicates
             frequency.
