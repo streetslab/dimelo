@@ -9,7 +9,9 @@ from version import version as this_version
 
 # write version to dimelo directory so it can be accessed by the command line
 this_directory = os.path.abspath(os.path.dirname(__file__))
-with open(os.path.join(this_directory, "dimelo", "_version.py"), "wt") as fversion:
+with open(
+    os.path.join(this_directory, "dimelo", "_version.py"), "wt"
+) as fversion:
     fversion.write('__version__ = "' + this_version + '"')
 
 # Define required packages. Alternatively, these could be defined in a separate

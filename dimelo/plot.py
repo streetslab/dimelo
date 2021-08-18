@@ -17,6 +17,7 @@ import traceback
 import pysam
 
 from ._version import __version__
+
 # You can import relative imports from your package. To do this, you can specify
 # the relative path of the module you would like to import. In this case,
 # we will import the module functions, which is a directory up in PlotMAPQ.
@@ -67,7 +68,10 @@ def main():
     )
 
     parser.add_argument(
-        "-v", "--version", action="store_true", help="Show software version and exit"
+        "-v",
+        "--version",
+        action="store_true",
+        help="Show software version and exit",
     )
     args, argv = parser.parse_known_args()
 
@@ -77,13 +81,19 @@ def main():
         sys.exit()
 
     parser.add_argument("bamIn", type=str, help="Enter the input bam file.")
-    parser.add_argument("sampleName", type=str, help="Enter the name of your sample.")
+    parser.add_argument(
+        "sampleName", type=str, help="Enter the name of your sample."
+    )
     parser.add_argument(
         "dirOut", type=str, help="Output folder for plot and spreadsheet"
     )
 
     parser.add_argument(
-        "-q", "--quiet", action="store_true", dest="quiet", help="Suppress progress"
+        "-q",
+        "--quiet",
+        action="store_true",
+        dest="quiet",
+        help="Suppress progress",
     )
 
     args = parser.parse_args()
@@ -96,7 +106,9 @@ def main():
             "  [Exception type: %s, raised in %s:%d]\n"
             % (
                 sys.exc_info()[1].__class__.__name__,
-                os.path.basename(traceback.extract_tb(sys.exc_info()[2])[-1][0]),
+                os.path.basename(
+                    traceback.extract_tb(sys.exc_info()[2])[-1][0]
+                ),
                 traceback.extract_tb(sys.exc_info()[2])[-1][1],
             )
         )
