@@ -12,7 +12,7 @@ plot
 # You can import relative imports from your package. To do this, you can specify
 # the relative path of the module you would like to import. In this case,
 # we will import the module functions, which is a directory up in PlotMAPQ.
-from .functions import *
+from .functions import PrintDictionaryToTab, SaveMAPQHistogram
 import sys
 import pysam
 import argparse
@@ -88,7 +88,7 @@ def main():
 
     try:
         plot_mapq(args.bamIn, args.sampleName, args.dirOut, args.quiet)
-    except:
+    except Exception:
         sys.stderr.write("  %s\n" % str(sys.exc_info()[1]))
         sys.stderr.write(
             "  [Exception type: %s, raised in %s:%d]\n"

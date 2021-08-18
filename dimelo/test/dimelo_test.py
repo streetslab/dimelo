@@ -1,9 +1,8 @@
 import unittest
 import pandas as pd
 from dimelo.test import DiMeLoTestCase
-from dimelo.functions import *
+from dimelo.functions import PrintDictionaryToTab, SaveMAPQHistogram
 import os
-from subprocess import Popen, PIPE, STDOUT
 
 
 class TestMAPQ(DiMeLoTestCase):
