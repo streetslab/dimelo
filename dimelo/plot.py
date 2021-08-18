@@ -9,16 +9,18 @@ plot
   main
 """
 
+import argparse
+import os
+import sys
+import traceback
+
+import pysam
+
+from ._version import __version__
 # You can import relative imports from your package. To do this, you can specify
 # the relative path of the module you would like to import. In this case,
 # we will import the module functions, which is a directory up in PlotMAPQ.
 from .functions import PrintDictionaryToTab, SaveMAPQHistogram
-import sys
-import pysam
-import argparse
-import os
-import traceback
-from ._version import __version__
 
 
 def plot_mapq(bamIn, sampleName, dirOut, quiet):

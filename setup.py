@@ -1,8 +1,10 @@
 # The setup.py file is used as the build script for setuptools. Setuptools is a
 # package that allows you to easily build and distribute Python distributions.
 
-import setuptools
 import os
+
+import setuptools
+
 from version import version as this_version
 
 # write version to dimelo directory so it can be accessed by the command line

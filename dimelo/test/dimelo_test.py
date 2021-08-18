@@ -1,8 +1,10 @@
-import unittest
-import pandas as pd
-from dimelo.test import DiMeLoTestCase
-from dimelo.functions import PrintDictionaryToTab, SaveMAPQHistogram
 import os
+import unittest
+
+import pandas as pd
+
+from dimelo.functions import PrintDictionaryToTab, SaveMAPQHistogram
+from dimelo.test import DiMeLoTestCase
 
 
 class TestMAPQ(DiMeLoTestCase):
