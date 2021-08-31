@@ -43,3 +43,8 @@ def create_methylation_objects():
     # 10. winnow_guppy      A+CG    center=True
     # 11. winnow_guppy      A+CG    center=False
     return all_data_combined
+
+
+def extract_methylation_data_subset(data, index, read_name):
+    # returns a dataframe subset for given methylation data and read name
+    return data[index][data[index]["read_name"] == read_name]

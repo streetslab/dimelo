@@ -56,7 +56,7 @@ def parse_ont_bam(
             :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
             :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True
     Return:
-            dataframe with: read_name, strand, position, quality, mod
+            dataframe with: read_name, strand, position, probability, mod
     """
     # make a region object for each row of bedFile
     bed = pd.read_csv(bedFile, sep="\t", header=None)
@@ -100,10 +100,10 @@ def parse_ont_bam_by_window(
         reference=window.chromosome, start=window.begin, end=window.end
     ):
         [
-            (mod, positions, quals),
-            (mod2, positions2, quals2),
+            (mod, positions, probs),
+            (mod2, positions2, probs2),
         ] = get_modified_reference_positions(read, basemod, window, center)
-        for pos, qual in zip(positions, quals):
+        for pos, prob in zip(positions, probs):
             if pos is not None:
                 if (center is True and abs(pos) <= windowSize) or (
                     center is False and pos > window.begin and pos < window.end
@@ -113,11 +113,11 @@ def parse_ont_bam_by_window(
                             read.query_name,
                             "-" if read.is_reverse else "+",
                             pos,
-                            qual,
+                            prob,
                             mod,
                         )
                     )
-        for pos, qual in zip(positions2, quals2):
+        for pos, prob in zip(positions2, probs2):
             if pos is not None:
                 if (center is True and abs(pos) <= windowSize) or (
                     center is False and pos > window.begin and pos < window.end
@@ -127,15 +127,15 @@ def parse_ont_bam_by_window(
                             read.query_name,
                             "-" if read.is_reverse else "+",
                             pos,
-                            qual,
+                            prob,
                             mod2,
                         )
                     )
     data_return = Methylation(
         table=pd.DataFrame(
-            data, columns=["read_name", "strand", "pos", "quality", "mod"]
+            data, columns=["read_name", "strand", "pos", "prob", "mod"]
         )
-        .astype(dtype={"mod": "category", "pos": "float", "quality": "int16"})
+        .astype(dtype={"mod": "category", "pos": "float", "prob": "int16"})
         .sort_values(["read_name", "pos"]),
         data_type="ont-bam",
         name=sampleName,
