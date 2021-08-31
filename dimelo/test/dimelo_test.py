@@ -4,8 +4,10 @@ import unittest
 import pandas as pd
 
 from dimelo.functions import PrintDictionaryToTab, SaveMAPQHistogram
-from dimelo.parse_bam import parse_ont_bam
+
+# from dimelo.parse_bam import parse_ont_bam
 from dimelo.test import DiMeLoTestCase
+from dimelo.test.helper.test_utils import create_methylation_objects
 
 
 class TestDiMeLo(DiMeLoTestCase):
@@ -30,7 +32,7 @@ class TestDiMeLo(DiMeLoTestCase):
         SaveMAPQHistogram(dictIn, filePath, title="MAPQ")
         assert os.path.exists(filePath)
 
-    def test_parse_ont_bam(self):
+    def test_parse_ont_bam_number(self):
         """
         This function calls helper functions:
         - parse_ont_bam_by_window
@@ -45,30 +47,9 @@ class TestDiMeLo(DiMeLoTestCase):
         'f2f51b7c-7818-4771-9101-258a6ee8ecb4',
         '35dbe94b-025a-4d0c-94e5-724bb2bdba0d',
         '360915ea-cab1-4bf4-85ea-2eaa3e79e5a8'
+        This is testing correct number of bases are extracted
         """
-        fileNames = [
-            "dimelo/test/data/mod_mappings_subset.bam",
-            "dimelo/test/data/winnowmap_guppy_merge_subset.bam",
-        ]
-        sampleName = "test"
-        bedFile = "dimelo/test/data/test.bed"
-        basemods = ["A", "CG", "A+CG"]
-        centers = [True, False]
-        windowSize = 1000
-
-        all_tests = []
-        for fileName in fileNames:
-            for basemod in basemods:
-                for center in centers:
-                    all_data = parse_ont_bam(
-                        fileName,
-                        sampleName,
-                        bedFile,
-                        basemod,
-                        center,
-                        windowSize,
-                    )
-                    all_tests.append(all_data)
+        all_tests = create_methylation_objects()
 
         # test extracting correct number of bases
         assert all_tests[0].shape == (
@@ -138,8 +119,44 @@ class TestDiMeLo(DiMeLoTestCase):
         # ]
 
         # test positions parsed correctly
+        def test_parse_ont_bam_position(self):
+            """
+            This function calls helper functions:
+            - parse_ont_bam_by_window
+            - get_modified_reference_positions
+            - get_mod_reference_positions_by_mod
+            Therefore, tests all four total functions in parse_bam.py.
+            Tests under various conditions:
+            - Bam: megalodon or guppy+winnowmap
+            - Basemod: A, CG or A+CG
+            - Center: True or False
+            For reference, read names extracted are:
+            'f2f51b7c-7818-4771-9101-258a6ee8ecb4',
+            '35dbe94b-025a-4d0c-94e5-724bb2bdba0d',
+            '360915ea-cab1-4bf4-85ea-2eaa3e79e5a8'
+            This is testing correct positions of bases are extracted
+            """
+            assert 1 == 1
 
         # test qualities parsed correctly
+        def test_parse_ont_bam_probability(self):
+            """
+            This function calls helper functions:
+            - parse_ont_bam_by_window
+            - get_modified_reference_positions
+            - get_mod_reference_positions_by_mod
+            Therefore, tests all four total functions in parse_bam.py.
+            Tests under various conditions:
+            - Bam: megalodon or guppy+winnowmap
+            - Basemod: A, CG or A+CG
+            - Center: True or False
+            For reference, read names extracted are:
+            'f2f51b7c-7818-4771-9101-258a6ee8ecb4',
+            '35dbe94b-025a-4d0c-94e5-724bb2bdba0d',
+            '360915ea-cab1-4bf4-85ea-2eaa3e79e5a8'
+            This is testing correct probabilities of methylation are extracted
+            """
+            assert 1 == 1
 
 
 if __name__ == "__main__":
