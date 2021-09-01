@@ -1,6 +1,6 @@
 r"""
 =================================================
-Functions to parse input bams. Called by plot.py.
+Functions to parse input bams.
 =================================================
 """
 
