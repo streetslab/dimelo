@@ -23,9 +23,8 @@ class Region(object):
         self.end = region[1][2]
         self.size = self.end - self.begin
         self.string = f"{self.chromosome}_{self.begin}_{self.end}"
-        self.strand = region[1][
-            3
-        ]  # strand of motif to orient single molecules
+        # strand of motif to orient single molecules
+        self.strand = region[1][3]
 
 
 class Methylation(object):
