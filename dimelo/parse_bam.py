@@ -55,7 +55,7 @@ def parse_ont_bam(
             :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
             :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True
     Return:
-            dataframe with: read_name, strand, position, probability, mod
+            dataframe with: read_name, strand, chr, position, probability, mod
     """
     # make a region object for each row of bedFile
     bed = pd.read_csv(bedFile, sep="\t", header=None)
@@ -111,6 +111,7 @@ def parse_ont_bam_by_window(
                         (
                             read.query_name,
                             "-" if read.is_reverse else "+",
+                            window.chromosome,
                             pos,
                             prob,
                             mod,
@@ -125,6 +126,7 @@ def parse_ont_bam_by_window(
                         (
                             read.query_name,
                             "-" if read.is_reverse else "+",
+                            window.chromosome,
                             pos,
                             prob,
                             mod2,
@@ -132,7 +134,7 @@ def parse_ont_bam_by_window(
                     )
     data_return = Methylation(
         table=pd.DataFrame(
-            data, columns=["read_name", "strand", "pos", "prob", "mod"]
+            data, columns=["read_name", "strand", "chr", "pos", "prob", "mod"]
         )
         .astype(dtype={"mod": "category", "prob": "int16"})
         .sort_values(["read_name", "pos"]),

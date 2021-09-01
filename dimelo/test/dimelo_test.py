@@ -57,51 +57,51 @@ class TestDiMeLo(DiMeLoTestCase):
         # test extracting correct number of bases
         assert all_tests[0].shape == (
             823,
-            5,
+            6,
         )  # mod_mappings_subset.bam, A, center=True
         assert all_tests[1].shape == (
             175,
-            5,
+            6,
         )  # mod_mappings_subset.bam, A, center=False
         assert all_tests[2].shape == (
             68,
-            5,
+            6,
         )  # mod_mappings_subset.bam, CG, center=True
         assert all_tests[3].shape == (
             7,
-            5,
+            6,
         )  # mod_mappings_subset.bam, CG, center=False
         assert all_tests[4].shape == (
             891,
-            5,
+            6,
         )  # mod_mappings_subset.bam, A+CG, center=True
         assert all_tests[5].shape == (
             182,
-            5,
+            6,
         )  # mod_mappings_subset.bam, A+CG, center=False
         assert all_tests[6].shape == (
             48,
-            5,
+            6,
         )  # winnowmap_guppy_merge_subset.bam, A, center=True
         assert all_tests[7].shape == (
             6,
-            5,
+            6,
         )  # winnowmap_guppy_merge_subset.bam, A, center=False
         assert all_tests[8].shape == (
             15,
-            5,
+            6,
         )  # winnowmap_guppy_merge_subset.bam, CG, center=True
         assert all_tests[9].shape == (
             2,
-            5,
+            6,
         )  # winnowmap_guppy_merge_subset.bam, CG, center=False
         assert all_tests[10].shape == (
             63,
-            5,
+            6,
         )  # winnowmap_guppy_merge_subset.bam, A+CG, center=True
         assert all_tests[11].shape == (
             8,
-            5,
+            6,
         )  # winnowmap_guppy_merge_subset.bam, A+CG, center=False
 
     def test_parse_ont_bam_position(self):
