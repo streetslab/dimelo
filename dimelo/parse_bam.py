@@ -134,7 +134,7 @@ def parse_ont_bam_by_window(
         table=pd.DataFrame(
             data, columns=["read_name", "strand", "pos", "prob", "mod"]
         )
-        .astype(dtype={"mod": "category", "pos": "float", "prob": "int16"})
+        .astype(dtype={"mod": "category", "prob": "int16"})
         .sort_values(["read_name", "pos"]),
         data_type="ont-bam",
         name=sampleName,
