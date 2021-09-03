@@ -32,7 +32,8 @@ def enrich_sm_roi(
     bedFile,
     basemod,
     outDir,
-    thresh,
+    threshA=128,
+    threshC=128,
     windowSize=1000,
     colorA=COLOR_A,
     colorC=COLOR_C,
@@ -45,7 +46,8 @@ def enrich_sm_roi(
             :param bedFile: specified windows for regions of interest
             :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
             :param outDir: directory to output plot
-            :param thresh: threshold for coloring a position as methylated
+            :param threshA: threshold for calling mA
+            :param threshC: threshold for calling mCG
             :param windowSize: window size around center point of feature of interest to plot (+/-); default 1000 bp
             :param colorA: color in hex for mA
             :param colorC: color in hex for mCG
@@ -63,7 +65,11 @@ def enrich_sm_roi(
     )
 
     # only keep calls with probability above threshold
-    all_data_t = all_data[all_data["prob"] >= thresh]
+    # all_data_t = all_data[all_data["prob"] >= thresh]
+    all_data_t = all_data[
+        (all_data["prob"] >= threshA and all_data["mod"].str.contains("A"))
+        or (all_data["prob"] >= threshC and all_data["mod"].str.contains("C"))
+    ]
 
     print(
         "processing "
@@ -76,9 +82,7 @@ def enrich_sm_roi(
     print(
         "processing "
         + str(len(all_data_t["read_name"].unique()))
-        + " reads with methylation > "
-        + thresh
-        + " for "
+        + " reads with methylation above threshold for "
         + sampleName
         + " for bam: "
         + fileName
@@ -119,7 +123,8 @@ def browser_sm_roi(
     window,
     basemod,
     outDir,
-    thresh,
+    threshA=128,
+    threshC=128,
     bedFileFeatures=None,
     colorA=COLOR_A,
     colorC=COLOR_C,
@@ -134,7 +139,8 @@ def browser_sm_roi(
             :param window: formatted as for example: "chr1:1-100000"
             :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
             :param outDir: directory to output plot
-            :param thresh: threshold for coloring a position as methylated
+            :param threshA: threshold for calling mA
+            :param threshC: threshold for calling mCG
             :param bedFileFeatures: annotation to display in browser (optional); default None
             :param colorA: color in hex for mA
             :param colorC: color in hex for mCG
@@ -158,7 +164,8 @@ def browser_sm_roi(
         bed=bedFileFeatures,
         dotsize=dotsize,
         static=static,
-        thresh=thresh,
+        threshA=threshA,
+        threshC=threshC,
         colorA=colorA,
         colorC=colorC,
     )

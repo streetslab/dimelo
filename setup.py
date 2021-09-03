@@ -26,6 +26,7 @@ REQUIRED_PACKAGES = [
     "plotly==4.14.3",
     "seaborn",
     "pyranges",
+    "psutil==5.8.0",
 ]
 
 # Read in the project description. We define this in the README file.

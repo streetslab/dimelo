@@ -12,7 +12,8 @@ import pyranges as pr
 
 COLOR_A = "#053C5E"
 COLOR_C = "#BB4430"
-DEFAULT_THRESH = 128
+DEFAULT_THRESH_A = 128
+DEFAULT_THRESH_C = 128
 
 
 class DataTraces(object):
@@ -73,7 +74,12 @@ def create_output(fig, outfile, window, static, outDir):
 
 
 def methylation(
-    meth_data, colorA=COLOR_A, colorC=COLOR_C, dotsize=4, thresh=DEFAULT_THRESH
+    meth_data,
+    colorA=COLOR_A,
+    colorC=COLOR_C,
+    dotsize=4,
+    threshA=DEFAULT_THRESH_A,
+    threshC=DEFAULT_THRESH_C,
 ):
     """
     Plot methylation traces from various data types
@@ -88,7 +94,8 @@ def methylation(
                 colorA=colorA,
                 colorC=colorC,
                 dotsize=dotsize,
-                thresh=thresh,
+                threshA=threshA,
+                threshC=threshC,
             )
         )
         types.append(meth.data_type)
@@ -97,7 +104,13 @@ def methylation(
 
 
 def make_per_read_meth_traces_phred(
-    table, colorA, colorC, max_cov=1000, dotsize=4, thresh=128
+    table,
+    colorA,
+    colorC,
+    max_cov=1000,
+    dotsize=4,
+    threshA=DEFAULT_THRESH_A,
+    threshC=DEFAULT_THRESH_C,
 ):
     """Make traces for each read"""
     minmax_table = find_min_and_max_pos_per_read(table)
@@ -129,7 +142,7 @@ def make_per_read_meth_traces_phred(
     if read_table_mC is not None:
         traces.append(
             make_per_position_phred_scatter(
-                read_table=read_table_mC[read_table_mC["prob"] > thresh],
+                read_table=read_table_mC[read_table_mC["prob"] > threshC],
                 mod="mC",
                 dotsize=dotsize,
                 colorscale=cmapC,
@@ -139,7 +152,7 @@ def make_per_read_meth_traces_phred(
     if read_table_mA is not None:
         traces.append(
             make_per_position_phred_scatter(
-                read_table=read_table_mA[read_table_mA["prob"] > thresh],
+                read_table=read_table_mA[read_table_mA["prob"] > threshA],
                 mod="mA",
                 dotsize=dotsize,
                 colorscale=cmapA,
@@ -240,7 +253,8 @@ def meth_browser(
     outfile=None,
     dotsize=4,
     static=False,
-    thresh=DEFAULT_THRESH,
+    threshA=DEFAULT_THRESH_A,
+    threshC=DEFAULT_THRESH_C,
     colorA=COLOR_A,
     colorC=COLOR_C,
 ):
@@ -251,7 +265,12 @@ def meth_browser(
     the trace to be used for annotation is thus always num_methrows + 1
     """
     meth_traces = methylation(
-        meth_data, colorA=colorA, colorC=colorC, dotsize=dotsize, thresh=thresh
+        meth_data,
+        colorA=colorA,
+        colorC=colorC,
+        dotsize=dotsize,
+        threshA=threshA,
+        threshC=threshC,
     )
 
     num_methrows = len(meth_data)
