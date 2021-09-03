@@ -25,6 +25,7 @@ REQUIRED_PACKAGES = [
     "joblib==1.0.1",
     "plotly==4.14.3",
     "seaborn",
+    "pyranges",
 ]
 
 # Read in the project description. We define this in the README file.

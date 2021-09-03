@@ -36,7 +36,7 @@ def enrich_sm_roi(
     windowSize=1000,
     colorA=COLOR_A,
     colorC=COLOR_C,
-    size=0.5,
+    dotsize=0.5,
 ):
     """Create single molecule plots centered at region of interest.
     Args:
@@ -49,7 +49,7 @@ def enrich_sm_roi(
             :param windowSize: window size around center point of feature of interest to plot (+/-); default 1000 bp
             :param colorA: color in hex for mA
             :param colorC: color in hex for mCG
-            :param size: size of points
+            :param dotsize: size of points
     Return:
             plot of single molecules centered at region of interest
     """
@@ -65,6 +65,25 @@ def enrich_sm_roi(
     # only keep calls with probability above threshold
     all_data_t = all_data[all_data["prob"] >= thresh]
 
+    print(
+        "processing "
+        + str(len(all_data["read_name"].unique()))
+        + " reads for "
+        + sampleName
+        + " for bam: "
+        + fileName
+    )
+    print(
+        "processing "
+        + str(len(all_data_t["read_name"].unique()))
+        + " reads with methylation > "
+        + thresh
+        + " for "
+        + sampleName
+        + " for bam: "
+        + fileName
+    )
+
     fig = plt.figure()
 
     colors = {"A+Y": colorA, "A+a": colorA, "C+Z": colorC, "C+m": colorC}
@@ -75,7 +94,7 @@ def enrich_sm_roi(
         y="read_name",
         hue="mod",
         palette=colors,
-        s=size,
+        s=dotsize,
         marker="s",
         linewidth=0,
         legend=None,
@@ -104,7 +123,7 @@ def browser_sm_roi(
     bedFileFeatures=None,
     colorA=COLOR_A,
     colorC=COLOR_C,
-    size=2,
+    dotsize=2,
     static=False,
 ):
     """
@@ -119,7 +138,7 @@ def browser_sm_roi(
             :param bedFileFeatures: annotation to display in browser (optional); default None
             :param colorA: color in hex for mA
             :param colorC: color in hex for mCG
-            :param size: size of points; default 2
+            :param dotsize: size of points; default 2
             :param static: produce pdf if True, produe html if False; default False
     Return:
             plot of single molecules centered at region of interest
@@ -137,7 +156,7 @@ def browser_sm_roi(
         window=Region(window),
         outDir=outDir,
         bed=bedFileFeatures,
-        dotsize=size,
+        dotsize=dotsize,
         static=static,
         thresh=thresh,
         colorA=colorA,
