@@ -11,7 +11,7 @@ from dimelo.test.helper.test_utils import (
 )
 
 # from dimelo.parse_bam import parse_ont_bam
-from dimelo.visualize import browser_sm_roi, enrich_sm_roi
+# from dimelo.visualize import browser_sm_roi, enrich_sm_roi
 
 
 class TestDiMeLo(DiMeLoTestCase):
@@ -466,34 +466,36 @@ class TestDiMeLo(DiMeLoTestCase):
                     == sub_wg_nocenter_ACG_KEY_fwd
                 )
 
-    def test_enrich_sm_roi(self):
-        dirPath = self.tmpFile()
-        enrich_sm_roi(
-            "dimelo/test/data/mod_mappings_subset.bam",
-            "test",
-            "dimelo/test/data/test.bed",
-            "A+CG",
-            dirPath,
-            0,
-            windowSize=500,
-            size=2,
-        )
-        assert os.path.exists(dirPath + "test_A+CG_sm_scatter.png")
+    # TODO add md5sum check for plot
+    # def test_enrich_sm_roi(self):
+    #     dirPath = self.tmpFile()
+    #     enrich_sm_roi(
+    #         "dimelo/test/data/mod_mappings_subset.bam",
+    #         "test",
+    #         "dimelo/test/data/test.bed",
+    #         "A+CG",
+    #         dirPath,
+    #         0,
+    #         windowSize=500,
+    #         size=2,
+    #     )
+    #     assert os.path.exists(dirPath + "test_A+CG_sm_scatter.png")
 
-    def test_browser_sm_roi(self):
-        dirPath = self.tmpFile()
-        browser_sm_roi(
-            ["dimelo/test/data/mod_mappings_subset.bam"],
-            ["test"],
-            "chr1:7504361-7506361",
-            "A+CG",
-            "/Users/annie/test",
-            0,
-            static=True,
-        )
-        assert os.path.exists(
-            dirPath + "methylation_browser_chr1_7504361_7506361.html"
-        )
+    # TODO add md5sum check for plot
+    # def test_browser_sm_roi(self):
+    #     dirPath = self.tmpFile()
+    #     browser_sm_roi(
+    #         ["dimelo/test/data/mod_mappings_subset.bam"],
+    #         ["test"],
+    #         "chr1:7504361-7506361",
+    #         "A+CG",
+    #         "/Users/annie/test",
+    #         0,
+    #         static=True,
+    #     )
+    #     assert os.path.exists(
+    #         dirPath + "methylation_browser_chr1_7504361_7506361.html"
+    #     )
 
 
 if __name__ == "__main__":
