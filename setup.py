@@ -23,6 +23,8 @@ REQUIRED_PACKAGES = [
     "pysam==0.15.3",
     "numpy>=1.20.3",
     "joblib==1.0.1",
+    "plotly==4.14.3",
+    "seaborn",
 ]
 
 # Read in the project description. We define this in the README file.
