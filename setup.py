@@ -19,7 +19,7 @@ with open(
 REQUIRED_PACKAGES = [
     "matplotlib==3.4.2",
     "pytest==6.2.4",
-    "pandas==1",
+    "pandas==1.3.2",
     "pysam==0.15.3",
     "numpy==1.20.3",
     "joblib==1.0.1",
