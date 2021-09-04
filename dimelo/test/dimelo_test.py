@@ -474,10 +474,10 @@ class TestDiMeLo(DiMeLoTestCase):
     #         "test",
     #         "dimelo/test/data/test.bed",
     #         "A+CG",
-    #         dirPath,
-    #         0,
+    #         "Users/annie/Desktop/test",
+    #         threshA=0, threshC=200,
     #         windowSize=500,
-    #         size=2,
+    #         dotsize=2,
     #     )
     #     assert os.path.exists(dirPath + "test_A+CG_sm_scatter.png")
 
@@ -489,8 +489,8 @@ class TestDiMeLo(DiMeLoTestCase):
     #         ["test"],
     #         "chr1:7504361-7506361",
     #         "A+CG",
-    #         "/Users/annie/test",
-    #         0,
+    #         "/Users/annie/Desktop/dimelo_test",
+    #         threshA=0, threshC=200,
     #         static=True,
     #     )
     #     assert os.path.exists(

@@ -178,7 +178,7 @@ def make_per_position_phred_scatter(
             color=read_table["prob"],
             colorscale=colorscale,
             colorbar=dict(
-                title=mod + " modification probability",
+                title=mod + " probability",
                 titleside="right",
                 tickvals=[read_table["prob"].min(), read_table["prob"].max()],
                 ticktext=[

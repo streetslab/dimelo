@@ -67,8 +67,8 @@ def enrich_sm_roi(
     # only keep calls with probability above threshold
     # all_data_t = all_data[all_data["prob"] >= thresh]
     all_data_t = all_data[
-        (all_data["prob"] >= threshA and all_data["mod"].str.contains("A"))
-        or (all_data["prob"] >= threshC and all_data["mod"].str.contains("C"))
+        (all_data["prob"] >= threshA & all_data["mod"].str.contains("A"))
+        | (all_data["prob"] >= threshC & all_data["mod"].str.contains("C"))
     ]
 
     print(
