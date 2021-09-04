@@ -27,7 +27,7 @@ REQUIRED_PACKAGES = [
     "seaborn",
     "pyranges",
     "psutil==5.8.0",
-    "cyton==0.29.24",
+    "cython==0.29.24",
 ]
 
 # Read in the project description. We define this in the README file.
