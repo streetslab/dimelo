@@ -10,9 +10,6 @@ from dimelo.test.helper.test_utils import (
     extract_methylation_data_subset,
 )
 
-# from dimelo.parse_bam import parse_ont_bam
-# from dimelo.visualize import browser_sm_roi, enrich_sm_roi
-
 
 class TestDiMeLo(DiMeLoTestCase):
     def test_PrintDictionaryToTab(self):

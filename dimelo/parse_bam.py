@@ -38,7 +38,7 @@ class Methylation(object):
 ####################################################################################
 # extracting modified base info from bams
 ####################################################################################
-def parse_ont_bam(
+def parse_bam(
     fileName,
     sampleName,
     bedFile=None,

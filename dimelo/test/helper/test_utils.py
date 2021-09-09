@@ -1,6 +1,6 @@
 # helper functions for dimelo_test.py
 
-from dimelo.parse_bam import parse_ont_bam
+from dimelo.parse_bam import parse_bam
 
 
 def create_methylation_objects():
@@ -19,7 +19,7 @@ def create_methylation_objects():
     for fileName in fileNames:
         for basemod in basemods:
             for center in centers:
-                all_data = parse_ont_bam(
+                all_data = parse_bam(
                     fileName,
                     sampleName,
                     bedFile,
