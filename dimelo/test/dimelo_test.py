@@ -4,8 +4,6 @@ import unittest
 import pandas as pd
 
 from dimelo.functions import PrintDictionaryToTab, SaveMAPQHistogram
-
-# from dimelo.parse_bam import parse_ont_bam
 from dimelo.test import DiMeLoTestCase
 from dimelo.test.helper.test_utils import (
     create_methylation_objects,
@@ -464,6 +462,37 @@ class TestDiMeLo(DiMeLoTestCase):
                     sub_wg_nocenter_ACG["prob"].tolist()
                     == sub_wg_nocenter_ACG_KEY_fwd
                 )
+
+    # TODO add md5sum check for plot
+    # def test_enrich_sm_roi(self):
+    #     dirPath = self.tmpFile()
+    #     enrich_sm_roi(
+    #         "dimelo/test/data/mod_mappings_subset.bam",
+    #         "test",
+    #         "dimelo/test/data/test.bed",
+    #         "A+CG",
+    #         "Users/annie/Desktop/test",
+    #         threshA=0, threshC=200,
+    #         windowSize=500,
+    #         dotsize=2,
+    #     )
+    #     assert os.path.exists(dirPath + "test_A+CG_sm_scatter.png")
+
+    # TODO add md5sum check for plot
+    # def test_browser_sm_roi(self):
+    #     dirPath = self.tmpFile()
+    #     browser_sm_roi(
+    #         ["dimelo/test/data/mod_mappings_subset.bam"],
+    #         ["test"],
+    #         "chr1:7504361-7506361",
+    #         "A+CG",
+    #         "/Users/annie/Desktop/dimelo_test",
+    #         threshA=0, threshC=200,
+    #         static=True,
+    #     )
+    #     assert os.path.exists(
+    #         dirPath + "methylation_browser_chr1_7504361_7506361.html"
+    #     )
 
 
 if __name__ == "__main__":

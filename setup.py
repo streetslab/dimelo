@@ -17,12 +17,17 @@ with open(
 # Define required packages. Alternatively, these could be defined in a separate
 # file and read in here.
 REQUIRED_PACKAGES = [
-    "matplotlib>=3.4.2",
+    "matplotlib==3.4.2",
     "pytest==6.2.4",
-    "pandas",
+    "pandas==1.3.2",
     "pysam==0.15.3",
-    "numpy>=1.20.3",
+    "numpy==1.20.3",
     "joblib==1.0.1",
+    "plotly==4.14.3",
+    "seaborn==0.11.2",
+    "pyranges==0.0.104",
+    "psutil==5.8.0",
+    # "cython==0.29.24",
 ]
 
 # Read in the project description. We define this in the README file.

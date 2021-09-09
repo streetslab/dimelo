@@ -38,13 +38,14 @@ class Methylation(object):
 ####################################################################################
 # extracting modified base info from bams
 ####################################################################################
-def parse_ont_bam(
+def parse_bam(
     fileName,
     sampleName,
-    bedFile,
-    basemod,
+    bedFile=None,
+    basemod="A+CG",
     center=False,
     windowSize=None,
+    region=None,
 ):
     """Create methylation object. Process windows in parallel.
     Args:
@@ -57,26 +58,32 @@ def parse_ont_bam(
     Return:
             dataframe with: read_name, strand, chr, position, probability, mod
     """
-    # make a region object for each row of bedFile
-    bed = pd.read_csv(bedFile, sep="\t", header=None)
-    windows = []
-    for row in bed.iterrows():
-        windows.append(Region(row))
+    if bedFile is not None:
+        # make a region object for each row of bedFile
+        bed = pd.read_csv(bedFile, sep="\t", header=None)
+        windows = []
+        for row in bed.iterrows():
+            windows.append(Region(row))
 
-    num_cores = multiprocessing.cpu_count()
-    meth_data = Parallel(n_jobs=num_cores)(
-        delayed(parse_ont_bam_by_window)(
-            fileName, sampleName, basemod, windowSize, w, center
+        num_cores = multiprocessing.cpu_count()
+        meth_data = Parallel(n_jobs=num_cores)(
+            delayed(parse_ont_bam_by_window)(
+                fileName, sampleName, basemod, windowSize, w, center
+            )
+            for w in windows
         )
-        for w in windows
-    )
 
-    list_tables = []
-    for m in meth_data:
-        list_tables.append(m.table)
-    all_data = pd.concat(list_tables)
+        list_tables = []
+        for m in meth_data:
+            list_tables.append(m.table)
+        all_data = pd.concat(list_tables)
 
-    return all_data
+        return all_data
+
+    if region is not None:
+        return parse_ont_bam_by_window(
+            fileName, sampleName, basemod, windowSize, region, center
+        )
 
 
 def parse_ont_bam_by_window(
@@ -136,7 +143,15 @@ def parse_ont_bam_by_window(
         table=pd.DataFrame(
             data, columns=["read_name", "strand", "chr", "pos", "prob", "mod"]
         )
-        .astype(dtype={"mod": "category", "prob": "int16"})
+        .astype(
+            dtype={
+                "read_name": "category",
+                "strand": "category",
+                "chr": "category",
+                "mod": "category",
+                "prob": "int16",
+            }
+        )
         .sort_values(["read_name", "pos"]),
         data_type="ont-bam",
         name=sampleName,
