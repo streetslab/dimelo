@@ -40,8 +40,9 @@ setuptools.setup(
     version=this_version,  # project version, read from version.py
     author="Annie Maslan & Reet Mishra & Ryan Keivanfar",  # Author, shown on PyPI
     scripts=[
-        "bin/dimelo-preprocess",
-        "bin/dimelo-plot",
+        "bin/dimelo-browser-sm-roi",
+        "bin/dimelo-enrich-sm-roi",
+        "bin/dimelo-parse-bam",
     ],  # command line scripts installed
     author_email="amaslan@berkeley.edu",  # Author email
     description="Tool for analyzing modified bases from BAM files",  # Short description of project
