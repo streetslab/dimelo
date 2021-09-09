@@ -1,6 +1,0 @@
-#!/usr/bin/env python
-
-import dimelo.plot
-
-# call main() from plot, which takes in command line arguments.
-dimelo.plot.main()

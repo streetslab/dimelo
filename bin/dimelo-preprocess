@@ -1,6 +1,0 @@
-#!/usr/bin/env python
-
-import dimelo.preprocess
-
-# call main() from preprocess, which takes in command line arguments.
-dimelo.preprocess.main()

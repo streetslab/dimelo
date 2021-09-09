@@ -96,3 +96,8 @@ def enrich_sm_roi(
 
 # def plot_base_abundance:
 # def plot_aggregate_me_frac:
+
+
+def main():
+    # TODO add argument parsing
+    print("main")

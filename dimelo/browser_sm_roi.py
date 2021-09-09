@@ -75,3 +75,8 @@ def browser_sm_roi(
         colorA=colorA,
         colorC=colorC,
     )
+
+
+def main():
+    # TODO add argument parsing
+    print("main")

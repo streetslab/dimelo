@@ -1,0 +1,6 @@
+#!/usr/bin/env python
+
+import dimelo.browser_sm_roi
+
+# call main(), which takes in command line arguments.
+dimelo.browser_sm_roi.main()

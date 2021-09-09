@@ -279,3 +279,8 @@ def get_mod_reference_positions_by_mod(read, basemod, index, window, center):
         return (basemod, refpos_adjusted, probabilities[prob_keep])
     else:
         return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
+
+
+def main():
+    # TODO add argument parsing
+    print("main")
