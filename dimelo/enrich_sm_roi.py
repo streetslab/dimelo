@@ -80,7 +80,8 @@ def enrich_sm_roi(
         + fileName
     )
 
-    fig = plt.figure()
+    # fig = plt.figure()
+    fig, ax = plt.subplots()
 
     colors = {"A+Y": colorA, "A+a": colorA, "C+Z": colorC, "C+m": colorC}
 
@@ -95,6 +96,8 @@ def enrich_sm_roi(
         linewidth=0,
         legend=None,
     )
+
+    ax.spines[["top", "right", "left"]].set_visible(False)
 
     plt.yticks([])
     plt.ylabel("")
