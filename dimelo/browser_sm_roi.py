@@ -3,10 +3,12 @@
 
 import sys
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import plotly
 import plotly.graph_objs as go
 import pyranges as pr
+import seaborn as sns
 
 from dimelo.parse_bam import parse_bam
 
@@ -61,6 +63,8 @@ def browser_sm_roi(
     threshA=128,
     threshC=128,
     bedFileFeatures=None,
+    smooth=1000,
+    min_periods=100,
     colorA=COLOR_A,
     colorC=COLOR_C,
     dotsize=4,
@@ -87,16 +91,24 @@ def browser_sm_roi(
 
     w = Region(window)
 
-    all_data = [
+    all_data_dict = [
         parse_bam(f, n, basemod=basemod, region=w)
         for f, n in zip(fileNames, sampleNames)
     ]
 
+    all_data = [i[0] for i in all_data_dict]
+    all_dict = [i[1] for i in all_data_dict]
+
     meth_browser(
         meth_data=all_data,
+        all_dict=all_dict,
+        basemod=basemod,
         window=Region(window),
+        sampleNames=sampleNames,
         outDir=outDir,
         bed=bedFileFeatures,
+        smooth=smooth,
+        min_periods=min_periods,
         dotsize=dotsize,
         static=static,
         threshA=threshA,
@@ -319,8 +331,13 @@ def make_per_read_line_trace(read_range, y_pos, strand):
 
 def meth_browser(
     meth_data,
+    all_dict,
+    basemod,
     window,
+    sampleNames,
     outDir,
+    smooth,
+    min_periods,
     bed=False,
     outfile=None,
     dotsize=4,
@@ -385,6 +402,13 @@ def meth_browser(
             i["font"]["size"] = 10
     create_output(fig, outfile, window, static, outDir)
 
+    i = 0
+    for d in all_dict:
+        plot_aggregate(
+            sampleNames[i], d, smooth, min_periods, window, basemod, outDir
+        )
+        i = i + 1
+
 
 def bed_annotation(bed, window):
     return [
@@ -409,6 +433,92 @@ def parse_bed(bed, window):
         df["Name"] = "noname"
     df_short = df[df.columns[0:3]]
     return df_short.itertuples(index=False, name=None)
+
+
+def plot_aggregate(
+    sampleName, ave_dict, smooth, min_periods, window, basemod, outDir
+):
+    """
+    plot rolling aggregate of frac methylated
+    plot rolling aggregate of total bases
+    """
+    fig = plt.figure()
+    ave_df = pd.DataFrame.from_dict(
+        ave_dict, orient="index", columns=["mod_count", "total_count"]
+    )  # keys are rows
+    ave_df["pos"] = ave_df.index.to_series().str.split(":").str[0].astype(int)
+    ave_df["mod"] = ave_df.index.to_series().str.split(":").str[1]
+    ave_df["frac"] = ave_df["mod_count"] / ave_df["total_count"]
+
+    r = range(-window.begin, window.end + 1, 1)
+    if "A" in basemod:
+        frac_A = ave_df[ave_df["mod"].str.contains("A")]
+        for bp in r:
+            if bp not in frac_A["pos"].values:
+                df2 = {
+                    "pos": bp,
+                    "mod": "A",
+                    "mod_count": 0,
+                    "total_count": 0,
+                    "frac": 0,
+                }
+                frac_A = frac_A.append(df2, ignore_index=True)
+        frac_A.sort_values(by=["pos"], inplace=True)
+        frac_A_rolling = (
+            frac_A["frac"]
+            .rolling(window=smooth, min_periods=min_periods, center=True)
+            .mean()
+        )
+        total_A_rolling = (
+            frac_A["total_count"]
+            .rolling(window=smooth, min_periods=min_periods, center=True)
+            .mean()
+        )
+        sns.lineplot(x=r, y=frac_A_rolling, color="#053C5E")
+    if "C" in basemod:
+        frac_C = ave_df[ave_df["mod"].str.contains("C")]
+        for bp in r:
+            if bp not in frac_C["pos"].values:
+                df2 = {
+                    "pos": bp,
+                    "mod": "C",
+                    "mod_count": 0,
+                    "total_count": 0,
+                    "frac": 0,
+                }
+                frac_C = frac_C.append(df2, ignore_index=True)
+        frac_C.sort_values(by=["pos"], inplace=True)
+        frac_C_rolling = (
+            frac_C["frac"]
+            .rolling(window=smooth, min_periods=min_periods, center=True)
+            .mean()
+        )
+        total_C_rolling = (
+            frac_C["total_count"]
+            .rolling(window=smooth, min_periods=min_periods, center=True)
+            .mean()
+        )
+        sns.lineplot(x=r, y=frac_C_rolling, color="#BB4430")
+    plt.title(basemod)
+    plt.show()
+    fig.savefig(
+        outDir
+        + "/"
+        + sampleName
+        + "_"
+        + basemod
+        + "_sm_rolling_avg_fraction.pdf"
+    )
+
+    # plot total count coverage
+    fig = plt.figure()
+    sns.lineplot(x=r, y=total_A_rolling, color="#053C5E")
+    sns.lineplot(x=r, y=total_C_rolling, color="#BB4430")
+    plt.title(basemod)
+    plt.show()
+    fig.savefig(
+        outDir + "/" + sampleName + "_" + basemod + "_sm_rolling_avg_total.pdf"
+    )
 
 
 def main():

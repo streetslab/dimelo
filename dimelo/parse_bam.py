@@ -122,15 +122,18 @@ def parse_bam(
         # return all_data, AggregateDict.dict
 
     if region is not None:
-        return parse_ont_bam_by_window(
-            fileName,
-            sampleName,
-            basemod,
-            windowSize,
-            region,
-            center,
-            threshA,
-            threshC,
+        return (
+            parse_ont_bam_by_window(
+                fileName,
+                sampleName,
+                basemod,
+                windowSize,
+                region,
+                center,
+                threshA,
+                threshC,
+            ),
+            ave_dict,
         )
 
 
@@ -370,7 +373,12 @@ def get_mod_reference_positions_by_mod(
         return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
     else:
         update_ave_dict(
-            refpos[keep], refpos[all_bases_index], center, windowSize, window
+            refpos[keep],
+            refpos[all_bases_index],
+            basemod,
+            center,
+            windowSize,
+            window,
         )
         return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
 
