@@ -1,3 +1,5 @@
+import sqlite3
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -44,7 +46,7 @@ def enrich_sm_roi(
     Return:
             plot of single molecules centered at region of interest
     """
-    all_data, ave_dict = parse_bam(
+    parse_bam(
         fileName,
         sampleName,
         bedFile,
@@ -55,22 +57,13 @@ def enrich_sm_roi(
         threshC=threshC,
     )
 
-    # only keep calls with probability above threshold
-    # now only storing above threshold
-    # all_data_t = all_data[all_data["prob"] >= thresh]
-    # all_data_t = all_data[
-    #     ((all_data["prob"] >= threshA) & (all_data["mod"].str.contains("A")))
-    #     | ((all_data["prob"] >= threshC) & (all_data["mod"].str.contains("C")))
-    # ]
+    all_data = pd.read_sql(
+        "SELECT * from methylationByBase", sqlite3.connect(fileName + ".db")
+    )
+    aggregate_counts = pd.read_sql(
+        "SELECT * from methylationAggregate", sqlite3.connect(fileName + ".db")
+    )
 
-    # print(
-    #     "processing "
-    #     + str(len(all_data["read_name"].unique()))
-    #     + " reads for "
-    #     + sampleName
-    #     + " for bam: "
-    #     + fileName
-    # )
     print(
         "processing "
         + str(len(all_data["read_name"].unique()))
@@ -108,27 +101,36 @@ def enrich_sm_roi(
     )
 
     plot_aggregate_me_frac(
-        sampleName, ave_dict, smooth, min_periods, windowSize, basemod, outDir
+        sampleName,
+        aggregate_counts,
+        smooth,
+        min_periods,
+        windowSize,
+        basemod,
+        outDir,
     )
 
-    return all_data, ave_dict
+    # return all_data, aggregate_counts
 
 
 # average profile
 def plot_aggregate_me_frac(
-    sampleName, ave_dict, smooth, min_periods, windowSize, basemod, outDir
+    sampleName,
+    aggregate_counts,
+    smooth,
+    min_periods,
+    windowSize,
+    basemod,
+    outDir,
 ):
     fig = plt.figure()
-    ave_df = pd.DataFrame.from_dict(
-        ave_dict, orient="index", columns=["mod_count", "total_count"]
-    )  # keys are rows
-    ave_df["pos"] = ave_df.index.to_series().str.split(":").str[0].astype(int)
-    ave_df["mod"] = ave_df.index.to_series().str.split(":").str[1]
-    ave_df["frac"] = ave_df["mod_count"] / ave_df["total_count"]
+    aggregate_counts["frac"] = (
+        aggregate_counts["methylated_bases"] / aggregate_counts["total_bases"]
+    )
 
     r = range(-windowSize, windowSize + 1, 1)
     if "A" in basemod:
-        frac_A = ave_df[ave_df["mod"].str.contains("A")]
+        frac_A = aggregate_counts[aggregate_counts["mod"].str.contains("A")]
         for bp in r:
             if bp not in frac_A["pos"].values:
                 df2 = {
@@ -147,7 +149,7 @@ def plot_aggregate_me_frac(
         )
         sns.lineplot(x=r, y=frac_A_rolling, color="#053C5E")
     if "C" in basemod:
-        frac_C = ave_df[ave_df["mod"].str.contains("C")]
+        frac_C = aggregate_counts[aggregate_counts["mod"].str.contains("C")]
         for bp in r:
             if bp not in frac_C["pos"].values:
                 df2 = {
@@ -189,14 +191,16 @@ def plot_aggregate_me_frac(
         )
 
 
-def plot_base_abundance(sampleName, ave_df, basemod, windowSize, outDir):
+def plot_base_abundance(
+    sampleName, aggregate_counts, basemod, windowSize, outDir
+):
     cmapPurple = colors.LinearSegmentedColormap.from_list(
         "custom purple", ["white", "#2D1E2F"], N=200
     )
     # plot base abundance
     fig = plt.figure()
     x = np.linspace(-windowSize, windowSize, num=2 * windowSize + 1)
-    y = ave_df["total_count"].to_numpy()  # base_count
+    y = aggregate_counts["total_count"].to_numpy()  # base_count
     fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True)
     extent = [x[0] - (x[1] - x[0]) / 2.0, x[-1] + (x[1] - x[0]) / 2.0, 0, 1]
     im = ax.imshow(

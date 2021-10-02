@@ -4,16 +4,20 @@ Functions to parse input bams.
 =================================================
 """
 
-# import multiprocessing
+import multiprocessing
 
 import numpy as np
 import pandas as pd
 import pysam
+from joblib import Parallel, delayed
 
-# from joblib import Parallel, delayed
+from dimelo.utils import clear_db, create_sql_table, execute_sql_command
+
+# import sqlite3
+
 
 ####################################################################################
-# classes for regions & methylation information
+# classes for regions
 ####################################################################################
 
 
@@ -28,25 +32,25 @@ class Region(object):
         self.strand = region[1][3]
 
 
-class Methylation(object):
-    def __init__(self, table, data_type, name, called_sites):
-        self.table = table
-        self.data_type = data_type
-        self.name = name
-        self.called_sites = called_sites
-
-
-# dictionary summarizing aggreate as go
-# class AggregateDict(object):
-#    def __init__(self, dict):
-#        self.dict = dictionary
-
-# global dictionary update
-ave_dict = {}
-
 ####################################################################################
 # extracting modified base info from bams
 ####################################################################################
+
+
+def make_db(fileName):
+    DATABASE_NAME = fileName + ".db"
+
+    clear_db(DATABASE_NAME)
+
+    table_name = "methylationByBase"
+    cols = ["id", "read_name", "chr", "pos", "prob", "mod"]
+    dtypes = ["TEXT", "TEXT", "TEXT", "INT", "INT", "TEXT"]
+    create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
+
+    table_name = "methylationAggregate"
+    cols = ["id", "pos", "mod", "methylated_bases", "total_bases"]
+    dtypes = ["TEXT", "INT", "TEXT", "INT", "INT"]
+    create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
 
 
 def parse_bam(
@@ -74,7 +78,9 @@ def parse_bam(
             dataframe with: read_name, strand, chr, position, probability, mod
             dictionary with aggregate data: {pos:modification: [methylated_bases, total_bases]}
     """
-    global ave_dict
+    # create database with two tables: methylationByBase and methylationAggregate
+    make_db(fileName)
+
     if bedFile is not None:
         # make a region object for each row of bedFile
         bed = pd.read_csv(bedFile, sep="\t", header=None)
@@ -82,58 +88,31 @@ def parse_bam(
         for row in bed.iterrows():
             windows.append(Region(row))
 
-        # num_cores = multiprocessing.cpu_count()
-        # meth_data = Parallel(n_jobs=num_cores)(
-        #     delayed(parse_ont_bam_by_window)(
-        #         fileName,
-        #         sampleName,
-        #         basemod,
-        #         windowSize,
-        #         w,
-        #         center,
-        #         threshA,
-        #         threshC,
-        #     )
-        #     for w in windows
-        # )
-
-        # test not in parallel
-        meth_data = []
-        for w in windows:
-            meth_data.append(
-                parse_ont_bam_by_window(
-                    fileName,
-                    sampleName,
-                    basemod,
-                    windowSize,
-                    w,
-                    center,
-                    threshA,
-                    threshC,
-                )
-            )
-
-        list_tables = []
-        for m in meth_data:
-            list_tables.append(m.table)
-        all_data = pd.concat(list_tables)
-
-        return all_data, ave_dict
-        # return all_data, AggregateDict.dict
-
-    if region is not None:
-        return (
-            parse_ont_bam_by_window(
+        num_cores = multiprocessing.cpu_count()
+        Parallel(n_jobs=num_cores)(
+            delayed(parse_ont_bam_by_window)(
                 fileName,
                 sampleName,
                 basemod,
                 windowSize,
-                region,
+                w,
                 center,
                 threshA,
                 threshC,
-            ),
-            ave_dict,
+            )
+            for w in windows
+        )
+
+    if region is not None:
+        parse_ont_bam_by_window(
+            fileName,
+            sampleName,
+            basemod,
+            windowSize,
+            region,
+            center,
+            threshA,
+            threshC,
         )
 
 
@@ -162,7 +141,14 @@ def parse_ont_bam_by_window(
             (mod, positions, probs),
             (mod2, positions2, probs2),
         ] = get_modified_reference_positions(
-            read, basemod, window, center, threshA, threshC, windowSize
+            read,
+            basemod,
+            window,
+            center,
+            threshA,
+            threshC,
+            windowSize,
+            fileName,
         )
         for pos, prob in zip(positions, probs):
             if pos is not None:
@@ -171,11 +157,12 @@ def parse_ont_bam_by_window(
                 ):  # to decrease memory, only store bases within the window
                     data.append(
                         (
+                            read.query_name + ":" + str(pos),
                             read.query_name,
-                            "-" if read.is_reverse else "+",
+                            # "-" if read.is_reverse else "+",
                             window.chromosome,
-                            pos,
-                            prob,
+                            int(pos),
+                            int(prob),
                             mod,
                         )
                     )
@@ -186,37 +173,33 @@ def parse_ont_bam_by_window(
                 ):  # to decrease memory, only store bases within the window
                     data.append(
                         (
+                            read.query_name + ":" + str(pos),
                             read.query_name,
-                            "-" if read.is_reverse else "+",
+                            # "-" if read.is_reverse else "+",
                             window.chromosome,
-                            pos,
-                            prob,
+                            int(pos),
+                            int(prob),
                             mod2,
                         )
                     )
-    data_return = Methylation(
-        table=pd.DataFrame(
-            data, columns=["read_name", "strand", "chr", "pos", "prob", "mod"]
+
+    # set variables for sqlite entry
+    # do if list is not empty (there were methylated bases for that window)
+    if data:
+        # data is list of tuples associated with given read
+        # or ignore because a read may overlap multiple windows
+        DATABASE_NAME = fileName + ".db"
+        table_name = "methylationByBase"
+        command = (
+            """INSERT OR IGNORE INTO """
+            + table_name
+            + """ VALUES(?,?,?,?,?,?);"""
         )
-        .astype(
-            dtype={
-                "read_name": "category",
-                "strand": "category",
-                "chr": "category",
-                "mod": "category",
-                "prob": "int16",
-            }
-        )
-        .sort_values(["read_name", "pos"]),
-        data_type="ont-bam",
-        name=sampleName,
-        called_sites=len(data),
-    )
-    return data_return
+        execute_sql_command(command, DATABASE_NAME, data)
 
 
 def get_modified_reference_positions(
-    read, basemod, window, center, threshA, threshC, windowSize
+    read, basemod, window, center, threshA, threshC, windowSize, fileName
 ):
     """Extract mA and mC pos & prob information for the read
     Args:
@@ -240,13 +223,29 @@ def get_modified_reference_positions(
             base2 = base
         if len(mod1_list) > 1 and (base in mod1 or base2 in mod1):
             mod1_return = get_mod_reference_positions_by_mod(
-                read, mod1, 0, window, center, threshA, threshC, windowSize
+                read,
+                mod1,
+                0,
+                window,
+                center,
+                threshA,
+                threshC,
+                windowSize,
+                fileName,
             )
         else:
             mod1_return = (None, [None], [None])
         if len(mod2_list) > 1 and (base in mod2 or base2 in mod2):
             mod2_return = get_mod_reference_positions_by_mod(
-                read, mod2, 1, window, center, threshA, threshC, windowSize
+                read,
+                mod2,
+                1,
+                window,
+                center,
+                threshA,
+                threshC,
+                windowSize,
+                fileName,
             )
             return (mod1_return, mod2_return)
         else:
@@ -256,7 +255,15 @@ def get_modified_reference_positions(
 
 
 def get_mod_reference_positions_by_mod(
-    read, basemod, index, window, center, threshA, threshC, windowSize
+    read,
+    basemod,
+    index,
+    window,
+    center,
+    threshA,
+    threshC,
+    windowSize,
+    fileName,
 ):
     """Get positions and probabilities of modified bases for a single read
     Args:
@@ -362,51 +369,66 @@ def get_mod_reference_positions_by_mod(
                 np.array(refpos[all_bases_index])
                 - round(((window.end - window.begin) / 2 + window.begin))
             )
-        update_ave_dict(
+        update_methylation_aggregate_db(
             refpos_mod_adjusted,
             refpos_total_adjusted,
             basemod,
             center,
             windowSize,
             window,
+            fileName,
         )
         return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
     else:
-        update_ave_dict(
+        update_methylation_aggregate_db(
             refpos[keep],
             refpos[all_bases_index],
             basemod,
             center,
             windowSize,
             window,
+            fileName,
         )
         return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
 
 
-def update_ave_dict(
-    refpos_mod, refpos_total, basemod, center, windowSize, window
+def update_methylation_aggregate_db(
+    refpos_mod, refpos_total, basemod, center, windowSize, window, fileName
 ):
     """
-    {pos:modification: [methylated_bases, total_bases]}
+    df with columns pos:modification, pos, mod, methylated_bases, total_bases
     """
-    global ave_dict
+    # store list of entries for a given read
+    data = []
     for pos in refpos_total:
         # only store positions within window
         if (center is True and abs(pos) <= windowSize) or (
             center is False and pos > window.begin and pos < window.end
         ):
             # key is pos:mod
-            key = str(pos) + ":" + basemod
-            # increment if the key is already in the dictionary
-            if key in ave_dict:
-                ave_dict[key][1] += 1
-                # increment modified cout if in modified list
-                if pos in refpos_mod:
-                    ave_dict[key][0] += 1
-            # add value of 1 if the key is not already in the dictionary
+            id = str(pos) + ":" + basemod
+            if pos in refpos_mod:
+                data.append((id, int(pos), basemod, 1, 1))
             else:
-                if pos in refpos_mod:
-                    ave_dict[key] = [1, 1]
-                else:
-                    ave_dict[key] = [0, 1]
-    return ave_dict
+                data.append((id, int(pos), basemod, 0, 1))
+
+    DATABASE_NAME = fileName + ".db"
+    # set variables for sqlite entry
+    table_name = "methylationAggregate"
+
+    # create or ignore if key already exists
+    command = (
+        """INSERT OR IGNORE INTO """ + table_name + """ VALUES(?,?,?,?,?);"""
+    )
+    execute_sql_command(command, DATABASE_NAME, data)
+
+    # update table for all entries
+    # values: methylated_bases, total_bases, id
+    # these are entries 3, 4, 0 in list of tuples
+    values_subset = [(x[3], x[4], x[0]) for x in data]
+    command = (
+        """UPDATE """
+        + table_name
+        + """ SET methylated_bases = methylated_bases + ?, total_bases = total_bases + ? WHERE id = ?"""
+    )
+    execute_sql_command(command, DATABASE_NAME, values_subset)
