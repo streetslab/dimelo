@@ -134,10 +134,11 @@ def plot_aggregate_me_frac(
         for bp in r:
             if bp not in frac_A["pos"].values:
                 df2 = {
+                    "id": bp + ":" + "A",
                     "pos": bp,
                     "mod": "A",
-                    "mod_count": 0,
-                    "total_count": 0,
+                    "methylated_bases": 0,
+                    "total_bases": 0,
                     "frac": 0,
                 }
                 frac_A = frac_A.append(df2, ignore_index=True)
@@ -153,10 +154,11 @@ def plot_aggregate_me_frac(
         for bp in r:
             if bp not in frac_C["pos"].values:
                 df2 = {
+                    "id": bp + ":" + "C",
                     "pos": bp,
                     "mod": "C",
-                    "mod_count": 0,
-                    "total_count": 0,
+                    "methylated_bases": 0,
+                    "total_bases": 0,
                     "frac": 0,
                 }
                 frac_C = frac_C.append(df2, ignore_index=True)
@@ -191,6 +193,9 @@ def plot_aggregate_me_frac(
         )
 
 
+# df with columns pos:modification, pos, mod, methylated_bases, total_bases
+
+
 def plot_base_abundance(
     sampleName, aggregate_counts, basemod, windowSize, outDir
 ):
@@ -200,7 +205,7 @@ def plot_base_abundance(
     # plot base abundance
     fig = plt.figure()
     x = np.linspace(-windowSize, windowSize, num=2 * windowSize + 1)
-    y = aggregate_counts["total_count"].to_numpy()  # base_count
+    y = aggregate_counts["total_bases"].to_numpy()  # base_count
     fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True)
     extent = [x[0] - (x[1] - x[0]) / 2.0, x[-1] + (x[1] - x[0]) / 2.0, 0, 1]
     im = ax.imshow(
