@@ -412,25 +412,29 @@ def update_methylation_aggregate_db(
             else:
                 data.append((id, int(pos), basemod, 0, 1))
 
-    DATABASE_NAME = fileName + ".db"
-    # set variables for sqlite entry
-    table_name = "methylationAggregate"
+    if data:  # if data to append is not empty
+        DATABASE_NAME = fileName + ".db"
+        # set variables for sqlite entry
+        table_name = "methylationAggregate"
 
-    # create or ignore if key already exists
-    # need to add 0 filler here so later is not incremented during update command
-    command = (
-        """INSERT OR IGNORE INTO """ + table_name + """ VALUES(?,?,?,?,?);"""
-    )
-    data_fill = [(x[0], x[1], x[2], 0, 0) for x in data]
-    execute_sql_command(command, DATABASE_NAME, data_fill)
+        # create or ignore if key already exists
+        # need to add 0 filler here so later is not incremented during update command
+        command = (
+            """INSERT OR IGNORE INTO """
+            + table_name
+            + """ VALUES(?,?,?,?,?);"""
+        )
 
-    # update table for all entries
-    # values: methylated_bases, total_bases, id
-    # these are entries 3, 4, 0 in list of tuples
-    values_subset = [(x[3], x[4], x[0]) for x in data]
-    command = (
-        """UPDATE """
-        + table_name
-        + """ SET methylated_bases = methylated_bases + ?, total_bases = total_bases + ? WHERE id = ?"""
-    )
-    execute_sql_command(command, DATABASE_NAME, values_subset)
+        data_fill = [(x[0], x[1], x[2], 0, 0) for x in data]
+        execute_sql_command(command, DATABASE_NAME, data_fill)
+
+        # update table for all entries
+        # values: methylated_bases, total_bases, id
+        # these are entries 3, 4, 0 in list of tuples
+        values_subset = [(x[3], x[4], x[0]) for x in data]
+        command = (
+            """UPDATE """
+            + table_name
+            + """ SET methylated_bases = methylated_bases + ?, total_bases = total_bases + ? WHERE id = ?"""
+        )
+        execute_sql_command(command, DATABASE_NAME, values_subset)
