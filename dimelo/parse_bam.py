@@ -5,6 +5,7 @@ Functions to parse input bams.
 """
 
 import multiprocessing
+from math import ceil
 
 import numpy as np
 import pandas as pd
@@ -23,13 +24,32 @@ from dimelo.utils import clear_db, create_sql_table, execute_sql_command
 
 class Region(object):
     def __init__(self, region):
-        self.chromosome = region[1][0]
-        self.begin = region[1][1]
-        self.end = region[1][2]
-        self.size = self.end - self.begin
-        self.string = f"{self.chromosome}_{self.begin}_{self.end}"
-        # strand of motif to orient single molecules
-        self.strand = region[1][3]
+        if ":" in region:
+            try:
+                self.chromosome, interval = region.replace(",", "").split(":")
+                try:
+                    # see if just integer chromosomes are used
+                    self.chromosome = int(self.chromosome)
+                except ValueError:
+                    pass
+                self.begin, self.end = [int(i) for i in interval.split("-")]
+            except ValueError:
+                pass
+                # sys.exit(
+                #    "\n\nERROR: Window (-w/--window) inproperly formatted, "
+                #    "examples of accepted formats are:\n"
+                #    "'chr5:150200605-150423790'\n\n"
+                # )
+            self.size = self.end - self.begin
+            self.string = f"{self.chromosome}_{self.begin}_{self.end}"
+        else:
+            self.chromosome = region[1][0]
+            self.begin = region[1][1]
+            self.end = region[1][2]
+            self.size = self.end - self.begin
+            self.string = f"{self.chromosome}_{self.begin}_{self.end}"
+            # strand of motif to orient single molecules
+            self.strand = region[1][3]
 
 
 ####################################################################################
@@ -81,6 +101,8 @@ def parse_bam(
     # create database with two tables: methylationByBase and methylationAggregate
     make_db(fileName)
 
+    num_cores = multiprocessing.cpu_count()
+
     if bedFile is not None:
         # make a region object for each row of bedFile
         bed = pd.read_csv(bedFile, sep="\t", header=None)
@@ -88,7 +110,6 @@ def parse_bam(
         for row in bed.iterrows():
             windows.append(Region(row))
 
-        num_cores = multiprocessing.cpu_count()
         Parallel(n_jobs=num_cores)(
             delayed(parse_ont_bam_by_window)(
                 fileName,
@@ -104,16 +125,37 @@ def parse_bam(
         )
 
     if region is not None:
-        parse_ont_bam_by_window(
-            fileName,
-            sampleName,
-            basemod,
-            windowSize,
-            region,
-            center,
-            threshA,
-            threshC,
+        # chunk up region into num_cores to extract in parallel
+        chsize = ceil(region.size / num_cores)
+        regions = [
+            Region(
+                f"{region.chromosome}:{region.begin + i * chsize}-{region.begin + (i + 1) * chsize}"
+            )
+            for i in range(num_cores)
+        ]
+        Parallel(n_jobs=num_cores)(
+            delayed(parse_ont_bam_by_window)(
+                fileName,
+                sampleName,
+                basemod,
+                windowSize,
+                r,
+                center,
+                threshA,
+                threshC,
+            )
+            for r in regions
         )
+        # parse_ont_bam_by_window(
+        #     fileName,
+        #     sampleName,
+        #     basemod,
+        #     windowSize,
+        #     region,
+        #     center,
+        #     threshA,
+        #     threshC,
+        # )
 
 
 def parse_ont_bam_by_window(

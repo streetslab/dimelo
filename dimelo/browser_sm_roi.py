@@ -73,7 +73,7 @@ def browser_sm_roi(
     """
     Create single molecule plots within a region of interest
     Args:
-            :param fileNames: list of names of bam files with Mm and Ml tags
+            :param fileNames: list of names of bam files with Mm and Ml tags; indexed
             :param sampleNames: list of names of samples for output plot name labelling
             :param window: formatted as for example: "chr1:1-100000"
             :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
@@ -86,7 +86,7 @@ def browser_sm_roi(
             :param dotsize: size of points; default 4
             :param static: produce pdf if True, produe html if False; default False
     Return:
-            plot of single molecules centered at region of interest
+            plot of single molecules within the region of interest
     """
 
     w = Region(window)
