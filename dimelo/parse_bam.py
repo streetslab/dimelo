@@ -24,7 +24,7 @@ from dimelo.utils import clear_db, create_sql_table, execute_sql_command
 
 class Region(object):
     def __init__(self, region):
-        if ":" in region:
+        if isinstance(region, str):  # ":" in region:
             try:
                 self.chromosome, interval = region.replace(",", "").split(":")
                 try:

@@ -73,7 +73,6 @@ def enrich_sm_roi(
         + fileName
     )
 
-    # fig = plt.figure()
     fig, ax = plt.subplots()
 
     colors = {"A+Y": colorA, "A+a": colorA, "C+Z": colorC, "C+m": colorC}
@@ -108,6 +107,8 @@ def enrich_sm_roi(
         windowSize,
         basemod,
         outDir,
+        colorA,
+        colorC,
     )
 
     # return all_data, aggregate_counts
@@ -122,53 +123,38 @@ def plot_aggregate_me_frac(
     windowSize,
     basemod,
     outDir,
+    colorA,
+    colorC,
 ):
-    fig = plt.figure()
     aggregate_counts["frac"] = (
         aggregate_counts["methylated_bases"] / aggregate_counts["total_bases"]
     )
 
-    r = range(-windowSize, windowSize + 1, 1)
+    fig = plt.figure()
     if "A" in basemod:
-        frac_A = aggregate_counts[aggregate_counts["mod"].str.contains("A")]
-        for bp in r:
-            if bp not in frac_A["pos"].values:
-                df2 = {
-                    "id": str(bp) + ":" + "A",
-                    "pos": bp,
-                    "mod": "A",
-                    "methylated_bases": 0,
-                    "total_bases": 0,
-                    "frac": 0,
-                }
-                frac_A = frac_A.append(df2, ignore_index=True)
-        frac_A.sort_values(by=["pos"], inplace=True)
-        frac_A_rolling = (
-            frac_A["frac"]
-            .rolling(window=smooth, min_periods=min_periods, center=True)
-            .mean()
+        aggregate_A = aggregate_counts[
+            aggregate_counts["mod"].str.contains("A")
+        ]
+        aggregate_A_rolling = aggregate_A.rolling(
+            window=smooth, min_periods=min_periods, center=True, on="pos"
+        ).mean()
+        sns.lineplot(
+            x=aggregate_A_rolling["pos"],
+            y=aggregate_A_rolling["frac"],
+            color=colorA,
         )
-        sns.lineplot(x=r, y=frac_A_rolling, color="#053C5E")
     if "C" in basemod:
-        frac_C = aggregate_counts[aggregate_counts["mod"].str.contains("C")]
-        for bp in r:
-            if bp not in frac_C["pos"].values:
-                df2 = {
-                    "id": str(bp) + ":" + "C",
-                    "pos": bp,
-                    "mod": "C",
-                    "methylated_bases": 0,
-                    "total_bases": 0,
-                    "frac": 0,
-                }
-                frac_C = frac_C.append(df2, ignore_index=True)
-        frac_C.sort_values(by=["pos"], inplace=True)
-        frac_C_rolling = (
-            frac_C["frac"]
-            .rolling(window=smooth, min_periods=min_periods, center=True)
-            .mean()
+        aggregate_C = aggregate_counts[
+            aggregate_counts["mod"].str.contains("C")
+        ]
+        aggregate_C_rolling = aggregate_C.rolling(
+            window=smooth, min_periods=min_periods, center=True, on="pos"
+        ).mean()
+        sns.lineplot(
+            x=aggregate_C_rolling["pos"],
+            y=aggregate_C_rolling["frac"],
+            color=colorC,
         )
-        sns.lineplot(x=r, y=frac_C_rolling, color="#BB4430")
     plt.title(basemod)
     plt.show()
     fig.savefig(
@@ -178,7 +164,7 @@ def plot_aggregate_me_frac(
     if "A" in basemod:
         plot_base_abundance(
             sampleName,
-            frac_A,
+            aggregate_A,
             "A",
             windowSize,
             outDir,
@@ -186,14 +172,11 @@ def plot_aggregate_me_frac(
     if "C" in basemod:
         plot_base_abundance(
             sampleName,
-            frac_C,
+            aggregate_C,
             "CG",
             windowSize,
             outDir,
         )
-
-
-# df with columns pos:modification, pos, mod, methylated_bases, total_bases
 
 
 def plot_base_abundance(
@@ -204,7 +187,7 @@ def plot_base_abundance(
     )
     # plot base abundance
     fig = plt.figure()
-    x = np.linspace(-windowSize, windowSize, num=2 * windowSize + 1)
+    x = aggregate_counts["pos"].to_numpy()
     y = aggregate_counts["total_bases"].to_numpy()  # base_count
     fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True)
     extent = [x[0] - (x[1] - x[0]) / 2.0, x[-1] + (x[1] - x[0]) / 2.0, 0, 1]
@@ -228,6 +211,156 @@ def plot_base_abundance(
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_base_count.png", dpi=600
     )
+
+
+# def plot_base_abundance(
+#     sampleName, aggregate_counts, basemod, windowSize, outDir
+# ):
+#     cmapPurple = colors.LinearSegmentedColormap.from_list(
+#         "custom purple", ["white", "#2D1E2F"], N=200
+#     )
+#     # plot base abundance
+#     fig = plt.figure()
+#     x = np.linspace(-windowSize, windowSize, num=2 * windowSize + 1)
+#     y = aggregate_counts["total_bases"].to_numpy()  # base_count
+#     fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True)
+#     extent = [x[0] - (x[1] - x[0]) / 2.0, x[-1] + (x[1] - x[0]) / 2.0, 0, 1]
+#     im = ax.imshow(
+#         y[np.newaxis, :], cmap=cmapPurple, aspect="auto", extent=extent
+#     )
+#     divider = make_axes_locatable(ax)
+#     cax = divider.append_axes("top", size="5%", pad=0.25)
+#     fig.colorbar(im, cax=cax, orientation="horizontal")
+#     ax.set_yticks([])
+#     ax.set_xlim(extent[0], extent[1])
+#     ax2.plot(x, y, "o", ms=0.5, color="#2D1E2F")
+#     ax.spines["top"].set_visible(False)
+#     ax.spines["right"].set_visible(False)
+#     ax.spines["bottom"].set_visible(False)
+#     ax.spines["left"].set_visible(False)
+#     ax.get_xaxis().set_ticks([])
+#     plt.tight_layout()
+#     plt.show()
+
+#     fig.savefig(
+#         outDir + "/" + sampleName + "_" + basemod + "_base_count.png", dpi=600
+#     )
+
+# # average profile
+# def plot_aggregate_me_frac(
+#     sampleName,
+#     aggregate_counts,
+#     smooth,
+#     min_periods,
+#     windowSize,
+#     basemod,
+#     outDir,
+# ):
+#     fig = plt.figure()
+#     aggregate_counts["frac"] = (
+#         aggregate_counts["methylated_bases"] / aggregate_counts["total_bases"]
+#     )
+
+#     r = range(-windowSize, windowSize + 1, 1)
+#     if "A" in basemod:
+#         frac_A = aggregate_counts[aggregate_counts["mod"].str.contains("A")]
+#         for bp in r:
+#             if bp not in frac_A["pos"].values:
+#                 df2 = {
+#                     "id": str(bp) + ":" + "A",
+#                     "pos": bp,
+#                     "mod": "A",
+#                     "methylated_bases": 0,
+#                     "total_bases": 0,
+#                     "frac": 0,
+#                 }
+#                 frac_A = frac_A.append(df2, ignore_index=True)
+#         frac_A.sort_values(by=["pos"], inplace=True)
+#         frac_A_rolling = (
+#             frac_A["frac"]
+#             .rolling(window=smooth, min_periods=min_periods, center=True)
+#             .mean()
+#         )
+#         sns.lineplot(x=r, y=frac_A_rolling, color="#053C5E")
+#     if "C" in basemod:
+#         frac_C = aggregate_counts[aggregate_counts["mod"].str.contains("C")]
+#         for bp in r:
+#             if bp not in frac_C["pos"].values:
+#                 df2 = {
+#                     "id": str(bp) + ":" + "C",
+#                     "pos": bp,
+#                     "mod": "C",
+#                     "methylated_bases": 0,
+#                     "total_bases": 0,
+#                     "frac": 0,
+#                 }
+#                 frac_C = frac_C.append(df2, ignore_index=True)
+#         frac_C.sort_values(by=["pos"], inplace=True)
+#         frac_C_rolling = (
+#             frac_C["frac"]
+#             .rolling(window=smooth, min_periods=min_periods, center=True)
+#             .mean()
+#         )
+#         sns.lineplot(x=r, y=frac_C_rolling, color="#BB4430")
+#     plt.title(basemod)
+#     plt.show()
+#     fig.savefig(
+#         outDir + "/" + sampleName + "_" + basemod + "_sm_rolling_avg.pdf"
+#     )
+
+#     if "A" in basemod:
+#         plot_base_abundance(
+#             sampleName,
+#             frac_A,
+#             "A",
+#             windowSize,
+#             outDir,
+#         )
+#     if "C" in basemod:
+#         plot_base_abundance(
+#             sampleName,
+#             frac_C,
+#             "CG",
+#             windowSize,
+#             outDir,
+#         )
+
+
+# # df with columns pos:modification, pos, mod, methylated_bases, total_bases
+
+
+# def plot_base_abundance(
+#     sampleName, aggregate_counts, basemod, windowSize, outDir
+# ):
+#     cmapPurple = colors.LinearSegmentedColormap.from_list(
+#         "custom purple", ["white", "#2D1E2F"], N=200
+#     )
+#     # plot base abundance
+#     fig = plt.figure()
+#     x = np.linspace(-windowSize, windowSize, num=2 * windowSize + 1)
+#     y = aggregate_counts["total_bases"].to_numpy()  # base_count
+#     fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True)
+#     extent = [x[0] - (x[1] - x[0]) / 2.0, x[-1] + (x[1] - x[0]) / 2.0, 0, 1]
+#     im = ax.imshow(
+#         y[np.newaxis, :], cmap=cmapPurple, aspect="auto", extent=extent
+#     )
+#     divider = make_axes_locatable(ax)
+#     cax = divider.append_axes("top", size="5%", pad=0.25)
+#     fig.colorbar(im, cax=cax, orientation="horizontal")
+#     ax.set_yticks([])
+#     ax.set_xlim(extent[0], extent[1])
+#     ax2.plot(x, y, "o", ms=0.5, color="#2D1E2F")
+#     ax.spines["top"].set_visible(False)
+#     ax.spines["right"].set_visible(False)
+#     ax.spines["bottom"].set_visible(False)
+#     ax.spines["left"].set_visible(False)
+#     ax.get_xaxis().set_ticks([])
+#     plt.tight_layout()
+#     plt.show()
+
+#     fig.savefig(
+#         outDir + "/" + sampleName + "_" + basemod + "_base_count.png", dpi=600
+#     )
 
 
 def main():
