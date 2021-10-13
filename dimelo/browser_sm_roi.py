@@ -415,7 +415,15 @@ def meth_browser(
     i = 0
     for d in aggregate_counts:
         plot_aggregate(
-            sampleNames[i], d, smooth, min_periods, window, basemod, outDir
+            sampleNames[i],
+            d,
+            smooth,
+            min_periods,
+            window,
+            basemod,
+            outDir,
+            colorA,
+            colorC,
         )
         i = i + 1
 
@@ -446,18 +454,26 @@ def parse_bed(bed, window):
 
 
 def plot_aggregate(
-    sampleName, aggregate_counts, smooth, min_periods, window, basemod, outDir
+    sampleName,
+    aggregate_counts,
+    smooth,
+    min_periods,
+    window,
+    basemod,
+    outDir,
+    colorA,
+    colorC,
 ):
     """
     plot rolling aggregate of frac methylated
     plot rolling aggregate of total bases
     """
-    fig = plt.figure()
 
     aggregate_counts["frac"] = (
         aggregate_counts["methylated_bases"] / aggregate_counts["total_bases"]
     )
 
+    # plot aggregate of fraction and of total count coverage
     if "A" in basemod:
         aggregate_A = aggregate_counts[
             aggregate_counts["mod"].str.contains("A")
@@ -465,20 +481,11 @@ def plot_aggregate(
         aggregate_A_rolling = aggregate_A.rolling(
             window=smooth, min_periods=min_periods, center=True, on="pos"
         ).mean()
-        sns.lineplot(
-            x=aggregate_A_rolling["pos"],
-            y=aggregate_A_rolling["frac"],
-            color="#053C5E",
+        plot_aggregate_frac(
+            aggregate_A_rolling, sampleName, "A", colorA, outDir
         )
-        plt.title("A")
-        plt.show()
-        fig.savefig(
-            outDir
-            + "/"
-            + sampleName
-            + "_"
-            + "A"
-            + "_sm_rolling_avg_fraction.pdf"
+        plot_aggregate_total(
+            aggregate_A_rolling, sampleName, "A", colorA, outDir
         )
     if "C" in basemod:
         aggregate_C = aggregate_counts[
@@ -487,45 +494,42 @@ def plot_aggregate(
         aggregate_C_rolling = aggregate_C.rolling(
             window=smooth, min_periods=min_periods, center=True, on="pos"
         ).mean()
-        sns.lineplot(
-            x=aggregate_C_rolling["pos"],
-            y=aggregate_C_rolling["frac"],
-            color="#BB4430",
+        plot_aggregate_frac(
+            aggregate_C_rolling, sampleName, "C", colorC, outDir
         )
-        plt.title("C")
-        plt.show()
-        fig.savefig(
-            outDir
-            + "/"
-            + sampleName
-            + "_"
-            + "C"
-            + "_sm_rolling_avg_fraction.pdf"
+        plot_aggregate_total(
+            aggregate_C_rolling, sampleName, "C", colorC, outDir
         )
-    # plot total count coverage
+
+
+def plot_aggregate_frac(aggregate_rolling, sampleName, mod, color, outDir):
     fig = plt.figure()
-    if "A" in basemod:
-        sns.lineplot(
-            x=aggregate_A_rolling["pos"],
-            y=aggregate_A_rolling["total_bases"],
-            color="#053C5E",
-        )
-        plt.title("A")
-        plt.show()
-        fig.savefig(
-            outDir + "/" + sampleName + "_" + "A" + "_sm_rolling_avg_total.pdf"
-        )
-    if "C" in basemod:
-        sns.lineplot(
-            x=aggregate_C_rolling["pos"],
-            y=aggregate_C_rolling["total_bases"],
-            color="#BB4430",
-        )
-        plt.title("C")
-        plt.show()
-        fig.savefig(
-            outDir + "/" + sampleName + "_" + "C" + "_sm_rolling_avg_total.pdf"
-        )
+    sns.lineplot(
+        x=aggregate_rolling["pos"],
+        y=aggregate_rolling["frac"],
+        color=color,
+    )
+    plt.title(mod)
+    plt.ylabel("m" + mod + "/" + mod)
+    plt.show()
+    fig.savefig(
+        outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_fraction.pdf"
+    )
+
+
+def plot_aggregate_total(aggregate_rolling, sampleName, mod, color, outDir):
+    fig = plt.figure()
+    sns.lineplot(
+        x=aggregate_rolling["pos"],
+        y=aggregate_rolling["total_bases"],
+        color=color,
+    )
+    plt.title(mod)
+    plt.ylabel("total " + mod)
+    plt.show()
+    fig.savefig(
+        outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_total.pdf"
+    )
 
 
 def main():
