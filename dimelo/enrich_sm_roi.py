@@ -138,6 +138,7 @@ def plot_aggregate_me_frac(
         aggregate_A_rolling = aggregate_A.rolling(
             window=smooth, min_periods=min_periods, center=True, on="pos"
         ).mean()
+        print(aggregate_A_rolling)
         sns.lineplot(
             x=aggregate_A_rolling["pos"],
             y=aggregate_A_rolling["frac"],
