@@ -1,6 +1,7 @@
 # code adapted from methplotlib
 # https://doi.org/10.1093/bioinformatics/btaa093
 
+import sqlite3
 import sys
 
 import matplotlib.pyplot as plt
@@ -21,9 +22,8 @@ DEFAULT_THRESH_C = 128
 
 
 class DataTraces(object):
-    def __init__(self, traces, types, names):
+    def __init__(self, traces, names):
         self.traces = traces
-        self.types = types
         self.names = names
         self.index = 0
 
@@ -35,7 +35,7 @@ class DataTraces(object):
             raise StopIteration
         else:
             self.index += 1
-            return self.traces[self.index - 1], self.types[self.index - 1]
+            return self.traces[self.index - 1]
 
 
 class Region(object):
@@ -91,17 +91,25 @@ def browser_sm_roi(
 
     w = Region(window)
 
-    all_data_dict = [
+    all_data = []
+    aggregate_counts = []
+    for f, n in zip(fileNames, sampleNames):
         parse_bam(f, n, basemod=basemod, region=w)
-        for f, n in zip(fileNames, sampleNames)
-    ]
-
-    all_data = [i[0] for i in all_data_dict]
-    all_dict = [i[1] for i in all_data_dict]
+        all_data.append(
+            pd.read_sql(
+                "SELECT * from methylationByBase", sqlite3.connect(f + ".db")
+            )
+        )
+        aggregate_counts.append(
+            pd.read_sql(
+                "SELECT * from methylationAggregate",
+                sqlite3.connect(f + ".db"),
+            )
+        )
 
     meth_browser(
-        meth_data=all_data,
-        all_dict=all_dict,
+        all_data=all_data,
+        aggregate_counts=aggregate_counts,
         basemod=basemod,
         window=Region(window),
         sampleNames=sampleNames,
@@ -158,7 +166,8 @@ def create_output(fig, outfile, window, static, outDir):
 
 
 def methylation(
-    meth_data,
+    all_data,
+    sampleNames,
     colorA=COLOR_A,
     colorC=COLOR_C,
     dotsize=4,
@@ -166,15 +175,14 @@ def methylation(
     threshC=DEFAULT_THRESH_C,
 ):
     """
-    Plot methylation traces from various data types
+    Plot methylation traces
     """
     traces = []
-    types = []
     names = []
-    for meth in meth_data:
+    for m, n in zip(all_data, sampleNames):
         traces.append(
             make_per_read_meth_traces_phred(
-                table=meth.table,
+                table=m,
                 colorA=colorA,
                 colorC=colorC,
                 dotsize=dotsize,
@@ -182,9 +190,8 @@ def methylation(
                 threshC=threshC,
             )
         )
-        types.append(meth.data_type)
-        names.append(meth.name)
-    return DataTraces(traces=traces, types=types, names=names)
+        names.append(n)
+    return DataTraces(traces=traces, names=n)
 
 
 def make_per_read_meth_traces_phred(
@@ -203,13 +210,13 @@ def make_per_read_meth_traces_phred(
     traces = []
     hidden = 0
     for read in table["read_name"].unique():
-        strand = table.loc[table["read_name"] == read, "strand"].values[0]
+        # strand = table.loc[table["read_name"] == read, "strand"].values[0]
         try:
             traces.append(
                 make_per_read_line_trace(
                     read_range=minmax_table.loc[read],
                     y_pos=df_heights.loc[read, "height"],
-                    strand=strand,
+                    # strand=strand,
                 )
             )
         except KeyError:
@@ -316,7 +323,7 @@ def assign_y_height_per_read(df, max_coverage=1000):
     ).set_index("read")
 
 
-def make_per_read_line_trace(read_range, y_pos, strand):
+def make_per_read_line_trace(read_range, y_pos):  # , strand):
     """
     Make a grey line trace for a single read
     """
@@ -330,8 +337,8 @@ def make_per_read_line_trace(read_range, y_pos, strand):
 
 
 def meth_browser(
-    meth_data,
-    all_dict,
+    all_data,
+    aggregate_counts,
     basemod,
     window,
     sampleNames,
@@ -348,13 +355,15 @@ def meth_browser(
     colorC=COLOR_C,
 ):
     """
-    meth_Data is a list of Methylation objects from the import_methylation submodule
+    meth_data is a list of methylationByBase tables as dataframes
+    all_dict is a list of methylationAggregate tables as dataframes
     annotation is optional and is a bed file
      then show one line per sample and one for the annotation, with methrows = number of datasets
     the trace to be used for annotation is thus always num_methrows + 1
     """
     meth_traces = methylation(
-        meth_data,
+        all_data,
+        sampleNames,
         colorA=colorA,
         colorC=colorC,
         dotsize=dotsize,
@@ -362,13 +371,14 @@ def meth_browser(
         threshC=threshC,
     )
 
-    num_methrows = len(meth_data)
+    num_methrows = len(all_data)
     annot_row = num_methrows + 1
     annot_axis = f"yaxis{annot_row}"
     fig = create_subplots(
         num_methrows, names=meth_traces.names, annotation=bool(bed)
     )
-    for y, (sample_traces, sample_type) in enumerate(meth_traces, start=1):
+    # for y, (sample_traces, sample_type) in enumerate(meth_traces, start=1):
+    for y, sample_traces in enumerate(meth_traces, start=1):
         for meth_trace in sample_traces:
             fig.add_trace(trace=meth_trace, row=y, col=1)
         fig["layout"][f"yaxis{y}"].update(title="Reads")
@@ -403,7 +413,7 @@ def meth_browser(
     create_output(fig, outfile, window, static, outDir)
 
     i = 0
-    for d in all_dict:
+    for d in aggregate_counts:
         plot_aggregate(
             sampleNames[i], d, smooth, min_periods, window, basemod, outDir
         )
@@ -436,89 +446,88 @@ def parse_bed(bed, window):
 
 
 def plot_aggregate(
-    sampleName, ave_dict, smooth, min_periods, window, basemod, outDir
+    sampleName, aggregate_counts, smooth, min_periods, window, basemod, outDir
 ):
     """
     plot rolling aggregate of frac methylated
     plot rolling aggregate of total bases
     """
     fig = plt.figure()
-    ave_df = pd.DataFrame.from_dict(
-        ave_dict, orient="index", columns=["mod_count", "total_count"]
-    )  # keys are rows
-    ave_df["pos"] = ave_df.index.to_series().str.split(":").str[0].astype(int)
-    ave_df["mod"] = ave_df.index.to_series().str.split(":").str[1]
-    ave_df["frac"] = ave_df["mod_count"] / ave_df["total_count"]
 
-    r = range(-window.begin, window.end + 1, 1)
-    if "A" in basemod:
-        frac_A = ave_df[ave_df["mod"].str.contains("A")]
-        for bp in r:
-            if bp not in frac_A["pos"].values:
-                df2 = {
-                    "pos": bp,
-                    "mod": "A",
-                    "mod_count": 0,
-                    "total_count": 0,
-                    "frac": 0,
-                }
-                frac_A = frac_A.append(df2, ignore_index=True)
-        frac_A.sort_values(by=["pos"], inplace=True)
-        frac_A_rolling = (
-            frac_A["frac"]
-            .rolling(window=smooth, min_periods=min_periods, center=True)
-            .mean()
-        )
-        total_A_rolling = (
-            frac_A["total_count"]
-            .rolling(window=smooth, min_periods=min_periods, center=True)
-            .mean()
-        )
-        sns.lineplot(x=r, y=frac_A_rolling, color="#053C5E")
-    if "C" in basemod:
-        frac_C = ave_df[ave_df["mod"].str.contains("C")]
-        for bp in r:
-            if bp not in frac_C["pos"].values:
-                df2 = {
-                    "pos": bp,
-                    "mod": "C",
-                    "mod_count": 0,
-                    "total_count": 0,
-                    "frac": 0,
-                }
-                frac_C = frac_C.append(df2, ignore_index=True)
-        frac_C.sort_values(by=["pos"], inplace=True)
-        frac_C_rolling = (
-            frac_C["frac"]
-            .rolling(window=smooth, min_periods=min_periods, center=True)
-            .mean()
-        )
-        total_C_rolling = (
-            frac_C["total_count"]
-            .rolling(window=smooth, min_periods=min_periods, center=True)
-            .mean()
-        )
-        sns.lineplot(x=r, y=frac_C_rolling, color="#BB4430")
-    plt.title(basemod)
-    plt.show()
-    fig.savefig(
-        outDir
-        + "/"
-        + sampleName
-        + "_"
-        + basemod
-        + "_sm_rolling_avg_fraction.pdf"
+    aggregate_counts["frac"] = (
+        aggregate_counts["methylated_bases"] / aggregate_counts["total_bases"]
     )
 
+    if "A" in basemod:
+        aggregate_A = aggregate_counts[
+            aggregate_counts["mod"].str.contains("A")
+        ]
+        aggregate_A_rolling = aggregate_A.rolling(
+            window=smooth, min_periods=min_periods, center=True, on="pos"
+        ).mean()
+        sns.lineplot(
+            x=aggregate_A_rolling["pos"],
+            y=aggregate_A_rolling["frac"],
+            color="#053C5E",
+        )
+        plt.title("A")
+        plt.show()
+        fig.savefig(
+            outDir
+            + "/"
+            + sampleName
+            + "_"
+            + "A"
+            + "_sm_rolling_avg_fraction.pdf"
+        )
+    if "C" in basemod:
+        aggregate_C = aggregate_counts[
+            aggregate_counts["mod"].str.contains("C")
+        ]
+        aggregate_C_rolling = aggregate_C.rolling(
+            window=smooth, min_periods=min_periods, center=True, on="pos"
+        ).mean()
+        sns.lineplot(
+            x=aggregate_C_rolling["pos"],
+            y=aggregate_C_rolling["frac"],
+            color="#BB4430",
+        )
+        plt.title("C")
+        plt.show()
+        fig.savefig(
+            outDir
+            + "/"
+            + sampleName
+            + "_"
+            + "C"
+            + "_sm_rolling_avg_fraction.pdf"
+        )
+    print(aggregate_A)
+    print(aggregate_A_rolling)
     # plot total count coverage
     fig = plt.figure()
-    sns.lineplot(x=r, y=total_A_rolling, color="#053C5E")
-    sns.lineplot(x=r, y=total_C_rolling, color="#BB4430")
-    plt.title(basemod)
-    plt.show()
-    fig.savefig(
-        outDir + "/" + sampleName + "_" + basemod + "_sm_rolling_avg_total.pdf"
-    )
+    if "A" in basemod:
+        sns.lineplot(
+            x=aggregate_A_rolling["pos"],
+            y=aggregate_A_rolling["total_bases"],
+            color="#053C5E",
+        )
+        plt.title("A")
+        plt.show()
+        fig.savefig(
+            outDir + "/" + sampleName + "_" + "A" + "_sm_rolling_avg_total.pdf"
+        )
+    if "C" in basemod:
+        sns.lineplot(
+            x=aggregate_C_rolling["pos"],
+            y=aggregate_C_rolling["total_bases"],
+            color="#BB4430",
+        )
+        plt.title("C")
+        plt.show()
+        fig.savefig(
+            outDir + "/" + sampleName + "_" + "C" + "_sm_rolling_avg_total.pdf"
+        )
 
 
 def main():

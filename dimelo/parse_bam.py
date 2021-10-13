@@ -417,10 +417,12 @@ def update_methylation_aggregate_db(
     table_name = "methylationAggregate"
 
     # create or ignore if key already exists
+    # need to add 0 filler here so later is not incremented during update command
     command = (
         """INSERT OR IGNORE INTO """ + table_name + """ VALUES(?,?,?,?,?);"""
     )
-    execute_sql_command(command, DATABASE_NAME, data)
+    data_fill = [(x[0], x[1], x[2], 0, 0) for x in data]
+    execute_sql_command(command, DATABASE_NAME, data_fill)
 
     # update table for all entries
     # values: methylated_bases, total_bases, id

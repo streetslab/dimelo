@@ -134,7 +134,7 @@ def plot_aggregate_me_frac(
         for bp in r:
             if bp not in frac_A["pos"].values:
                 df2 = {
-                    "id": bp + ":" + "A",
+                    "id": str(bp) + ":" + "A",
                     "pos": bp,
                     "mod": "A",
                     "methylated_bases": 0,
@@ -154,7 +154,7 @@ def plot_aggregate_me_frac(
         for bp in r:
             if bp not in frac_C["pos"].values:
                 df2 = {
-                    "id": bp + ":" + "C",
+                    "id": str(bp) + ":" + "C",
                     "pos": bp,
                     "mod": "C",
                     "methylated_bases": 0,
