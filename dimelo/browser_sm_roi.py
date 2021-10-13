@@ -191,7 +191,7 @@ def methylation(
             )
         )
         names.append(n)
-    return DataTraces(traces=traces, names=n)
+    return DataTraces(traces=traces, names=names)
 
 
 def make_per_read_meth_traces_phred(
@@ -502,8 +502,6 @@ def plot_aggregate(
             + "C"
             + "_sm_rolling_avg_fraction.pdf"
         )
-    print(aggregate_A)
-    print(aggregate_A_rolling)
     # plot total count coverage
     fig = plt.figure()
     if "A" in basemod:
