@@ -89,7 +89,7 @@ def enrich_sm_roi_overlay(
             )
         i = i + 1
     plt.title(basemod)
-    plt.legend(fileNames)
+    plt.legend(sampleNames)
     plt.show()
     fig.savefig(outDir + "/" + basemod + "_sm_rolling_avg_overlay.pdf")
 
