@@ -135,6 +135,7 @@ def plot_aggregate_me_frac(
         aggregate_A = aggregate_counts[
             aggregate_counts["mod"].str.contains("A")
         ]
+        aggregate_A.sort_values(["pos"], inplace=True)
         aggregate_A_rolling = aggregate_A.rolling(
             window=smooth, min_periods=min_periods, center=True, on="pos"
         ).mean()
