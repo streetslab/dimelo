@@ -478,6 +478,8 @@ def plot_aggregate(
         aggregate_A = aggregate_counts[
             aggregate_counts["mod"].str.contains("A")
         ]
+        # need to sort first!
+        aggregate_A.sort_values(["pos"], inplace=True)
         aggregate_A_rolling = aggregate_A.rolling(
             window=smooth, min_periods=min_periods, center=True, on="pos"
         ).mean()
@@ -491,6 +493,8 @@ def plot_aggregate(
         aggregate_C = aggregate_counts[
             aggregate_counts["mod"].str.contains("C")
         ]
+        # need to sort first!
+        aggregate_C.sort_values(["pos"], inplace=True)
         aggregate_C_rolling = aggregate_C.rolling(
             window=smooth, min_periods=min_periods, center=True, on="pos"
         ).mean()
