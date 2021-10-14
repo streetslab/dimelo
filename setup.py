@@ -42,6 +42,7 @@ setuptools.setup(
     scripts=[
         "bin/dimelo-browser-sm-roi",
         "bin/dimelo-enrich-sm-roi",
+        "bin/dimelo-enrich-sm-roi-overlay",
         "bin/dimelo-parse-bam",
     ],  # command line scripts installed
     author_email="amaslan@berkeley.edu",  # Author email
