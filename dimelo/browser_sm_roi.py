@@ -97,13 +97,14 @@ def browser_sm_roi(
         parse_bam(f, n, basemod=basemod, region=w)
         all_data.append(
             pd.read_sql(
-                "SELECT * from methylationByBase", sqlite3.connect(f + ".db")
+                "SELECT * from methylationByBase",
+                sqlite3.connect(f + "_" + n + ".db"),
             )
         )
         aggregate_counts.append(
             pd.read_sql(
                 "SELECT * from methylationAggregate",
-                sqlite3.connect(f + ".db"),
+                sqlite3.connect(f + "_" + n + ".db"),
             )
         )
 

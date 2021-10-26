@@ -58,10 +58,12 @@ def enrich_sm_roi(
     )
 
     all_data = pd.read_sql(
-        "SELECT * from methylationByBase", sqlite3.connect(fileName + ".db")
+        "SELECT * from methylationByBase",
+        sqlite3.connect(fileName + "_" + sampleName + ".db"),
     )
     aggregate_counts = pd.read_sql(
-        "SELECT * from methylationAggregate", sqlite3.connect(fileName + ".db")
+        "SELECT * from methylationAggregate",
+        sqlite3.connect(fileName + "_" + sampleName + ".db"),
     )
 
     print(
@@ -203,7 +205,7 @@ def plot_base_abundance(
     fig.colorbar(im, cax=cax, orientation="horizontal")
     ax.set_yticks([])
     ax.set_xlim(extent[0], extent[1])
-    ax2.plot(x, y, "o", ms=0.5, color="#2D1E2F")
+    ax2.plot(x, y, "o", ms=0.5, color="#2D1Es2F")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["bottom"].set_visible(False)

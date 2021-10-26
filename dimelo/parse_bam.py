@@ -57,8 +57,8 @@ class Region(object):
 ####################################################################################
 
 
-def make_db(fileName):
-    DATABASE_NAME = fileName + ".db"
+def make_db(fileName, sampleName):
+    DATABASE_NAME = fileName + "_" + sampleName + ".db"
 
     clear_db(DATABASE_NAME)
 
@@ -99,7 +99,7 @@ def parse_bam(
             dictionary with aggregate data: {pos:modification: [methylated_bases, total_bases]}
     """
     # create database with two tables: methylationByBase and methylationAggregate
-    make_db(fileName)
+    make_db(fileName, sampleName)
 
     num_cores = multiprocessing.cpu_count()
 
@@ -191,6 +191,7 @@ def parse_ont_bam_by_window(
             threshC,
             windowSize,
             fileName,
+            sampleName,
         )
         for pos, prob in zip(positions, probs):
             if pos is not None:
@@ -230,7 +231,7 @@ def parse_ont_bam_by_window(
     if data:
         # data is list of tuples associated with given read
         # or ignore because a read may overlap multiple windows
-        DATABASE_NAME = fileName + ".db"
+        DATABASE_NAME = fileName + "_" + sampleName + ".db"
         table_name = "methylationByBase"
         command = (
             """INSERT OR IGNORE INTO """
@@ -241,7 +242,15 @@ def parse_ont_bam_by_window(
 
 
 def get_modified_reference_positions(
-    read, basemod, window, center, threshA, threshC, windowSize, fileName
+    read,
+    basemod,
+    window,
+    center,
+    threshA,
+    threshC,
+    windowSize,
+    fileName,
+    sampleName,
 ):
     """Extract mA and mC pos & prob information for the read
     Args:
@@ -274,6 +283,7 @@ def get_modified_reference_positions(
                 threshC,
                 windowSize,
                 fileName,
+                sampleName,
             )
         else:
             mod1_return = (None, [None], [None])
@@ -288,6 +298,7 @@ def get_modified_reference_positions(
                 threshC,
                 windowSize,
                 fileName,
+                sampleName,
             )
             return (mod1_return, mod2_return)
         else:
@@ -306,6 +317,7 @@ def get_mod_reference_positions_by_mod(
     threshC,
     windowSize,
     fileName,
+    sampleName,
 ):
     """Get positions and probabilities of modified bases for a single read
     Args:
@@ -419,6 +431,7 @@ def get_mod_reference_positions_by_mod(
             windowSize,
             window,
             fileName,
+            sampleName,
         )
         return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
     else:
@@ -430,12 +443,20 @@ def get_mod_reference_positions_by_mod(
             windowSize,
             window,
             fileName,
+            sampleName,
         )
         return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
 
 
 def update_methylation_aggregate_db(
-    refpos_mod, refpos_total, basemod, center, windowSize, window, fileName
+    refpos_mod,
+    refpos_total,
+    basemod,
+    center,
+    windowSize,
+    window,
+    fileName,
+    sampleName,
 ):
     """
     df with columns pos:modification, pos, mod, methylated_bases, total_bases
@@ -455,7 +476,7 @@ def update_methylation_aggregate_db(
                 data.append((id, int(pos), basemod, 0, 1))
 
     if data:  # if data to append is not empty
-        DATABASE_NAME = fileName + ".db"
+        DATABASE_NAME = fileName + "_" + sampleName + ".db"
         # set variables for sqlite entry
         table_name = "methylationAggregate"
 
