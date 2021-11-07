@@ -110,8 +110,7 @@ def parse_bam(
             windows.append(Region(row))
 
     if region is not None:
-        windows = []
-        windows = [Region(region)]
+        windows = [region]
 
     num_cores = multiprocessing.cpu_count()
 
@@ -136,6 +135,7 @@ def parse_bam(
             threshC,
             batchSize,
         )
+        if len(i) > 0
     )
 
 
