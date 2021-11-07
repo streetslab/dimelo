@@ -49,6 +49,7 @@ def enrich_sm_roi(
     parse_bam(
         fileName,
         sampleName,
+        outDir,
         bedFile,
         basemod,
         center=True,
@@ -58,12 +59,16 @@ def enrich_sm_roi(
     )
 
     all_data = pd.read_sql(
-        "SELECT * from methylationByBase",
-        sqlite3.connect(fileName + "_" + sampleName + ".db"),
+        "SELECT * from methylationByBase_" + sampleName,
+        sqlite3.connect(
+            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+        ),
     )
     aggregate_counts = pd.read_sql(
-        "SELECT * from methylationAggregate",
-        sqlite3.connect(fileName + "_" + sampleName + ".db"),
+        "SELECT * from methylationAggregate" + sampleName,
+        sqlite3.connect(
+            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+        ),
     )
 
     print(

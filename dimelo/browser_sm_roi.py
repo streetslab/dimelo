@@ -94,17 +94,21 @@ def browser_sm_roi(
     all_data = []
     aggregate_counts = []
     for f, n in zip(fileNames, sampleNames):
-        parse_bam(f, n, basemod=basemod, region=w)
+        parse_bam(f, n, outDir, basemod=basemod, region=w)
         all_data.append(
             pd.read_sql(
-                "SELECT * from methylationByBase",
-                sqlite3.connect(f + "_" + n + ".db"),
+                "SELECT * from methylationByBase_" + n,
+                sqlite3.connect(
+                    outDir + "/" + f.split("/")[-1].split(".")[0] + ".db"
+                ),
             )
         )
         aggregate_counts.append(
             pd.read_sql(
-                "SELECT * from methylationAggregate",
-                sqlite3.connect(f + "_" + n + ".db"),
+                "SELECT * from methylationAggregate_" + n,
+                sqlite3.connect(
+                    outDir + "/" + f.split("/")[-1].split(".")[0] + ".db"
+                ),
             )
         )
 

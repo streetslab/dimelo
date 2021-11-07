@@ -56,17 +56,19 @@ class Region(object):
 ####################################################################################
 
 
-def make_db(fileName, sampleName):
-    DATABASE_NAME = fileName + "_" + sampleName + ".db"
+def make_db(fileName, sampleName, outDir):
+    DATABASE_NAME = (
+        outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+    )
 
     clear_db(DATABASE_NAME)
 
-    table_name = "methylationByBase"
+    table_name = "methylationByBase_" + sampleName
     cols = ["id", "read_name", "chr", "pos", "prob", "mod"]
     dtypes = ["TEXT", "TEXT", "TEXT", "INT", "INT", "TEXT"]
     create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
 
-    table_name = "methylationAggregate"
+    table_name = "methylationAggregate_" + sampleName
     cols = ["id", "pos", "mod", "methylated_bases", "total_bases"]
     dtypes = ["TEXT", "INT", "TEXT", "INT", "INT"]
     create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
@@ -75,6 +77,7 @@ def make_db(fileName, sampleName):
 def parse_bam(
     fileName,
     sampleName,
+    outDir,
     bedFile=None,
     basemod="A+CG",
     center=False,
@@ -98,7 +101,7 @@ def parse_bam(
             dictionary with aggregate data: {pos:modification: [methylated_bases, total_bases]}
     """
     # create database with two tables: methylationByBase and methylationAggregate
-    make_db(fileName, sampleName)
+    make_db(fileName, sampleName, outDir)
 
     bam = pysam.AlignmentFile(fileName, "rb")
 
@@ -116,8 +119,10 @@ def parse_bam(
 
     batchSize = 100
 
-    DATABASE_NAME = fileName + "_" + sampleName + ".db"
-    table_name = "methylationByBase"
+    DATABASE_NAME = (
+        outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+    )
+    table_name = "methylationByBase_" + sampleName
     command = (
         """INSERT OR IGNORE INTO """ + table_name + """ VALUES(?,?,?,?,?,?);"""
     )
@@ -134,6 +139,7 @@ def parse_bam(
             threshA,
             threshC,
             batchSize,
+            outDir,
         )
         if len(i) > 0
     )
@@ -150,6 +156,7 @@ def batch_read_generator(
     threshA,
     threshC,
     batchSize,
+    outDir,
 ):
     """Parse all reads in batchs
     Args:
@@ -186,6 +193,7 @@ def batch_read_generator(
                 windowSize,
                 fileName,
                 sampleName,
+                outDir,
             )
             for pos, prob in zip(positions, probs):
                 if pos is not None:
@@ -238,6 +246,7 @@ def get_modified_reference_positions(
     windowSize,
     fileName,
     sampleName,
+    outDir,
 ):
     """Extract mA and mC pos & prob information for the read
     Args:
@@ -271,6 +280,7 @@ def get_modified_reference_positions(
                 windowSize,
                 fileName,
                 sampleName,
+                outDir,
             )
         else:
             mod1_return = (None, [None], [None])
@@ -286,6 +296,7 @@ def get_modified_reference_positions(
                 windowSize,
                 fileName,
                 sampleName,
+                outDir,
             )
             return (mod1_return, mod2_return)
         else:
@@ -305,6 +316,7 @@ def get_mod_reference_positions_by_mod(
     windowSize,
     fileName,
     sampleName,
+    outDir,
 ):
     """Get positions and probabilities of modified bases for a single read
     Args:
@@ -419,6 +431,7 @@ def get_mod_reference_positions_by_mod(
             window,
             fileName,
             sampleName,
+            outDir,
         )
         return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
     else:
@@ -431,6 +444,7 @@ def get_mod_reference_positions_by_mod(
             window,
             fileName,
             sampleName,
+            outDir,
         )
         return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
 
@@ -444,6 +458,7 @@ def update_methylation_aggregate_db(
     window,
     fileName,
     sampleName,
+    outDir,
 ):
     """
     df with columns pos:modification, pos, mod, methylated_bases, total_bases
@@ -463,9 +478,11 @@ def update_methylation_aggregate_db(
                 data.append((id, int(pos), basemod, 0, 1))
 
     if data:  # if data to append is not empty
-        DATABASE_NAME = fileName + "_" + sampleName + ".db"
+        DATABASE_NAME = (
+            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+        )
         # set variables for sqlite entry
-        table_name = "methylationAggregate"
+        table_name = "methylationAggregate_" + sampleName
 
         # create or ignore if key already exists
         # need to add 0 filler here so later is not incremented during update command

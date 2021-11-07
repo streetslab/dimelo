@@ -96,6 +96,7 @@ def execute_overlay(
     parse_bam(
         fileName,
         sampleName,
+        outDir,
         bedFile,
         basemod,
         center=True,
@@ -104,8 +105,10 @@ def execute_overlay(
         threshC=threshC,
     )
     aggregate_counts = pd.read_sql(
-        "SELECT * from methylationAggregate",
-        sqlite3.connect(fileName + "_" + sampleName + ".db"),
+        "SELECT * from methylationAggregate_" + sampleName,
+        sqlite3.connect(
+            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+        ),
     )
     aggregate_counts["frac"] = (
         aggregate_counts["methylated_bases"] / aggregate_counts["total_bases"]
