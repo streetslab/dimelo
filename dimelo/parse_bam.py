@@ -81,8 +81,8 @@ def parse_bam(
     center=False,
     windowSize=None,
     region=None,
-    threshA=128,
-    threshC=128,
+    threshA=129,
+    threshC=129,
 ):
     """Create methylation object. Process windows in parallel.
     Args:

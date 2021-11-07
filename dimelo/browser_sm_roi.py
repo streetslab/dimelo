@@ -17,8 +17,8 @@ from dimelo.parse_bam import parse_bam
 
 COLOR_A = "#053C5E"
 COLOR_C = "#BB4430"
-DEFAULT_THRESH_A = 128
-DEFAULT_THRESH_C = 128
+DEFAULT_THRESH_A = 129
+DEFAULT_THRESH_C = 129
 
 
 class DataTraces(object):
@@ -60,8 +60,8 @@ def browser_sm_roi(
     window,
     basemod,
     outDir,
-    threshA=128,
-    threshC=128,
+    threshA=DEFAULT_THRESH_A,
+    threshC=DEFAULT_THRESH_C,
     bedFileFeatures=None,
     smooth=1000,
     min_periods=100,
@@ -78,8 +78,8 @@ def browser_sm_roi(
             :param window: formatted as for example: "chr1:1-100000"
             :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
             :param outDir: directory to output plot
-            :param threshA: threshold for calling mA; default 128
-            :param threshC: threshold for calling mCG; default 128
+            :param threshA: threshold for calling mA; default 129
+            :param threshC: threshold for calling mCG; default 129
             :param bedFileFeatures: annotation to display in browser (optional); default None
             :param colorA: color in hex for mA
             :param colorC: color in hex for mCG

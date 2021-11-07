@@ -13,8 +13,8 @@ def enrich_sm_roi_overlay(
     bedFiles,
     basemod,
     outDir,
-    threshA=128,
-    threshC=128,
+    threshA=129,
+    threshC=129,
     windowSize=1000,
     colors=["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"],
     dotsize=0.5,
@@ -29,8 +29,8 @@ def enrich_sm_roi_overlay(
             :param bedFiles: list of specified windows for regions of interest to overlay
             :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
             :param outDir: directory to output plot
-            :param threshA: threshold for calling mA; default 128
-            :param threshC: threshold for calling mCG; default 128
+            :param threshA: threshold for calling mA; default 129
+            :param threshC: threshold for calling mCG; default 129
             :param windowSize: window size around center point of feature of interest to plot (+/-); default 1000 bp
             :param colors: list of hex colors for overlay
             :param colorC: color in hex for mCG

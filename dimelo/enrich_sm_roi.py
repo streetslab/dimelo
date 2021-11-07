@@ -19,8 +19,8 @@ def enrich_sm_roi(
     bedFile,
     basemod,
     outDir,
-    threshA=128,
-    threshC=128,
+    threshA=129,
+    threshC=129,
     windowSize=1000,
     colorA=COLOR_A,
     colorC=COLOR_C,
@@ -35,8 +35,8 @@ def enrich_sm_roi(
             :param bedFile: specified windows for regions of interest
             :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
             :param outDir: directory to output plot
-            :param threshA: threshold for calling mA; default 128
-            :param threshC: threshold for calling mCG; default 128
+            :param threshA: threshold for calling mA; default 129
+            :param threshC: threshold for calling mCG; default 129
             :param windowSize: window size around center point of feature of interest to plot (+/-); default 1000 bp
             :param colorA: color in hex for mA
             :param colorC: color in hex for mCG
