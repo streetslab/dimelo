@@ -12,6 +12,8 @@ import sqlite3
 def clear_db(database_name):
     if os.path.exists(database_name):
         os.remove(database_name)
+    if os.path.exists(database_name + "-journal"):
+        os.remove(database_name + "-journal")
 
 
 def create_sql_table(database_name, table_name, cols, d_types):
@@ -47,7 +49,7 @@ def execute_sql_command(command: str, database_name: str, values) -> None:
     No return, executes the command
     """
     # will create if not present
-    conn = sqlite3.connect(database_name, timeout=10.0)
+    conn = sqlite3.connect(database_name, timeout=30.0)
     c = conn.cursor()
     if len(values) == 0:
         c.execute(command)
