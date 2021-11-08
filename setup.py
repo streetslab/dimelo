@@ -42,7 +42,9 @@ setuptools.setup(
     scripts=[
         "bin/dimelo-browser-sm-roi",
         "bin/dimelo-enrich-sm-roi",
+        "bin/dimelo-enrich-sm-roi-overlay",
         "bin/dimelo-parse-bam",
+        "bin/dimelo-qc-report",
     ],  # command line scripts installed
     author_email="amaslan@berkeley.edu",  # Author email
     description="Tool for analyzing modified bases from BAM files",  # Short description of project

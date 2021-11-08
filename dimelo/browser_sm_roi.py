@@ -1,12 +1,15 @@
 # code adapted from methplotlib
 # https://doi.org/10.1093/bioinformatics/btaa093
 
+import sqlite3
 import sys
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import plotly
 import plotly.graph_objs as go
 import pyranges as pr
+import seaborn as sns
 
 from dimelo.parse_bam import parse_bam
 
@@ -14,14 +17,13 @@ from dimelo.parse_bam import parse_bam
 
 COLOR_A = "#053C5E"
 COLOR_C = "#BB4430"
-DEFAULT_THRESH_A = 128
-DEFAULT_THRESH_C = 128
+DEFAULT_THRESH_A = 129
+DEFAULT_THRESH_C = 129
 
 
 class DataTraces(object):
-    def __init__(self, traces, types, names):
+    def __init__(self, traces, names):
         self.traces = traces
-        self.types = types
         self.names = names
         self.index = 0
 
@@ -33,7 +35,7 @@ class DataTraces(object):
             raise StopIteration
         else:
             self.index += 1
-            return self.traces[self.index - 1], self.types[self.index - 1]
+            return self.traces[self.index - 1]
 
 
 class Region(object):
@@ -58,9 +60,11 @@ def browser_sm_roi(
     window,
     basemod,
     outDir,
-    threshA=128,
-    threshC=128,
+    threshA=DEFAULT_THRESH_A,
+    threshC=DEFAULT_THRESH_C,
     bedFileFeatures=None,
+    smooth=1000,
+    min_periods=100,
     colorA=COLOR_A,
     colorC=COLOR_C,
     dotsize=4,
@@ -69,34 +73,55 @@ def browser_sm_roi(
     """
     Create single molecule plots within a region of interest
     Args:
-            :param fileNames: list of names of bam files with Mm and Ml tags
+            :param fileNames: list of names of bam files with Mm and Ml tags; indexed
             :param sampleNames: list of names of samples for output plot name labelling
             :param window: formatted as for example: "chr1:1-100000"
             :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
             :param outDir: directory to output plot
-            :param threshA: threshold for calling mA; default 128
-            :param threshC: threshold for calling mCG; default 128
+            :param threshA: threshold for calling mA; default 129
+            :param threshC: threshold for calling mCG; default 129
             :param bedFileFeatures: annotation to display in browser (optional); default None
             :param colorA: color in hex for mA
             :param colorC: color in hex for mCG
             :param dotsize: size of points; default 4
             :param static: produce pdf if True, produe html if False; default False
     Return:
-            plot of single molecules centered at region of interest
+            plot of single molecules within the region of interest
     """
 
     w = Region(window)
 
-    all_data = [
-        parse_bam(f, n, basemod=basemod, region=w)
-        for f, n in zip(fileNames, sampleNames)
-    ]
+    all_data = []
+    aggregate_counts = []
+    for f, n in zip(fileNames, sampleNames):
+        parse_bam(f, n, outDir, basemod=basemod, region=w)
+        all_data.append(
+            pd.read_sql(
+                "SELECT * from methylationByBase_" + n,
+                sqlite3.connect(
+                    outDir + "/" + f.split("/")[-1].split(".")[0] + ".db"
+                ),
+            )
+        )
+        aggregate_counts.append(
+            pd.read_sql(
+                "SELECT * from methylationAggregate_" + n,
+                sqlite3.connect(
+                    outDir + "/" + f.split("/")[-1].split(".")[0] + ".db"
+                ),
+            )
+        )
 
     meth_browser(
-        meth_data=all_data,
+        all_data=all_data,
+        aggregate_counts=aggregate_counts,
+        basemod=basemod,
         window=Region(window),
+        sampleNames=sampleNames,
         outDir=outDir,
         bed=bedFileFeatures,
+        smooth=smooth,
+        min_periods=min_periods,
         dotsize=dotsize,
         static=static,
         threshA=threshA,
@@ -146,7 +171,8 @@ def create_output(fig, outfile, window, static, outDir):
 
 
 def methylation(
-    meth_data,
+    all_data,
+    sampleNames,
     colorA=COLOR_A,
     colorC=COLOR_C,
     dotsize=4,
@@ -154,15 +180,14 @@ def methylation(
     threshC=DEFAULT_THRESH_C,
 ):
     """
-    Plot methylation traces from various data types
+    Plot methylation traces
     """
     traces = []
-    types = []
     names = []
-    for meth in meth_data:
+    for m, n in zip(all_data, sampleNames):
         traces.append(
             make_per_read_meth_traces_phred(
-                table=meth.table,
+                table=m,
                 colorA=colorA,
                 colorC=colorC,
                 dotsize=dotsize,
@@ -170,9 +195,8 @@ def methylation(
                 threshC=threshC,
             )
         )
-        types.append(meth.data_type)
-        names.append(meth.name)
-    return DataTraces(traces=traces, types=types, names=names)
+        names.append(n)
+    return DataTraces(traces=traces, names=names)
 
 
 def make_per_read_meth_traces_phred(
@@ -191,13 +215,13 @@ def make_per_read_meth_traces_phred(
     traces = []
     hidden = 0
     for read in table["read_name"].unique():
-        strand = table.loc[table["read_name"] == read, "strand"].values[0]
+        # strand = table.loc[table["read_name"] == read, "strand"].values[0]
         try:
             traces.append(
                 make_per_read_line_trace(
                     read_range=minmax_table.loc[read],
                     y_pos=df_heights.loc[read, "height"],
-                    strand=strand,
+                    # strand=strand,
                 )
             )
         except KeyError:
@@ -304,7 +328,7 @@ def assign_y_height_per_read(df, max_coverage=1000):
     ).set_index("read")
 
 
-def make_per_read_line_trace(read_range, y_pos, strand):
+def make_per_read_line_trace(read_range, y_pos):  # , strand):
     """
     Make a grey line trace for a single read
     """
@@ -318,9 +342,14 @@ def make_per_read_line_trace(read_range, y_pos, strand):
 
 
 def meth_browser(
-    meth_data,
+    all_data,
+    aggregate_counts,
+    basemod,
     window,
+    sampleNames,
     outDir,
+    smooth,
+    min_periods,
     bed=False,
     outfile=None,
     dotsize=4,
@@ -331,13 +360,15 @@ def meth_browser(
     colorC=COLOR_C,
 ):
     """
-    meth_Data is a list of Methylation objects from the import_methylation submodule
+    meth_data is a list of methylationByBase tables as dataframes
+    all_dict is a list of methylationAggregate tables as dataframes
     annotation is optional and is a bed file
      then show one line per sample and one for the annotation, with methrows = number of datasets
     the trace to be used for annotation is thus always num_methrows + 1
     """
     meth_traces = methylation(
-        meth_data,
+        all_data,
+        sampleNames,
         colorA=colorA,
         colorC=colorC,
         dotsize=dotsize,
@@ -345,13 +376,14 @@ def meth_browser(
         threshC=threshC,
     )
 
-    num_methrows = len(meth_data)
+    num_methrows = len(all_data)
     annot_row = num_methrows + 1
     annot_axis = f"yaxis{annot_row}"
     fig = create_subplots(
         num_methrows, names=meth_traces.names, annotation=bool(bed)
     )
-    for y, (sample_traces, sample_type) in enumerate(meth_traces, start=1):
+    # for y, (sample_traces, sample_type) in enumerate(meth_traces, start=1):
+    for y, sample_traces in enumerate(meth_traces, start=1):
         for meth_trace in sample_traces:
             fig.add_trace(trace=meth_trace, row=y, col=1)
         fig["layout"][f"yaxis{y}"].update(title="Reads")
@@ -385,6 +417,21 @@ def meth_browser(
             i["font"]["size"] = 10
     create_output(fig, outfile, window, static, outDir)
 
+    i = 0
+    for d in aggregate_counts:
+        plot_aggregate(
+            sampleNames[i],
+            d,
+            smooth,
+            min_periods,
+            window,
+            basemod,
+            outDir,
+            colorA,
+            colorC,
+        )
+        i = i + 1
+
 
 def bed_annotation(bed, window):
     return [
@@ -409,6 +456,89 @@ def parse_bed(bed, window):
         df["Name"] = "noname"
     df_short = df[df.columns[0:3]]
     return df_short.itertuples(index=False, name=None)
+
+
+def plot_aggregate(
+    sampleName,
+    aggregate_counts,
+    smooth,
+    min_periods,
+    window,
+    basemod,
+    outDir,
+    colorA,
+    colorC,
+):
+    """
+    plot rolling aggregate of frac methylated
+    plot rolling aggregate of total bases
+    """
+
+    aggregate_counts["frac"] = (
+        aggregate_counts["methylated_bases"] / aggregate_counts["total_bases"]
+    )
+
+    # plot aggregate of fraction and of total count coverage
+    if "A" in basemod:
+        aggregate_A = aggregate_counts[
+            aggregate_counts["mod"].str.contains("A")
+        ]
+        # need to sort first!
+        aggregate_A.sort_values(["pos"], inplace=True)
+        aggregate_A_rolling = aggregate_A.rolling(
+            window=smooth, min_periods=min_periods, center=True, on="pos"
+        ).mean()
+        plot_aggregate_frac(
+            aggregate_A_rolling, sampleName, "A", colorA, outDir
+        )
+        plot_aggregate_total(
+            aggregate_A_rolling, sampleName, "A", colorA, outDir
+        )
+    if "C" in basemod:
+        aggregate_C = aggregate_counts[
+            aggregate_counts["mod"].str.contains("C")
+        ]
+        # need to sort first!
+        aggregate_C.sort_values(["pos"], inplace=True)
+        aggregate_C_rolling = aggregate_C.rolling(
+            window=smooth, min_periods=min_periods, center=True, on="pos"
+        ).mean()
+        plot_aggregate_frac(
+            aggregate_C_rolling, sampleName, "C", colorC, outDir
+        )
+        plot_aggregate_total(
+            aggregate_C_rolling, sampleName, "C", colorC, outDir
+        )
+
+
+def plot_aggregate_frac(aggregate_rolling, sampleName, mod, color, outDir):
+    fig = plt.figure()
+    sns.lineplot(
+        x=aggregate_rolling["pos"],
+        y=aggregate_rolling["frac"],
+        color=color,
+    )
+    plt.title(mod)
+    plt.ylabel("m" + mod + "/" + mod)
+    plt.show()
+    fig.savefig(
+        outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_fraction.pdf"
+    )
+
+
+def plot_aggregate_total(aggregate_rolling, sampleName, mod, color, outDir):
+    fig = plt.figure()
+    sns.lineplot(
+        x=aggregate_rolling["pos"],
+        y=aggregate_rolling["total_bases"],
+        color=color,
+    )
+    plt.title(mod)
+    plt.ylabel("total " + mod)
+    plt.show()
+    fig.savefig(
+        outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_total.pdf"
+    )
 
 
 def main():
