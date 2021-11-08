@@ -6,7 +6,7 @@ import multiprocessing
 import time
 from joblib import Parallel, delayed
 from math import log
-from dimelo.parse_bam import get_modified_reference_positions as pbref, make_db
+from dimelo.parse_bam import get_modified_reference_positions, make_db
 from dimelo.utils import execute_sql_command
 
 
@@ -215,7 +215,7 @@ from dimelo.utils import execute_sql_command
 #     return basemod, len(all_bases_index), probabilities[prob_keep]
 
 
-def batch_read_generator(file_bamIn, batch_size):
+def batch_read_generator(file_bamIn, batch_size, outDir):
     counter = 0
     r_list = []
 
@@ -225,7 +225,9 @@ def batch_read_generator(file_bamIn, batch_size):
         r = [read.query_name, read.reference_name, read.reference_start, read.reference_end, read.query_length,
              "-" if read.is_reverse else "+", read.mapping_quality, ave_qual(read.query_qualities),
              ave_qual(read.query_alignment_qualities)]
-        [(mod, numA, probs), (mod2, numC, probs2)] = pbref(read, "A+CG", None, False, 129, 129, None, None)
+        [(mod, numA, probs), (mod2, numC, probs2)] = get_modified_reference_positions(read, "A+CG", None, False,
+                                                                                      129, 129, None, None, None,
+                                                                                      outDir, False, True)
 
         if type(numA) == int:
             isA = True
@@ -238,11 +240,11 @@ def batch_read_generator(file_bamIn, batch_size):
             prob2agg_05 = prob_bin(prob2list)
 
         if isC and not isA:
-            r.extend((mod2, np.nan, np.nan, numC, prob2agg_05))
+            r.extend((np.nan, np.nan, numC, prob2agg_05))
         elif isA and not isC:
-            r.extend((mod, numA, probagg_05, np.nan, np.nan))
+            r.extend((numA, probagg_05, np.nan, np.nan))
         elif isA and isC:
-            r.extend(("A+CG", numA, probagg_05, numC, prob2agg_05))
+            r.extend((numA, probagg_05, numC, prob2agg_05))
 
         r = tuple(r)
         if counter < batch_size:
@@ -290,7 +292,7 @@ def ave_qual(quals, qround=False, tab=errs_tab(129)):
         return None
 
 
-def parse_bam_read(bamIn):
+def parse_bam_read(bamIn, outDir):
     file_bamIn = pysam.AlignmentFile(bamIn, "rb")
 
     # DB_NAME = bamIn.split('/')[-1].split('.')[0] + ".db"
@@ -301,28 +303,28 @@ def parse_bam_read(bamIn):
     # table_name = 'READS'
     # create_sql_table(DB_NAME, table_name, cols, dt)
 
-    DB_NAME, tables = make_db(bamIn, '', 'out', True, True)
-    template_command = '''INSERT INTO ''' + tables[0] + ''' VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?);'''
+    DB_NAME, tables = make_db(bamIn, '', outDir, True, True)
+    template_command = '''INSERT INTO ''' + tables[0] + ''' VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);'''
     num_cores = multiprocessing.cpu_count() - 1
 
     Parallel(n_jobs=num_cores, verbose=10)(
         delayed(execute_sql_command)(
             template_command,
             DB_NAME,
-            i) for i in batch_read_generator(file_bamIn, 100))
+            i) for i in batch_read_generator(file_bamIn, 100, outDir))
     return DB_NAME, tables[0]
 
 
-def get_runtime(f, inp1):
+def get_runtime(f, inp1, inp2):
     start = time.time()
-    re_val = f(inp1)
+    re_val = f(inp1, inp2)
     time.sleep(1)
     end = time.time()
     return f"Runtime of the program is {end - start}", re_val
 
 
 def qc_report(filebamIn):
-    runtime = get_runtime(parse_bam_read, filebamIn)
+    runtime = get_runtime(parse_bam_read, filebamIn, 'out')
     print(runtime)
 
 
