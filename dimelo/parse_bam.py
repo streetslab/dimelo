@@ -5,6 +5,7 @@ Functions to parse input bams.
 """
 
 import multiprocessing
+import os
 
 import numpy as np
 import pandas as pd
@@ -56,23 +57,67 @@ class Region(object):
 ####################################################################################
 
 
-def make_db(fileName, sampleName, outDir, testMode):
+def make_db(fileName, sampleName, outDir, testMode, qc):
+    if not os.path.exists(outDir):
+        os.mkdir(outDir)
+
     DATABASE_NAME = (
         outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
     )
 
     if testMode:
         clear_db(DATABASE_NAME)
+    tables = []
+    if qc:
+        table_name = "reads"
+        cols = [
+            "name",
+            "chr",
+            "start",
+            "end",
+            "length",
+            "strand",
+            "mapq",
+            "ave_baseq",
+            "ave_alignq",
+            "basemod",
+            "numA",
+            "methAprob05",
+            "numC",
+            "methCprob05",
+        ]
+        dtypes = [
+            "TEXT",
+            "TEXT",
+            "INT",
+            "INT",
+            "INT",
+            "TEXT",
+            "INT",
+            "INT",
+            "INT",
+            "TEXT",
+            "FLOAT",
+            "FLOAT",
+            "FLOAT",
+            "FLOAT",
+        ]
+        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
+        tables.append(table_name)
+    else:
+        table_name = "methylationByBase_" + sampleName
+        cols = ["id", "read_name", "chr", "pos", "prob", "mod"]
+        dtypes = ["TEXT", "TEXT", "TEXT", "INT", "INT", "TEXT"]
+        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
+        tables.append(table_name)
 
-    table_name = "methylationByBase_" + sampleName
-    cols = ["id", "read_name", "chr", "pos", "prob", "mod"]
-    dtypes = ["TEXT", "TEXT", "TEXT", "INT", "INT", "TEXT"]
-    create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
+        table_name = "methylationAggregate_" + sampleName
+        cols = ["id", "pos", "mod", "methylated_bases", "total_bases"]
+        dtypes = ["TEXT", "INT", "TEXT", "INT", "INT"]
+        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
+        tables.append(table_name)
 
-    table_name = "methylationAggregate_" + sampleName
-    cols = ["id", "pos", "mod", "methylated_bases", "total_bases"]
-    dtypes = ["TEXT", "INT", "TEXT", "INT", "INT"]
-    create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
+    return DATABASE_NAME, tables
 
 
 def parse_bam(
@@ -88,6 +133,7 @@ def parse_bam(
     threshC=129,
     extractAllBases=False,
     testMode=False,
+    qc=False,
 ):
     """Create methylation object. Process windows in parallel.
     Args:
@@ -104,7 +150,7 @@ def parse_bam(
             dictionary with aggregate data: {pos:modification: [methylated_bases, total_bases]}
     """
     # create database with two tables: methylationByBase and methylationAggregate
-    make_db(fileName, sampleName, outDir, testMode)
+    make_db(fileName, sampleName, outDir, testMode, qc)
 
     bam = pysam.AlignmentFile(fileName, "rb")
 
@@ -144,6 +190,7 @@ def parse_bam(
             batchSize,
             outDir,
             extractAllBases,
+            qc,
         )
         if len(i) > 0
     )
@@ -162,6 +209,7 @@ def batch_read_generator(
     batchSize,
     outDir,
     extractAllBases,
+    qc,
 ):
     """Parse all reads in batchs
     Args:
@@ -200,6 +248,7 @@ def batch_read_generator(
                 sampleName,
                 outDir,
                 extractAllBases,
+                qc,
             )
             for pos, prob in zip(positions, probs):
                 if pos is not None:
@@ -254,6 +303,7 @@ def get_modified_reference_positions(
     sampleName,
     outDir,
     extractAllBases,
+    qc,
 ):
     """Extract mA and mC pos & prob information for the read
     Args:
@@ -268,14 +318,15 @@ def get_modified_reference_positions(
     if (read.has_tag("Mm")) & (";" in read.get_tag("Mm")):
         mod1 = read.get_tag("Mm").split(";")[0].split(",", 1)[0]
         mod2 = read.get_tag("Mm").split(";")[1].split(",", 1)[0]
-        mod1_list = read.get_tag("Mm").split(";")[0].split(",", 1)
-        mod2_list = read.get_tag("Mm").split(";")[1].split(",", 1)
+        # mod1_list = read.get_tag("Mm").split(";")[0].split(",", 1)
+        # mod2_list = read.get_tag("Mm").split(";")[1].split(",", 1)
         base = basemod[0]  # this will be A, C, or A
         if basemod == "A+CG":
-            base2 = basemod[2]  # this will be C for A+C case
+            base2 = basemod[2]  # this will be C for A+CG case
         else:  # in the case of a single mod will just be checking that single base
             base2 = base
-        if len(mod1_list) > 1 and (base in mod1 or base2 in mod1):
+        # if len(mod1_list) > 1 and (base in mod1 or base2 in mod1):
+        if base in mod1 or base2 in mod1:
             mod1_return = get_mod_reference_positions_by_mod(
                 read,
                 mod1,
@@ -289,10 +340,12 @@ def get_modified_reference_positions(
                 sampleName,
                 outDir,
                 extractAllBases,
+                qc,
             )
         else:
             mod1_return = (None, [None], [None])
-        if len(mod2_list) > 1 and (base in mod2 or base2 in mod2):
+        # if len(mod2_list) > 1 and (base in mod2 or base2 in mod2):
+        if base in mod2 or base2 in mod2:
             mod2_return = get_mod_reference_positions_by_mod(
                 read,
                 mod2,
@@ -306,6 +359,7 @@ def get_modified_reference_positions(
                 sampleName,
                 outDir,
                 extractAllBases,
+                qc,
             )
             return (mod1_return, mod2_return)
         else:
@@ -327,6 +381,7 @@ def get_mod_reference_positions_by_mod(
     sampleName,
     outDir,
     extractAllBases,
+    qc,
 ):
     """Get positions and probabilities of modified bases for a single read
     Args:
@@ -338,16 +393,10 @@ def get_mod_reference_positions_by_mod(
             :param threshC: threshold above which to call a C base methylated
             :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only applicable for center=True
     """
+    modsPresent = True
     base, mod = basemod.split("+")
-    deltas = [
-        int(i) for i in read.get_tag("Mm").split(";")[index].split(",")[1:]
-    ]
     num_base = len(read.get_tag("Mm").split(";")[index].split(",")) - 1
-    Ml = read.get_tag("Ml")
-    if index == 0:
-        probabilities = np.array(Ml[0:num_base], dtype=int)
-    if index == 1:
-        probabilities = np.array(Ml[0 - num_base :], dtype=int)
+    # get base_index
     base_index = np.array(
         [
             i
@@ -355,23 +404,37 @@ def get_mod_reference_positions_by_mod(
             if letter == base
         ]
     )
-    # determine locations of the modified bases, where index_adj is the adjustment of the base_index
-    # based on the cumulative sum of the deltas
-    locations = np.cumsum(deltas)
-    # loop through locations and increment index_adj by the difference between the next location and current one + 1
-    # if the difference is zero, therefore, the index adjustment just gets incremented by one because no base should be skipped
-    index_adj = []
-    index_adj.append(locations[0])
-    i = 0
-    for i in range(len(locations) - 1):
-        diff = locations[i + 1] - locations[i]
-        index_adj.append(index_adj[i] + diff + 1)
-    # get the indices of the modified bases
-    modified_bases = base_index[index_adj]
+    # get reference positons
     refpos = np.array(read.get_reference_positions(full_length=True))
     if read.is_reverse:
         refpos = np.flipud(refpos)
-        probabilities = probabilities[::-1]
+    modified_bases = []
+    if num_base == 0:
+        modsPresent = False
+    if modsPresent:
+        deltas = [
+            int(i) for i in read.get_tag("Mm").split(";")[index].split(",")[1:]
+        ]
+        Ml = read.get_tag("Ml")
+        if index == 0:
+            probabilities = np.array(Ml[0:num_base], dtype=int)
+        if index == 1:
+            probabilities = np.array(Ml[0 - num_base :], dtype=int)
+        # determine locations of the modified bases, where index_adj is the adjustment of the base_index
+        # based on the cumulative sum of the deltas
+        locations = np.cumsum(deltas)
+        # loop through locations and increment index_adj by the difference between the next location and current one + 1
+        # if the difference is zero, therefore, the index adjustment just gets incremented by one because no base should be skipped
+        index_adj = []
+        index_adj.append(locations[0])
+        i = 0
+        for i in range(len(locations) - 1):
+            diff = locations[i + 1] - locations[i]
+            index_adj.append(index_adj[i] + diff + 1)
+        # get the indices of the modified bases
+        modified_bases = base_index[index_adj]
+        if read.is_reverse:
+            probabilities = probabilities[::-1]
 
     # extract CpG sites only rather than all mC
     keep = []
@@ -458,7 +521,7 @@ def get_mod_reference_positions_by_mod(
             return (basemod, refpos_total_adjusted, probs)
         else:
             return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
-    else:
+    elif not qc:
         update_methylation_aggregate_db(
             refpos[keep],
             refpos[all_bases_index],
@@ -474,6 +537,15 @@ def get_mod_reference_positions_by_mod(
             return (basemod, np.array(refpos[all_bases_index]), probs)
         else:
             return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
+    else:
+        if not modsPresent:
+            return (basemod, len(np.array(refpos[all_bases_index])), [])
+        else:
+            return (
+                basemod,
+                len(np.array(refpos[all_bases_index])),
+                probabilities[prob_keep],
+            )
 
 
 def update_methylation_aggregate_db(

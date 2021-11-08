@@ -1,0 +1,6 @@
+#!/usr/bin/env python
+
+import dimelo.qc
+
+# call main(), which takes in command line arguments.
+dimelo.qc.main()
