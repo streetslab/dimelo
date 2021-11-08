@@ -4,13 +4,13 @@ Functions to parse input bams + conduct QC.
 =================================================
 """
 
-# import multiprocessing
+import multiprocessing
 
 import numpy as np
 import pandas as pd
 import pysam
+from joblib import Parallel, delayed
 
-# from joblib import Parallel, delayed
 
 ####################################################################################
 # classes for regions & methylation information
@@ -28,7 +28,7 @@ class Region(object):
         self.string = f"{self.chromosome}_{self.begin}_{self.end}"
         # strand of motif to orient single molecules
         self.strand = region[1][3]
-        self.id = self.string + "_" + str(self.strand)
+        self.id = self.string + '_' + str(self.strand)
         self.add_to_all_regions((self.id, self))
 
     def add_to_all_regions(self, r):
@@ -43,14 +43,13 @@ class Methylation(object):
 
     def __init__(self, table, data_type, name, called_sites):
         self.table = table
-        # self.data_type = data_type
-        # self.name = name
-        # self.called_sites = called_sites
+        #self.data_type = data_type
+        #self.name = name
+        #self.called_sites = called_sites
         self.add_to_all_tables(self.table)
 
     def add_to_all_tables(self, t):
         Methylation.all_tables.append(t)
-
 
 class Read(object):
     all_tables = pd.DataFrame()
@@ -58,9 +57,9 @@ class Read(object):
     def __init__(self, table, data_type, name, called_sites):
 
         self.table = table
-        # self.data_type = data_type
-        # self.name = name
-        # self.called_sites = called_sites
+        #self.data_type = data_type
+        #self.name = name
+        #self.called_sites = called_sites
         self.add_to_all_tables(self.table)
 
     def add_to_all_tables(self, t):
@@ -71,21 +70,20 @@ class Read(object):
 # extracting modified base info from bams
 ####################################################################################
 
-# test all regions and all methylation dataframes
+#test all regions and all methylation dataframes
 def test_meth_reg_all_classes_qc():
-    r = Region([1, 300, 500, "+"])
+    r = Region([1, 300, 500, '+'])
     print(r)
     print(Region.all_regions)
 
-
 def parse_bam(
-    fileName,
-    sampleName,
-    bedFile=None,
-    basemod="A+CG",
-    center=False,
-    windowSize=None,
-    region=None,
+        fileName,
+        sampleName,
+        bedFile=None,
+        basemod="A+CG",
+        center=False,
+        windowSize=None,
+        region=None,
 ):
     """Create methylation object. Process windows in parallel.
     Args:
@@ -101,26 +99,26 @@ def parse_bam(
     if bedFile is not None:
         # make a region object for each row of bedFile
         bed = pd.read_csv(bedFile, sep="\t", header=None)
-        # windows = []
+        windows = []
         for row in bed.iterrows():
-            # r = Region(row)
+            r = Region(row)
             print(row)
-            # windows.append(Region(row))
+            #windows.append(Region(row))
 
-        # num_cores = multiprocessing.cpu_count()
-        # meth_data = Parallel(n_jobs=num_cores)(
-        #     delayed(parse_ont_bam_by_window)(
-        #         fileName, sampleName, basemod, windowSize, w, center
-        #     )
-        #     for w in windows
-        # )
+        num_cores = multiprocessing.cpu_count()
+        meth_data = Parallel(n_jobs=num_cores)(
+            delayed(parse_ont_bam_by_window)(
+                fileName, sampleName, basemod, windowSize, w, center
+            )
+            for w in windows
+        )
 
-        # list_tables = []
-        # for m in meth_data:
+        #list_tables = []
+        #for m in meth_data:
         #    list_tables.append(m.table)
-        # all_data = pd.concat(list_tables)
+        #all_data = pd.concat(list_tables)
 
-        # return all_data
+        #return all_data
         return Methylation.all_tables
 
     if region is not None:
@@ -130,7 +128,7 @@ def parse_bam(
 
 
 def parse_ont_bam_by_window(
-    fileName, sampleName, basemod, windowSize, window, center
+        fileName, sampleName, basemod, windowSize, window, center
 ):
     """Create methylation object for each window.
     Args:
@@ -146,7 +144,7 @@ def parse_ont_bam_by_window(
     bam = pysam.AlignmentFile(fileName, "rb")
     data = []
     for read in bam.fetch(
-        reference=window.chromosome, start=window.begin, end=window.end
+            reference=window.chromosome, start=window.begin, end=window.end
     ):
         [
             (mod, positions, probs),
@@ -155,7 +153,7 @@ def parse_ont_bam_by_window(
         for pos, prob in zip(positions, probs):
             if pos is not None:
                 if (center is True and abs(pos) <= windowSize) or (
-                    center is False and pos > window.begin and pos < window.end
+                        center is False and pos > window.begin and pos < window.end
                 ):  # to decrease memory, only store bases within the window
                     data.append(
                         (
@@ -171,7 +169,7 @@ def parse_ont_bam_by_window(
         for pos, prob in zip(positions2, probs2):
             if pos is not None:
                 if (center is True and abs(pos) <= windowSize) or (
-                    center is False and pos > window.begin and pos < window.end
+                        center is False and pos > window.begin and pos < window.end
                 ):  # to decrease memory, only store bases within the window
                     data.append(
                         (
@@ -186,18 +184,9 @@ def parse_ont_bam_by_window(
                     )
     data_return = Methylation(
         table=pd.DataFrame(
-            data,
-            columns=[
-                "read_name",
-                "length",
-                "strand",
-                "chr",
-                "pos",
-                "prob",
-                "mod",
-            ],
+            data, columns=["read_name", "length","strand", "chr", "pos", "prob", "mod"]
         )
-        .astype(
+            .astype(
             dtype={
                 "read_name": "category",
                 "length": "category",
@@ -207,7 +196,7 @@ def parse_ont_bam_by_window(
                 "prob": "int16",
             }
         )
-        .sort_values(["read_name", "pos"]),
+            .sort_values(["read_name", "pos"]),
         data_type="ont-bam",
         name=sampleName,
         called_sites=len(data),
@@ -267,7 +256,7 @@ def get_mod_reference_positions_by_mod(read, basemod, index, window, center):
     if index == 0:
         probabilities = np.array(Ml[0:num_base], dtype=int)
     if index == 1:
-        probabilities = np.array(Ml[0 - num_base :], dtype=int)
+        probabilities = np.array(Ml[0 - num_base:], dtype=int)
     base_index = np.array(
         [
             i
@@ -302,12 +291,12 @@ def get_mod_reference_positions_by_mod(read, basemod, index, window, center):
     if "C" in basemod:
         for m in modified_bases:
             if (
-                m < len(seq) - 1
+                    m < len(seq) - 1
             ):  # if modified C is not the last base in the read
                 if (refpos[m] is not None) & (refpos[m + 1] is not None):
                     if seq[m + 1] == "G":
                         if (
-                            abs(refpos[m + 1] - refpos[m]) == 1
+                                abs(refpos[m + 1] - refpos[m]) == 1
                         ):  # ensure there isn't a gap
                             keep.append(m)
                             prob_keep.append(i)
@@ -328,8 +317,8 @@ def get_mod_reference_positions_by_mod(read, basemod, index, window, center):
             )
         if window.strand == "-":
             refpos_adjusted = -1 * (
-                np.array(refpos[keep])
-                - round(((window.end - window.begin) / 2 + window.begin))
+                    np.array(refpos[keep])
+                    - round(((window.end - window.begin) / 2 + window.begin))
             )
         return (basemod, refpos_adjusted, probabilities[prob_keep])
     else:
