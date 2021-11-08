@@ -56,12 +56,13 @@ class Region(object):
 ####################################################################################
 
 
-def make_db(fileName, sampleName, outDir):
+def make_db(fileName, sampleName, outDir, testMode):
     DATABASE_NAME = (
         outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
     )
 
-    clear_db(DATABASE_NAME)
+    if testMode:
+        clear_db(DATABASE_NAME)
 
     table_name = "methylationByBase_" + sampleName
     cols = ["id", "read_name", "chr", "pos", "prob", "mod"]
@@ -85,6 +86,8 @@ def parse_bam(
     region=None,
     threshA=129,
     threshC=129,
+    extractAllBases=False,
+    testMode=False,
 ):
     """Create methylation object. Process windows in parallel.
     Args:
@@ -101,7 +104,7 @@ def parse_bam(
             dictionary with aggregate data: {pos:modification: [methylated_bases, total_bases]}
     """
     # create database with two tables: methylationByBase and methylationAggregate
-    make_db(fileName, sampleName, outDir)
+    make_db(fileName, sampleName, outDir, testMode)
 
     bam = pysam.AlignmentFile(fileName, "rb")
 
@@ -140,6 +143,7 @@ def parse_bam(
             threshC,
             batchSize,
             outDir,
+            extractAllBases,
         )
         if len(i) > 0
     )
@@ -157,6 +161,7 @@ def batch_read_generator(
     threshC,
     batchSize,
     outDir,
+    extractAllBases,
 ):
     """Parse all reads in batchs
     Args:
@@ -194,6 +199,7 @@ def batch_read_generator(
                 fileName,
                 sampleName,
                 outDir,
+                extractAllBases,
             )
             for pos, prob in zip(positions, probs):
                 if pos is not None:
@@ -247,6 +253,7 @@ def get_modified_reference_positions(
     fileName,
     sampleName,
     outDir,
+    extractAllBases,
 ):
     """Extract mA and mC pos & prob information for the read
     Args:
@@ -281,6 +288,7 @@ def get_modified_reference_positions(
                 fileName,
                 sampleName,
                 outDir,
+                extractAllBases,
             )
         else:
             mod1_return = (None, [None], [None])
@@ -297,6 +305,7 @@ def get_modified_reference_positions(
                 fileName,
                 sampleName,
                 outDir,
+                extractAllBases,
             )
             return (mod1_return, mod2_return)
         else:
@@ -317,6 +326,7 @@ def get_mod_reference_positions_by_mod(
     fileName,
     sampleName,
     outDir,
+    extractAllBases,
 ):
     """Get positions and probabilities of modified bases for a single read
     Args:
@@ -367,6 +377,7 @@ def get_mod_reference_positions_by_mod(
     keep = []
     prob_keep = []
     all_bases_index = []
+    probs = []
     i = 0
     seq = read.get_forward_sequence()
     # deal with None for refpos from soft clipped / unaligned bases
@@ -387,6 +398,11 @@ def get_mod_reference_positions_by_mod(
                                 if probabilities[i] >= threshC:
                                     keep.append(b)
                                     prob_keep.append(i)
+                            if extractAllBases:
+                                if b in modified_bases:
+                                    probs.append(probabilities[i])
+                                else:
+                                    probs.append(0)
             # increment for each instance of modified base
             if b in modified_bases:
                 i = i + 1
@@ -400,6 +416,11 @@ def get_mod_reference_positions_by_mod(
                     if probabilities[i] >= threshA:
                         keep.append(b)
                         prob_keep.append(i)
+                if extractAllBases:
+                    if b in modified_bases:
+                        probs.append(probabilities[i])
+                    else:
+                        probs.append(0)
             # increment for each instance of modified base
             if b in modified_bases:
                 i = i + 1
@@ -433,7 +454,10 @@ def get_mod_reference_positions_by_mod(
             sampleName,
             outDir,
         )
-        return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
+        if extractAllBases:
+            return (basemod, refpos_total_adjusted, probs)
+        else:
+            return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
     else:
         update_methylation_aggregate_db(
             refpos[keep],
@@ -446,7 +470,10 @@ def get_mod_reference_positions_by_mod(
             sampleName,
             outDir,
         )
-        return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
+        if extractAllBases:
+            return (basemod, np.array(refpos[all_bases_index]), probs)
+        else:
+            return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
 
 
 def update_methylation_aggregate_db(

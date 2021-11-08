@@ -28,9 +28,8 @@ def create_sql_table(database_name, table_name, cols, d_types):
         else:
             s = s + cols[i] + " " + d_types[i] + "," + " "
     fs = "(" + s + ")"
-    c.execute(
-        """CREATE TABLE if not exists """ + table_name + """ """ + fs + """;"""
-    )
+    c.execute("""DROP TABLE IF EXISTS """ + table_name + """;""")
+    c.execute("""CREATE TABLE """ + table_name + """ """ + fs + """;""")
     conn.commit()
 
 
