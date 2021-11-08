@@ -1,14 +1,15 @@
 "Functions to parse_bam for QC"
 
-import numpy as np
-import pysam
 import multiprocessing
 import time
-from joblib import Parallel, delayed
 from math import log
+
+import numpy as np
+import pysam
+from joblib import Parallel, delayed
+
 from dimelo.parse_bam import get_modified_reference_positions, make_db
 from dimelo.utils import execute_sql_command
-
 
 # def create_sql_table(database_name, table_name, cols, d_types):
 #     if os.path.exists(database_name):
@@ -222,12 +223,34 @@ def batch_read_generator(file_bamIn, batch_size, outDir):
     for read in file_bamIn.fetch(until_eof=True):
         isA = False
         isC = False
-        r = [read.query_name, read.reference_name, read.reference_start, read.reference_end, read.query_length,
-             "-" if read.is_reverse else "+", read.mapping_quality, ave_qual(read.query_qualities),
-             ave_qual(read.query_alignment_qualities)]
-        [(mod, numA, probs), (mod2, numC, probs2)] = get_modified_reference_positions(read, "A+CG", None, False,
-                                                                                      129, 129, None, None, None,
-                                                                                      outDir, False, True)
+        r = [
+            read.query_name,
+            read.reference_name,
+            read.reference_start,
+            read.reference_end,
+            read.query_length,
+            "-" if read.is_reverse else "+",
+            read.mapping_quality,
+            ave_qual(read.query_qualities),
+            ave_qual(read.query_alignment_qualities),
+        ]
+        [
+            (mod, numA, probs),
+            (mod2, numC, probs2),
+        ] = get_modified_reference_positions(
+            read,
+            "A+CG",
+            None,
+            False,
+            129,
+            129,
+            None,
+            None,
+            None,
+            outDir,
+            False,
+            True,
+        )
 
         if type(numA) == int:
             isA = True
@@ -262,8 +285,9 @@ def prob_bin(bin):
     # calculating probability that no base in the window (or across reads) is methylated and then taking the complement
     # treat p=1 as 254/255 for prevent log(0)
     # print(bin)
-    probs = [np.log(1 - p) for p in bin if
-             ((p < 1) and (p >= 0.5))]  # only consider probabilities > 0.5 and handle 1 on next line
+    probs = [
+        np.log(1 - p) for p in bin if ((p < 1) and (p >= 0.5))
+    ]  # only consider probabilities > 0.5 and handle 1 on next line
     probs1 = [np.log(1 - 254 / 255) for p in bin if p == 1]
     probsAll = probs + probs1
     prob = 1 - np.exp(sum(probsAll))
@@ -303,15 +327,18 @@ def parse_bam_read(bamIn, outDir):
     # table_name = 'READS'
     # create_sql_table(DB_NAME, table_name, cols, dt)
 
-    DB_NAME, tables = make_db(bamIn, '', outDir, True, True)
-    template_command = '''INSERT INTO ''' + tables[0] + ''' VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);'''
+    DB_NAME, tables = make_db(bamIn, "", outDir, True, True)
+    template_command = (
+        """INSERT INTO """
+        + tables[0]
+        + """ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);"""
+    )
     num_cores = multiprocessing.cpu_count() - 1
 
     Parallel(n_jobs=num_cores, verbose=10)(
-        delayed(execute_sql_command)(
-            template_command,
-            DB_NAME,
-            i) for i in batch_read_generator(file_bamIn, 100, outDir))
+        delayed(execute_sql_command)(template_command, DB_NAME, i)
+        for i in batch_read_generator(file_bamIn, 100, outDir)
+    )
     return DB_NAME, tables[0]
 
 
@@ -324,7 +351,7 @@ def get_runtime(f, inp1, inp2):
 
 
 def qc_report(filebamIn):
-    runtime = get_runtime(parse_bam_read, filebamIn, 'out')
+    runtime = get_runtime(parse_bam_read, filebamIn, "out")
     print(runtime)
 
 
