@@ -430,8 +430,8 @@ def make_cluster_plot(
         (abs(all_data_t["pos"]) > 2 * windowSize + gap - 100)
         & (abs(all_data_t["pos"]) < 2 * windowSize + gap + 100)
     ]
-    peak_ids = peak["read:windows"].unique()
-    peak_ids2 = peak2["read:windows"].unique()
+    peak_ids = peak["read_windows"].unique()
+    peak_ids2 = peak2["read_windows"].unique()
     boolean_keep_series = all_data_t.id.isin(peak_ids) | all_data_t.id.isin(
         peak_ids2
     )  # reads_keep
@@ -467,7 +467,7 @@ def make_cluster_plot(
     # cluster plots
     # TODO: speed this up
     all_data_pivoted = pd.pivot_table(
-        all_data_t_p, values="prob", columns="pos", index="read:windows"
+        all_data_t_p, values="prob", columns="pos", index="read_windows"
     )  # index was read_name #p
     r = range(-windowSize, 4 * windowSize + gap + 1, 1)
     for bp in r:

@@ -106,7 +106,7 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
         table_name = "methylationByBaseJoint_" + sampleName
         cols = [
             "id",
-            "read:windows",
+            "read_windows",
             "read_name",
             "pos",
             "prob",
