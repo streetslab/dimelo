@@ -68,6 +68,7 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
     if testMode:
         clear_db(DATABASE_NAME)
     tables = []
+    # for qc report
     if qc:
         table_name = "reads"
         cols = [
@@ -102,6 +103,7 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
         ]
         create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
         tables.append(table_name)
+    # for joint occupancy plots
     elif joint:
         table_name = "methylationByBaseJoint_" + sampleName
         cols = [
@@ -116,6 +118,7 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
         dtypes = ["TEXT", "TEXT", "TEXT", "INT", "INT", "TEXT", "FLOAT"]
         create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
         tables.append(table_name)
+    # for browser and enrichment plots
     else:
         table_name = "methylationByBase_" + sampleName
         cols = ["id", "read_name", "chr", "pos", "prob", "mod"]

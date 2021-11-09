@@ -132,6 +132,7 @@ def extract_peak_pairs(bed, min_dist, max_dist, outDir):
         ):
             left_keep.append(i)
             right_keep.append(i + 1)
+    print("number of peak pairs: " + str(bed.iloc[left_keep].shape[0]))
     return bed.iloc[left_keep], bed.iloc[right_keep]
 
 
