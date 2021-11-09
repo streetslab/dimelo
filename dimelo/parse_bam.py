@@ -118,6 +118,12 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
         dtypes = ["TEXT", "TEXT", "TEXT", "INT", "INT", "TEXT", "FLOAT"]
         create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
         tables.append(table_name)
+
+        table_name = "methylationAggregate_" + sampleName
+        cols = ["id", "pos", "mod", "methylated_bases", "total_bases"]
+        dtypes = ["TEXT", "INT", "TEXT", "INT", "INT"]
+        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
+        tables.append(table_name)
     # for browser and enrichment plots
     else:
         table_name = "methylationByBase_" + sampleName
