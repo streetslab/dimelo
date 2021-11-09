@@ -57,7 +57,7 @@ class Region(object):
 ####################################################################################
 
 
-def make_db(fileName, sampleName, outDir, testMode, qc):
+def make_db(fileName, sampleName, outDir, testMode, qc, joint):
     if not os.path.exists(outDir):
         os.mkdir(outDir)
 
@@ -102,6 +102,20 @@ def make_db(fileName, sampleName, outDir, testMode, qc):
         ]
         create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
         tables.append(table_name)
+    elif joint:
+        table_name = "methylationByBaseJoint_" + sampleName
+        cols = [
+            "id",
+            "read:windows",
+            "read_name",
+            "pos",
+            "prob",
+            "mod",
+            "peak_strength",
+        ]
+        dtypes = ["TEXT", "TEXT", "TEXT", "INT", "INT", "TEXT", "FLOAT"]
+        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
+        tables.append(table_name)
     else:
         table_name = "methylationByBase_" + sampleName
         cols = ["id", "read_name", "chr", "pos", "prob", "mod"]
@@ -132,6 +146,7 @@ def parse_bam(
     extractAllBases=False,
     testMode=False,
     qc=False,
+    joint=False,
 ):
     """Create methylation object. Process windows in parallel.
     Args:
@@ -148,7 +163,7 @@ def parse_bam(
             dictionary with aggregate data: {pos:modification: [methylated_bases, total_bases]}
     """
     # create database with two tables: methylationByBase and methylationAggregate
-    make_db(fileName, sampleName, outDir, testMode, qc)
+    make_db(fileName, sampleName, outDir, testMode, qc, joint)
 
     bam = pysam.AlignmentFile(fileName, "rb")
 

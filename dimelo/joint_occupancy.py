@@ -69,7 +69,7 @@ def joint_occupancy(
     )
 
     all_data = pd.read_sql(
-        "SELECT * from methylationByBase_" + sampleName,
+        "SELECT * from methylationByBaseJoint_" + sampleName,
         sqlite3.connect(
             outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
         ),
@@ -157,14 +157,16 @@ def parse_bam_paired(
 ):
     bam = pysam.AlignmentFile(fileName, "rb")
 
-    make_db(fileName, sampleName, outDir, False, False)
+    make_db(fileName, sampleName, outDir, False, False, True)
 
     DATABASE_NAME = (
         outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
     )
-    table_name = "methylationByBase_" + sampleName
+    table_name = "methylationByBaseJoint_" + sampleName
     command = (
-        """INSERT OR IGNORE INTO """ + table_name + """ VALUES(?,?,?,?,?,?);"""
+        """INSERT OR IGNORE INTO """
+        + table_name
+        + """ VALUES(?,?,?,?,?,?,?);"""
     )
 
     num_cores = multiprocessing.cpu_count()
@@ -225,7 +227,7 @@ def batch_read_generator(
             :param batchSize: number of reads to submit to db at once
             :param gap: gap between neighboring viewpoints
     Return:
-            data to put into methylationByBase table
+            data to put into methylationByBaseJoint table
     """
     counter = 0
     data = []
@@ -283,6 +285,11 @@ def batch_read_generator(
                                     + w2.string
                                     + ":"
                                     + str(posL),
+                                    read.query_name
+                                    + ":"
+                                    + w1.string
+                                    + "-"
+                                    + w2.string,
                                     read.query_name,
                                     int(posL),
                                     int(prob),
@@ -301,6 +308,11 @@ def batch_read_generator(
                                     + w2.string
                                     + ":"
                                     + str(posR_adj),
+                                    read.query_name
+                                    + ":"
+                                    + w1.string
+                                    + "-"
+                                    + w2.string,
                                     read.query_name,
                                     int(posR_adj),
                                     int(prob),
@@ -320,6 +332,11 @@ def batch_read_generator(
                                     + w2.string
                                     + ":"
                                     + str(posL),
+                                    read.query_name
+                                    + ":"
+                                    + w1.string
+                                    + "-"
+                                    + w2.string,
                                     read.query_name,
                                     int(posL),
                                     int(prob),
@@ -338,6 +355,11 @@ def batch_read_generator(
                                     + w2.string
                                     + ":"
                                     + str(posR_adj),
+                                    read.query_name
+                                    + ":"
+                                    + w1.string
+                                    + "-"
+                                    + w2.string,
                                     read.query_name,
                                     int(posR_adj),
                                     int(prob),
@@ -368,15 +390,16 @@ def bin_probabilities(all_data, mod):
         binned_probs = probs.rolling(window=20, center=True).apply(
             lambda b: prob_bin(b)
         )
-
         all_data_mod.loc[all_data_mod["id"] == r, "prob"] = binned_probs
     return all_data_mod
 
 
 def prob_bin(bin):
-    # probability a base in the window is methylated by:
-    # calculating probability that no base in the window is methylated and then taking the complement
-    # treat p=1 as 254/255 for prevent log(0)
+    """
+    probability a base in the window is methylated by:
+    calculating probability that no base in the window is methylated and then taking the complement
+    treat p=1 as 254/255 for prevent log(0)
+    """
     probs = [
         np.log(1 - p) for p in bin if ((p < 1) and (p > 0.5))
     ]  # only consider probabilities > 0.5 and handle 1 later
@@ -399,18 +422,25 @@ def make_cluster_plot(
 ):
     # all_data is already threshold to only contain
     all_data_t = all_data[all_data["prob"] > thresh]
+    # all_data_t = all_data_t.astype({"pos": int}) # TODO: need this? - shouldn't once update db
+
     # require that quality > thresh be within 100 bp of the peak center on either side
-    peak = all_data_t[abs(all_data_t["pos"] <= 100)]
+    peak = all_data_t[abs(all_data_t["pos"]) <= 100]
     peak2 = all_data_t[
-        abs(all_data_t["pos"] > 2 * windowSize + gap - 100)
-        & abs(all_data_t["pos"] < 2 * windowSize + gap + 100)
+        (abs(all_data_t["pos"]) > 2 * windowSize + gap - 100)
+        & (abs(all_data_t["pos"]) < 2 * windowSize + gap + 100)
     ]
-    peak_ids = peak["id"].unique()
-    peak_ids2 = peak2["id"].unique()
+    peak_ids = peak["read:windows"].unique()
+    peak_ids2 = peak2["read:windows"].unique()
     boolean_keep_series = all_data_t.id.isin(peak_ids) | all_data_t.id.isin(
         peak_ids2
     )  # reads_keep
     all_data_t_p = all_data_t[boolean_keep_series]
+
+    print(
+        "number of reads in final plot: "
+        + str(len(all_data_t_p.read_name.unique()))
+    )
 
     fig, ax = plt.subplots()
     sns.scatterplot(
@@ -425,11 +455,10 @@ def make_cluster_plot(
     )
 
     ax.spines[["top", "right", "left"]].set_visible(False)
-
     plt.yticks([])
     plt.ylabel("")
     plt.xlabel("")
-    plt.xlim(-windowSize, windowSize)
+    plt.xlim(-windowSize, 3 * windowSize + gap)
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_joint_occupancy.png",
         dpi=600,
@@ -438,7 +467,7 @@ def make_cluster_plot(
     # cluster plots
     # TODO: speed this up
     all_data_pivoted = pd.pivot_table(
-        all_data_t_p, values="prob", columns="pos", index="id"
+        all_data_t_p, values="prob", columns="pos", index="read:windows"
     )  # index was read_name #p
     r = range(-windowSize, 4 * windowSize + gap + 1, 1)
     for bp in r:
