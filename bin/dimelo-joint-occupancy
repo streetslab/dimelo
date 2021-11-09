@@ -1,0 +1,6 @@
+#!/usr/bin/env python
+
+import dimelo.joint_occupancy
+
+# call main(), which takes in command line arguments.
+dimelo.joint_occupancy.main()

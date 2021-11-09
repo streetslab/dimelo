@@ -27,6 +27,7 @@ REQUIRED_PACKAGES = [
     "seaborn==0.11.2",
     "pyranges==0.0.104",
     "psutil==5.8.0",
+    "scikit-learn==0.24.1"
     # "cython==0.29.24",
 ]
 
@@ -45,6 +46,7 @@ setuptools.setup(
         "bin/dimelo-enrich-sm-roi-overlay",
         "bin/dimelo-parse-bam",
         "bin/dimelo-qc-report",
+        "bin/dimelo-joint-occupancy",
     ],  # command line scripts installed
     author_email="amaslan@berkeley.edu",  # Author email
     description="Tool for analyzing modified bases from BAM files",  # Short description of project
