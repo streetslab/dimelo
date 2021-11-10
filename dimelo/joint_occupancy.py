@@ -76,7 +76,7 @@ def joint_occupancy(
     )
 
     if "A" in basemod:
-        all_data_A_binned = bin_probabilities(all_data, "A")
+        all_data_A_binned = all_data  # bin_probabilities(all_data, "A")
         print(
             "processing "
             + str(len(all_data_A_binned["read_name"].unique()))
