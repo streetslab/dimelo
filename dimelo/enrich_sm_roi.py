@@ -65,7 +65,7 @@ def enrich_sm_roi(
         ),
     )
     aggregate_counts = pd.read_sql(
-        "SELECT * from methylationAggregate" + sampleName,
+        "SELECT * from methylationAggregate_" + sampleName,
         sqlite3.connect(
             outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
         ),
