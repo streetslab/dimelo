@@ -354,17 +354,17 @@ def parse_reads_windows(
                                 w2.peak_strength,
                             )
                         )
-        if data:
-            DATABASE_NAME = (
-                outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
-            )
-            table_name = "methylationByBaseJoint_" + sampleName
-            command = (
-                """INSERT OR IGNORE INTO """
-                + table_name
-                + """ VALUES(?,?,?,?,?,?,?);"""
-            )
-            execute_sql_command(command, DATABASE_NAME, data)
+    if data:
+        DATABASE_NAME = (
+            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+        )
+        table_name = "methylationByBaseJoint_" + sampleName
+        command = (
+            """INSERT OR IGNORE INTO """
+            + table_name
+            + """ VALUES(?,?,?,?,?,?,?);"""
+        )
+        execute_sql_command(command, DATABASE_NAME, data)
 
 
 def bin_probabilities(all_data, mod):
