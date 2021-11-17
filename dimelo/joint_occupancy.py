@@ -157,33 +157,20 @@ def parse_bam_paired(
     threshC,
     gap,
 ):
-    bam = pysam.AlignmentFile(fileName, "rb")
 
     make_db(fileName, sampleName, outDir, False, False, True)
-
-    DATABASE_NAME = (
-        outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
-    )
-    table_name = "methylationByBaseJoint_" + sampleName
-    command = (
-        """INSERT OR IGNORE INTO """
-        + table_name
-        + """ VALUES(?,?,?,?,?,?,?);"""
-    )
 
     num_cores = multiprocessing.cpu_count()
     batchSize = 100
 
     Parallel(n_jobs=num_cores, verbose=10)(
-        delayed(execute_sql_command)(command, DATABASE_NAME, i)
-        for i in batch_read_generator(
-            bam,
+        delayed(parse_reads_windows)(
             fileName,
             sampleName,
             basemod,
             windowSize,
-            windows1,
-            windows2,
+            window1,
+            window2,
             center,
             threshA,
             threshC,
@@ -193,18 +180,17 @@ def parse_bam_paired(
             False,
             gap,
         )
-        if len(i) > 0
+        for window1, window2 in zip(windows1, windows2)
     )
 
 
-def batch_read_generator(
-    bam,
+def parse_reads_windows(
     fileName,
     sampleName,
     basemod,
     windowSize,
-    windows1,
-    windows2,
+    w1,
+    w2,
     center,
     threshA,
     threshC,
@@ -216,7 +202,6 @@ def batch_read_generator(
 ):
     """Parse all reads in batchs
     Args:
-            :param bam: read in bam file with Mm and Ml tags
             :param fileName: name of bam file
             :param sampleName: name of sample for output file name labelling
             :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
@@ -231,151 +216,155 @@ def batch_read_generator(
     Return:
             data to put into methylationByBaseJoint table
     """
-    counter = 0
     data = []
 
-    for w1, w2 in zip(windows1, windows2):
-        reads1 = bam.fetch(reference=w1.chromosome, start=w1.begin, end=w1.end)
-        reads2 = bam.fetch(reference=w1.chromosome, start=w1.begin, end=w1.end)
-        for read in reads1:
-            # only add reads that span both sites
-            # includeunique identifier that is w1-w2-read_name
-            if read in reads2:
-                [
-                    (mod, positionsL, probs),
-                    (mod2, positions2L, probs2),
-                ] = get_modified_reference_positions(
-                    read,
-                    basemod,
-                    w1,
-                    center,
-                    threshA,
-                    threshC,
-                    windowSize,
-                    fileName,
-                    sampleName,
-                    outDir,
-                    extractAllBases,
-                    qc,
-                )
-                [
-                    (mod, positionsR, probs),
-                    (mod2, positions2R, probs2),
-                ] = get_modified_reference_positions(
-                    read,
-                    basemod,
-                    w2,
-                    center,
-                    threshA,
-                    threshC,
-                    windowSize,
-                    fileName,
-                    sampleName,
-                    outDir,
-                    extractAllBases,
-                    qc,
-                )
-                for posL, posR, prob in zip(positionsL, positionsR, probs):
-                    if posL is not None:
-                        if abs(posL) <= windowSize:
-                            data.append(
-                                (
-                                    read.query_name
-                                    + ":"
-                                    + w1.string
-                                    + "-"
-                                    + w2.string
-                                    + ":"
-                                    + str(posL),
-                                    read.query_name
-                                    + ":"
-                                    + w1.string
-                                    + "-"
-                                    + w2.string,
-                                    read.query_name,
-                                    int(posL),
-                                    int(prob),
-                                    mod,
-                                    w1.peak_strength,
-                                )
+    bam = pysam.AlignmentFile(fileName, "rb")
+
+    reads1 = bam.fetch(reference=w1.chromosome, start=w1.begin, end=w1.end)
+    reads2 = bam.fetch(reference=w1.chromosome, start=w1.begin, end=w1.end)
+    for read in reads1:
+        # only add reads that span both sites
+        # includeunique identifier that is w1-w2-read_name
+        if read in reads2:
+            [
+                (mod, positionsL, probs),
+                (mod2, positions2L, probs2),
+            ] = get_modified_reference_positions(
+                read,
+                basemod,
+                w1,
+                center,
+                threshA,
+                threshC,
+                windowSize,
+                fileName,
+                sampleName,
+                outDir,
+                extractAllBases,
+                qc,
+            )
+            [
+                (mod, positionsR, probs),
+                (mod2, positions2R, probs2),
+            ] = get_modified_reference_positions(
+                read,
+                basemod,
+                w2,
+                center,
+                threshA,
+                threshC,
+                windowSize,
+                fileName,
+                sampleName,
+                outDir,
+                extractAllBases,
+                qc,
+            )
+            for posL, posR, prob in zip(positionsL, positionsR, probs):
+                if posL is not None:
+                    if abs(posL) <= windowSize:
+                        data.append(
+                            (
+                                read.query_name
+                                + ":"
+                                + w1.string
+                                + "-"
+                                + w2.string
+                                + ":"
+                                + str(posL),
+                                read.query_name
+                                + ":"
+                                + w1.string
+                                + "-"
+                                + w2.string,
+                                read.query_name,
+                                int(posL),
+                                int(prob),
+                                mod,
+                                w1.peak_strength,
                             )
-                        if abs(posR) <= windowSize:
-                            posR_adj = posR + 2 * windowSize + gap
-                            data.append(
-                                (
-                                    read.query_name
-                                    + ":"
-                                    + w1.string
-                                    + "-"
-                                    + w2.string
-                                    + ":"
-                                    + str(posR_adj),
-                                    read.query_name
-                                    + ":"
-                                    + w1.string
-                                    + "-"
-                                    + w2.string,
-                                    read.query_name,
-                                    int(posR_adj),
-                                    int(prob),
-                                    mod,
-                                    w2.peak_strength,
-                                )
+                        )
+                    if abs(posR) <= windowSize:
+                        posR_adj = posR + 2 * windowSize + gap
+                        data.append(
+                            (
+                                read.query_name
+                                + ":"
+                                + w1.string
+                                + "-"
+                                + w2.string
+                                + ":"
+                                + str(posR_adj),
+                                read.query_name
+                                + ":"
+                                + w1.string
+                                + "-"
+                                + w2.string,
+                                read.query_name,
+                                int(posR_adj),
+                                int(prob),
+                                mod,
+                                w2.peak_strength,
                             )
-                for posL, posR, prob in zip(positions2L, positions2R, probs2):
-                    if posL is not None:
-                        if abs(posL) <= 1000:
-                            data.append(
-                                (
-                                    read.query_name
-                                    + ":"
-                                    + w1.string
-                                    + "-"
-                                    + w2.string
-                                    + ":"
-                                    + str(posL),
-                                    read.query_name
-                                    + ":"
-                                    + w1.string
-                                    + "-"
-                                    + w2.string,
-                                    read.query_name,
-                                    int(posL),
-                                    int(prob),
-                                    mod2,
-                                    w1.peak_strength,
-                                )
+                        )
+            for posL, posR, prob in zip(positions2L, positions2R, probs2):
+                if posL is not None:
+                    if abs(posL) <= windowSize:
+                        data.append(
+                            (
+                                read.query_name
+                                + ":"
+                                + w1.string
+                                + "-"
+                                + w2.string
+                                + ":"
+                                + str(posL),
+                                read.query_name
+                                + ":"
+                                + w1.string
+                                + "-"
+                                + w2.string,
+                                read.query_name,
+                                int(posL),
+                                int(prob),
+                                mod2,
+                                w1.peak_strength,
                             )
-                        if abs(posR) <= 1000:
-                            posR_adj = posR + 3000
-                            data.append(
-                                (
-                                    read.query_name
-                                    + ":"
-                                    + w1.string
-                                    + "-"
-                                    + w2.string
-                                    + ":"
-                                    + str(posR_adj),
-                                    read.query_name
-                                    + ":"
-                                    + w1.string
-                                    + "-"
-                                    + w2.string,
-                                    read.query_name,
-                                    int(posR_adj),
-                                    int(prob),
-                                    mod2,
-                                    w2.peak_strength,
-                                )
+                        )
+                    if abs(posR) <= windowSize:
+                        posR_adj = posR + 2 * windowSize + gap
+                        data.append(
+                            (
+                                read.query_name
+                                + ":"
+                                + w1.string
+                                + "-"
+                                + w2.string
+                                + ":"
+                                + str(posR_adj),
+                                read.query_name
+                                + ":"
+                                + w1.string
+                                + "-"
+                                + w2.string,
+                                read.query_name,
+                                int(posR_adj),
+                                int(prob),
+                                mod2,
+                                w2.peak_strength,
                             )
-                if counter < batchSize - 1:
-                    counter += 1
-                else:
-                    yield data
-                    counter = 0
-                    data = []
-    yield data
+                        )
+        if data:
+            DATABASE_NAME = (
+                outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+            )
+            table_name = "methylationByBaseJoint_" + sampleName
+            command = (
+                """INSERT OR IGNORE INTO """
+                + table_name
+                + """ VALUES(?,?,?,?,?,?,?);"""
+            )
+            execute_sql_command(command, DATABASE_NAME, data)
 
 
 def bin_probabilities(all_data, mod):
