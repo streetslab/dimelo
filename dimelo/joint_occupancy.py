@@ -76,7 +76,7 @@ def joint_occupancy(
     )
 
     if "A" in basemod:
-        all_data_A_binned = all_data  # bin_probabilities(all_data, "A")
+        all_data_A_binned = all_data  # TODO: bin_probabilities(all_data, "A")
         print(
             "processing "
             + str(len(all_data_A_binned["read_name"].unique()))
@@ -384,14 +384,20 @@ def bin_probabilities(all_data, mod):
     """
     all_data_mod = all_data[all_data["mod"].str.contains(mod)]
     all_data_mod.loc[:, "prob"] = all_data_mod["prob"] / 255
-    read_ids = all_data_mod["id"].unique()
+    read_ids = all_data_mod[
+        "read_windows"
+    ].unique()  # no longer id because id has position
     for r in read_ids:
-        subset = all_data_mod[all_data_mod["id"] == r]
+        subset = all_data_mod[
+            all_data_mod["read_windows"] == r
+        ]  # no longer id because id has position
         probs = subset["prob"]
         binned_probs = probs.rolling(window=20, center=True).apply(
             lambda b: prob_bin(b)
         )
-        all_data_mod.loc[all_data_mod["id"] == r, "prob"] = binned_probs
+        all_data_mod.loc[
+            all_data_mod["read_windows"] == r, "prob"
+        ] = binned_probs  # no longer id because id has position
     return all_data_mod
 
 
@@ -433,7 +439,9 @@ def make_cluster_plot(
     ]
     peak_ids = peak["read_windows"].unique()
     peak_ids2 = peak2["read_windows"].unique()
-    boolean_keep_series = all_data_t.id.isin(peak_ids) | all_data_t.id.isin(
+    boolean_keep_series = all_data_t.read_windows.isin(
+        peak_ids
+    ) | all_data_t.read_windows.isin(
         peak_ids2
     )  # reads_keep
     all_data_t_p = all_data_t[boolean_keep_series]
@@ -455,6 +463,7 @@ def make_cluster_plot(
         legend=None,
     )
 
+    # TODO: add box for gap region
     ax.spines[["top", "right", "left"]].set_visible(False)
     plt.yticks([])
     plt.ylabel("")
@@ -483,7 +492,9 @@ def make_cluster_plot(
     all_data_pivoted_mod_0_rolling = pd.DataFrame()
     for i in range(0, all_data_pivoted_0.shape[0]):
         all_data_pivoted_mod_0_rolling = all_data_pivoted_mod_0_rolling.append(
-            all_data_pivoted_0.iloc[i, :].rolling(window=5).mean()
+            all_data_pivoted_0.iloc[i, :]
+            .rolling(window=5)
+            .mean()  # TODO: add on position?
         )  # 33
     all_data_pivoted_mod_0_rolling_0 = all_data_pivoted_mod_0_rolling.fillna(0)
     k = KMeans(
@@ -522,7 +533,7 @@ def make_cluster_plot(
         + "/"
         + sampleName
         + "_"
-        + thresh
+        + str(thresh)
         + "_cluster_double_peak.4.rolling.png",
         dpi=500,
     )
