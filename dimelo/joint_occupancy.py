@@ -1,6 +1,7 @@
 import multiprocessing
 import sqlite3
 
+import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -469,6 +470,20 @@ def make_cluster_plot(
     plt.ylabel("")
     plt.xlabel("")
     plt.xlim(-windowSize, 3 * windowSize + gap)
+
+    # Create a Rectangle patch
+    rect = patches.Rectangle(
+        (windowSize, 0),
+        gap,
+        len(all_data_t_p.read_windows.unique()),
+        linewidth=1,
+        edgecolor="grey",
+        facecolor="grey",
+    )
+
+    # Add the patch to the Axes
+    ax.add_patch(rect)
+
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_joint_occupancy.png",
         dpi=600,
