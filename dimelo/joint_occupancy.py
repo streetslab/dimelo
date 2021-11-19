@@ -418,7 +418,9 @@ def make_cluster_plot(
     dotsize,
 ):
     # all_data is already threshold to only contain
-    all_data_t = all_data[all_data["prob"] > thresh]
+    all_data_t = all_data[
+        all_data["prob"] > 0.9
+    ]  # TODO:stick with 0.9 for now (thresh later)
 
     # require that quality > thresh be within 100 bp of the peak center on either side
     peak = all_data_t[abs(all_data_t["pos"]) <= 100]
