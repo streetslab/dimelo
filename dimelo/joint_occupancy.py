@@ -40,7 +40,7 @@ def joint_occupancy(
     outDir,
     threshA=129,
     threshC=129,
-    windowSize=10000,
+    windowSize=1000,
     colorA=COLOR_A,
     colorC=COLOR_C,
     dotsize=0.5,
@@ -77,7 +77,7 @@ def joint_occupancy(
     )
 
     if "A" in basemod:
-        all_data_A_binned = all_data  # TODO: bin_probabilities(all_data, "A")
+        all_data_A_binned = bin_probabilities(all_data, "A")  # all_data
         print(
             "processing "
             + str(len(all_data_A_binned["read_name"].unique()))
@@ -419,7 +419,6 @@ def make_cluster_plot(
 ):
     # all_data is already threshold to only contain
     all_data_t = all_data[all_data["prob"] > thresh]
-    # all_data_t = all_data_t.astype({"pos": int}) # TODO: need this? - shouldn't once update db
 
     # require that quality > thresh be within 100 bp of the peak center on either side
     peak = all_data_t[abs(all_data_t["pos"]) <= 100]
@@ -523,7 +522,7 @@ def make_cluster_plot(
         :, (to_plot.columns != "labels") & (to_plot.columns != "left_sum")
     ]
 
-    fig = plt.figure()
+    fig, ax = plt.subplots()
     sns.heatmap(
         to_plot_2,
         cmap=cmapA,
@@ -531,6 +530,20 @@ def make_cluster_plot(
         yticklabels=False,
         cbar_kws=dict(use_gridspec=False, location="top"),
     )
+
+    # Create a Rectangle patch
+    rect = patches.Rectangle(
+        (windowSize, 0),
+        gap,
+        len(all_data_t_p.read_windows.unique()),
+        linewidth=1,
+        edgecolor="grey",
+        facecolor="grey",
+    )
+
+    # Add the patch to the Axes
+    ax.add_patch(rect)
+
     plt.show()
     fig.savefig(
         outDir
