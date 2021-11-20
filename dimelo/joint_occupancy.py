@@ -222,10 +222,15 @@ def parse_reads_windows(
 
     reads1 = bam.fetch(reference=w1.chromosome, start=w1.begin, end=w1.end)
     reads2 = bam.fetch(reference=w1.chromosome, start=w1.begin, end=w1.end)
+    print(w1.chromosome)
+    print(w1.begin)
+    print(w1.end)
+    count = 0
     for read in reads1:
         # only add reads that span both sites
         # includeunique identifier that is w1-w2-read_name
         if read in reads2:
+            count = count + 1
             [
                 (mod, positionsL, probs),
                 (mod2, positions2L, probs2),
@@ -354,6 +359,7 @@ def parse_reads_windows(
                                 w2.peak_strength,
                             )
                         )
+    print(count)
     if data:
         DATABASE_NAME = (
             outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
@@ -503,7 +509,7 @@ def make_cluster_plot(
         )  # 33
     all_data_pivoted_mod_0_rolling_0 = all_data_pivoted_mod_0_rolling.fillna(0)
     k = KMeans(
-        n_clusters=4, random_state=1
+        n_clusters=3, random_state=1  # try with 3 clusters
     )  # try different numbers of clusters #2
     k.fit(all_data_pivoted_mod_0_rolling_0)
 
@@ -539,8 +545,8 @@ def make_cluster_plot(
         gap,
         len(all_data_t_p.read_windows.unique()),
         linewidth=1,
-        edgecolor="grey",
-        facecolor="grey",
+        edgecolor="lightgrey",
+        facecolor="lightgrey",
     )
 
     # Add the patch to the Axes
