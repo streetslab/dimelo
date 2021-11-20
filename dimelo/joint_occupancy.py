@@ -535,7 +535,7 @@ def make_cluster_plot(
 
     # Create a Rectangle patch
     rect = patches.Rectangle(
-        (windowSize, 0),
+        (2 * windowSize, 0),
         gap,
         len(all_data_t_p.read_windows.unique()),
         linewidth=1,
