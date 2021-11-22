@@ -565,5 +565,5 @@ def make_cluster_plot(
 
 
 def main():
-    # TODO add argument parsing
+    # TODO add argument parsing for command line
     print("main")
