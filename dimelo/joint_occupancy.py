@@ -9,6 +9,7 @@ import pysam
 import seaborn as sns
 from joblib import Parallel, delayed
 from matplotlib import colors
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pybedtools import BedTool
 from sklearn.cluster import KMeans
 
@@ -77,7 +78,9 @@ def joint_occupancy(
     )
 
     if "A" in basemod:
-        all_data_A_binned = bin_probabilities(all_data, "A")  # all_data
+        all_data_A_binned = bin_probabilities(
+            all_data, "A", threshA
+        )  # all_data
         print(
             "processing "
             + str(len(all_data_A_binned["read_name"].unique()))
@@ -98,7 +101,7 @@ def joint_occupancy(
                 dotsize,
             )
     if "C" in basemod:
-        all_data_C_binned = bin_probabilities(all_data, "C")
+        all_data_C_binned = bin_probabilities(all_data, "C", threshC)
         print(
             "processing "
             + str(len(all_data_A_binned["read_name"].unique()))
@@ -372,7 +375,7 @@ def parse_reads_windows(
         execute_sql_command(command, DATABASE_NAME, data)
 
 
-def bin_probabilities(all_data, mod):
+def bin_probabilities(all_data, mod, thresh):
     """
     bin data for 10 A's as slide across the read
     calculate the probability at least one base is methylated
@@ -388,7 +391,7 @@ def bin_probabilities(all_data, mod):
         ]  # no longer id because id has position
         probs = subset["prob"]
         binned_probs = probs.rolling(window=20, center=True).apply(
-            lambda b: prob_bin(b)
+            lambda b: prob_bin(b, thresh)
         )
         all_data_mod.loc[
             all_data_mod["read_windows"] == r, "prob"
@@ -396,14 +399,14 @@ def bin_probabilities(all_data, mod):
     return all_data_mod
 
 
-def prob_bin(bin):
+def prob_bin(bin, thresh):
     """
     probability a base in the window is methylated by:
     calculating probability that no base in the window is methylated and then taking the complement
     treat p=1 as 254/255 for prevent log(0)
     """
     probs = [
-        np.log(1 - p) for p in bin if ((p < 1) and (p > 0.5))
+        np.log(1 - p) for p in bin if ((p < 1) and (p >= (thresh / 255)))
     ]  # only consider probabilities > 0.5 and handle 1 later
     probs1 = [np.log(1 - 254 / 255) for p in bin if p == 1]
     probsAll = probs + probs1
@@ -561,6 +564,77 @@ def make_cluster_plot(
         + "_cluster_double_peak.4.rolling.png",
         dpi=500,
     )
+
+    # add ChIP-seq signal strength
+    cmapPurple = colors.LinearSegmentedColormap.from_list(
+        "custom purple", ["white", "#610345"], N=200
+    )
+
+    ordered_read_ids = to_plot.index.values
+    print(
+        "all clusters: "
+        + str(len(all_data_pivoted_mod_0_rolling_0.index.values))
+    )
+    w1_signal_strength = []
+    w2_signal_strength = []
+    for r in ordered_read_ids:
+        read_data = all_data[all_data["read_windows"] == r]
+        w1_peak = read_data[read_data["pos"] <= windowSize][
+            "peak_strength"
+        ].unique()
+        w2_peak = read_data[read_data["pos"] >= (windowSize + gap)][
+            "peak_strength"
+        ].unique()
+        w1_signal_strength.append(w1_peak[0])
+        w2_signal_strength.append(w2_peak[0])
+
+    fig = plt.figure()
+    x = np.linspace(0, len(ordered_read_ids), num=len(ordered_read_ids))
+    y = pd.Series(w1_signal_strength)
+    fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True)
+    extent = [x[0] - (x[1] - x[0]) / 2.0, x[-1] + (x[1] - x[0]) / 2.0, 0, 1]
+    im = ax.imshow(
+        y[np.newaxis, :], cmap=cmapPurple, aspect="auto", extent=extent
+    )
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("top", size="5%", pad=0.25)
+    fig.colorbar(im, cax=cax, orientation="horizontal")
+    ax.set_yticks([])
+    ax.set_xlim(extent[0], extent[1])
+    ax2.plot(x, y, "o", ms=0.5, color="#2D1E2F")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.get_xaxis().set_ticks([])
+    plt.tight_layout()
+    plt.show()
+    fig.savefig(outDir + "/" + sampleName + "_peak_signal_w1.png", dpi=300)
+
+    # window 2
+    # from positions (windowSize+gap) to (windowSize+gap+2*windowSize)
+    fig = plt.figure()
+    x = np.linspace(0, len(ordered_read_ids), num=len(ordered_read_ids))
+    y = pd.Series(w2_signal_strength)
+    fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True)
+    extent = [x[0] - (x[1] - x[0]) / 2.0, x[-1] + (x[1] - x[0]) / 2.0, 0, 1]
+    im = ax.imshow(
+        y[np.newaxis, :], cmap=cmapPurple, aspect="auto", extent=extent
+    )
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("top", size="5%", pad=0.25)
+    fig.colorbar(im, cax=cax, orientation="horizontal")
+    ax.set_yticks([])
+    ax.set_xlim(extent[0], extent[1])
+    ax2.plot(x, y, "o", ms=0.5, color="#2D1E2F")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.get_xaxis().set_ticks([])
+    plt.tight_layout()
+    plt.show()
+    fig.savefig(outDir + "/" + sampleName + "_peak_signal_w2.png", dpi=300)
 
 
 def main():
