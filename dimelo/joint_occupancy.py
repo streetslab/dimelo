@@ -221,7 +221,7 @@ def parse_reads_windows(
     bam = pysam.AlignmentFile(fileName, "rb")
 
     reads1 = bam.fetch(reference=w1.chromosome, start=w1.begin, end=w1.end)
-    reads2 = bam.fetch(reference=w1.chromosome, start=w1.begin, end=w1.end)
+    reads2 = bam.fetch(reference=w2.chromosome, start=w2.begin, end=w2.end)
     count = 0
     for read in reads1:
         # only add reads that span both sites
@@ -356,9 +356,8 @@ def parse_reads_windows(
                                 w2.peak_strength,
                             )
                         )
-    print(w1.chromosome)
-    print(w1.begin)
-    print(w1.end)
+    print(w1.string)
+    print(w2.string)
     print(count)
     if data:
         DATABASE_NAME = (
