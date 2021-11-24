@@ -545,7 +545,7 @@ def get_mod_reference_positions_by_mod(
         if extractAllBases:
             return (basemod, np.array(refpos[all_bases_index]), probs)
         elif not modsPresent:
-            return (basemod, None, None)
+            return (None, [None], [None])
         else:
             return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
     else:
