@@ -528,6 +528,8 @@ def get_mod_reference_positions_by_mod(
         )
         if extractAllBases:
             return (basemod, refpos_total_adjusted, probs)
+        elif not modsPresent:
+            return (None, [None], [None])
         else:
             return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
     elif not qc:
