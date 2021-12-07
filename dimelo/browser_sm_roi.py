@@ -11,7 +11,7 @@ import plotly.graph_objs as go
 import pyranges as pr
 import seaborn as sns
 
-from dimelo.parse_bam import parse_bam
+# from dimelo.parse_bam import parse_bam
 
 # import plotly.io as pio
 
@@ -89,14 +89,14 @@ def browser_sm_roi(
             plot of single molecules within the region of interest
     """
 
-    w = Region(window)
+    # w = Region(window)
 
     all_data = []
     aggregate_counts = []
     for f, n in zip(fileNames, sampleNames):
-        parse_bam(
-            f, n, outDir, basemod="A+CG", region=w
-        )  # try with A+CG here; was basemod=basemod
+        # parse_bam(
+        #     f, n, outDir, basemod="A+CG", region=w
+        # )  # try with A+CG here; was basemod=basemod
         all_data.append(
             pd.read_sql(
                 "SELECT * from methylationByBase_" + n,
@@ -240,7 +240,7 @@ def make_per_read_meth_traces_phred(
     read_table_mA = table[table["mod"].str.contains("A")]
     cmapA = ["white", colorA]
     cmapC = ["white", colorC]
-    if basemod.str.contains("C"):  # if read_table_mC is not None:
+    if basemod.contains("C"):  # if read_table_mC is not None:
         traces.append(
             make_per_position_phred_scatter(
                 read_table=read_table_mC[read_table_mC["prob"] > threshC],
@@ -250,7 +250,7 @@ def make_per_read_meth_traces_phred(
                 offset=0.05,
             )
         )
-    if basemod.str.contains("A"):  # if read_table_mA is not None:
+    if basemod.contains("A"):  # if read_table_mA is not None:
         traces.append(
             make_per_position_phred_scatter(
                 read_table=read_table_mA[read_table_mA["prob"] > threshA],
