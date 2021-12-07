@@ -240,7 +240,7 @@ def make_per_read_meth_traces_phred(
     read_table_mA = table[table["mod"].str.contains("A")]
     cmapA = ["white", colorA]
     cmapC = ["white", colorC]
-    if basemod.contains("C"):  # if read_table_mC is not None:
+    if "C" in basemod:  # if read_table_mC is not None:
         traces.append(
             make_per_position_phred_scatter(
                 read_table=read_table_mC[read_table_mC["prob"] > threshC],
@@ -250,7 +250,7 @@ def make_per_read_meth_traces_phred(
                 offset=0.05,
             )
         )
-    if basemod.contains("A"):  # if read_table_mA is not None:
+    if "A" in basemod:  # if read_table_mA is not None:
         traces.append(
             make_per_position_phred_scatter(
                 read_table=read_table_mA[read_table_mA["prob"] > threshA],
