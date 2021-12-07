@@ -11,7 +11,7 @@ import plotly.graph_objs as go
 import pyranges as pr
 import seaborn as sns
 
-# from dimelo.parse_bam import parse_bam
+from dimelo.parse_bam import parse_bam
 
 # import plotly.io as pio
 
@@ -89,14 +89,14 @@ def browser_sm_roi(
             plot of single molecules within the region of interest
     """
 
-    # w = Region(window)
+    w = Region(window)
 
     all_data = []
     aggregate_counts = []
     for f, n in zip(fileNames, sampleNames):
-        # parse_bam(
-        #     f, n, outDir, basemod="A+CG", region=w
-        # )  # try with A+CG here; was basemod=basemod
+        parse_bam(
+            f, n, outDir, basemod="A+CG", region=w
+        )  # try with A+CG here; was basemod=basemod
         all_data.append(
             pd.read_sql(
                 "SELECT * from methylationByBase_" + n,
