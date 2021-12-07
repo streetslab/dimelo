@@ -94,7 +94,9 @@ def browser_sm_roi(
     all_data = []
     aggregate_counts = []
     for f, n in zip(fileNames, sampleNames):
-        parse_bam(f, n, outDir, basemod=basemod, region=w)
+        parse_bam(
+            f, n, outDir, basemod="A+CG", region=w
+        )  # try with A+CG here; was basemod=basemod
         all_data.append(
             pd.read_sql(
                 "SELECT * from methylationByBase_" + n,
@@ -173,6 +175,7 @@ def create_output(fig, outfile, window, static, outDir):
 def methylation(
     all_data,
     sampleNames,
+    basemod,
     colorA=COLOR_A,
     colorC=COLOR_C,
     dotsize=4,
@@ -188,6 +191,7 @@ def methylation(
         traces.append(
             make_per_read_meth_traces_phred(
                 table=m,
+                basemod=basemod,
                 colorA=colorA,
                 colorC=colorC,
                 dotsize=dotsize,
@@ -201,6 +205,7 @@ def methylation(
 
 def make_per_read_meth_traces_phred(
     table,
+    basemod,
     colorA,
     colorC,
     max_cov=1000,
@@ -235,7 +240,7 @@ def make_per_read_meth_traces_phred(
     read_table_mA = table[table["mod"].str.contains("A")]
     cmapA = ["white", colorA]
     cmapC = ["white", colorC]
-    if read_table_mC is not None:
+    if basemod.str.contains("C"):  # if read_table_mC is not None:
         traces.append(
             make_per_position_phred_scatter(
                 read_table=read_table_mC[read_table_mC["prob"] > threshC],
@@ -245,7 +250,7 @@ def make_per_read_meth_traces_phred(
                 offset=0.05,
             )
         )
-    if read_table_mA is not None:
+    if basemod.str.contains("A"):  # if read_table_mA is not None:
         traces.append(
             make_per_position_phred_scatter(
                 read_table=read_table_mA[read_table_mA["prob"] > threshA],
@@ -369,6 +374,7 @@ def meth_browser(
     meth_traces = methylation(
         all_data,
         sampleNames,
+        basemod,
         colorA=colorA,
         colorC=colorC,
         dotsize=dotsize,
