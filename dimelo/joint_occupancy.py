@@ -525,8 +525,11 @@ def make_cluster_plot(
         all_data_pivoted_0.loc[idx, "left_sum"] = left_sum
     all_data_pivoted_0["labels"] = k.labels_
     all_data_pivoted_0 = all_data_pivoted_0.sort_values(
-        by=["labels", "left_sum"], axis=0, ascending=False
-    )
+        by=["labels"], axis=0, ascending=False
+    )  # sort by labels only
+    # all_data_pivoted_0 = all_data_pivoted_0.sort_values(
+    #     by=["labels", "left_sum"], axis=0, ascending=False
+    # )
     to_plot = all_data_pivoted_0
     to_plot_2 = to_plot.loc[
         :, (to_plot.columns != "labels") & (to_plot.columns != "left_sum")
