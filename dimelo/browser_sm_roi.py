@@ -95,7 +95,12 @@ def browser_sm_roi(
     aggregate_counts = []
     for f, n in zip(fileNames, sampleNames):
         parse_bam(
-            f, n, outDir, basemod="A+CG", region=w
+            f,
+            n,
+            outDir,
+            basemod="A+CG",
+            region=w,
+            extractAllBases=True,  # extract all for full read length
         )  # try with A+CG here; was basemod=basemod
         all_data.append(
             pd.read_sql(
