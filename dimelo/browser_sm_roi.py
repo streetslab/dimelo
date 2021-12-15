@@ -100,7 +100,8 @@ def browser_sm_roi(
             outDir,
             basemod="A+CG",
             region=w,
-            extractAllBases=True,  # extract all for full read length
+            threshA=0,
+            threshC=0,  # extractAllBases=True,  # extract all for full read length
         )  # try with A+CG here; was basemod=basemod
         all_data.append(
             pd.read_sql(
