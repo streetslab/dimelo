@@ -7,9 +7,9 @@ dimelo module
 dimelo allows you to perform quality control and plot modified bases from bam files.
 
 """
-from .browser_sm_roi import browser_sm_roi
-from .enrich_sm_roi import enrich_sm_roi
-from .enrich_sm_roi_overlay import enrich_sm_roi_overlay
-from .joint_occupancy import joint_occupancy
 from .parse_bam import parse_bam
+from .plot_browser import plot_browser
+from .plot_enrichment import plot_enrichment
+from .plot_enrichment_profile import plot_enrichment_profile
+from .plot_joint_enrichment import plot_joint_enrichment
 from .qc import qc_report

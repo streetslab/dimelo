@@ -13,7 +13,7 @@ COLOR_A = "#053C5E"
 COLOR_C = "#BB4430"
 
 
-def enrich_sm_roi(
+def plot_enrichment_profile(
     fileName,
     sampleName,
     bedFile,

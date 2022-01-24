@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import dimelo.browser_sm_roi
+import dimelo.plot_joint_enrichment
 
 # call main(), which takes in command line arguments.
-dimelo.browser_sm_roi.main()
+dimelo.plot_joint_enrichment.main()

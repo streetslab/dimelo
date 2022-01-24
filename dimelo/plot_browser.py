@@ -54,7 +54,7 @@ class Region(object):
             self.string = f"{self.chromosome}_{self.begin}_{self.end}"
 
 
-def browser_sm_roi(
+def plot_browser(
     fileNames,
     sampleNames,
     window,

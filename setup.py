@@ -42,12 +42,13 @@ setuptools.setup(
     version=this_version,  # project version, read from version.py
     author="Annie Maslan & Reet Mishra & Ryan Keivanfar",  # Author, shown on PyPI
     scripts=[
-        "bin/dimelo-browser-sm-roi",
-        "bin/dimelo-enrich-sm-roi",
-        "bin/dimelo-enrich-sm-roi-overlay",
         "bin/dimelo-parse-bam",
+        "bin/dimelo-plot-browser",
+        "bin/dimelo-plot-enrichment",
+        "bin/dimelo-plot-enrichment-profile",
+        "bin/dimelo-plot-joint-enrichment",
+        # "bin/dimelo-enrich-sm-roi-overlay",
         "bin/dimelo-qc-report",
-        "bin/dimelo-joint-occupancy",
     ],  # command line scripts installed
     author_email="amaslan@berkeley.edu",  # Author email
     description="Tool for analyzing modified bases from BAM files",  # Short description of project

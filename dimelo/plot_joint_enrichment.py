@@ -33,7 +33,7 @@ class Region(object):
         self.peak_strength = region[1][4]
 
 
-def joint_occupancy(
+def plot_joint_enrichment(
     fileName,
     sampleName,
     bedFile,
@@ -483,7 +483,7 @@ def make_cluster_plot(
     ax.add_patch(rect)
 
     fig.savefig(
-        outDir + "/" + sampleName + "_" + basemod + "_joint_occupancy.png",
+        outDir + "/" + sampleName + "_" + basemod + "_joint_enrichment.png",
         dpi=600,
     )
 
