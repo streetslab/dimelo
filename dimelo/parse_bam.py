@@ -442,8 +442,6 @@ def get_mod_reference_positions_by_mod(
             index_adj.append(index_adj[i] + diff + 1)
         # get the indices of the modified bases
         modified_bases = base_index[index_adj]
-        # if read.is_reverse:
-        #     probabilities = probabilities[::-1]
 
     # extract CpG sites only rather than all mC
     keep = []
