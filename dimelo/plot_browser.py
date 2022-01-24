@@ -1,6 +1,7 @@
 # code adapted from methplotlib
 # https://doi.org/10.1093/bioinformatics/btaa093
 
+import multiprocessing
 import sqlite3
 import sys
 
@@ -69,6 +70,7 @@ def plot_browser(
     colorC=COLOR_C,
     dotsize=4,
     static=False,
+    cores=None,
 ):
     """
     Create single molecule plots within a region of interest
@@ -89,6 +91,16 @@ def plot_browser(
             plot of single molecules within the region of interest
     """
 
+    cores_avail = multiprocessing.cpu_count()
+    if cores is None:
+        num_cores = cores_avail
+    else:
+        # if more than available cores is specified, process with available cores
+        if cores > cores_avail:
+            num_cores = cores_avail
+        else:
+            num_cores = cores
+
     w = Region(window)
 
     all_data = []
@@ -101,6 +113,7 @@ def plot_browser(
             basemod="A+CG",
             region=w,
             extractAllBases=True,
+            cores=num_cores,
             # threshA=0,
             # threshC=0,  # extractAllBases=True,  # extract all for full read length
         )  # try with A+CG here; was basemod=basemod

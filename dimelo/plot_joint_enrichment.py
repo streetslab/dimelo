@@ -48,6 +48,7 @@ def plot_joint_enrichment(
     min_distance=2000,
     max_distance=10000,
     gap=1000,
+    cores=None,
 ):
     peak_left, peak_right = extract_peak_pairs(
         bedFile, min_distance, max_distance, outDir
@@ -55,6 +56,17 @@ def plot_joint_enrichment(
 
     peak_left_windows = make_windows(peak_left)
     peak_right_windows = make_windows(peak_right)
+
+    # default number of cores is max available
+    cores_avail = multiprocessing.cpu_count()
+    if cores is None:
+        num_cores = cores_avail
+    else:
+        # if more than available cores is specified, process with available cores
+        if cores > cores_avail:
+            num_cores = cores_avail
+        else:
+            num_cores = cores
 
     parse_bam_paired(
         fileName,
@@ -68,6 +80,7 @@ def plot_joint_enrichment(
         0,  # get all As (for binning); threshold before plotting
         0,  # get all As (for binning); threshold before plotting
         gap,
+        num_cores,
     )
 
     all_data = pd.read_sql(
@@ -159,11 +172,12 @@ def parse_bam_paired(
     threshA,
     threshC,
     gap,
+    num_cores,
 ):
 
     make_db(fileName, sampleName, outDir, False, False, True)
 
-    num_cores = multiprocessing.cpu_count()
+    # num_cores = multiprocessing.cpu_count()
     batchSize = 100
 
     Parallel(n_jobs=num_cores, verbose=10)(

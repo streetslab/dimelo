@@ -1,5 +1,5 @@
 def plot_enrichment():
-    # TODO add barchart
+    # TODO add barchart - be sure to have cores as optional argument
     print("enrichment")
 
 

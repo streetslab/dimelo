@@ -156,6 +156,7 @@ def parse_bam(
     testMode=False,
     qc=False,
     joint=False,
+    cores=None,
 ):
     """Create methylation object. Process windows in parallel.
     Args:
@@ -184,7 +185,16 @@ def parse_bam(
     if region is not None:
         windows = [region]
 
-    num_cores = multiprocessing.cpu_count()
+    # default number of cores is max available
+    cores_avail = multiprocessing.cpu_count()
+    if cores is None:
+        num_cores = cores_avail
+    else:
+        # if more than available cores is specified, process with available cores
+        if cores > cores_avail:
+            num_cores = cores_avail
+        else:
+            num_cores = cores
 
     batchSize = 100
 

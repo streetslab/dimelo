@@ -1,3 +1,4 @@
+import multiprocessing
 import sqlite3
 
 import matplotlib.pyplot as plt
@@ -27,6 +28,7 @@ def plot_enrichment_profile(
     dotsize=0.5,
     smooth=50,
     min_periods=10,
+    cores=None,
 ):
     """Create single molecule plots centered at region of interest.
     Args:
@@ -46,6 +48,18 @@ def plot_enrichment_profile(
     Return:
             plot of single molecules centered at region of interest
     """
+
+    # default number of cores is max available
+    cores_avail = multiprocessing.cpu_count()
+    if cores is None:
+        num_cores = cores_avail
+    else:
+        # if more than available cores is specified, process with available cores
+        if cores > cores_avail:
+            num_cores = cores_avail
+        else:
+            num_cores = cores
+
     parse_bam(
         fileName,
         sampleName,
@@ -56,6 +70,7 @@ def plot_enrichment_profile(
         windowSize=windowSize,
         threshA=threshA,
         threshC=threshC,
+        cores=num_cores,
     )
 
     all_data = pd.read_sql(
