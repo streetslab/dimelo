@@ -1,11 +1,16 @@
 "Functions to parse_bam for QC"
 
 import multiprocessing
+import sqlite3
 import time
 from math import log
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pysam
+
+# import seaborn as sns
 from joblib import Parallel, delayed
 
 from dimelo.parse_bam import get_modified_reference_positions, make_db
@@ -353,6 +358,77 @@ def get_runtime(f, inp1, inp2):
 def qc_report(filebamIn):
     runtime = get_runtime(parse_bam_read, filebamIn, "out")
     print(runtime)
+    # runtime = get_runtime(parse_bam_read, filebamIn, 'out')
+    # print(runtime)
+
+    DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, "out")
+
+    # DB_NAME = "out/winnowmap_guppy_merge_subset.db"
+    TABLE_NAME = "reads"
+    plot_feature_df = pd.read_sql(
+        "SELECT * from " + TABLE_NAME, con=sqlite3.connect(DB_NAME)
+    )
+    print(plot_feature_df.columns)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    x = plot_feature_df["length"]
+    # sns.displot(data=x, color ='#559CAD', kind='hist', bins = 200)
+    # plt.show()
+    # plt.hist(x, bins=200, color = '#559CAD', density=True) #density = True
+    colors = [
+        "#BB4430",
+        "#FFBC0A",
+        "#053C5E",
+        "#A9E5BB",
+        "#610345",
+        "#2D1E2F",
+        "#559CAD",
+        "#5E747F",
+        "#F343F4",
+    ]
+    plt.hist(x, bins=200, color=colors[6])  # density = True
+    plt.axvline(
+        x.median(),
+        color=colors[0],
+        linestyle="dashed",
+        linewidth=1.3,
+        label="median: " + str(round(x.median())) + " bp",
+    )
+    plt.axvline(
+        x.mean(),
+        color=colors[2],
+        linestyle="dashed",
+        linewidth=1.3,
+        label="mean: " + str(round(x.mean())) + " bp",
+    )
+    # sns.despine()
+    plt.title(DB_NAME.split("/")[1][:-3] + " read length")
+    plt.xlabel("Read Length (bp)")
+    plt.ylabel("Count")
+    plt.legend()
+    plt.savefig(DB_NAME[:-3] + "_read_length_count.pdf")
+    plt.clf()
+
+    plt.hist(x, bins=200, color=colors[6], density=True)  #
+    plt.axvline(
+        x.median(),
+        color=colors[0],
+        linestyle="dashed",
+        linewidth=1.3,
+        label="median: " + str(round(x.median())) + " bp",
+    )
+    plt.axvline(
+        x.mean(),
+        color=colors[2],
+        linestyle="dashed",
+        linewidth=1.3,
+        label="mean: " + str(round(x.mean())) + " bp",
+    )
+    # sns.despine()
+    plt.title(DB_NAME.split("/")[1][:-3] + " read length")
+    plt.xlabel("Read Length (bp)")
+    plt.ylabel("Frequency")
+    plt.legend()
+    plt.savefig(DB_NAME[:-3] + "_read_length_freq.pdf")
 
 
 def main():
