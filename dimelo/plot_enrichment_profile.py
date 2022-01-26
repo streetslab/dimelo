@@ -12,12 +12,13 @@ from dimelo.parse_bam import parse_bam
 
 COLOR_A = "#053C5E"
 COLOR_C = "#BB4430"
+COLOR_LIST = ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
 
 
 def plot_enrichment_profile(
-    fileName,
-    sampleName,
-    bedFile,
+    fileNames,
+    sampleNames,
+    bedFiles,
     basemod,
     outDir,
     threshA=129,
@@ -25,16 +26,18 @@ def plot_enrichment_profile(
     windowSize=1000,
     colorA=COLOR_A,
     colorC=COLOR_C,
+    colors=COLOR_LIST,
     dotsize=0.5,
     smooth=50,
     min_periods=10,
     cores=None,
 ):
     """Create single molecule plots centered at region of interest.
+    Overlay EITHER multiple files OR multiple bed regions for a single file
     Args:
-            :param fileName: name of bam file with Mm and Ml tags
-            :param sampleName: name of sample for output file name labelling
-            :param bedFile: specified windows for regions of interest
+            :param fileNames: name(s) of bam file with Mm and Ml tags
+            :param sampleNames: name(s) of sample for output file name labelling
+            :param bedFiles: specified windows for region(s) of interest
             :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
             :param outDir: directory to output plot
             :param threshA: threshold for calling mA; default 129
@@ -42,6 +45,7 @@ def plot_enrichment_profile(
             :param windowSize: window size around center point of feature of interest to plot (+/-); default 1000 bp
             :param colorA: color in hex for mA
             :param colorC: color in hex for mCG
+            :param colors: color list in hex for overlay; default is ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
             :param dotsize: size of points
             :param smooth: window over which to smooth aggregate curve; default of 50 bp
             :param min_periods: minimum number of bases to consider for smoothing: default of 10 bp
@@ -59,6 +63,157 @@ def plot_enrichment_profile(
             num_cores = cores_avail
         else:
             num_cores = cores
+
+    # if  single bam file rather than list is entered, convert to list
+    if type(fileNames) != list:
+        fileNames = [fileNames]
+    # if single sample name rather than list is entered, convert to list
+    if type(sampleNames) != list:
+        sampleNames = [sampleNames]
+    # if single bed file rather than list is entered, convert to list
+    if type(bedFiles) != list:
+        bedFiles = [bedFiles]
+
+    # overlay condition
+    if len(fileNames) > 1 or len(bedFiles) > 1:
+        if basemod == "A+CG":
+            print(
+                "enrichment overlays can only be produced for a single base modification at a time"
+            )
+            return
+        fig = plt.figure()
+        if len(fileNames) > 1:
+            if len(bedFiles) > 1:
+                print(
+                    "only a single region file can be used when overlaying multiple bam files"
+                )
+                return
+            for f, n, c in zip(fileNames, sampleNames, colors):
+                execute_overlay(
+                    f,
+                    n,
+                    c,
+                    bedFiles[0],
+                    basemod,
+                    outDir,
+                    threshA,
+                    threshC,
+                    windowSize,
+                    dotsize,
+                    smooth,
+                    min_periods,
+                    num_cores,
+                )
+        if len(bedFiles) > 1:
+            if len(fileNames) > 1:
+                print(
+                    "only a single bam file can be used when overlaying multiple bed file regions"
+                )
+                return
+            for b, n, c in zip(bedFiles, sampleNames, colors):
+                execute_overlay(
+                    fileNames[0],
+                    n,
+                    c,
+                    b,
+                    basemod,
+                    outDir,
+                    threshA,
+                    threshC,
+                    windowSize,
+                    dotsize,
+                    smooth,
+                    min_periods,
+                    num_cores,
+                )
+        plt.title(basemod)
+        plt.legend(sampleNames)
+        plt.show()
+        fig.savefig(outDir + "/" + basemod + "_sm_rolling_avg_overlay.pdf")
+
+    # no overlay condition
+    if (len(fileNames) == 1) and (len(bedFiles) == 1):
+        execute_single_plot(
+            fileNames[0],
+            sampleNames[0],
+            bedFiles[0],
+            basemod,
+            outDir,
+            threshA,
+            threshC,
+            windowSize,
+            colorA,
+            colorC,
+            dotsize,
+            smooth,
+            min_periods,
+            num_cores,
+        )
+
+
+def execute_overlay(
+    fileName,
+    sampleName,
+    color,
+    bedFile,
+    basemod,
+    outDir,
+    threshA,
+    threshC,
+    windowSize,
+    dotsize,
+    smooth,
+    min_periods,
+    num_cores,
+):
+    parse_bam(
+        fileName,
+        sampleName,
+        outDir,
+        bedFile,
+        basemod,
+        center=True,
+        windowSize=windowSize,
+        threshA=threshA,
+        threshC=threshC,
+        cores=num_cores,
+    )
+    aggregate_counts = pd.read_sql(
+        "SELECT * from methylationAggregate_" + sampleName,
+        sqlite3.connect(
+            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+        ),
+    )
+    aggregate_counts["frac"] = (
+        aggregate_counts["methylated_bases"] / aggregate_counts["total_bases"]
+    )
+    if "A" in basemod:
+        plot_aggregate_helper(
+            aggregate_counts, "A", smooth, min_periods, color
+        )
+
+    if "C" in basemod:
+        plot_aggregate_helper(
+            aggregate_counts, "C", smooth, min_periods, color
+        )
+
+
+def execute_single_plot(
+    fileName,
+    sampleName,
+    bedFile,
+    basemod,
+    outDir,
+    threshA,
+    threshC,
+    windowSize,
+    colorA,
+    colorC,
+    dotsize,
+    smooth,
+    min_periods,
+    num_cores,
+):
 
     parse_bam(
         fileName,
@@ -133,8 +288,6 @@ def plot_enrichment_profile(
         colorC,
     )
 
-    # return all_data, aggregate_counts
-
 
 # average profile
 def plot_aggregate_me_frac(
@@ -154,32 +307,12 @@ def plot_aggregate_me_frac(
 
     fig = plt.figure()
     if "A" in basemod:
-        aggregate_A = aggregate_counts[
-            aggregate_counts["mod"].str.contains("A")
-        ]
-        # need to sort first!
-        aggregate_A.sort_values(["pos"], inplace=True)
-        aggregate_A_rolling = aggregate_A.rolling(
-            window=smooth, min_periods=min_periods, center=True, on="pos"
-        ).mean()
-        sns.lineplot(
-            x=aggregate_A_rolling["pos"],
-            y=aggregate_A_rolling["frac"],
-            color=colorA,
+        plot_aggregate_helper(
+            aggregate_counts, "A", smooth, min_periods, colorA
         )
     if "C" in basemod:
-        aggregate_C = aggregate_counts[
-            aggregate_counts["mod"].str.contains("C")
-        ]
-        # need to sort first!
-        aggregate_C.sort_values(["pos"], inplace=True)
-        aggregate_C_rolling = aggregate_C.rolling(
-            window=smooth, min_periods=min_periods, center=True, on="pos"
-        ).mean()
-        sns.lineplot(
-            x=aggregate_C_rolling["pos"],
-            y=aggregate_C_rolling["frac"],
-            color=colorC,
+        plot_aggregate_helper(
+            aggregate_counts, "C", smooth, min_periods, colorC
         )
     plt.title(basemod)
     plt.show()
@@ -190,7 +323,9 @@ def plot_aggregate_me_frac(
     if "A" in basemod:
         plot_base_abundance(
             sampleName,
-            aggregate_A,
+            aggregate_counts[
+                aggregate_counts["mod"].str.contains("A")
+            ].sort_values(["pos"], inplace=True),
             "A",
             windowSize,
             outDir,
@@ -198,11 +333,26 @@ def plot_aggregate_me_frac(
     if "C" in basemod:
         plot_base_abundance(
             sampleName,
-            aggregate_C,
+            aggregate_counts[
+                aggregate_counts["mod"].str.contains("C")
+            ].sort_values(["pos"], inplace=True),
             "CG",
             windowSize,
             outDir,
         )
+
+
+# helper function to create smoothed lineplot
+def plot_aggregate_helper(aggregate_counts, mod, smooth, min_periods, color):
+    aggregate = aggregate_counts[aggregate_counts["mod"].str.contains(mod)]
+    # need to sort first!
+    aggregate.sort_values(["pos"], inplace=True)
+    aggregate_rolling = aggregate.rolling(
+        window=smooth, min_periods=min_periods, center=True, on="pos"
+    ).mean()
+    sns.lineplot(
+        x=aggregate_rolling["pos"], y=aggregate_rolling["frac"], color=color
+    )
 
 
 def plot_base_abundance(
@@ -237,156 +387,6 @@ def plot_base_abundance(
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_base_count.png", dpi=600
     )
-
-
-# def plot_base_abundance(
-#     sampleName, aggregate_counts, basemod, windowSize, outDir
-# ):
-#     cmapPurple = colors.LinearSegmentedColormap.from_list(
-#         "custom purple", ["white", "#2D1E2F"], N=200
-#     )
-#     # plot base abundance
-#     fig = plt.figure()
-#     x = np.linspace(-windowSize, windowSize, num=2 * windowSize + 1)
-#     y = aggregate_counts["total_bases"].to_numpy()  # base_count
-#     fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True)
-#     extent = [x[0] - (x[1] - x[0]) / 2.0, x[-1] + (x[1] - x[0]) / 2.0, 0, 1]
-#     im = ax.imshow(
-#         y[np.newaxis, :], cmap=cmapPurple, aspect="auto", extent=extent
-#     )
-#     divider = make_axes_locatable(ax)
-#     cax = divider.append_axes("top", size="5%", pad=0.25)
-#     fig.colorbar(im, cax=cax, orientation="horizontal")
-#     ax.set_yticks([])
-#     ax.set_xlim(extent[0], extent[1])
-#     ax2.plot(x, y, "o", ms=0.5, color="#2D1E2F")
-#     ax.spines["top"].set_visible(False)
-#     ax.spines["right"].set_visible(False)
-#     ax.spines["bottom"].set_visible(False)
-#     ax.spines["left"].set_visible(False)
-#     ax.get_xaxis().set_ticks([])
-#     plt.tight_layout()
-#     plt.show()
-
-#     fig.savefig(
-#         outDir + "/" + sampleName + "_" + basemod + "_base_count.png", dpi=600
-#     )
-
-# # average profile
-# def plot_aggregate_me_frac(
-#     sampleName,
-#     aggregate_counts,
-#     smooth,
-#     min_periods,
-#     windowSize,
-#     basemod,
-#     outDir,
-# ):
-#     fig = plt.figure()
-#     aggregate_counts["frac"] = (
-#         aggregate_counts["methylated_bases"] / aggregate_counts["total_bases"]
-#     )
-
-#     r = range(-windowSize, windowSize + 1, 1)
-#     if "A" in basemod:
-#         frac_A = aggregate_counts[aggregate_counts["mod"].str.contains("A")]
-#         for bp in r:
-#             if bp not in frac_A["pos"].values:
-#                 df2 = {
-#                     "id": str(bp) + ":" + "A",
-#                     "pos": bp,
-#                     "mod": "A",
-#                     "methylated_bases": 0,
-#                     "total_bases": 0,
-#                     "frac": 0,
-#                 }
-#                 frac_A = frac_A.append(df2, ignore_index=True)
-#         frac_A.sort_values(by=["pos"], inplace=True)
-#         frac_A_rolling = (
-#             frac_A["frac"]
-#             .rolling(window=smooth, min_periods=min_periods, center=True)
-#             .mean()
-#         )
-#         sns.lineplot(x=r, y=frac_A_rolling, color="#053C5E")
-#     if "C" in basemod:
-#         frac_C = aggregate_counts[aggregate_counts["mod"].str.contains("C")]
-#         for bp in r:
-#             if bp not in frac_C["pos"].values:
-#                 df2 = {
-#                     "id": str(bp) + ":" + "C",
-#                     "pos": bp,
-#                     "mod": "C",
-#                     "methylated_bases": 0,
-#                     "total_bases": 0,
-#                     "frac": 0,
-#                 }
-#                 frac_C = frac_C.append(df2, ignore_index=True)
-#         frac_C.sort_values(by=["pos"], inplace=True)
-#         frac_C_rolling = (
-#             frac_C["frac"]
-#             .rolling(window=smooth, min_periods=min_periods, center=True)
-#             .mean()
-#         )
-#         sns.lineplot(x=r, y=frac_C_rolling, color="#BB4430")
-#     plt.title(basemod)
-#     plt.show()
-#     fig.savefig(
-#         outDir + "/" + sampleName + "_" + basemod + "_sm_rolling_avg.pdf"
-#     )
-
-#     if "A" in basemod:
-#         plot_base_abundance(
-#             sampleName,
-#             frac_A,
-#             "A",
-#             windowSize,
-#             outDir,
-#         )
-#     if "C" in basemod:
-#         plot_base_abundance(
-#             sampleName,
-#             frac_C,
-#             "CG",
-#             windowSize,
-#             outDir,
-#         )
-
-
-# # df with columns pos:modification, pos, mod, methylated_bases, total_bases
-
-
-# def plot_base_abundance(
-#     sampleName, aggregate_counts, basemod, windowSize, outDir
-# ):
-#     cmapPurple = colors.LinearSegmentedColormap.from_list(
-#         "custom purple", ["white", "#2D1E2F"], N=200
-#     )
-#     # plot base abundance
-#     fig = plt.figure()
-#     x = np.linspace(-windowSize, windowSize, num=2 * windowSize + 1)
-#     y = aggregate_counts["total_bases"].to_numpy()  # base_count
-#     fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True)
-#     extent = [x[0] - (x[1] - x[0]) / 2.0, x[-1] + (x[1] - x[0]) / 2.0, 0, 1]
-#     im = ax.imshow(
-#         y[np.newaxis, :], cmap=cmapPurple, aspect="auto", extent=extent
-#     )
-#     divider = make_axes_locatable(ax)
-#     cax = divider.append_axes("top", size="5%", pad=0.25)
-#     fig.colorbar(im, cax=cax, orientation="horizontal")
-#     ax.set_yticks([])
-#     ax.set_xlim(extent[0], extent[1])
-#     ax2.plot(x, y, "o", ms=0.5, color="#2D1E2F")
-#     ax.spines["top"].set_visible(False)
-#     ax.spines["right"].set_visible(False)
-#     ax.spines["bottom"].set_visible(False)
-#     ax.spines["left"].set_visible(False)
-#     ax.get_xaxis().set_ticks([])
-#     plt.tight_layout()
-#     plt.show()
-
-#     fig.savefig(
-#         outDir + "/" + sampleName + "_" + basemod + "_base_count.png", dpi=600
-#     )
 
 
 def main():

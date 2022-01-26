@@ -49,7 +49,12 @@ class Region(object):
             self.size = self.end - self.begin
             self.string = f"{self.chromosome}_{self.begin}_{self.end}"
             # strand of motif to orient single molecules
-            self.strand = region[1][3]
+            # if not passed just keep as all +
+            if len(region[1]) >= 4:
+                if (region[1][3] == "+") or (region[1][3] == "-"):
+                    self.strand = region[1][3]
+            else:
+                self.strand = "+"
 
 
 ####################################################################################
