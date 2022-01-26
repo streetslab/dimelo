@@ -75,8 +75,8 @@ def plot_browser(
     """
     Create single molecule plots within a region of interest
     Args:
-            :param fileNames: list of names of bam files with Mm and Ml tags; indexed
-            :param sampleNames: list of names of samples for output plot name labelling
+            :param fileNames: list of names of bam files with Mm and Ml tags; indexed; or single file name as string
+            :param sampleNames: list of names of samples for output plot name labelling; or single sample name as string
             :param window: formatted as for example: "chr1:1-100000"
             :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
             :param outDir: directory to output plot
@@ -101,11 +101,19 @@ def plot_browser(
         else:
             num_cores = cores
 
+    # if  single bam file rather than list is entered, convert to list
+    if type(fileNames) != list:
+        fileNames = [fileNames]
+    # if single sample name rather than list is entered, convert to list
+    if type(sampleNames) != list:
+        sampleNames = [sampleNames]
+
     w = Region(window)
 
     all_data = []
     aggregate_counts = []
     for f, n in zip(fileNames, sampleNames):
+        # extract all bases and both mods to get full extent of read in terms of any mod bases
         parse_bam(
             f,
             n,
@@ -114,17 +122,14 @@ def plot_browser(
             region=w,
             extractAllBases=True,
             cores=num_cores,
-            # threshA=0,
-            # threshC=0,  # extractAllBases=True,  # extract all for full read length
-        )  # try with A+CG here; was basemod=basemod
-        all_data.append(
-            pd.read_sql(
-                "SELECT * from methylationByBase_" + n,
-                sqlite3.connect(
-                    outDir + "/" + f.split("/")[-1].split(".")[0] + ".db"
-                ),
-            )
         )
+        d = pd.read_sql(
+            "SELECT * from methylationByBase_" + n,
+            sqlite3.connect(
+                outDir + "/" + f.split("/")[-1].split(".")[0] + ".db"
+            ),
+        )
+        all_data.append(d)
         aggregate_counts.append(
             pd.read_sql(
                 "SELECT * from methylationAggregate_" + n,
@@ -132,6 +137,16 @@ def plot_browser(
                     outDir + "/" + f.split("/")[-1].split(".")[0] + ".db"
                 ),
             )
+        )
+
+        # print number of reads for each sample
+        print(
+            "processing "
+            + str(len(d["read_name"].unique()))
+            + " reads for "
+            + n
+            + " for bam: "
+            + f
         )
 
     meth_browser(
