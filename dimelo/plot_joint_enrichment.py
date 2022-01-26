@@ -49,6 +49,7 @@ def plot_joint_enrichment(
     max_distance=10000,
     gap=1000,
     cores=None,
+    num_clusters=3,
 ):
     peak_left, peak_right = extract_peak_pairs(
         bedFile, min_distance, max_distance, outDir
@@ -111,6 +112,7 @@ def plot_joint_enrichment(
                 gap,
                 colorA,
                 dotsize,
+                num_clusters,
             )
     if "C" in basemod:
         all_data_C_binned = bin_probabilities(all_data, "C", threshC)
@@ -131,6 +133,7 @@ def plot_joint_enrichment(
                 gap,
                 colorC,
                 dotsize,
+                num_clusters,
             )
 
 
@@ -428,6 +431,7 @@ def make_cluster_plot(
     gap,
     color,
     dotsize,
+    num_clusters,
 ):
     # all_data is already threshold to only contain
     all_data_t = all_data[
@@ -514,9 +518,7 @@ def make_cluster_plot(
             .mean()  # TODO: add on position?
         )  # 33
     all_data_pivoted_mod_0_rolling_0 = all_data_pivoted_mod_0_rolling.fillna(0)
-    k = KMeans(
-        n_clusters=3, random_state=1  # try with 3 clusters
-    )  # try different numbers of clusters #2
+    k = KMeans(n_clusters=num_clusters, random_state=1)
     k.fit(all_data_pivoted_mod_0_rolling_0)
 
     # sort by left peak signal strength after labels
