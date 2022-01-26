@@ -100,7 +100,6 @@ def plot_joint_enrichment(
             + " reads for for bam: "
             + fileName
         )
-        print(all_data_A_binned.shape[0])
         if all_data_A_binned.shape[0] > 0:
             make_cluster_plot(
                 all_data_A_binned,
@@ -117,7 +116,7 @@ def plot_joint_enrichment(
         all_data_C_binned = bin_probabilities(all_data, "C", threshC)
         print(
             "processing "
-            + str(len(all_data_A_binned["read_name"].unique()))
+            + str(len(all_data_C_binned["read_name"].unique()))
             + " reads for for bam: "
             + fileName
         )
@@ -177,9 +176,6 @@ def parse_bam_paired(
 
     make_db(fileName, sampleName, outDir, False, False, True)
 
-    # num_cores = multiprocessing.cpu_count()
-    batchSize = 100
-
     Parallel(n_jobs=num_cores, verbose=10)(
         delayed(parse_reads_windows)(
             fileName,
@@ -191,7 +187,6 @@ def parse_bam_paired(
             center,
             threshA,
             threshC,
-            batchSize,
             outDir,
             True,  # want to extract all bases for binning
             False,
@@ -211,7 +206,6 @@ def parse_reads_windows(
     center,
     threshA,
     threshC,
-    batchSize,
     outDir,
     extractAllBases,
     qc,
@@ -228,7 +222,6 @@ def parse_reads_windows(
             :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
             :param threshA: threshold above which to call an A base methylated
             :param threshC: threshold above which to call a C base methylated
-            :param batchSize: number of reads to submit to db at once
             :param gap: gap between neighboring viewpoints
     Return:
             data to put into methylationByBaseJoint table
