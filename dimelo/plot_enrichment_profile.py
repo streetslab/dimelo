@@ -306,15 +306,19 @@ def plot_aggregate_me_frac(
     )
 
     fig = plt.figure()
+    labels = []
     if "A" in basemod:
         plot_aggregate_helper(
             aggregate_counts, "A", smooth, min_periods, colorA
         )
+        labels.append("A")
     if "C" in basemod:
         plot_aggregate_helper(
             aggregate_counts, "C", smooth, min_periods, colorC
         )
+        labels.append("CG")
     plt.title(basemod)
+    plt.legend(labels)
     plt.show()
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_sm_rolling_avg.pdf"
