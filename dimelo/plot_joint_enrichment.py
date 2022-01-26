@@ -86,7 +86,7 @@ def plot_joint_enrichment(
     all_data = pd.read_sql(
         "SELECT * from methylationByBaseJoint_" + sampleName,
         sqlite3.connect(
-            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
         ),
     )
 
@@ -373,12 +373,9 @@ def parse_reads_windows(
                                 w2.peak_strength,
                             )
                         )
-    print(w1.string)
-    print(w2.string)
-    print(count)
     if data:
         DATABASE_NAME = (
-            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
         )
         table_name = "methylationByBaseJoint_" + sampleName
         command = (

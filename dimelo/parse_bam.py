@@ -67,7 +67,7 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
         os.mkdir(outDir)
 
     DATABASE_NAME = (
-        outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+        outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
     )
 
     if testMode:
@@ -304,7 +304,7 @@ def parse_reads_window(
         # data is list of tuples associated with given read
         # or ignore because a read may overlap multiple windows
         DATABASE_NAME = (
-            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
         )
         table_name = "methylationByBase_" + sampleName
         command = (
@@ -604,7 +604,7 @@ def update_methylation_aggregate_db(
 
     if data:  # if data to append is not empty
         DATABASE_NAME = (
-            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
         )
         # set variables for sqlite entry
         table_name = "methylationAggregate_" + sampleName

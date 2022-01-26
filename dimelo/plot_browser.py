@@ -126,7 +126,7 @@ def plot_browser(
         d = pd.read_sql(
             "SELECT * from methylationByBase_" + n,
             sqlite3.connect(
-                outDir + "/" + f.split("/")[-1].split(".")[0] + ".db"
+                outDir + "/" + f.split("/")[-1].replace(".bam", "") + ".db"
             ),
         )
         all_data.append(d)
@@ -134,7 +134,7 @@ def plot_browser(
             pd.read_sql(
                 "SELECT * from methylationAggregate_" + n,
                 sqlite3.connect(
-                    outDir + "/" + f.split("/")[-1].split(".")[0] + ".db"
+                    outDir + "/" + f.split("/")[-1].replace(".bam", "") + ".db"
                 ),
             )
         )

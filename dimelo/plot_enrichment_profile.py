@@ -181,7 +181,7 @@ def execute_overlay(
     aggregate_counts = pd.read_sql(
         "SELECT * from methylationAggregate_" + sampleName,
         sqlite3.connect(
-            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
         ),
     )
     aggregate_counts["frac"] = (
@@ -231,13 +231,13 @@ def execute_single_plot(
     all_data = pd.read_sql(
         "SELECT * from methylationByBase_" + sampleName,
         sqlite3.connect(
-            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
         ),
     )
     aggregate_counts = pd.read_sql(
         "SELECT * from methylationAggregate_" + sampleName,
         sqlite3.connect(
-            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
         ),
     )
 
