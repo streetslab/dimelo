@@ -325,21 +325,27 @@ def plot_aggregate_me_frac(
     )
 
     if "A" in basemod:
+        aggregate_A = aggregate_counts[
+            aggregate_counts["mod"].str.contains("A")
+        ]
+        # need to sort first!
+        aggregate_A.sort_values(["pos"], inplace=True)
         plot_base_abundance(
             sampleName,
-            aggregate_counts[
-                aggregate_counts["mod"].str.contains("A")
-            ].sort_values(["pos"], inplace=True),
+            aggregate_A,
             "A",
             windowSize,
             outDir,
         )
     if "C" in basemod:
+        aggregate_C = aggregate_counts[
+            aggregate_counts["mod"].str.contains("C")
+        ]
+        # need to sort first!
+        aggregate_C.sort_values(["pos"], inplace=True)
         plot_base_abundance(
             sampleName,
-            aggregate_counts[
-                aggregate_counts["mod"].str.contains("C")
-            ].sort_values(["pos"], inplace=True),
+            aggregate_C,
             "CG",
             windowSize,
             outDir,
@@ -371,6 +377,7 @@ def plot_base_abundance(
     y = aggregate_counts["total_bases"].to_numpy()  # base_count
     fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True)
     extent = [x[0] - (x[1] - x[0]) / 2.0, x[-1] + (x[1] - x[0]) / 2.0, 0, 1]
+    # extent = [x[0], x[-1], 0, 1]
     im = ax.imshow(
         y[np.newaxis, :], cmap=cmapPurple, aspect="auto", extent=extent
     )
@@ -380,14 +387,14 @@ def plot_base_abundance(
     ax.set_yticks([])
     ax.set_xlim(extent[0], extent[1])
     ax2.plot(x, y, "o", ms=0.5, color="#2D1E2F")
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["bottom"].set_visible(False)
-    ax.spines["left"].set_visible(False)
-    ax.get_xaxis().set_ticks([])
+    ax2.set_xlim(extent[0], extent[1])
+    # ax.spines["top"].set_visible(False)
+    # ax.spines["right"].set_visible(False)
+    # ax.spines["bottom"].set_visible(False)
+    # ax.spines["left"].set_visible(False)
+    # ax.get_xaxis().set_ticks([])
     plt.tight_layout()
     plt.show()
-
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_base_count.png", dpi=600
     )
