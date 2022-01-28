@@ -1,6 +1,0 @@
-#!/usr/bin/env python
-
-import dimelo.enrich_sm_roi_overaly
-
-# call main(), which takes in command line arguments.
-dimelo.enrich_sm_roi_overlay.main()
