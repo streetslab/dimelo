@@ -3,8 +3,6 @@ python:
   - "3.7"
 install:
   - pip install cython
-  - source devtools/travis-ci/install_miniconda.sh
-  - conda install -c bioconda pysam=1.15.3
   - make develop
 script:
   - make test
