@@ -3,7 +3,7 @@ python:
   - "3.7"
 install:
   - pip install cython
-  - pip install joblib
+  - pip install libcurl
   - make develop
 script:
   - make test
