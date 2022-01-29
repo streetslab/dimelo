@@ -29,7 +29,7 @@ REQUIRED_PACKAGES = [
     "scikit-learn==0.24.1",
     "pybedtools==0.8.1",
     "pysam==0.15.3",
-    # "cython==0.29.24",
+    "cython==0.29.24",
 ]
 
 # Read in the project description. We define this in the README file.
