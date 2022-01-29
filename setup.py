@@ -28,8 +28,7 @@ REQUIRED_PACKAGES = [
     "pyranges==0.0.104",
     "psutil==5.8.0",
     "scikit-learn==0.24.1",
-    "pybedtools==0.8.1"
-    # "cython==0.29.24",
+    "pybedtools==0.8.1" "cython==0.29.24",
 ]
 
 # Read in the project description. We define this in the README file.
