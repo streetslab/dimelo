@@ -20,7 +20,6 @@ REQUIRED_PACKAGES = [
     "matplotlib==3.4.2",
     "pytest==6.2.4",
     "pandas==1.3.2",
-    "pysam==0.15.3",
     "numpy==1.20.3",
     "joblib==1.0.1",
     "plotly==4.14.3",
@@ -29,7 +28,8 @@ REQUIRED_PACKAGES = [
     "psutil==5.8.0",
     "scikit-learn==0.24.1",
     "pybedtools==0.8.1",
-    "cython==0.29.24",
+    "pysam==0.15.3",
+    # "cython==0.29.24",
 ]
 
 # Read in the project description. We define this in the README file.
