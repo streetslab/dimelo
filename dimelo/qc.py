@@ -219,36 +219,36 @@ from dimelo.utils import execute_sql_command
 #     return basemod, len(all_bases_index), probabilities[prob_keep]
 
 
-def batch_read_generator(file_bamIn, batch_size, outDir):
+def batch_read_generator(file_bamIn, batch_size):
     counter = 0
     r_list = []
 
     for read in file_bamIn.fetch(until_eof=True):
-        isA = False
-        isC = False
+        #isA = False
+        #isC = False
         r = [read.query_name, read.reference_name, read.reference_start, read.reference_end, read.query_length,
              "-" if read.is_reverse else "+", read.mapping_quality, ave_qual(read.query_qualities),
              ave_qual(read.query_alignment_qualities)]
-        [(mod, numA, probs), (mod2, numC, probs2)] = get_modified_reference_positions(read, "A+CG", None, False,
-                                                                                      129, 129, None, None, None,
-                                                                                      outDir, False, True)
+        #[(mod, numA, probs), (mod2, numC, probs2)] = get_modified_reference_positions(read, "A+CG", None, False,
+         #                                                                             129, 129, None, None, None,
+          #                                                                            outDir, False, True)
 
-        if type(numA) == int:
-            isA = True
-            problist = [int(x) / 255 for x in probs]
-            probagg_05 = prob_bin(problist)
-
-        if type(numC) == int:
-            isC = True
-            prob2list = [int(x) / 255 for x in probs2]
-            prob2agg_05 = prob_bin(prob2list)
-
-        if isC and not isA:
-            r.extend((np.nan, np.nan, numC, prob2agg_05))
-        elif isA and not isC:
-            r.extend((numA, probagg_05, np.nan, np.nan))
-        elif isA and isC:
-            r.extend((numA, probagg_05, numC, prob2agg_05))
+       # if type(numA) == int:
+       #      isA = True
+       #      problist = [int(x) / 255 for x in probs]
+       #      probagg_05 = prob_bin(problist)
+       #
+       #  if type(numC) == int:
+       #      isC = True
+       #      prob2list = [int(x) / 255 for x in probs2]
+       #      prob2agg_05 = prob_bin(prob2list)
+       #
+       #  if isC and not isA:
+       #      r.extend((np.nan, np.nan, numC, prob2agg_05))
+       #  elif isA and not isC:
+       #      r.extend((numA, probagg_05, np.nan, np.nan))
+       #  elif isA and isC:
+       #      r.extend((numA, probagg_05, numC, prob2agg_05))
 
         r = tuple(r)
         if counter < batch_size:
@@ -296,7 +296,7 @@ def ave_qual(quals, qround=False, tab=errs_tab(129)):
         return None
 
 
-def parse_bam_read(bamIn, outDir):
+def parse_bam_read(bamIn, outDir, cores):
     file_bamIn = pysam.AlignmentFile(bamIn, "rb")
 
     # DB_NAME = bamIn.split('/')[-1].split('.')[0] + ".db"
@@ -309,13 +309,22 @@ def parse_bam_read(bamIn, outDir):
 
     DB_NAME, tables = make_db(bamIn, '', outDir, True, True)
     template_command = '''INSERT INTO ''' + tables[0] + ''' VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);'''
-    num_cores = multiprocessing.cpu_count() - 1
+    #num_cores = multiprocessing.cpu_count() - 1 #need to keep all cores
+    cores_avail = multiprocessing.cpu_count()
+    if cores is None:
+        num_cores = cores_avail
+    else:
+        # if more than available cores is specified, process with available cores
+        if cores > cores_avail:
+            num_cores = cores_avail
+        else:
+            num_cores = cores
 
     Parallel(n_jobs=num_cores, verbose=10)(
         delayed(execute_sql_command)(
             template_command,
             DB_NAME,
-            i) for i in batch_read_generator(file_bamIn, 100, outDir))
+            i) for i in batch_read_generator(file_bamIn, 100))
     return DB_NAME, tables[0]
 
 
@@ -327,48 +336,347 @@ def get_runtime(f, inp1, inp2):
     return f"Runtime of the program is {end - start}", re_val
 
 
-def qc_report(filebamIn):
+def qc_plot(x, sampleName, plotType, colors, num, axes):
+    #plt.subplot(3, 2, num)
+    an_array = np.array(x)
+    q1 = np.quantile(an_array, 0.25)
+    q3 = np.quantile(an_array, 0.75)
+    iq = q3 - q1
+    outlier = q3 + 3 * iq
+    not_outlier = an_array <= outlier
+    no_outliers = an_array[not_outlier]
+
+
+    ptype = ''
+    unit = ''
+    xlabel = ''
+    hasN50 = False
+    if plotType == 'L':
+        ptype = " Read Length"
+        xlabel = "Read Length (bp)"
+        unit = " bp"
+        hasN50 = True
+        n50 = calculate_N50(x)
+    elif plotType == 'M':
+        ptype = " Mapping Quality"
+        xlabel = "Mapping Quality"
+    elif plotType == 'B':
+        ptype = " Basecall Quality"
+        xlabel = "Average Basecall Quality"
+    elif plotType == 'A':
+        ptype = " Alignment Quality"
+        xlabel = "Average Alignment Quality"
+
+
+    plt.hist(no_outliers, bins=200, color=colors[6], density=True)  #
+    plt.axvline(x.median(), color=colors[0], linestyle='dashed', linewidth=1.3,
+                label='median: ' + str(round(x.median())) + unit)
+    plt.axvline(x.mean(), color=colors[2], linestyle='dashed', linewidth=1.3,
+                label='mean: ' + str(round(x.mean())) + unit)
+    if hasN50:
+        plt.axvline(n50, color=colors[1], linestyle='dashed', linewidth=1,
+                label='N50: ' + str(round(n50)) + unit)
+    plt.title(ptype)
+    plt.xlabel(xlabel)
+    plt.ylabel("Frequency")
+    plt.xlim(0, )
+    plt.plot([], [], ' ', label="max: " + str(round(max(x))) + unit)
+    plt.legend()
+
+    values = [round(min(x)), round(q1), round(x.median()),
+              round(q3), round(max(x)), round(x.mean())]
+    return plt, values
+    #plt.savefig(outDir + "/" + sampleName + "_rlength_freq_no_outliers.pdf", bbox_inches='tight')
+
+def calculate_N50(x):
+    array_rl = np.array(x)
+    N = np.sum(array_rl)
+    array_rl[::-1].sort()
+    rl_cumsum = np.cumsum(array_rl)
+    n50 = array_rl[np.argmax(rl_cumsum > N / 2)]
+    return n50
+
+
+def qc_report(filebamInList, sampleNameList, outDir, testMode = False, colors = ["#BB4430", "#FFBC0A",
+                                                                         "#053C5E", "#A9E5BB",
+                                                                         "#610345", "#2D1E2F",
+                                                                         "#559CAD", "#5E747F", "#F343F4"]):
     #runtime = get_runtime(parse_bam_read, filebamIn, 'out')
     #print(runtime)
 
-    DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, 'out')
+    if type(filebamInList) != list:
+        filebamInList = [filebamInList]
+        sampleNameList = [sampleNameList]
+
+    for index in range(len(filebamInList)):
+        filebamIn = filebamInList[index]
+        sampleName = sampleNameList[index]
+        if testMode:
+            DB_NAME = outDir + "/" + filebamIn.split("/")[-1][:-4] + ".db"
+            #DB_NAME = "out/winnowmap_guppy_merge_subset.db"
+            # DB_NAME = "out/mod_mappings_subset.db"
+            TABLE_NAME = "reads"
+        else:
+            DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, 'out')
+
+        if sampleName is None:
+            sampleName = DB_NAME.split('/')[1][:-3]
 
 
-    #DB_NAME = "out/winnowmap_guppy_merge_subset.db"
-    TABLE_NAME = "reads"
-    plot_feature_df = pd.read_sql("SELECT * from " + TABLE_NAME, con=sqlite3.connect(DB_NAME))
-    print(plot_feature_df.columns)
-    fig, ax = plt.subplots(figsize=(6, 4))
-    x = plot_feature_df['length']
-    #sns.displot(data=x, color ='#559CAD', kind='hist', bins = 200)
-    #plt.show()
-    #plt.hist(x, bins=200, color = '#559CAD', density=True) #density = True
-    colors = ["#BB4430", "#FFBC0A", "#053C5E", "#A9E5BB", "#610345", "#2D1E2F", "#559CAD", "#5E747F", "#F343F4"]
-    plt.hist(x, bins=200, color=colors[6])  # density = True
-    plt.axvline(x.median(), color=colors[0], linestyle='dashed', linewidth=1.3,
-                label='median: ' + str(round(x.median())) + ' bp')
-    plt.axvline(x.mean(), color=colors[2], linestyle='dashed', linewidth=1.3,
-                label='mean: ' + str(round(x.mean())) + ' bp')
-    #sns.despine()
-    plt.title(DB_NAME.split('/')[1][:-3] + " read length")
-    plt.xlabel("Read Length (bp)")
-    plt.ylabel("Count")
-    plt.legend()
-    plt.savefig(DB_NAME[:-3] + "_read_length_count.pdf")
-    plt.clf()
+        plot_feature_df = pd.read_sql("SELECT * from " + TABLE_NAME, con=sqlite3.connect(DB_NAME))
 
-    plt.hist(x, bins=200, color=colors[6], density = True)  #
-    plt.axvline(x.median(), color=colors[0], linestyle='dashed', linewidth=1.3,
-                label='median: ' + str(round(x.median())) + ' bp')
-    plt.axvline(x.mean(), color=colors[2], linestyle='dashed', linewidth=1.3,
-                label='mean: ' + str(round(x.mean())) + ' bp')
-    # sns.despine()
-    plt.title(DB_NAME.split('/')[1][:-3] + " read length")
-    plt.xlabel("Read Length (bp)")
-    plt.ylabel("Frequency")
-    plt.legend()
-    plt.savefig(DB_NAME[:-3] + "_read_length_freq.pdf")
+        #fig, ax = plt.subplots(figsize=(10, 8))
 
+        fig = plt.figure(figsize=(12,10))
+        grid = plt.GridSpec(3, 2, figure=fig)
+
+        ax_5 = plt.subplot2grid(shape=(3, 2), loc=(0, 0), colspan=2)
+        ax_5.axis("off")
+        pltTable = ax_5.table(cellText=report_table,
+                              rowLabels=rows,
+                              colLabels=columns,
+                              loc='center')
+
+
+        #gridsize = (3,2)
+        #
+        # fig = plt.figure()
+        # fig.set_figheight(6)
+        # fig.set_figwidth(6)
+        # ax_1 = plt.subplot2grid(shape=(3, 2), loc=(0, 0), colspan=1)
+        # ax_2 = plt.subplot2grid(shape=(3, 2), loc=(0, 1), colspan=1)
+        # ax_3 = plt.subplot2grid(shape=(3, 2), loc=(1, 0), colspan=1)
+        # #ax_5.axis("off")
+        # ax_4 = plt.subplot2grid(shape=(3, 2), loc=(1, 1), colspan=1)
+        # #ax_4.axis("off")
+        # ax_5 = plt.subplot2grid(shape=(3, 2), loc=(2, 0), colspan=2)
+        # ax_5.axis("off")
+
+        #
+        # report_table = np.array([[0,0,0,0,0,0], [0,0,0,0,0,0], [0,0,0,0,0,0], [0,0,0,0,0,0]]).T
+        # columns = ['Read Length', 'Mapping Quality', 'Basecall Quality', 'Alignment Quality']
+        # rows = ['Min', '25%', 'Median', '75%', 'Max', 'Mean'] #get rid of N50, total bases (mean read length * total)
+        # pltTable = ax_5.table(cellText=report_table,
+        #                       rowLabels=rows,
+        #                       colLabels=columns,
+        #                       loc='center')
+        #pltTable.scale(1, 1.5)
+
+
+        #plt.show()
+
+        #################
+        # ax_5 = fig.add_subplot(111)
+        # ax_5.axis("tight")
+        # ax_5.axis("off")
+        # ax_5.margins(3)
+        #
+        # Read Length
+        #plt.figure()
+        x = plot_feature_df['length']
+        ax_1 = fig.add_subplot(grid[0,0])
+        pltRL, valRL = qc_plot(x, sampleName, 'L', colors, 1, ax_1)
+        pltRL.savefig(outDir + "/" + sampleName + "_rlength_freq_no_outliers.pdf", bbox_inches='tight')
+        #
+        # Mapping Quality
+        #plt.figure()
+        x = plot_feature_df['mapq']
+        ax_2 = fig.add_subplot(grid[0,1])
+        pltMQ, valMQ = qc_plot(x, sampleName, 'M', colors, 2, ax_2)
+        pltMQ.savefig(outDir + "/" + sampleName + "_mapq_freq_no_outliers.pdf", bbox_inches='tight')
+
+        # Basecall Quality
+        #plt.figure()
+        x = plot_feature_df['ave_baseq']
+        ax_3 = fig.add_subplot(grid[1,0])
+        pltBQ, valBQ = qc_plot(x, sampleName, 'B', colors, 3, ax_3)
+        pltBQ.savefig(outDir + "/" + sampleName + "_baseq_freq_no_outliers.pdf", bbox_inches='tight')
+
+        # Alignment Quality
+        #plt.figure()
+        x = plot_feature_df['ave_alignq']
+        ax_4 = fig.add_subplot(grid[1,1])
+        pltAQ, valAQ = qc_plot(x, sampleName, 'A', colors, 4, ax_4)
+        pltAQ.savefig(outDir + "/" + sampleName + "_alignq_freq_no_outliers.pdf", bbox_inches='tight')
+
+        report_table = np.array([valRL, valMQ, valBQ, valAQ]).T
+        columns = ['Read Length', 'Mapping Quality', 'Basecall Quality', 'Alignment Quality']
+        rows = ['Min', '25%', 'Median', '75%', 'Max', 'Mean'] #get rid of N50, total bases (mean read length * total)
+        #have x num reads, x num bases description separate from the table
+        print("mean length: ", valRL[5])
+        print("num reads: ", len(x))
+        print("num bases: ", round(valRL[5] * len(valRL)))
+        print(report_table)
+
+        #plt.table(report_table, loc='bottom')
+
+
+        ##ax_5 = fig.add_subplot(grid[2,:])
+        #ax_5 = plt.subplot2grid(gridsize, (2, 0), colspan=2, rowspan=2)
+        # #ax_5.visible = False
+        # ax_5.axis("tight")
+        # #ax_5.axis("off")
+        ax_5 = plt.subplot2grid(shape=(3, 2), loc=(2, 0), colspan=2)
+        ax_5.axis("off")
+        pltTable = ax_5.table(cellText=report_table,
+                                rowLabels=rows,
+                                colLabels=columns,
+                                loc='center')
+        #pltTable.scale(1, 1.5)
+        #plt.subplots_adjust(wspace=0.4,
+        #                    hspace=0.4)
+        fig.tight_layout(w_pad = 2, h_pad = 4)
+        #plt.subplots_adjust(left=0.3, bottom=0.4)
+        #plt.title("", size=30)
+        #pltTable.text(12, 3.4, '', size=30)
+##############
+        summary_data = "mean length: " + str(valRL[5]) + " bp"
+        summary_data = summary_data + "; num reads: " + str(len(x))
+        summary_data = summary_data + "; " + "num bases: " + str(round(valRL[5] * len(valRL)) + " bp")
+        fig.suptitle(sampleName + " QC Summary Report", y = 1.05)
+        #plt.title("mean length: " + str(valRL[5]), y = 0.8)
+        plt.title(summary_data, y=0.8)
+        #plt.title("TITLE: " + str(valRL[5]), fontsize = 12, y=1.3)
+        plt.savefig(outDir + "/" + sampleName + "_qc_report.pdf", bbox_inches='tight')
+
+    # an_array = np.array(x)
+    # q1 = np.quantile(an_array, 0.25)
+    # q3 = np.quantile(an_array, 0.75)
+    # iq = q3 - q1
+    # outlier = q3 + 3 * iq
+    # not_outlier = an_array <= outlier
+    # no_outliers = an_array[not_outlier]
+    #
+    #
+    # n50 = calculate_N50(x)
+    #
+    # plt.hist(no_outliers, bins=200, color=colors[6], density = True)  #
+    # plt.axvline(x.median(), color=colors[0], linestyle='dashed', linewidth=1.3,
+    #             label='median: ' + str(round(x.median())) + ' bp')
+    # plt.axvline(x.mean(), color=colors[2], linestyle='dashed', linewidth=1.3,
+    #             label='mean: ' + str(round(x.mean())) + ' bp')
+    # plt.axvline(n50, color=colors[1], linestyle='dashed', linewidth=1,
+    #             label='N50: ' + str(round(n50)) + ' bp')
+    # plt.title(sampleName + " read length")
+    # plt.xlabel("Read Length (bp)")
+    # plt.ylabel("Frequency")
+    # plt.xlim(0, )
+    # plt.plot([], [], ' ', label="max: " + str(round(max(x))) + ' bp')
+    # plt.legend()
+    # plt.savefig(outDir + "/" + sampleName + "_rlength_freq_no_outliers.pdf", bbox_inches='tight')
+    #
+    # # Basecall Quality
+    # print(plot_feature_df.columns)
+    # x = plot_feature_df['ave_baseq']
+    #
+    # an_array = np.array(x)
+    # q1 = np.quantile(an_array, 0.25)
+    # q3 = np.quantile(an_array, 0.75)
+    # iq = q3 - q1
+    # outlier = q3 + 3 * iq
+    # not_outlier = an_array <= outlier
+    # no_outliers = an_array[not_outlier]
+    #
+    # def calculate_N50(list_of_lengths):
+    #     array_rl = np.array(list_of_lengths)
+    #     N = np.sum(array_rl)
+    #     array_rl[::-1].sort()
+    #     rl_cumsum = np.cumsum(array_rl)
+    #     n50 = array_rl[np.argmax(rl_cumsum > N / 2)]
+    #     return n50
+    #
+    # n50 = calculate_N50(x)
+    #
+    # plt.figure()
+    # plt.hist(no_outliers, bins=200, color=colors[6], density=True)  #
+    # plt.axvline(x.median(), color=colors[0], linestyle='dashed', linewidth=1.3,
+    #             label='median: ' + str(round(x.median())))
+    # plt.axvline(x.mean(), color=colors[2], linestyle='dashed', linewidth=1.3,
+    #             label='mean: ' + str(round(x.mean())))
+    # plt.axvline(n50, color=colors[1], linestyle='dashed', linewidth=1,
+    #             label='N50: ' + str(round(n50)))
+    # plt.title(sampleName + " average basecall quality")
+    # plt.xlabel("Average Basecall Quality")
+    # plt.ylabel("Frequency")
+    # #plt.xlim(0, )
+    # plt.plot([], [], ' ', label="max: " + str(round(max(x))))
+    # plt.legend()
+    # plt.savefig(outDir + "/" + sampleName + "_baseq_freq_no_outliers.pdf", bbox_inches='tight')
+    #
+    # # Mapping Quality
+    # x = plot_feature_df['mapq']
+    #
+    # an_array = np.array(x)
+    # q1 = np.quantile(an_array, 0.25)
+    # q3 = np.quantile(an_array, 0.75)
+    # iq = q3 - q1
+    # outlier = q3 + 3 * iq
+    # not_outlier = an_array <= outlier
+    # no_outliers = an_array[not_outlier]
+    #
+    # def calculate_N50(list_of_lengths):
+    #     array_rl = np.array(list_of_lengths)
+    #     N = np.sum(array_rl)
+    #     array_rl[::-1].sort()
+    #     rl_cumsum = np.cumsum(array_rl)
+    #     n50 = array_rl[np.argmax(rl_cumsum > N / 2)]
+    #     return n50
+    #
+    # n50 = calculate_N50(x)
+    #
+    # plt.figure()
+    # plt.hist(no_outliers, bins=200, color=colors[6], density=True)  #
+    # plt.axvline(x.median(), color=colors[0], linestyle='dashed', linewidth=1.3,
+    #             label='median: ' + str(round(x.median())))
+    # plt.axvline(x.mean(), color=colors[2], linestyle='dashed', linewidth=1.3,
+    #             label='mean: ' + str(round(x.mean())))
+    # plt.axvline(n50, color=colors[1], linestyle='dashed', linewidth=1,
+    #             label='N50: ' + str(round(n50)))
+    # plt.title(sampleName + " average mapping quality")
+    # plt.xlabel("Average Mapping Quality")
+    # plt.ylabel("Frequency")
+    # plt.xlim(0, )
+    # plt.plot([], [], ' ', label="max: " + str(round(max(x))))
+    # plt.legend()
+    # plt.savefig(outDir + "/" + sampleName + "_mapq_freq_no_outliers.pdf", bbox_inches='tight')
+    #
+    # # Alignment Quality
+    # print(plot_feature_df['ave_alignq'])
+    # x = plot_feature_df['ave_alignq']
+    #
+    # an_array = np.array(x)
+    # q1 = np.quantile(an_array, 0.25)
+    # q3 = np.quantile(an_array, 0.75)
+    # iq = q3 - q1
+    # outlier = q3 + 3 * iq
+    # not_outlier = an_array <= outlier
+    # no_outliers = an_array[not_outlier]
+    #
+    # def calculate_N50(list_of_lengths):
+    #     array_rl = np.array(list_of_lengths)
+    #     N = np.sum(array_rl)
+    #     array_rl[::-1].sort()
+    #     rl_cumsum = np.cumsum(array_rl)
+    #     n50 = array_rl[np.argmax(rl_cumsum > N / 2)]
+    #     return n50
+    #
+    # n50 = calculate_N50(x)
+    #
+    # plt.figure()
+    # plt.hist(no_outliers, bins=200, color=colors[6], density=True)  #
+    # plt.axvline(x.median(), color=colors[0], linestyle='dashed', linewidth=1.3,
+    #             label='median: ' + str(round(x.median())))
+    # plt.axvline(x.mean(), color=colors[2], linestyle='dashed', linewidth=1.3,
+    #             label='mean: ' + str(round(x.mean())))
+    # plt.axvline(n50, color=colors[1], linestyle='dashed', linewidth=1,
+    #             label='N50: ' + str(round(n50)))
+    # plt.title(sampleName + " average alignment quality")
+    # plt.xlabel("Average Alignment Quality")
+    # plt.ylabel("Frequency")
+    # plt.xlim(0, )
+    # plt.plot([], [], ' ', label="max: " + str(round(max(x))))
+    # plt.legend()
+    # plt.savefig(outDir + "/" + sampleName + "_alignq_freq_no_outliers.pdf", bbox_inches='tight')
 
 def main():
     print("main")
