@@ -67,7 +67,7 @@ def ave_qual(quals, qround=False, tab=errs_tab(129)):
         return None
 
 
-def parse_bam_read(bamIn, outDir, cores = multiprocessing.cpu_count()-1):
+def parse_bam_read(bamIn, outDir, cores=None):
     file_bamIn = pysam.AlignmentFile(bamIn, "rb")
 
 
