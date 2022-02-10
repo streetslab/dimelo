@@ -67,12 +67,12 @@ def ave_qual(quals, qround=False, tab=errs_tab(129)):
         return None
 
 
-def parse_bam_read(bamIn, outDir, cores):
+def parse_bam_read(bamIn, outDir, cores = multiprocessing.cpu_count()-1):
     file_bamIn = pysam.AlignmentFile(bamIn, "rb")
 
 
-    DB_NAME, tables = make_db(bamIn, '', outDir, True, True)
-    template_command = '''INSERT INTO ''' + tables[0] + ''' VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);'''
+    DB_NAME, tables = make_db(bamIn, '', outDir, True, True, joint=False)
+    template_command = '''INSERT INTO ''' + tables[0] + ''' VALUES(?,?,?,?,?,?,?,?,?);'''
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
         num_cores = cores_avail
@@ -101,6 +101,10 @@ def get_runtime(f, inp1, inp2):
 
 def qc_plot(x, sampleName, plotType, colors, num, axes):
     an_array = np.array(x)
+    if all(v is None for v in an_array):
+        return plt, []
+    # print(x.describe(),x.count == 0, x.shape, x.dtype)
+    # print(, an_array)
     q1 = np.quantile(an_array, 0.25)
     q3 = np.quantile(an_array, 0.75)
     iq = q3 - q1
@@ -185,51 +189,89 @@ def qc_report(filebamInList, sampleNameList, outDir, testMode = False, colors = 
 
 
         plot_feature_df = pd.read_sql("SELECT * from " + TABLE_NAME, con=sqlite3.connect(DB_NAME))
-
+        #print(DB_NAME)
+        #print(plot_feature_df)
         fig = plt.figure(figsize=(12,10))
         grid = plt.GridSpec(3, 2, figure=fig)
 
         ax_5 = plt.subplot2grid(shape=(3, 2), loc=(0, 0), colspan=2)
         ax_5.axis("off")
-        pltTable = ax_5.table(cellText=report_table,
-                              rowLabels=rows,
-                              colLabels=columns,
-                              loc='center')
+        #pltTable = ax_5.table(cellText=report_table,
+        #                      rowLabels=rows,
+        #                      colLabels=columns,
+        #                      loc='center')
 
+        keep_values = [0,0,0,0]
+        valRL = []; valMQ = []; valBQ = []; valAQ = [];
         ###### Read Length ######
         x = plot_feature_df['length']
+        #if not x.empty:
         ax_1 = fig.add_subplot(grid[0,0])
         pltRL, valRL = qc_plot(x, sampleName, 'L', colors, 1, ax_1)
+        if valRL:
+            keep_values[0] = 1
         pltRL.savefig(outDir + "/" + sampleName + "_rlength_freq_no_outliers.pdf", bbox_inches='tight')
 
         ###### Mapping Quality ######
         x = plot_feature_df['mapq']
+        #if not x.empty:
         ax_2 = fig.add_subplot(grid[0,1])
         pltMQ, valMQ = qc_plot(x, sampleName, 'M', colors, 2, ax_2)
+        if valMQ:
+            keep_values[1] = 1
         pltMQ.savefig(outDir + "/" + sampleName + "_mapq_freq_no_outliers.pdf", bbox_inches='tight')
 
         ###### Basecall Quality ######
         x = plot_feature_df['ave_baseq']
+        # print(x.describe(), x.shape, x.dtype)
+        # print(x, len(x), x is None)
+        # print("here")
+        # print("is x empty: ", x.empty)
+        # if not x.empty:
+        #     print("here2")
+        #     print(x.empty)
         ax_3 = fig.add_subplot(grid[1,0])
         pltBQ, valBQ = qc_plot(x, sampleName, 'B', colors, 3, ax_3)
+        if valBQ:
+            keep_values[2] = 1
         pltBQ.savefig(outDir + "/" + sampleName + "_baseq_freq_no_outliers.pdf", bbox_inches='tight')
 
         ###### Alignment Quality ######
         x = plot_feature_df['ave_alignq']
+        # if not x.empty:
+        #     print(x.empty)
         ax_4 = fig.add_subplot(grid[1,1])
         pltAQ, valAQ = qc_plot(x, sampleName, 'A', colors, 4, ax_4)
+        if valAQ:
+            keep_values[3] = 1
         pltAQ.savefig(outDir + "/" + sampleName + "_alignq_freq_no_outliers.pdf", bbox_inches='tight')
 
-        report_table = np.array([valRL, valMQ, valBQ, valAQ]).T
-        columns = ['Read Length', 'Mapping Quality', 'Basecall Quality', 'Alignment Quality']
+        val_table = [valRL, valMQ, valBQ, valAQ]
+        val_table_new = []
+        cols = ['Read Length', 'Mapping Quality', 'Basecall Quality', 'Alignment Quality']
+        columns = []
+        axes_stored = [ax_1, ax_2, ax_3, ax_4]
+        for i in range(len(keep_values)):
+            if keep_values[i] == 1:
+                val_table_new.append(val_table[i])
+                columns.append(cols[i])
+            else:
+                plt.delaxes(axes_stored[i])
+        #report_table = np.array([valRL, valMQ, valBQ, valAQ]).T
+
+        report_table = np.array(val_table_new).T
+
         rows = ['Min', '25%', 'Median', '75%', 'Max', 'Mean']
         print("mean length: ", valRL[5])
         print("num reads: ", len(x))
         print("num bases: ", round(valRL[5] * len(valRL)))
-        print(report_table)
+        # print(report_table)
 
-
-        ax_5 = plt.subplot2grid(shape=(3, 2), loc=(2, 0), colspan=2)
+        # print(len(report_table))
+        if len(columns) <= 2:
+            ax_5 = plt.subplot2grid(shape=(3, 2), loc=(1, 0), colspan=2)
+        else:
+            ax_5 = plt.subplot2grid(shape=(3, 2), loc=(2, 0), colspan=2)
         ax_5.axis("off")
         pltTable = ax_5.table(cellText=report_table,
                                 rowLabels=rows,
@@ -246,13 +288,15 @@ def qc_report(filebamInList, sampleNameList, outDir, testMode = False, colors = 
 
         summary_data = "mean length: " + str(valRL[5]) + " bp"
         summary_data = summary_data + "; num reads: " + str(len(x))
-        summary_data = summary_data + "; " + "num bases: " + str(round(valRL[5] * len(valRL)) + " bp")
+        summary_data = summary_data + "; " + "num bases: " + str(round(valRL[5] * len(valRL))) + " bp"
         fig.suptitle(sampleName + " QC Summary Report", y = 1.05)
         #plt.title("mean length: " + str(valRL[5]), y = 0.8)
         plt.title(summary_data, y=0.8)
         #plt.title("TITLE: " + str(valRL[5]), fontsize = 12, y=1.3)
-        plt.savefig(outDir + "/" + sampleName + "_qc_report.pdf", bbox_inches='tight')
 
+        #saving as PDF
+        final_file_name = outDir + "/" + sampleName + "_qc_report"
+        plt.savefig(final_file_name + ".pdf", bbox_inches='tight')
 
 def main():
     print("main")

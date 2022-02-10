@@ -49,7 +49,12 @@ class Region(object):
             self.size = self.end - self.begin
             self.string = f"{self.chromosome}_{self.begin}_{self.end}"
             # strand of motif to orient single molecules
-            self.strand = region[1][3]
+            # if not passed just keep as all +
+            if len(region[1]) >= 4:
+                if (region[1][3] == "+") or (region[1][3] == "-"):
+                    self.strand = region[1][3]
+            else:
+                self.strand = "+"
 
 
 ####################################################################################
@@ -57,17 +62,18 @@ class Region(object):
 ####################################################################################
 
 
-def make_db(fileName, sampleName, outDir, testMode, qc):
+def make_db(fileName, sampleName, outDir, testMode, qc, joint):
     if not os.path.exists(outDir):
         os.mkdir(outDir)
 
     DATABASE_NAME = (
-        outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+        outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
     )
 
     if testMode:
         clear_db(DATABASE_NAME)
     tables = []
+    # for qc report
     if qc:
         table_name = "reads"
         cols = [
@@ -80,10 +86,6 @@ def make_db(fileName, sampleName, outDir, testMode, qc):
             "mapq",
             "ave_baseq",
             "ave_alignq",
-            "numA",
-            "methAprob05",
-            "numC",
-            "methCprob05",
         ]
         dtypes = [
             "TEXT",
@@ -95,13 +97,31 @@ def make_db(fileName, sampleName, outDir, testMode, qc):
             "INT",
             "INT",
             "INT",
-            "FLOAT",
-            "FLOAT",
-            "FLOAT",
-            "FLOAT",
         ]
         create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
         tables.append(table_name)
+    # for joint occupancy plots
+    elif joint:
+        table_name = "methylationByBaseJoint_" + sampleName
+        cols = [
+            "id",
+            "read_windows",
+            "read_name",
+            "pos",
+            "prob",
+            "mod",
+            "peak_strength",
+        ]
+        dtypes = ["TEXT", "TEXT", "TEXT", "INT", "INT", "TEXT", "FLOAT"]
+        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
+        tables.append(table_name)
+
+        table_name = "methylationAggregate_" + sampleName
+        cols = ["id", "pos", "mod", "methylated_bases", "total_bases"]
+        dtypes = ["TEXT", "INT", "TEXT", "INT", "INT"]
+        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
+        tables.append(table_name)
+    # for browser and enrichment plots
     else:
         table_name = "methylationByBase_" + sampleName
         cols = ["id", "read_name", "chr", "pos", "prob", "mod"]
@@ -132,6 +152,8 @@ def parse_bam(
     extractAllBases=False,
     testMode=False,
     qc=False,
+    joint=False,
+    cores=None,
 ):
     """Create methylation object. Process windows in parallel.
     Args:
@@ -148,9 +170,7 @@ def parse_bam(
             dictionary with aggregate data: {pos:modification: [methylated_bases, total_bases]}
     """
     # create database with two tables: methylationByBase and methylationAggregate
-    make_db(fileName, sampleName, outDir, testMode, qc)
-
-    bam = pysam.AlignmentFile(fileName, "rb")
+    make_db(fileName, sampleName, outDir, testMode, qc, joint)
 
     if bedFile is not None:
         # make a region object for each row of bedFile
@@ -162,26 +182,26 @@ def parse_bam(
     if region is not None:
         windows = [region]
 
-    num_cores = multiprocessing.cpu_count()
+    # default number of cores is max available
+    cores_avail = multiprocessing.cpu_count()
+    if cores is None:
+        num_cores = cores_avail
+    else:
+        # if more than available cores is specified, process with available cores
+        if cores > cores_avail:
+            num_cores = cores_avail
+        else:
+            num_cores = cores
 
     batchSize = 100
 
-    DATABASE_NAME = (
-        outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
-    )
-    table_name = "methylationByBase_" + sampleName
-    command = (
-        """INSERT OR IGNORE INTO """ + table_name + """ VALUES(?,?,?,?,?,?);"""
-    )
     Parallel(n_jobs=num_cores, verbose=10)(
-        delayed(execute_sql_command)(command, DATABASE_NAME, i)
-        for i in batch_read_generator(
-            bam,
+        delayed(parse_reads_window)(
             fileName,
             sampleName,
             basemod,
             windowSize,
-            windows,
+            window,
             center,
             threshA,
             threshC,
@@ -190,17 +210,16 @@ def parse_bam(
             extractAllBases,
             qc,
         )
-        if len(i) > 0
+        for window in windows
     )
 
 
-def batch_read_generator(
-    bam,
+def parse_reads_window(
     fileName,
     sampleName,
     basemod,
     windowSize,
-    windows,
+    window,
     center,
     threshA,
     threshC,
@@ -209,7 +228,7 @@ def batch_read_generator(
     extractAllBases,
     qc,
 ):
-    """Parse all reads in batchs
+    """Parse all reads in window
     Args:
             :param bam: read in bam file with Mm and Ml tags
             :param fileName: name of bam file
@@ -220,73 +239,72 @@ def batch_read_generator(
             :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
             :param threshA: threshold above which to call an A base methylated
             :param threshC: threshold above which to call a C base methylated
-            :param batchSize: number of reads to submit to db at once
     Return:
-            data to put into methylationByBase table
+            put data into methylationByBase table
     """
-    counter = 0
     data = []
-
-    for window in windows:
-        for read in bam.fetch(
-            reference=window.chromosome, start=window.begin, end=window.end
-        ):
-            [
-                (mod, positions, probs),
-                (mod2, positions2, probs2),
-            ] = get_modified_reference_positions(
-                read,
-                basemod,
-                window,
-                center,
-                threshA,
-                threshC,
-                windowSize,
-                fileName,
-                sampleName,
-                outDir,
-                extractAllBases,
-                qc,
-            )
-            for pos, prob in zip(positions, probs):
-                if pos is not None:
-                    if (center is True and abs(pos) <= windowSize) or (
-                        center is False
-                        and pos > window.begin
-                        and pos < window.end
-                    ):  # to decrease memory, only store bases within the window
-                        d = (
-                            read.query_name + ":" + str(pos),
-                            read.query_name,
-                            window.chromosome,
-                            int(pos),
-                            int(prob),
-                            mod,
-                        )
-                        data.append(d)
-            for pos, prob in zip(positions2, probs2):
-                if pos is not None:
-                    if (center is True and abs(pos) <= windowSize) or (
-                        center is False
-                        and pos > window.begin
-                        and pos < window.end
-                    ):  # to decrease memory, only store bases within the window
-                        d = (
-                            read.query_name + ":" + str(pos),
-                            read.query_name,
-                            window.chromosome,
-                            int(pos),
-                            int(prob),
-                            mod2,
-                        )
-                        data.append(d)
-            if counter < batchSize - 1:
-                counter += 1
-            else:
-                yield data
-                counter = 0
-                data = []
-    yield data
+    bam = pysam.AlignmentFile(fileName, "rb")
+    for read in bam.fetch(
+        reference=window.chromosome, start=window.begin, end=window.end
+    ):
+        [
+            (mod, positions, probs),
+            (mod2, positions2, probs2),
+        ] = get_modified_reference_positions(
+            read,
+            basemod,
+            window,
+            center,
+            threshA,
+            threshC,
+            windowSize,
+            fileName,
+            sampleName,
+            outDir,
+            extractAllBases,
+            qc,
+        )
+        for pos, prob in zip(positions, probs):
+            if pos is not None:
+                if (center is True and abs(pos) <= windowSize) or (
+                    center is False and pos > window.begin and pos < window.end
+                ):  # to decrease memory, only store bases within the window
+                    d = (
+                        read.query_name + ":" + str(pos),
+                        read.query_name,
+                        window.chromosome,
+                        int(pos),
+                        int(prob),
+                        mod,
+                    )
+                    data.append(d)
+        for pos, prob in zip(positions2, probs2):
+            if pos is not None:
+                if (center is True and abs(pos) <= windowSize) or (
+                    center is False and pos > window.begin and pos < window.end
+                ):  # to decrease memory, only store bases within the window
+                    d = (
+                        read.query_name + ":" + str(pos),
+                        read.query_name,
+                        window.chromosome,
+                        int(pos),
+                        int(prob),
+                        mod2,
+                    )
+                    data.append(d)
+    if data:
+        # data is list of tuples associated with given read
+        # or ignore because a read may overlap multiple windows
+        DATABASE_NAME = (
+            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
+        )
+        table_name = "methylationByBase_" + sampleName
+        command = (
+            """INSERT OR IGNORE INTO """
+            + table_name
+            + """ VALUES(?,?,?,?,?,?);"""
+        )
+        execute_sql_command(command, DATABASE_NAME, data)
 
 
 def get_modified_reference_positions(
@@ -431,8 +449,6 @@ def get_mod_reference_positions_by_mod(
             index_adj.append(index_adj[i] + diff + 1)
         # get the indices of the modified bases
         modified_bases = base_index[index_adj]
-        if read.is_reverse:
-            probabilities = probabilities[::-1]
 
     # extract CpG sites only rather than all mC
     keep = []
@@ -517,6 +533,8 @@ def get_mod_reference_positions_by_mod(
         )
         if extractAllBases:
             return (basemod, refpos_total_adjusted, probs)
+        elif not modsPresent:
+            return (None, [None], [None])
         else:
             return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
     elif not qc:
@@ -533,6 +551,8 @@ def get_mod_reference_positions_by_mod(
         )
         if extractAllBases:
             return (basemod, np.array(refpos[all_bases_index]), probs)
+        elif not modsPresent:
+            return (None, [None], [None])
         else:
             return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
     else:
@@ -576,7 +596,7 @@ def update_methylation_aggregate_db(
 
     if data:  # if data to append is not empty
         DATABASE_NAME = (
-            outDir + "/" + fileName.split("/")[-1].split(".")[0] + ".db"
+            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
         )
         # set variables for sqlite entry
         table_name = "methylationAggregate_" + sampleName
