@@ -210,7 +210,7 @@ def qc_report(filebamInList, sampleNameList, outDir, testMode = False, colors = 
         pltRL, valRL = qc_plot(x, sampleName, 'L', colors, 1, ax_1)
         if valRL:
             keep_values[0] = 1
-        pltRL.savefig(outDir + "/" + sampleName + "_rlength_freq_no_outliers.pdf", bbox_inches='tight')
+        #pltRL.savefig(outDir + "/" + sampleName + "_rlength_freq_no_outliers.pdf", bbox_inches='tight')
 
         ###### Mapping Quality ######
         x = plot_feature_df['mapq']
@@ -219,7 +219,7 @@ def qc_report(filebamInList, sampleNameList, outDir, testMode = False, colors = 
         pltMQ, valMQ = qc_plot(x, sampleName, 'M', colors, 2, ax_2)
         if valMQ:
             keep_values[1] = 1
-        pltMQ.savefig(outDir + "/" + sampleName + "_mapq_freq_no_outliers.pdf", bbox_inches='tight')
+        #pltMQ.savefig(outDir + "/" + sampleName + "_mapq_freq_no_outliers.pdf", bbox_inches='tight')
 
         ###### Basecall Quality ######
         x = plot_feature_df['ave_baseq']
@@ -234,7 +234,7 @@ def qc_report(filebamInList, sampleNameList, outDir, testMode = False, colors = 
         pltBQ, valBQ = qc_plot(x, sampleName, 'B', colors, 3, ax_3)
         if valBQ:
             keep_values[2] = 1
-        pltBQ.savefig(outDir + "/" + sampleName + "_baseq_freq_no_outliers.pdf", bbox_inches='tight')
+        #pltBQ.savefig(outDir + "/" + sampleName + "_baseq_freq_no_outliers.pdf", bbox_inches='tight')
 
         ###### Alignment Quality ######
         x = plot_feature_df['ave_alignq']
@@ -244,7 +244,7 @@ def qc_report(filebamInList, sampleNameList, outDir, testMode = False, colors = 
         pltAQ, valAQ = qc_plot(x, sampleName, 'A', colors, 4, ax_4)
         if valAQ:
             keep_values[3] = 1
-        pltAQ.savefig(outDir + "/" + sampleName + "_alignq_freq_no_outliers.pdf", bbox_inches='tight')
+        #pltAQ.savefig(outDir + "/" + sampleName + "_alignq_freq_no_outliers.pdf", bbox_inches='tight')
 
         val_table = [valRL, valMQ, valBQ, valAQ]
         val_table_new = []
