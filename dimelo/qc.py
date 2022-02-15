@@ -264,7 +264,7 @@ def qc_report(filebamInList, sampleNameList, outDir, testMode = False, colors = 
         rows = ['Min', '25%', 'Median', '75%', 'Max', 'Mean']
         print("mean length: ", valRL[5])
         print("num reads: ", len(x))
-        print("num bases: ", round(valRL[5] * len(valRL)))
+        print("num bases: ", round(valRL[5] * len(x)))
         # print(report_table)
 
         # print(len(report_table))
@@ -288,7 +288,7 @@ def qc_report(filebamInList, sampleNameList, outDir, testMode = False, colors = 
 
         summary_data = "mean length: " + str(valRL[5]) + " bp"
         summary_data = summary_data + "; num reads: " + str(len(x))
-        summary_data = summary_data + "; " + "num bases: " + str(round(valRL[5] * len(valRL))) + " bp"
+        summary_data = summary_data + "; " + "num bases: " + str(round(valRL[5] * len(x))) + " bp"
         fig.suptitle(sampleName + " QC Summary Report", y = 1.05)
         #plt.title("mean length: " + str(valRL[5]), y = 0.8)
         plt.title(summary_data, y=0.8)
