@@ -63,11 +63,6 @@ class Region(object):
                 self.strand = "+"
 
 
-####################################################################################
-# extracting modified base info from bams
-####################################################################################
-
-
 def make_db(fileName, sampleName, outDir, testMode, qc, joint):
     if not os.path.exists(outDir):
         os.mkdir(outDir)
@@ -209,22 +204,6 @@ def parse_bam(
     >>> aggregate_counts = pd.read_sql("SELECT * from methylationAggregate_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
 
     """
-
-    # """Create methylation object. Process windows in parallel.
-    # Args:
-    #         :param fileName: name of bam file with Mm and Ml tags
-    #         :param sampleName: name of sample for output file name labelling
-    #         :param bedFile: name of bed file that defines regions of interest
-    #         :param basemod: which basemod, currently supported options are 'A', 'CG', 'A+CG'
-    #         :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
-    #         :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True
-    #         :param threshA: threshold above which to call an A base methylated
-    #         :param threshC: threshold above which to call a C base methylated
-    # Return:
-    #         dataframe with: read_name, strand, chr, position, probability, mod
-    #         dictionary with aggregate data: {pos:modification: [methylated_bases, total_bases]}
-    # """
-    # create database with two tables: methylationByBase and methylationAggregate
     make_db(fileName, sampleName, outDir, testMode, qc, joint)
 
     if bedFile is not None:
