@@ -1,3 +1,15 @@
+r"""
+=================
+plot_browser module
+=================
+.. currentmodule:: dimelo.plot_browser
+.. autosummary::
+    plot_browser
+
+plot_browser plots single molecules with colored base modifications in region of interest
+
+"""
+
 # code adapted from methplotlib
 # https://doi.org/10.1093/bioinformatics/btaa093
 
@@ -73,22 +85,54 @@ def plot_browser(
     cores=None,
 ):
     """
-    Create single molecule plots within a region of interest
-    Args:
-            :param fileNames: list of names of bam files with Mm and Ml tags; indexed; or single file name as string
-            :param sampleNames: list of names of samples for output plot name labelling; or single sample name as string
-            :param window: formatted as for example: "chr1:1-100000"
-            :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
-            :param outDir: directory to output plot
-            :param threshA: threshold for calling mA; default 129
-            :param threshC: threshold for calling mCG; default 129
-            :param bedFileFeatures: annotation to display in browser (optional); default None
-            :param colorA: color in hex for mA
-            :param colorC: color in hex for mCG
-            :param dotsize: size of points; default 4
-            :param static: produce pdf if True, produe html if False; default False
-    Return:
-            plot of single molecules within the region of interest
+    fileNames
+        list of names of bam files with Mm and Ml tags; indexed; or single file name as string
+    sampleNames
+        list of names of samples for output plot name labelling; or single sample name as string
+    window
+        formatted as for example: "chr1:1-100000"
+    basemod
+        One of the following:
+
+        * ``'A'`` - extract mA only
+        * ``'CG'`` - extract mCpG only
+        * ``'A+CG'`` - extract mA and mCpG
+    outDir
+        directory to output plot
+    threshA
+        threshold for calling mA; default 129
+    threshC
+        threshold for calling mCG; default 129
+    bedFileFeatures
+        annotation to display in browser (optional); default None
+    smooth
+        window over which to smooth aggregate curve; default of 1000 bp
+    min_periods
+        minimum number of bases to consider for smoothing: default of 100 bp
+    colorA
+        color in hex for mA; default #053C5E
+    colorC
+        color in hex for mCG; default #BB4430
+    dotsize
+        size of points; default 4
+    static
+        One of the following:
+
+        * ``'True'`` - pdf output
+        * ``'False'`` - interactive html output; default is False
+    cores
+        number of cores over which to parallelize; default is all available
+
+    **Example**
+
+    >>> dm.plot_browser("dimelo/test/data/mod_mappings_subset.bam", "test", "chr1:2907273-2909473", "A+CG", "/dimelo/dimelo_test", static=False)
+    >>> dm.plot_browser(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "chr1:2907273-2909473", "A+CG", "/dimelo/dimelo_test", static=False)
+
+    **Return**
+
+        * PDF or HTML file with single molecules displayed over region of interest. Modified bases are colored according to colorA and colorC.
+        * PDFs of aggregate coverage and fraction of bases modified over region of interest.
+
     """
 
     cores_avail = multiprocessing.cpu_count()

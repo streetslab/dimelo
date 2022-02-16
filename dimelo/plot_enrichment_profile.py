@@ -1,3 +1,15 @@
+r"""
+==================================
+plot_enrichment_profile module
+==================================
+.. currentmodule:: dimelo.plot_enrichment_profile
+.. autosummary::
+    plot_enrichment_profile
+
+plot_enrichment_profile plots single molecules centered at regions of interest defined in bed file and produces aggregate profile
+
+"""
+
 import multiprocessing
 import sqlite3
 
@@ -32,25 +44,59 @@ def plot_enrichment_profile(
     min_periods=10,
     cores=None,
 ):
-    """Create single molecule plots centered at region of interest.
-    Overlay EITHER multiple files OR multiple bed regions for a single file
-    Args:
-            :param fileNames: name(s) of bam file with Mm and Ml tags
-            :param sampleNames: name(s) of sample for output file name labelling
-            :param bedFiles: specified windows for region(s) of interest
-            :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
-            :param outDir: directory to output plot
-            :param threshA: threshold for calling mA; default 129
-            :param threshC: threshold for calling mCG; default 129
-            :param windowSize: window size around center point of feature of interest to plot (+/-); default 1000 bp
-            :param colorA: color in hex for mA
-            :param colorC: color in hex for mCG
-            :param colors: color list in hex for overlay; default is ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
-            :param dotsize: size of points
-            :param smooth: window over which to smooth aggregate curve; default of 50 bp
-            :param min_periods: minimum number of bases to consider for smoothing: default of 10 bp
-    Return:
-            plot of single molecules centered at region of interest
+    """
+    fileNames
+        name(s) of bam file with Mm and Ml tags
+    sampleNames
+        name(s) of sample for output file name labelling
+    bedFiles
+        specified windows for region(s) of interest; if a 4th column is included with the strand for a motif of interest (+/-), reads will be oriented with respect to motif
+    basemod
+        One of the following:
+
+        * ``'A'`` - extract mA only
+        * ``'CG'`` - extract mCpG only
+        * ``'A+CG'`` - extract mA and mCpG
+    outDir
+        directory to output plot
+    threshA
+        threshold for calling mA; default 129
+    threshC
+        threshold for calling mCG; default 129
+    windowSize
+        window size around center point of feature of interest to plot (+/-); default 1000 bp
+    colorA
+        color in hex for mA; default #053C5E
+    colorC
+        color in hex for mCG; default #BB4430
+    colors
+        color list in hex for overlay plots; default is ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
+    dotsize
+        size of points; default is 0.5
+    smooth
+        window over which to smooth aggregate curve; default of 50 bp
+    min_periods
+        minimum number of bases to consider for smoothing: default of 10 bp
+    cores
+        number of cores over which to parallelize; default is all available
+
+    **Example**
+
+    For single file and region:
+
+    >>> dm.plot_enrichment_profile("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/test/data/test.bed", "A+CG", "/dimelo/dimelo_test", windowSize=500, dotsize=1)
+
+    To overlay multiple regions of interest (can conversely also overlay multiple samples over a single region if a list of files is provided):
+
+    >>> dm.plot_enrichment_profile("dimelo/test/data/mod_mappings_subset.bam", ["test1","test2"], ["dimelo/test/data/test.bed","dimelo/test/data/test.bed"], "A", "/dimelo/dimelo_test", windowSize=500, dotsize=1)
+
+    **Return**
+
+        * Aggregate profile of fraction of bases modified centered at features of interest
+        * Single molecules centered at features of interest
+        * Base abundance centered at features of interest
+
+
     """
 
     # default number of cores is max available

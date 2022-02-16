@@ -1,3 +1,15 @@
+r"""
+=======================
+plot_enrichment module
+=======================
+.. currentmodule:: dimelo.plot_enrichment
+.. autosummary::
+    plot_enrichment
+
+plot_enrichment plots fraction of bases modified within regions of interest defined by bed file
+
+"""
+
 import multiprocessing
 import sqlite3
 
@@ -21,18 +33,37 @@ def plot_enrichment(
     colors=COLOR_LIST,
     cores=None,
 ):
-    """Create barplots showing modified/total bases in region(s) of interest for given sample(s).
-    Args:
-            :param fileNames: name(s) of bam file with Mm and Ml tags
-            :param sampleNames: name(s) of sample for output file name labelling
-            :param bedFiles: specified windows for region(s) of interest
-            :param basemod: which basemods, currently supported options are 'A', 'CG'; only valid to look at one type of mod
-            :param outDir: directory to output plot
-            :param threshA: threshold for calling mA; default 129
-            :param threshC: threshold for calling mCG; default 129
-            :param colors: color list in hex for overlay; default is ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
-    Return:
-            barplot of modified/total bases
+    """
+    fileNames
+        name(s) of bam file with Mm and Ml tags
+    sampleNames
+        name(s) of sample for output file name labelling
+    bedFiles
+        specified windows for region(s) of interest
+    basemod
+        One of the following (only valid to look at one type of mod):
+
+        * ``'A'`` - extract mA only
+        * ``'CG'`` - extract mCpG only
+    outDir
+        directory to output plot
+    threshA
+        threshold for calling mA; default 129
+    threshC
+        threshold for calling mCG; default 129
+    colors
+        color list in hex for overlay; default is ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
+    cores
+        number of cores over which to parallelize; default is all available
+
+    **Example**
+
+    >>> dm.plot_enrichment(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/mod_mappings_subset.bam"], ["test1", "test2"], "dimelo/test/data/test.bed", "CG", "/dimelo/dimelo_test", threshC=129)
+
+    **Return**
+
+    Barplot with overall fraction of bases modified within regions of interest specified by bedFile(s)
+
     """
 
     # default number of cores is max available

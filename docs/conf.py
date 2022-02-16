@@ -33,6 +33,16 @@ extensions = [
     "sphinx.ext.autosectionlabel",
 ]
 
+# Include doc string for __init__ method in the documentation
+autosummary_generate = True
+
+autoclass_content = "class"
+autodoc_member_order = "bysource"
+
+# If true, the current module name will be prepended to all description
+# unit titles (such as .. function::).
+add_module_names = False
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
 

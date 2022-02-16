@@ -1,7 +1,13 @@
 r"""
-=================================================
-Functions to parse input bams.
-=================================================
+=================
+parse_bam module
+=================
+.. currentmodule:: dimelo.parse_bam
+.. autosummary::
+    parse_bam
+
+parse_bam allows you to summarize modification calls in a sql database
+
 """
 
 import multiprocessing
@@ -163,20 +169,69 @@ def parse_bam(
     joint=False,
     cores=None,
 ):
-    """Create methylation object. Process windows in parallel.
-    Args:
-            :param fileName: name of bam file with Mm and Ml tags
-            :param sampleName: name of sample for output file name labelling
-            :param bedFile: name of bed file that defines regions of interest
-            :param basemod: which basemod, currently supported options are 'A', 'CG', 'A+CG'
-            :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
-            :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True
-            :param threshA: threshold above which to call an A base methylated
-            :param threshC: threshold above which to call a C base methylated
-    Return:
-            dataframe with: read_name, strand, chr, position, probability, mod
-            dictionary with aggregate data: {pos:modification: [methylated_bases, total_bases]}
     """
+    fileName
+        name of bam file with Mm and Ml tags
+    sampleName
+        name of sample for output SQL table name labelling
+    outDir
+        directory where SQL database is stored
+    bedFile
+        name of bed file that defines regions of interest over which to extract mod calls
+    basemod
+        One of the following:
+
+        * ``'A'`` - extract mA only
+        * ``'CG'`` - extract mCpG only
+        * ``'A+CG'`` - extract mA and mCpG
+    center
+        One of the following:
+
+        * ``'True'`` - report positions with respect to reference center (+/- window size)
+        * ``'False'`` - report positions in original reference space
+    windowSize
+        window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True
+    region
+        single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end
+    threshA
+        threshold above which to call an A base methylated; default is 129
+    threshC
+        threshold above which to call a C base methylated; default is 129
+    extractAllBases
+         One of the following:
+
+        * ``'True'`` - store all base mod calls, regardles of methylation probability threshold
+        * ``'False'`` - only modifications above specified threshold are stored
+    cores
+        number of cores over which to parallelize; default is all available
+
+    **Example**
+
+    >>> dm.parse_bam("dimelo/test/data/mod_mappings_subset.bam", "test", "/dimelo/dimelo_test", bedFile="dimelo/test/data/test.bed", basemod="A+CG", center=True, windowSize=500, threshA=190, threshC=190, extractAllBases=False, cores=8)
+
+    **Return**
+
+    Returns a SQL database in the specified output directory. Database can be converted into pandas dataframe with:
+
+    >>> all_data = pd.read_sql("SELECT * from methylationByBase_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
+    >>> aggregate_counts = pd.read_sql("SELECT * from methylationAggregate_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
+
+    """
+
+    # """Create methylation object. Process windows in parallel.
+    # Args:
+    #         :param fileName: name of bam file with Mm and Ml tags
+    #         :param sampleName: name of sample for output file name labelling
+    #         :param bedFile: name of bed file that defines regions of interest
+    #         :param basemod: which basemod, currently supported options are 'A', 'CG', 'A+CG'
+    #         :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
+    #         :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True
+    #         :param threshA: threshold above which to call an A base methylated
+    #         :param threshC: threshold above which to call a C base methylated
+    # Return:
+    #         dataframe with: read_name, strand, chr, position, probability, mod
+    #         dictionary with aggregate data: {pos:modification: [methylated_bases, total_bases]}
+    # """
     # create database with two tables: methylationByBase and methylationAggregate
     make_db(fileName, sampleName, outDir, testMode, qc, joint)
 

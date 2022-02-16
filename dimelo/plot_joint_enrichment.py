@@ -1,3 +1,15 @@
+r"""
+=================
+plot_joint_enrichment module
+=================
+.. currentmodule:: dimelo.plot_joint_enrichment
+.. autosummary::
+    plot_joint_enrichment
+
+plot_joint_enrichment plots single molecules that span two sites of interest
+
+"""
+
 import multiprocessing
 import sqlite3
 
@@ -51,6 +63,54 @@ def plot_joint_enrichment(
     cores=None,
     num_clusters=3,
 ):
+    """
+    fileName
+        name of bam file with Mm and Ml tags
+    sampleName
+        name of sample for output file name labelling
+    bedFile
+        specified windows for region(s) of interest
+    basemod
+        One of the following:
+
+        * ``'A'`` - extract mA only
+        * ``'CG'`` - extract mCpG only
+        * ``'A+CG'`` - extract mA and mCpG
+    outDir
+        directory to output plot
+    threshA
+        threshold for calling mA; default 129
+    threshC
+        threshold for calling mCG; default 129
+    windowSize
+         window size around center point of feature of interest to plot (+/-); default 1000 bp
+    colorA
+        color in hex for mA; default #053C5E
+    colorC
+        color in hex for mCG; default #BB4430
+    dotsize
+        size of points; default is 0.5
+    min_distance
+        minimum distance between two regions of interest spanned by a single molecule; default is 2000 bp
+    max_distance
+        maximum distance between two regions of interest spanned by a single molecule; default is 10000 bp
+    gap
+        gap between neighboring viewpoints; default is 1000 bp
+    cores
+        number of cores over which to parallelize; default is all available
+    num_clusters
+        number of clusters for kmeans clustering for visualization; default is 3
+
+    **Example**
+
+    >>> dm.plot_joint_enrichment("dimelo/test/data/mod_mappings_subset.bam", "joint_test", "dimelo/test/data/test.bed", "A",  "/dimelo/dimelo_test")
+
+    **Return**
+
+    Single molecules that span two sites of interest with base modifications colored, clustered for visualization with kmeans clustering
+
+    """
+
     peak_left, peak_right = extract_peak_pairs(
         bedFile, min_distance, max_distance, outDir
     )
