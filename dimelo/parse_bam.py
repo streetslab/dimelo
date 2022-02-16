@@ -20,9 +20,6 @@ from joblib import Parallel, delayed
 
 from dimelo.utils import clear_db, create_sql_table, execute_sql_command
 
-# import sqlite3
-
-
 ####################################################################################
 # classes for regions
 ####################################################################################
