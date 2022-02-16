@@ -92,10 +92,6 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
             "mapq",
             "ave_baseq",
             "ave_alignq",
-            "numA",
-            "methAprob05",
-            "numC",
-            "methCprob05",
         ]
         dtypes = [
             "TEXT",
@@ -107,10 +103,6 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
             "INT",
             "INT",
             "INT",
-            "FLOAT",
-            "FLOAT",
-            "FLOAT",
-            "FLOAT",
         ]
         create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
         tables.append(table_name)
