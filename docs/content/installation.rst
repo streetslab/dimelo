@@ -7,43 +7,64 @@ Requirements
 * `conda <https://docs.conda.io/en/latest/miniconda.html>`__
 * python 3.7
 
-Installation from Pip
----------------------
-
-1. Create and activate a pytion 3.7 conda venv:
-
-.. code:: bash
-
-	conda create --name dimelo python=3.7 pip
-	source activate dimelo
-
-2. Install dimelo from Pypi:
-
-.. code:: bash
-
-	pip install -i https://test.pypi.org/simple/dimelo
-
 Installation from Source
 ------------------------
 
-1. Create and activate a pytion 3.7 conda venv:
-
-.. code:: bash
-
-	conda create --name dimelo python=3.7 pip
-	source activate dimelo
-
-
-2. Get the code:
+1. Get the code.
 
 .. code:: bash
 
 	git clone https://github.com/amaslan/dimelo
 	cd dimelo
 
+2. Create and activate a python 3.7 conda venv.
 
-3. Install dimelo and its requirements
+Recommended to avoid package dependency install issues:
+
+.. code:: bash
+
+	conda env create -f environment.yml
+	conda activate dimelo
+
+Other option:
+
+.. code:: bash
+
+	conda create --name dimelo python=3.7
+	conda activate dimelo
+
+3. Install dimelo and its requirements.
+
+.. code:: bash
+
+	pip install .
+
+4. Now the dimelo package is available for import. For example, you may import it like this: 
+
+.. code:: bash
+
+	python
+
+>>> import dimelo as dm
+
+And then call functions like this:
+
+>>> dm.function_name(...)
+
+
+Other notes
+------------------------
+
+* The dependency pybedtools requires that you have bedtools. Because this is not able to be installed with pip, if you did not create your environment from environment.yml, you must run:
+
+.. code:: bash
+
+	conda install bedtools
+
+* If you would like to make changes to the package, you can install it in developer mode:
 
 .. code:: bash
 
 	pip install -e .
+
+
