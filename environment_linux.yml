@@ -32,7 +32,6 @@ dependencies:
     - charset-normalizer==2.0.12
     - cycler==0.11.0
     - cython==0.29.27
-    - dimelo==0.0.1a0
     - docutils==0.17.1
     - idna==3.3
     - imagesize==1.3.0
@@ -84,4 +83,3 @@ dependencies:
     - typing-extensions==4.1.1
     - urllib3==1.26.8
     - zipp==3.7.0
-prefix: /clusterfs/rosalind/groups/streetslab/amaslan/miniconda3/envs/dimelo
