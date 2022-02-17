@@ -21,12 +21,21 @@ Installation from Source
 
 Recommended to avoid package dependency install issues:
 
+Linux:
+
 .. code:: bash
 
-	conda env create -f environment.yml
+	conda env create -f environment_linux.yml
 	conda activate dimelo
 
-Other option:
+MacOS:
+
+.. code:: bash
+
+	conda env create -f environment_macOS.yml
+	conda activate dimelo
+
+Other option to create venv without using provided yml:
 
 .. code:: bash
 
