@@ -225,16 +225,19 @@ def qc_report(
         cores
             number of cores over which to parallelize; default is all available
         colors
-            color list in hex for overlay plots; default is ["#BB4430","#FFBC0A","#053C5E","#A9E5BB","#610345","#2D1E2F","#559CAD","#5E747F","#F343F4"]
+            color list in hex for overlay plots; default is:
+            ["#BB4430","#FFBC0A","#053C5E","#A9E5BB","#610345",
+            "#2D1E2F","#559CAD","#5E747F","#F343F4"]
 
         **Example**
+
         For single sample:
 
-        >>> dm.plot_browser("dimelo/test/data/mod_mappings_subset.bam", "test", "/dimelo/out")
+        >>> dm.qc_report("dimelo/test/data/mod_mappings_subset.bam", "test", "/dimelo/out")
 
         For multiple sample files:
 
-        >>> dm.plot_browser(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "/dimelo/out")
+        >>> dm.qc_report(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "/dimelo/out")
 
         **Return**
 
@@ -245,6 +248,12 @@ def qc_report(
                 * average basecall quality per read histogram (if basecaller provided information)
                 * summary table describing spread of data
                 * number of reads, number of basepairs
+
+
+        Sample QC Report
+
+        .. image:: images/sample_qc_report.png
+
         """
     if type(fileNames) != list:
         fileNames = [fileNames]
