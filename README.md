@@ -3,3 +3,5 @@
 
 # dimelo
 dimelo is a python package for analysis of dimelo-seq &amp; nanopore modified base data.
+
+Documentation: https://amaslan.github.io/dimelo/
