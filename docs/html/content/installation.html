@@ -1,0 +1,189 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>Installation &#8212; dimelo  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="qc_report" href="reference/qc_report.html" />
+    <link rel="prev" title="dimelo" href="../index.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="installation">
+<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h1>
+<section id="requirements">
+<h2>Requirements<a class="headerlink" href="#requirements" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://docs.conda.io/en/latest/miniconda.html">conda</a></p></li>
+<li><p>python 3.7</p></li>
+</ul>
+</section>
+<section id="installation-from-source">
+<h2>Installation from Source<a class="headerlink" href="#installation-from-source" title="Permalink to this headline">¶</a></h2>
+<ol class="arabic simple">
+<li><p>Get the code.</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git clone https://github.com/amaslan/dimelo
+<span class="nb">cd</span> dimelo
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>Create and activate a python 3.7 conda venv.</p></li>
+</ol>
+<p>Recommended to avoid package dependency install issues:</p>
+<p>Linux:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda env create -f environment_linux.yml
+conda activate dimelo
+</pre></div>
+</div>
+<p>MacOS:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda env create -f environment_macOS.yml
+conda activate dimelo
+</pre></div>
+</div>
+<p>Other option to create venv without using provided yml:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda create --name dimelo <span class="nv">python</span><span class="o">=</span><span class="m">3</span>.7
+conda activate dimelo
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li><p>Install dimelo and its requirements.</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install .
+</pre></div>
+</div>
+<ol class="arabic simple" start="4">
+<li><p>Now the dimelo package is available for import. For example, you may import it like this:</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">dimelo</span> <span class="k">as</span> <span class="nn">dm</span>
+</pre></div>
+</div>
+<p>And then call functions like this:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dm</span><span class="o">.</span><span class="n">function_name</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="other-notes">
+<h2>Other notes<a class="headerlink" href="#other-notes" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>The dependency pybedtools requires that you have bedtools. Because this is not able to be installed with pip, if you did not create your environment from environment.yml, you must run:</p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda install bedtools
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>If you would like to make changes to the package, you can install it in developer mode:</p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install -e .
+</pre></div>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">dimelo</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installation-from-source">Installation from Source</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#other-notes">Other notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="reference/qc_report.html">qc_report</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/parse_bam.html">parse_bam</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/plot_browser.html">plot_browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/plot_enrichment.html">plot_enrichment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/plot_enrichment_profile.html">plot_enrichment_profile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/plot_joint_enrichment.html">plot_joint_enrichment</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="../index.html" title="previous chapter">dimelo</a></li>
+      <li>Next: <a href="reference/qc_report.html" title="next chapter">qc_report</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2022, Annie Maslan & Reet Mishra.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.2.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="../_sources/content/installation.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
