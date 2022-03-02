@@ -58,7 +58,7 @@ class Region(object):
                     self.strand = region[1][3]
                 # handle case of bed file with additional field that isn't strand +/-
                 else:
-                    self.strand == "+"
+                    self.strand = "+"
             else:
                 self.strand = "+"
 
