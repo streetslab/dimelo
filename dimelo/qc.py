@@ -1,5 +1,14 @@
-"Functions to parse_bam for QC"
+r"""
+=================
+QC module
+=================
+.. currentmodule:: dimelo.qc_report
+.. autosummary::
+    qc_report
 
+qc_report provides a detailed summary report of many important quality control information including read length, mapping quality, etc.
+
+"""
 import multiprocessing
 import sqlite3
 import time
@@ -14,6 +23,7 @@ from joblib import Parallel, delayed
 from dimelo.parse_bam import make_db
 from dimelo.utils import execute_sql_command
 
+COLOR_LIST = ["#BB4430","#FFBC0A","#053C5E","#A9E5BB","#610345","#2D1E2F","#559CAD","#5E747F","#F343F4"]
 
 def batch_read_generator(file_bamIn, batch_size):
     counter = 0
@@ -82,7 +92,7 @@ def ave_qual(quals, qround=False, tab=errs_tab(129)):
 def parse_bam_read(bamIn, outDir, cores=None):
     file_bamIn = pysam.AlignmentFile(bamIn, "rb")
 
-    DB_NAME, tables = make_db(bamIn, "", outDir, True, True, joint=False)
+    DB_NAME, tables = make_db(bamIn, "", outDir, False, True, joint=False)
     template_command = (
         """INSERT INTO """ + tables[0] + """ VALUES(?,?,?,?,?,?,?,?,?);"""
     )
@@ -143,7 +153,6 @@ def qc_plot(x, sampleName, plotType, colors, num, axes):
     elif plotType == "A":
         ptype = " Alignment Quality"
         xlabel = "Average Alignment Quality"
-
     plt.hist(no_outliers, bins=200, color=colors[6], density=True)  #
     plt.axvline(
         x.median(),
@@ -197,39 +206,70 @@ def calculate_N50(x):
 
 
 def qc_report(
-    filebamInList,
-    sampleNameList,
+    fileNames,
+    sampleNames,
     outDir,
-    testMode=False,
-    colors=[
-        "#BB4430",
-        "#FFBC0A",
-        "#053C5E",
-        "#A9E5BB",
-        "#610345",
-        "#2D1E2F",
-        "#559CAD",
-        "#5E747F",
-        "#F343F4",
-    ],
+    colors= COLOR_LIST,
+    cores = None,
 ):
     # runtime = get_runtime(parse_bam_read, filebamIn, 'out')
     # print(runtime)
 
-    if type(filebamInList) != list:
-        filebamInList = [filebamInList]
-        sampleNameList = [sampleNameList]
+    """
+        fileNames
+            list of names of bam files; indexed; or single file name as string
+        sampleNames
+            list of names of samples for output plot name labelling; or single sample name as string
+        outDir
+            directory to output QC summary report
+        cores
+            number of cores over which to parallelize; default is all available
+        colors
+            color list in hex for overlay plots; default is:
+            ["#BB4430","#FFBC0A","#053C5E","#A9E5BB","#610345",
+            "#2D1E2F","#559CAD","#5E747F","#F343F4"]
 
-    for index in range(len(filebamInList)):
-        filebamIn = filebamInList[index]
-        sampleName = sampleNameList[index]
-        if testMode:
-            DB_NAME = outDir + "/" + filebamIn.split("/")[-1][:-4] + ".db"
-            # DB_NAME = "out/winnowmap_guppy_merge_subset.db"
-            # DB_NAME = "out/mod_mappings_subset.db"
-            TABLE_NAME = "reads"
-        else:
-            DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, "out")
+        **Example**
+
+        For single sample:
+
+        >>> dm.qc_report("dimelo/test/data/mod_mappings_subset.bam", "test", "/dimelo/out")
+
+        For multiple sample files:
+
+        >>> dm.qc_report(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "/dimelo/out")
+
+        **Return**
+
+            * PDF of QC Summary Report which includes:
+                * read length histogram
+                * mapping quality histogram
+                * average alignment quality per read histogram (if basecaller provided information)
+                * average basecall quality per read histogram (if basecaller provided information)
+                * summary table describing spread of data
+                * number of reads, number of basepairs
+
+
+        Sample QC Report
+
+        .. image:: images/sample_qc_report.png
+
+        """
+    if type(fileNames) != list:
+        fileNames = [fileNames]
+        sampleNames = [sampleNames]
+
+    for index in range(len(fileNames)):
+        filebamIn = fileNames[index]
+        sampleName = sampleNames[index]
+        DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, "out", cores)
+        # if testMode:
+        #     DB_NAME = outDir + "/" + filebamIn.split("/")[-1][:-4] + ".db"
+        #     # DB_NAME = "out/winnowmap_guppy_merge_subset.db"
+        #     # DB_NAME = "out/mod_mappings_subset.db"
+        #     TABLE_NAME = "reads"
+        # else:
+        #     DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, "out")
 
         if sampleName is None:
             sampleName = DB_NAME.split("/")[1][:-3]

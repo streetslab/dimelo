@@ -75,8 +75,50 @@
 <h1>qc_report<a class="headerlink" href="#qc-report" title="Permalink to this headline"></a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="dimelo.qc_report">
-<span class="sig-name descname"><span class="pre">qc_report</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filebamInList</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampleNameList</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outDir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">testMode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">['#BB4430',</span> <span class="pre">'#FFBC0A',</span> <span class="pre">'#053C5E',</span> <span class="pre">'#A9E5BB',</span> <span class="pre">'#610345',</span> <span class="pre">'#2D1E2F',</span> <span class="pre">'#559CAD',</span> <span class="pre">'#5E747F',</span> <span class="pre">'#F343F4']</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dimelo.qc_report" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">qc_report</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fileNames</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampleNames</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outDir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">['#BB4430',</span> <span class="pre">'#FFBC0A',</span> <span class="pre">'#053C5E',</span> <span class="pre">'#A9E5BB',</span> <span class="pre">'#610345',</span> <span class="pre">'#2D1E2F',</span> <span class="pre">'#559CAD',</span> <span class="pre">'#5E747F',</span> <span class="pre">'#F343F4']</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dimelo.qc_report" title="Permalink to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>fileNames</dt><dd><p>list of names of bam files; indexed; or single file name as string</p>
+</dd>
+<dt>sampleNames</dt><dd><p>list of names of samples for output plot name labelling; or single sample name as string</p>
+</dd>
+<dt>outDir</dt><dd><p>directory to output QC summary report</p>
+</dd>
+<dt>cores</dt><dd><p>number of cores over which to parallelize; default is all available</p>
+</dd>
+<dt>colors</dt><dd><p>color list in hex for overlay plots; default is:
+[“#BB4430”,”#FFBC0A”,”#053C5E”,”#A9E5BB”,”#610345”,
+“#2D1E2F”,”#559CAD”,”#5E747F”,”#F343F4”]</p>
+</dd>
+</dl>
+<p><strong>Example</strong></p>
+<p>For single sample:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dm</span><span class="o">.</span><span class="n">qc_report</span><span class="p">(</span><span class="s2">&quot;dimelo/test/data/mod_mappings_subset.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="s2">&quot;/dimelo/out&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For multiple sample files:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dm</span><span class="o">.</span><span class="n">qc_report</span><span class="p">([</span><span class="s2">&quot;dimelo/test/data/mod_mappings_subset1.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;dimelo/test/data/mod_mappings_subset2.bam&quot;</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;test1&quot;</span><span class="p">,</span> <span class="s2">&quot;test2&quot;</span><span class="p">],</span> <span class="s2">&quot;/dimelo/out&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Return</strong></p>
+<blockquote>
+<div><ul class="simple">
+<li><dl class="simple">
+<dt>PDF of QC Summary Report which includes:</dt><dd><ul>
+<li><p>read length histogram</p></li>
+<li><p>mapping quality histogram</p></li>
+<li><p>average alignment quality per read histogram (if basecaller provided information)</p></li>
+<li><p>average basecall quality per read histogram (if basecaller provided information)</p></li>
+<li><p>summary table describing spread of data</p></li>
+<li><p>number of reads, number of basepairs</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+</div></blockquote>
+<p>Sample QC Report</p>
+<img alt="../../_images/sample_qc_report.png" src="../../_images/sample_qc_report.png" />
+</dd></dl>
 
 </section>
 
