@@ -24,6 +24,9 @@ Tool summary
 |:doc:`content/reference/parse_bam`               | data formatting       | 1 BAM                               | sql database (to allow for custom visualization)                                                                               |
 +-------------------------------------------------+-----------------------+-------------------------------------+--------------------------------------------+-----------------------------------------------------------------------------------+
 
+Example Gallery
+---------------
+:doc:`auto_examples/index`
 
 .. toctree::
    :maxdepth: 2
