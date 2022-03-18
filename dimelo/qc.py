@@ -10,6 +10,7 @@ qc_report provides a detailed summary report of many important quality control i
 
 """
 import multiprocessing
+import os
 import sqlite3
 import time
 from math import log
@@ -255,6 +256,9 @@ def qc_report(
         .. image:: images/sample_qc_report.png
 
         """
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
+
     if type(fileNames) != list:
         fileNames = [fileNames]
         sampleNames = [sampleNames]
