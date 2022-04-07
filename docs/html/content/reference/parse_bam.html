@@ -76,7 +76,7 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="dimelo.parse_bam">
 <span class="sig-name descname"><span class="pre">parse_bam</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fileName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampleName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outDir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bedFile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basemod</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'A+CG'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">windowSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">region</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshA</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">129</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshC</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">129</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extractAllBases</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">testMode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">joint</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dimelo.parse_bam" title="Permalink to this definition"></a></dt>
-<dd><dl>
+<dd><dl class="simple">
 <dt>fileName</dt><dd><p>name of bam file with Mm and Ml tags</p>
 </dd>
 <dt>sampleName</dt><dd><p>name of sample for output SQL table name labelling</p>
@@ -106,12 +106,10 @@
 </dd>
 <dt>threshC</dt><dd><p>threshold above which to call a C base methylated; default is 129</p>
 </dd>
-<dt>extractAllBases</dt><dd><blockquote>
-<div><p>One of the following:</p>
-</div></blockquote>
+<dt>extractAllBases</dt><dd><p>One of the following:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">'True'</span></code> - store all base mod calls, regardles of methylation probability threshold</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">'False'</span></code> - only modifications above specified threshold are stored</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">'True'</span></code> - Store all base mod calls, regardles of methylation probability threshold. Bases stored are those that can have a modification call (A, CG, or both depending on <code class="docutils literal notranslate"><span class="pre">basemod</span></code> parameter) and are covered bases only, not all bases in the reference.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">'False'</span></code> - Only modifications above specified threshold are stored</p></li>
 </ul>
 </dd>
 <dt>cores</dt><dd><p>number of cores over which to parallelize; default is all available</p>
