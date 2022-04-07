@@ -108,7 +108,7 @@
 </dd>
 <dt>extractAllBases</dt><dd><p>One of the following:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">'True'</span></code> - Store all base mod calls, regardles of methylation probability threshold. Bases stored are those that can have a modification call (A, CG, or both depending on <code class="docutils literal notranslate"><span class="pre">basemod</span></code> parameter) and are covered bases only, not all bases in the reference.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">'True'</span></code> - Store all base mod calls, regardles of methylation probability threshold. Bases stored are those that can have a modification call (A, CG, or both depending on <code class="docutils literal notranslate"><span class="pre">basemod</span></code> parameter) and are sequenced bases, not all bases in the reference.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">'False'</span></code> - Only modifications above specified threshold are stored</p></li>
 </ul>
 </dd>
@@ -125,6 +125,32 @@
 <span class="gp">&gt;&gt;&gt; </span><span class="n">aggregate_counts</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span><span class="s2">&quot;SELECT * from methylationAggregate_&quot;</span> <span class="o">+</span> <span class="n">sampleName</span><span class="p">,</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">outDir</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">fileName</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;.db&quot;</span><span class="p">))</span>
 </pre></div>
 </div>
+<p>Each database contains these two tables with columns listed below:</p>
+<ol class="arabic simple">
+<li><dl class="simple">
+<dt>methylationByBase_sampleName</dt><dd><ul class="simple">
+<li><p>id(read_name:pos)</p></li>
+<li><p>read_name</p></li>
+<li><p>chr</p></li>
+<li><p>pos</p></li>
+<li><p>prob</p></li>
+<li><p>mod</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>methylationAggregate_sampleName</dt><dd><ul class="simple">
+<li><p>id(pos:mod)</p></li>
+<li><p>pos</p></li>
+<li><p>mod</p></li>
+<li><p>methylated_bases</p></li>
+<li><p>total_bases</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ol>
 </dd></dl>
 
 </section>

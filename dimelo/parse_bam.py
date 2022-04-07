@@ -203,6 +203,22 @@ def parse_bam(
     >>> all_data = pd.read_sql("SELECT * from methylationByBase_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
     >>> aggregate_counts = pd.read_sql("SELECT * from methylationAggregate_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
 
+    Each database contains these two tables with columns listed below:
+
+    1. methylationByBase_sampleName
+        * id(read_name:pos)
+        * read_name
+        * chr
+        * pos
+        * prob
+        * mod
+    2. methylationAggregate_sampleName
+        * id(pos:mod)
+        * pos
+        * mod
+        * methylated_bases
+        * total_bases
+
     """
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
