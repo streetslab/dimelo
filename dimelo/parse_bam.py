@@ -251,7 +251,7 @@ def parse_bam(
                 "The bedFile and region parameters are mutually exclusive; specify one or the other."
             )
             return
-        windows = [region]
+        windows = [Region(region)]
 
     # default number of cores is max available
     cores_avail = multiprocessing.cpu_count()

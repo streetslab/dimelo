@@ -168,8 +168,6 @@ def plot_browser(
     if type(sampleNames) != list:
         sampleNames = [sampleNames]
 
-    w = Region(window)
-
     all_data = []
     aggregate_counts = []
     for f, n in zip(fileNames, sampleNames):
@@ -179,7 +177,7 @@ def plot_browser(
             n,
             outDir,
             basemod="A+CG",
-            region=w,
+            region=window,  # pass string representation
             extractAllBases=True,
             cores=num_cores,
         )
