@@ -204,6 +204,9 @@ def parse_bam(
     >>> aggregate_counts = pd.read_sql("SELECT * from methylationAggregate_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
 
     """
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
+
     make_db(fileName, sampleName, outDir, testMode, qc, joint)
 
     if bedFile is not None:

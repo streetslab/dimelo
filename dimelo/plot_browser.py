@@ -14,6 +14,7 @@ plot_browser plots single molecules with colored base modifications in region of
 # https://doi.org/10.1093/bioinformatics/btaa093
 
 import multiprocessing
+import os
 import sqlite3
 import sys
 
@@ -134,6 +135,9 @@ def plot_browser(
         * PDFs of aggregate coverage and fraction of bases modified over region of interest.
 
     """
+
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
 
     cores_avail = multiprocessing.cpu_count()
     if cores is None:

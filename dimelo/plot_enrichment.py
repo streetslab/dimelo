@@ -11,6 +11,7 @@ plot_enrichment plots fraction of bases modified within regions of interest defi
 """
 
 import multiprocessing
+import os
 import sqlite3
 
 import matplotlib.pyplot as plt
@@ -65,6 +66,9 @@ def plot_enrichment(
     Barplot with overall fraction of bases modified within regions of interest specified by bedFile(s)
 
     """
+
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
 
     # default number of cores is max available
     cores_avail = multiprocessing.cpu_count()

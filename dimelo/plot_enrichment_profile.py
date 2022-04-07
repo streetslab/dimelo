@@ -11,6 +11,7 @@ plot_enrichment_profile plots single molecules centered at regions of interest d
 """
 
 import multiprocessing
+import os
 import sqlite3
 
 import matplotlib.pyplot as plt
@@ -98,6 +99,9 @@ def plot_enrichment_profile(
 
 
     """
+
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
 
     # default number of cores is max available
     cores_avail = multiprocessing.cpu_count()

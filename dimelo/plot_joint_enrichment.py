@@ -11,6 +11,7 @@ plot_joint_enrichment plots single molecules that span two sites of interest
 """
 
 import multiprocessing
+import os
 import sqlite3
 
 import matplotlib.patches as patches
@@ -110,6 +111,9 @@ def plot_joint_enrichment(
     Single molecules that span two sites of interest with base modifications colored, clustered for visualization with kmeans clustering
 
     """
+
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
 
     peak_left, peak_right = extract_peak_pairs(
         bedFile, min_distance, max_distance, outDir
