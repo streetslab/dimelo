@@ -59,7 +59,7 @@ def plot_enrichment(
 
     **Example**
 
-    >>> dm.plot_enrichment(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/mod_mappings_subset.bam"], ["test1", "test2"], "dimelo/test/data/test.bed", "CG", "/dimelo/dimelo_test", threshC=129)
+    >>> dm.plot_enrichment(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/mod_mappings_subset.bam"], ["test1", "test2"], "dimelo/test/data/test.bed", "CG", "dimelo/dimelo_test", threshC=129)
 
     **Return**
 

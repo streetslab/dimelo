@@ -85,11 +85,11 @@ def plot_enrichment_profile(
 
     For single file and region:
 
-    >>> dm.plot_enrichment_profile("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/test/data/test.bed", "A+CG", "/dimelo/dimelo_test", windowSize=500, dotsize=1)
+    >>> dm.plot_enrichment_profile("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/test/data/test.bed", "A+CG", "dimelo/dimelo_test", windowSize=500, dotsize=1)
 
     To overlay multiple regions of interest (can conversely also overlay multiple samples over a single region if a list of files is provided):
 
-    >>> dm.plot_enrichment_profile("dimelo/test/data/mod_mappings_subset.bam", ["test1","test2"], ["dimelo/test/data/test.bed","dimelo/test/data/test.bed"], "A", "/dimelo/dimelo_test", windowSize=500, dotsize=1)
+    >>> dm.plot_enrichment_profile("dimelo/test/data/mod_mappings_subset.bam", ["test1","test2"], ["dimelo/test/data/test.bed","dimelo/test/data/test.bed"], "A", "dimelo/dimelo_test", windowSize=500, dotsize=1)
 
     **Return**
 

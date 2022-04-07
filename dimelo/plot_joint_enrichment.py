@@ -104,7 +104,7 @@ def plot_joint_enrichment(
 
     **Example**
 
-    >>> dm.plot_joint_enrichment("dimelo/test/data/mod_mappings_subset.bam", "joint_test", "dimelo/test/data/test.bed", "A",  "/dimelo/dimelo_test")
+    >>> dm.plot_joint_enrichment("dimelo/test/data/mod_mappings_subset.bam", "joint_test", "dimelo/test/data/test.bed", "A",  "dimelo/dimelo_test")
 
     **Return**
 

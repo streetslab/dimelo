@@ -194,7 +194,7 @@ def parse_bam(
 
     **Example**
 
-    >>> dm.parse_bam("dimelo/test/data/mod_mappings_subset.bam", "test", "/dimelo/dimelo_test", bedFile="dimelo/test/data/test.bed", basemod="A+CG", center=True, windowSize=500, threshA=190, threshC=190, extractAllBases=False, cores=8)
+    >>> dm.parse_bam("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/dimelo_test", bedFile="dimelo/test/data/test.bed", basemod="A+CG", center=True, windowSize=500, threshA=190, threshC=190, extractAllBases=False, cores=8)
 
     **Return**
 
@@ -202,7 +202,7 @@ def parse_bam(
 
     >>> fileName = "dimelo/test/data/mod_mappings_subset.bam"
     >>> sampleName = "test"
-    >>> outDir = "/dimelo/dimelo_test"
+    >>> outDir = "dimelo/dimelo_test"
     >>> all_data = pd.read_sql("SELECT * from methylationByBase_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
     >>> aggregate_counts = pd.read_sql("SELECT * from methylationAggregate_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
 
@@ -283,6 +283,18 @@ def parse_bam(
         )
         for window in windows
     )
+
+    str_out = """\
+    Outputs
+    _______
+    DB file: {out_path} \
+    """.format(
+        out_path=outDir
+        + "/"
+        + fileName.split("/")[-1].replace(".bam", "")
+        + ".db"
+    )
+    print(str_out)
 
 
 def parse_reads_window(

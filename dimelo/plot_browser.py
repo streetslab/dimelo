@@ -138,8 +138,8 @@ def plot_browser(
 
     **Example**
 
-    >>> dm.plot_browser("dimelo/test/data/mod_mappings_subset.bam", "test", "chr1:2907273-2909473", "A+CG", "/dimelo/dimelo_test", static=False)
-    >>> dm.plot_browser(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "chr1:2907273-2909473", "A+CG", "/dimelo/dimelo_test", static=False)
+    >>> dm.plot_browser("dimelo/test/data/mod_mappings_subset.bam", "test", "chr1:2907273-2909473", "A+CG", "dimelo/dimelo_test", static=False)
+    >>> dm.plot_browser(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "chr1:2907273-2909473", "A+CG", "dimelo/dimelo_test", static=False)
 
     **Return**
 
