@@ -200,6 +200,9 @@ def parse_bam(
 
     Returns a SQL database in the specified output directory. Database can be converted into pandas dataframe with:
 
+    >>> fileName = "dimelo/test/data/mod_mappings_subset.bam"
+    >>> sampleName = "test"
+    >>> outDir = "/dimelo/dimelo_test"
     >>> all_data = pd.read_sql("SELECT * from methylationByBase_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
     >>> aggregate_counts = pd.read_sql("SELECT * from methylationAggregate_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
 
