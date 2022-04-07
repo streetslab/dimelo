@@ -185,10 +185,10 @@ def parse_bam(
     threshC
         threshold above which to call a C base methylated; default is 129
     extractAllBases
-         One of the following:
+        One of the following:
 
-        * ``'True'`` - store all base mod calls, regardles of methylation probability threshold
-        * ``'False'`` - only modifications above specified threshold are stored
+        * ``'True'`` - Store all base mod calls, regardles of methylation probability threshold. Bases stored are those that can have a modification call (A, CG, or both depending on ``basemod`` parameter) and are sequenced bases, not all bases in the reference.
+        * ``'False'`` - Only modifications above specified threshold are stored
     cores
         number of cores over which to parallelize; default is all available
 
