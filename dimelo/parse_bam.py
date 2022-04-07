@@ -164,7 +164,7 @@ def parse_bam(
     outDir
         directory where SQL database is stored
     bedFile
-        name of bed file that defines regions of interest over which to extract mod calls
+        name of bed file that defines regions of interest over which to extract mod calls within window defined in by ``windowSize``. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
     basemod
         One of the following:
 
@@ -174,12 +174,12 @@ def parse_bam(
     center
         One of the following:
 
-        * ``'True'`` - report positions with respect to reference center (+/- window size)
+        * ``'True'`` - report positions with respect to reference center (+/- windowSize)
         * ``'False'`` - report positions in original reference space
     windowSize
         window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True
     region
-        single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end
+        single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
     threshA
         threshold above which to call an A base methylated; default is 129
     threshC
@@ -228,7 +228,17 @@ def parse_bam(
 
     make_db(fileName, sampleName, outDir, testMode, qc, joint)
 
+    if bedFile is None:
+        if region is None:
+            print("Either bedFile or region must be specified.")
+            return
+
     if bedFile is not None:
+        if region is not None:
+            print(
+                "The bedFile and region parameters are mutually exclusive; specify one or the other."
+            )
+            return
         # make a region object for each row of bedFile
         bed = pd.read_csv(bedFile, sep="\t", header=None)
         windows = []
@@ -236,6 +246,11 @@ def parse_bam(
             windows.append(Region(row))
 
     if region is not None:
+        if bedFile is not None:
+            print(
+                "The bedFile and region parameters are mutually exclusive; specify one or the other."
+            )
+            return
         windows = [region]
 
     # default number of cores is max available
