@@ -234,11 +234,11 @@ def qc_report(
 
         For single sample:
 
-        >>> dm.qc_report("dimelo/test/data/mod_mappings_subset.bam", "test", "/dimelo/out")
+        >>> dm.qc_report("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/dimelo_test")
 
         For multiple sample files:
 
-        >>> dm.qc_report(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "/dimelo/out")
+        >>> dm.qc_report(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/winnowmap_guppy_merge_subset.bam"], ["test1", "test2"], "dimelo/dimelo_test")
 
         **Return**
 
