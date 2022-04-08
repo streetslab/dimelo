@@ -181,10 +181,21 @@ def plot_enrichment_profile(
                     min_periods,
                     num_cores,
                 )
+        if len(fileNames) == 1:
+            title = "sample_" + fileNames[0].split("/")[-1].replace(".bam", "")
+        if len(bedFiles) == 1:
+            title = "region_" + bedFiles[0].split("/")[-1].replace(".bed", "")
         plt.title(basemod)
         plt.legend(sampleNames)
         plt.show()
-        fig.savefig(outDir + "/" + basemod + "_sm_rolling_avg_overlay.pdf")
+        fig.savefig(
+            outDir
+            + "/"
+            + title
+            + "_"
+            + basemod
+            + "_sm_rolling_avg_overlay.pdf"
+        )
 
         str_out = """\
         Outputs
@@ -195,6 +206,8 @@ def plot_enrichment_profile(
             db_paths=db_paths,
             overlay_path=outDir
             + "/"
+            + title
+            + "_"
             + basemod
             + "_sm_rolling_avg_overlay.pdf",
         )

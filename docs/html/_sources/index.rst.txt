@@ -1,6 +1,9 @@
 dimelo
 ========
+
 a python package for analyzing DiMeLo-seq data
+
+https://github.com/amaslan/dimelo
 
 Installation
 --------------
