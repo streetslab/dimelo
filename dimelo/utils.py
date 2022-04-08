@@ -58,3 +58,5 @@ def execute_sql_command(command: str, database_name: str, values) -> None:
         c.execute(command, values)
     # saves the changes
     conn.commit()
+    c.close()
+    conn.close()
