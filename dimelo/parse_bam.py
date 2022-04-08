@@ -164,7 +164,7 @@ def parse_bam(
     outDir
         directory where SQL database is stored
     bedFile
-        name of bed file that defines regions of interest over which to extract mod calls within window defined in by ``windowSize``. Optional 4th column in bed file to specify strand of regions of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
+        name of bed file that defines regions of interest over which to extract mod calls within window defined in by ``windowSize``. Optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
     basemod
         One of the following:
 
@@ -194,7 +194,13 @@ def parse_bam(
 
     **Example**
 
+    For regions defined by ``bedFile``:
+
     >>> dm.parse_bam("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/dimelo_test", bedFile="dimelo/test/data/test.bed", basemod="A+CG", center=True, windowSize=500, threshA=190, threshC=190, extractAllBases=False, cores=8)
+
+    For single region defined with ``region``:
+
+    >>> dm.parse_bam("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/dimelo_test", region="chr1:2907273-2909473", basemod="A+CG", threshA=190, threshC=190, cores=8)
 
     **Return**
 
