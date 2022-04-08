@@ -124,6 +124,11 @@ def plot_enrichment_profile(
     if type(bedFiles) != list:
         bedFiles = [bedFiles]
 
+    db_paths = []
+    for f in fileNames:
+        db = outDir + "/" + f.split("/")[-1].replace(".bam", "") + ".db"
+        db_paths.append(db)
+
     # overlay condition
     if len(fileNames) > 1 or len(bedFiles) > 1:
         if basemod == "A+CG":
@@ -181,6 +186,19 @@ def plot_enrichment_profile(
         plt.show()
         fig.savefig(outDir + "/" + basemod + "_sm_rolling_avg_overlay.pdf")
 
+        str_out = """\
+        Outputs
+        _______
+        DB file: {db_paths}
+        overlay plot: {overlay_path} \
+        """.format(
+            db_paths=db_paths,
+            overlay_path=outDir
+            + "/"
+            + basemod
+            + "_sm_rolling_avg_overlay.pdf",
+        )
+
     # no overlay condition
     if (len(fileNames) == 1) and (len(bedFiles) == 1):
         execute_single_plot(
@@ -199,6 +217,44 @@ def plot_enrichment_profile(
             min_periods,
             num_cores,
         )
+
+        t_paths = []
+        if "A" in basemod:
+            t_path = (
+                outDir + "/" + sampleNames[0] + "_" + "A" + "_base_count.png"
+            )
+            t_paths.append(t_path)
+        if "C" in basemod:
+            t_path = (
+                outDir + "/" + sampleNames[0] + "_" + "C" + "_base_count.png"
+            )
+            t_paths.append(t_path)
+
+        str_out = """\
+        Outputs
+        _______
+        DB file: {db_paths}
+        enrichment plot: {enrichment_path}
+        single molecule plot: {sm_path}
+        base count plots: {t_paths} \
+        """.format(
+            db_paths=db_paths,
+            enrichment_path=outDir
+            + "/"
+            + sampleNames[0]
+            + "_"
+            + basemod
+            + "_sm_rolling_avg.pdf",
+            sm_path=outDir
+            + "/"
+            + sampleNames[0]
+            + "_"
+            + basemod
+            + "_sm_scatter.png",
+            t_paths=t_paths,
+        )
+
+    print(str_out)
 
 
 def execute_overlay(

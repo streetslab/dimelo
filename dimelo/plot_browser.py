@@ -139,7 +139,7 @@ def plot_browser(
     **Example**
 
     >>> dm.plot_browser("dimelo/test/data/mod_mappings_subset.bam", "test", "chr1:2907273-2909473", "A+CG", "dimelo/dimelo_test", static=False)
-    >>> dm.plot_browser(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "chr1:2907273-2909473", "A+CG", "dimelo/dimelo_test", static=False)
+    >>> dm.plot_browser(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/mod_mappings_subset.bam"], ["test1", "test2"], "chr1:2907273-2909473", "A+CG", "dimelo/dimelo_test", static=False)
 
     **Return**
 
@@ -224,6 +224,51 @@ def plot_browser(
         colorA=colorA,
         colorC=colorC,
     )
+
+    # print output files to std out
+    if static is False:
+        ext = "html"
+    else:
+        ext = "pdf"
+
+    db_paths = []
+    f_paths = []
+    t_paths = []
+
+    for f, s in zip(fileNames, sampleNames):
+        db = outDir + "/" + f.split("/")[-1].replace(".bam", "") + ".db"
+        db_paths.append(db)
+        if "A" in basemod:
+            f_path = (
+                outDir + "/" + s + "_" + "A" + "_sm_rolling_avg_fraction.pdf"
+            )
+            t_path = outDir + "/" + s + "_" + "A" + "_sm_rolling_avg_total.pdf"
+            f_paths.append(f_path)
+            t_paths.append(t_path)
+        if "C" in basemod:
+            f_path = (
+                outDir + "/" + s + "_" + "C" + "_sm_rolling_avg_fraction.pdf"
+            )
+            t_path = outDir + "/" + s + "_" + "C" + "_sm_rolling_avg_total.pdf"
+            f_paths.append(f_path)
+            t_paths.append(t_path)
+
+    w = Region(window)
+
+    str_out = """\
+    Outputs
+    _______
+    DB file: {db_paths}
+    browser plot: {browser_path}
+    rolling average fraction bases methylated plot: {frac_paths}
+    rolling average total bases plot: {total_paths} \
+    """.format(
+        db_paths=db_paths,
+        browser_path=outDir + "/" + f"methylation_browser_{w.string}.{ext}",
+        frac_paths=f_paths,
+        total_paths=t_paths,
+    )
+    print(str_out)
 
 
 def create_subplots(num_methrows, names=None, annotation=True):

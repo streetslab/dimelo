@@ -60,6 +60,7 @@ def plot_enrichment(
     **Example**
 
     >>> dm.plot_enrichment(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/mod_mappings_subset.bam"], ["test1", "test2"], "dimelo/test/data/test.bed", "CG", "dimelo/dimelo_test", threshC=129)
+    >>> dm.plot_enrichment("dimelo/test/data/mod_mappings_subset.bam", ["test1", "test2"], ["dimelo/test/data/test.bed", "dimelo/test/data/test.bed"], "CG", "dimelo/dimelo_test", threshC=129)
 
     **Return**
 
@@ -161,17 +162,39 @@ def plot_enrichment(
     df = pd.DataFrame(data)
     # draw from aggregate to calculate modified/total in region of interest
     if len(fileNames) == 1:
-        title = "sample_" + fileNames[0].split("/")[-1]
+        title = "sample_" + fileNames[0].split("/")[-1].replace(".bam", "")
     if len(bedFiles) == 1:
-        title = "region_" + bedFiles[0].split("/")[-1]
+        title = "region_" + bedFiles[0].split("/")[-1].replace(".bed", "")
     if (len(fileNames) == 1) and (len(bedFiles) == 1):
         title = (
             "sample_"
-            + fileNames[0].split("/")[-1]
+            + fileNames[0].split("/")[-1].replace(".bam", "")
             + "_region_"
-            + bedFiles[0].split("/")[-1]
+            + bedFiles[0].split("/")[-1].replace(".bed", "")
         )
     plot_barchart(df, basemod, outDir, colors, title)
+
+    db_paths = []
+    for f in fileNames:
+        db = outDir + "/" + f.split("/")[-1].replace(".bam", "") + ".db"
+        db_paths.append(db)
+
+    str_out = """\
+        Outputs
+        _______
+        DB file: {db_paths}
+        enrichment barplot: {plot_path} \
+        """.format(
+        db_paths=db_paths,
+        plot_path=outDir
+        + "/"
+        + title
+        + "_"
+        + basemod
+        + "_enrichment_barplot.png",
+    )
+
+    print(str_out)
 
 
 def get_counts(
