@@ -276,7 +276,7 @@ def qc_report(
         #     DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, "out")
 
         if sampleName is None:
-            sampleName = DB_NAME.split("/")[1][:-3]
+            sampleName = DB_NAME.split("/")[-1][:-3]
 
         plot_feature_df = pd.read_sql(
             "SELECT * from " + TABLE_NAME, con=sqlite3.connect(DB_NAME)
