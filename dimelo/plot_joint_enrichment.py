@@ -200,11 +200,32 @@ def plot_joint_enrichment(
                 num_clusters,
             )
 
+    str_out = """\
+        Outputs
+        _______
+        DB file: {db_path}
+        joint enrichment plot: {plot_path} \
+        """.format(
+        db_path=outDir
+        + "/"
+        + fileName.split("/")[-1].replace(".bam", "")
+        + ".db",
+        plot_path=outDir
+        + "/"
+        + sampleName
+        + "_"
+        + basemod
+        + "_joint_enrichment.png",
+    )
+
+    print(str_out)
+
 
 def extract_peak_pairs(bed, min_dist, max_dist, outDir):
     b = BedTool(bed)
     b.sort().saveas(outDir + "/tmp.sorted.bed")
     bed = pd.read_csv(outDir + "/tmp.sorted.bed", sep="\t", header=None)
+    os.remove(outDir + "/tmp.sorted.bed")
     # find middle
     left_keep = []
     right_keep = []
