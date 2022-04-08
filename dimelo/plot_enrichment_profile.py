@@ -51,7 +51,7 @@ def plot_enrichment_profile(
     sampleNames
         name(s) of sample for output file name labelling
     bedFiles
-        specified windows for region(s) of interest; if a 4th column is included with the strand for a motif of interest (+/-), reads will be oriented with respect to motif
+        specified windows for region(s) of interest; optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. Reads will be oriented with respect to strand.
     basemod
         One of the following:
 

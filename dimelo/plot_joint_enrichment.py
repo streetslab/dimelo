@@ -70,7 +70,7 @@ def plot_joint_enrichment(
     sampleName
         name of sample for output file name labelling
     bedFile
-        specified windows for region(s) of interest
+        specified windows for region(s) of interest. 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. 5th column to specify peak strength.
     basemod
         One of the following:
 

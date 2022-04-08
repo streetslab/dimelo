@@ -164,7 +164,7 @@ def parse_bam(
     outDir
         directory where SQL database is stored
     bedFile
-        name of bed file that defines regions of interest over which to extract mod calls within window defined in by ``windowSize``. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
+        name of bed file that defines regions of interest over which to extract mod calls within window defined in by ``windowSize``. Optional 4th column in bed file to specify strand of regions of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
     basemod
         One of the following:
 
