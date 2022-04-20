@@ -237,7 +237,7 @@ def parse_bam_paired(
     num_cores,
 ):
 
-    make_db(fileName, sampleName, outDir, False, False, True)
+    make_db(fileName, sampleName, outDir, joint=True)
 
     Parallel(n_jobs=num_cores, verbose=10)(
         delayed(parse_reads_windows)(

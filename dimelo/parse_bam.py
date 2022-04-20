@@ -12,6 +12,7 @@ parse_bam allows you to summarize modification calls in a sql database
 
 import multiprocessing
 import os
+from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -20,13 +21,22 @@ from joblib import Parallel, delayed
 
 from dimelo.utils import clear_db, create_sql_table, execute_sql_command
 
-####################################################################################
-# classes for regions
-####################################################################################
+
+"""
+TODO:
+    - convert paths over to pathlib where possible, and update relevant type annotations
+    - Standardize comment formats
+    - convert string concatenations to f-strings, to make things more readable
+"""
 
 
 class Region(object):
     def __init__(self, region):
+        """
+        TODO:
+                - document this
+                - it appears that the region parameter can be either a string of some sort or a row of a bed file, as returned from pd.DataFrame.iterrows()
+        """
         if isinstance(region, str):  # ":" in region:
             try:
                 self.chromosome, interval = region.replace(",", "").split(":")
@@ -63,7 +73,46 @@ class Region(object):
                 self.strand = "+"
 
 
-def make_db(fileName, sampleName, outDir, testMode, qc, joint):
+def make_db(
+        fileName: str,
+        sampleName: str,
+        outDir: str,
+        testMode: bool=False,
+        qc: bool=False,
+        joint: bool=False
+) -> Tuple[str, List[str]]:
+    """Sets up the necessary database tables.
+
+    Args:
+            :param fileName: name of bam file with Mm and Ml tags
+            :param sampleName: name of sample for output SQL table name labelling
+            :param outDir: directory where SQL database is stored
+            :param testMode: turns on test mode; note that this will clear the database if it exists
+            :param qc: turns on qc mode
+            :param joint: turns on joint enrichment mode
+
+    Returns:
+            - path to the new database
+            - list of newly-created table names
+    
+    TODO:
+            - document testMode, qc, and joint mode more fully; update top-level documentation accordingly
+            - make this use pathlib for path operations
+            - current uses:
+              parse_bam.py:234:    make_db(fileName, sampleName, outDir, testMode, qc, joint)
+              plot_joint_enrichment.py:240:    make_db(fileName, sampleName, outDir, joint=True)
+              qc.py:96:    DB_NAME, tables = make_db(bamIn, "", outDir, qc=True)
+            - ****Right now, joint and qc are basically mutually exclusive. Is this functionality intended? Why should it be so?
+            - Modularize and simplify sql table specification. There should be easy-to-reference top-level variables that contain the table names, columns, datatypes, etc. Not sure how they should be stored yet, however, because I do not know if/how they are going to be referenced elsewhere in the codebase.
+    """
+    # TODO: These should replace the path operations once pathlib conversion is in place
+    # filePath = Path(fileName)
+    # outPath = Path(outDir)
+    
+    # outPath.mkdir(parents=True, exist_ok=True)
+
+    # (outPath / filePath.name).withsuffix('.db')
+    
     if not os.path.exists(outDir):
         os.mkdir(outDir)
 
@@ -73,6 +122,7 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
 
     if testMode:
         clear_db(DATABASE_NAME)
+        
     tables = []
     # for qc report
     if qc:
@@ -140,22 +190,22 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
 
 
 def parse_bam(
-    fileName,
-    sampleName,
-    outDir,
-    bedFile=None,
-    basemod="A+CG",
-    center=False,
-    windowSize=None,
-    region=None,
-    threshA=129,
-    threshC=129,
-    extractAllBases=False,
-    testMode=False,
-    qc=False,
-    joint=False,
-    cores=None,
-):
+    fileName: str,
+    sampleName: str,
+    outDir: str,
+    bedFile: str=None,
+    basemod: str="A+CG",
+    center: bool=False,
+    windowSize: int=None,
+    region: str=None,
+    threshA: int=129,
+    threshC: int=129,
+    extractAllBases: bool=False,
+    testMode: bool=False,
+    qc: bool=False,
+    joint: bool=False,
+    cores: int=None
+) -> None:
     """
     fileName
         name of bam file with Mm and Ml tags
@@ -249,35 +299,37 @@ def parse_bam(
 
 
 def parse_reads_window(
-    fileName,
-    sampleName,
-    basemod,
-    windowSize,
-    window,
-    center,
-    threshA,
-    threshC,
-    batchSize,
-    outDir,
-    extractAllBases,
-    qc,
-):
-    """Parse all reads in window
+    fileName: str,
+    sampleName: str,
+    basemod: str,
+    windowSize: int,
+    window: Region,
+    center: bool,
+    threshA: int,
+    threshC: int,
+    batchSize: int,
+    outDir: str,
+    extractAllBases: bool,
+    qc: bool,
+) -> None:
+    """Parse all reads in window and put data into methylationByBase table.
+    
     Args:
             :param bam: read in bam file with Mm and Ml tags
             :param fileName: name of bam file
             :param sampleName: name of sample for output file name labelling
             :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
             :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only applicable for center=True
-            :param windows: windows from bed file or single window if region
+            :param window: single window
             :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
             :param threshA: threshold above which to call an A base methylated
             :param threshC: threshold above which to call a C base methylated
-    Return:
-            put data into methylationByBase table
+
+    TODO:
+            - Find a way to mention in documentation that this has a side effect of populating the aggregated table as well...
     """
-    data = []
     bam = pysam.AlignmentFile(fileName, "rb")
+    data = []
     for read in bam.fetch(
         reference=window.chromosome, start=window.begin, end=window.end
     ):
@@ -298,6 +350,7 @@ def parse_reads_window(
             extractAllBases,
             qc,
         )
+        # Generate rows for methylationByBase database update
         for pos, prob in zip(positions, probs):
             if pos is not None:
                 if (center is True and abs(pos) <= windowSize) or (
@@ -342,18 +395,18 @@ def parse_reads_window(
 
 
 def get_modified_reference_positions(
-    read,
-    basemod,
-    window,
-    center,
-    threshA,
-    threshC,
-    windowSize,
-    fileName,
-    sampleName,
-    outDir,
-    extractAllBases,
-    qc,
+    read: pysam.AlignedSegment,
+    basemod: str,
+    window: Region,
+    center: bool,
+    threshA: int,
+    threshC: int,
+    windowSize: int,
+    fileName: str,
+    sampleName: str,
+    outDir: str,
+    extractAllBases: bool,
+    qc: bool,
 ):
     """Extract mA and mC pos & prob information for the read
     Args:
@@ -364,6 +417,11 @@ def get_modified_reference_positions(
             :param threshA: threshold above which to call an A base methylated
             :param threshC: threshold above which to call a C base methylated
             :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only applicable for center=True
+    Return:
+        For each mod, you get the positions where those mods are and the probabilities for those mods (parallel vectors)
+    TODO:
+            - This is referenced in plot_joint_enrichment
+            - Oh boy, what does this return? At minimum it should have a type annotation. At maximum, it should have a class.
     """
     if (read.has_tag("Mm")) & (";" in read.get_tag("Mm")):
         mod1 = read.get_tag("Mm").split(";")[0].split(",", 1)[0]
@@ -419,19 +477,19 @@ def get_modified_reference_positions(
 
 
 def get_mod_reference_positions_by_mod(
-    read,
-    basemod,
-    index,
-    window,
-    center,
-    threshA,
-    threshC,
-    windowSize,
-    fileName,
-    sampleName,
-    outDir,
-    extractAllBases,
-    qc,
+    read: pysam.AlignedSegment,
+    basemod: str,
+    index: int,
+    window: Region,
+    center: bool,
+    threshA: int,
+    threshC: int,
+    windowSize: int,
+    fileName: str,
+    sampleName: str,
+    outDir: str,
+    extractAllBases: bool,
+    qc: bool,
 ):
     """Get positions and probabilities of modified bases for a single read
     Args:
@@ -442,6 +500,13 @@ def get_mod_reference_positions_by_mod(
             :param threshA: threshold above which to call an A base methylated
             :param threshC: threshold above which to call a C base methylated
             :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only applicable for center=True
+            :param index: 0 or 1
+
+    TODO:
+            - What is index? What is its type? What does it represent?
+            - Pretty sure this is where I'd actually have to update things for GpC methylation? Maybe elsewhere too though?
+            - Oh boy, what does this return? At minimum it should have a type annotation. At maximum, it should have a class.
+                -  -> Tuple(str, List[int], List[int])
     """
     modsPresent = True
     base, mod = basemod.split("+")
@@ -497,6 +562,8 @@ def get_mod_reference_positions_by_mod(
             if (
                 b < len(seq) - 1
             ):  # if modified C is not the last base in the read
+                # TODO: For GpC, I want b-1 to be a G, but don't want b+1 to be a C
+                # TODO: need to check first position edge case
                 if (refpos[b] is not None) & (refpos[b + 1] is not None):
                     if seq[b + 1] == "G":
                         if (
@@ -601,18 +668,24 @@ def get_mod_reference_positions_by_mod(
 
 
 def update_methylation_aggregate_db(
-    refpos_mod,
-    refpos_total,
-    basemod,
-    center,
-    windowSize,
-    window,
-    fileName,
-    sampleName,
-    outDir,
-):
-    """
+    refpos_mod: List[int],
+    refpos_total: List[int],
+    basemod: str,
+    center: bool,
+    windowSize: int,
+    window: Region,
+    fileName: str,
+    sampleName: str,
+    outDir: str,
+) -> None:
+    """Updates the aggregate methylation table with all of the methylation information from a single read.
+    Args:
+            :param refpos_mod: list of modified reference positions
+            :param refpos_total: list of all reference positions for the base in question
     df with columns pos:modification, pos, mod, methylated_bases, total_bases
+
+    TODO:
+       - verify the exact types of the refpos arguments
     """
     # store list of entries for a given read
     data = []

@@ -93,7 +93,7 @@ def ave_qual(quals, qround=False, tab=errs_tab(129)):
 def parse_bam_read(bamIn, outDir, cores=None):
     file_bamIn = pysam.AlignmentFile(bamIn, "rb")
 
-    DB_NAME, tables = make_db(bamIn, "", outDir, False, True, joint=False)
+    DB_NAME, tables = make_db(bamIn, "", outDir, qc=True)
     template_command = (
         """INSERT INTO """ + tables[0] + """ VALUES(?,?,?,?,?,?,?,?,?);"""
     )
