@@ -63,7 +63,7 @@ class Region(object):
                 self.strand = "+"
 
 
-def make_db(fileName, sampleName, outDir, testMode, qc, joint):
+def make_db(fileName, sampleName, outDir, testMode, qc):
     if not os.path.exists(outDir):
         os.mkdir(outDir)
 
@@ -101,27 +101,6 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
         ]
         create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
         tables.append(table_name)
-    # for joint occupancy plots
-    elif joint:
-        table_name = "methylationByBaseJoint_" + sampleName
-        cols = [
-            "id",
-            "read_windows",
-            "read_name",
-            "pos",
-            "prob",
-            "mod",
-            "peak_strength",
-        ]
-        dtypes = ["TEXT", "TEXT", "TEXT", "INT", "INT", "TEXT", "FLOAT"]
-        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
-        tables.append(table_name)
-
-        table_name = "methylationAggregate_" + sampleName
-        cols = ["id", "pos", "mod", "methylated_bases", "total_bases"]
-        dtypes = ["TEXT", "INT", "TEXT", "INT", "INT"]
-        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
-        tables.append(table_name)
     # for browser and enrichment plots
     else:
         table_name = "methylationByBase_" + sampleName
@@ -153,7 +132,6 @@ def parse_bam(
     extractAllBases=False,
     testMode=False,
     qc=False,
-    joint=False,
     cores=None,
 ):
     """
@@ -232,7 +210,7 @@ def parse_bam(
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
 
-    make_db(fileName, sampleName, outDir, testMode, qc, joint)
+    make_db(fileName, sampleName, outDir, testMode, qc)
 
     if bedFile is None:
         if region is None:
