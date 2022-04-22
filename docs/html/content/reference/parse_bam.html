@@ -97,7 +97,7 @@
 <li><p><code class="docutils literal notranslate"><span class="pre">'False'</span></code> - report positions in original reference space</p></li>
 </ul>
 </dd>
-<dt>windowSize</dt><dd><p>window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True</p>
+<dt>windowSize</dt><dd><p>window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True; still, only reads that span the regions defined in the bed file will be included</p>
 </dd>
 <dt>region</dt><dd><p>single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end. NB. The <code class="docutils literal notranslate"><span class="pre">bedFile</span></code> and <code class="docutils literal notranslate"><span class="pre">region</span></code> parameters are mutually exclusive; specify one or the other.</p>
 </dd>

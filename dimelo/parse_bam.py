@@ -155,7 +155,7 @@ def parse_bam(
         * ``'True'`` - report positions with respect to reference center (+/- windowSize)
         * ``'False'`` - report positions in original reference space
     windowSize
-        window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True
+        window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True; still, only reads that span the regions defined in the bed file will be included
     region
         single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
     threshA
