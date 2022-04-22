@@ -13,6 +13,7 @@ plot_enrichment_profile plots single molecules centered at regions of interest d
 import multiprocessing
 import os
 import sqlite3
+from itertools import cycle
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -143,7 +144,7 @@ def plot_enrichment_profile(
                     "only a single region file can be used when overlaying multiple bam files"
                 )
                 return
-            for f, n, c in zip(fileNames, sampleNames, colors):
+            for f, n, c in zip(fileNames, sampleNames, cycle(colors)):
                 execute_overlay(
                     f,
                     n,
@@ -165,7 +166,7 @@ def plot_enrichment_profile(
                     "only a single bam file can be used when overlaying multiple bed file regions"
                 )
                 return
-            for b, n, c in zip(bedFiles, sampleNames, colors):
+            for b, n, c in zip(bedFiles, sampleNames, cycle(colors)):
                 execute_overlay(
                     fileNames[0],
                     n,
@@ -232,10 +233,12 @@ def plot_enrichment_profile(
             )
             t_paths.append(t_path)
 
-    enrichment_path = f"{outDir}/{sampleNames[0]}_{basemod}_sm_rolling_avg.pdf"
-    sm_path = f"{outDir}/{sampleNames[0]}_{basemod}_sm_scatter.png"
-    str_out = f"Outputs\n_______\nDB file: {db_paths}\nenrichment plot: {enrichment_path}\nsingle molecule plot: {sm_path}\nbase count plots: {t_paths}"
-    print(str_out)
+        enrichment_path = (
+            f"{outDir}/{sampleNames[0]}_{basemod}_sm_rolling_avg.pdf"
+        )
+        sm_path = f"{outDir}/{sampleNames[0]}_{basemod}_sm_scatter.png"
+        str_out = f"Outputs\n_______\nDB file: {db_paths}\nenrichment plot: {enrichment_path}\nsingle molecule plot: {sm_path}\nbase count plots: {t_paths}"
+        print(str_out)
 
 
 def execute_overlay(
