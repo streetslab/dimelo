@@ -179,21 +179,8 @@ def plot_enrichment(
         db = outDir + "/" + f.split("/")[-1].replace(".bam", "") + ".db"
         db_paths.append(db)
 
-    str_out = """\
-        Outputs
-        _______
-        DB file: {db_paths}
-        enrichment barplot: {plot_path} \
-        """.format(
-        db_paths=db_paths,
-        plot_path=outDir
-        + "/"
-        + title
-        + "_"
-        + basemod
-        + "_enrichment_barplot.png",
-    )
-
+    plot_path = f"{outDir}/{title}_{basemod}_enrichment_barplot.png"
+    str_out = f"Outputs\n_______\nDB file: {db_paths}\nenrichment barplot: {plot_path}"
     print(str_out)
 
 
@@ -243,6 +230,11 @@ def plot_barchart(data, basemod, outDir, colors, title):
     """
     fig, ax1 = plt.subplots()
     plt.bar("sampleName", "fractionMethylated", data=data, color=colors)
+    print("\nData for barplot")
+    print("________________\n")
+    print(f"{data.sampleName}")
+    print(f"{data.fractionMethylated}")
+    print("\n")
     sns.despine(fig)
     plt.ylabel("fraction methylated bases")
     plt.xlabel("")

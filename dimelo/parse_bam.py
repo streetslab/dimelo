@@ -268,16 +268,9 @@ def parse_bam(
         for window in windows
     )
 
-    str_out = """\
-    Outputs
-    _______
-    DB file: {out_path} \
-    """.format(
-        out_path=outDir
-        + "/"
-        + fileName.split("/")[-1].replace(".bam", "")
-        + ".db"
-    )
+    f = fileName.split("/")[-1].replace(".bam", "")
+    out_path = f"{outDir}/{f}.db"
+    str_out = f"Outputs\n_______\nDB file: {out_path}"
     print(str_out)
 
 

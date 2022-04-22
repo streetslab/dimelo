@@ -255,19 +255,8 @@ def plot_browser(
 
     w = Region(window)
 
-    str_out = """\
-    Outputs
-    _______
-    DB file: {db_paths}
-    browser plot: {browser_path}
-    rolling average fraction bases methylated plot: {frac_paths}
-    rolling average total bases plot: {total_paths} \
-    """.format(
-        db_paths=db_paths,
-        browser_path=outDir + "/" + f"methylation_browser_{w.string}.{ext}",
-        frac_paths=f_paths,
-        total_paths=t_paths,
-    )
+    browser_path = f"{outDir}/methylation_browser_{w.string}.{ext}"
+    str_out = f"Outputs\n_______\nDB file: {db_paths}\nbrowser plot: {browser_path}\nrolling average fraction bases methylated plot: {f_paths}\nrolling average total bases plot: {t_paths}"
     print(str_out)
 
 

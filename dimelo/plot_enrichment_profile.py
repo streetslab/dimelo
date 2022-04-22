@@ -197,20 +197,9 @@ def plot_enrichment_profile(
             + "_sm_rolling_avg_overlay.pdf"
         )
 
-        str_out = """\
-        Outputs
-        _______
-        DB file: {db_paths}
-        overlay plot: {overlay_path} \
-        """.format(
-            db_paths=db_paths,
-            overlay_path=outDir
-            + "/"
-            + title
-            + "_"
-            + basemod
-            + "_sm_rolling_avg_overlay.pdf",
-        )
+        overlay_path = f"{outDir}/{title}_{basemod}_sm_rolling_avg_overlay.pdf"
+        str_out = f"Outputs\n_______\nDB file: {db_paths}\noverlay plot: {overlay_path}"
+        print(str_out)
 
     # no overlay condition
     if (len(fileNames) == 1) and (len(bedFiles) == 1):
@@ -243,30 +232,9 @@ def plot_enrichment_profile(
             )
             t_paths.append(t_path)
 
-        str_out = """\
-        Outputs
-        _______
-        DB file: {db_paths}
-        enrichment plot: {enrichment_path}
-        single molecule plot: {sm_path}
-        base count plots: {t_paths} \
-        """.format(
-            db_paths=db_paths,
-            enrichment_path=outDir
-            + "/"
-            + sampleNames[0]
-            + "_"
-            + basemod
-            + "_sm_rolling_avg.pdf",
-            sm_path=outDir
-            + "/"
-            + sampleNames[0]
-            + "_"
-            + basemod
-            + "_sm_scatter.png",
-            t_paths=t_paths,
-        )
-
+    enrichment_path = f"{outDir}/{sampleNames[0]}_{basemod}_sm_rolling_avg.pdf"
+    sm_path = f"{outDir}/{sampleNames[0]}_{basemod}_sm_scatter.png"
+    str_out = f"Outputs\n_______\nDB file: {db_paths}\nenrichment plot: {enrichment_path}\nsingle molecule plot: {sm_path}\nbase count plots: {t_paths}"
     print(str_out)
 
 
