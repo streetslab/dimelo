@@ -11,6 +11,7 @@ plot_enrichment plots fraction of bases modified within regions of interest defi
 """
 
 import multiprocessing
+import os
 import sqlite3
 
 import matplotlib.pyplot as plt
@@ -58,13 +59,17 @@ def plot_enrichment(
 
     **Example**
 
-    >>> dm.plot_enrichment(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/mod_mappings_subset.bam"], ["test1", "test2"], "dimelo/test/data/test.bed", "CG", "/dimelo/dimelo_test", threshC=129)
+    >>> dm.plot_enrichment(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/mod_mappings_subset.bam"], ["test1", "test2"], "dimelo/test/data/test.bed", "CG", "dimelo/dimelo_test", threshC=129)
+    >>> dm.plot_enrichment("dimelo/test/data/mod_mappings_subset.bam", ["test1", "test2"], ["dimelo/test/data/test.bed", "dimelo/test/data/test.bed"], "CG", "dimelo/dimelo_test", threshC=129)
 
     **Return**
 
     Barplot with overall fraction of bases modified within regions of interest specified by bedFile(s)
 
     """
+
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
 
     # default number of cores is max available
     cores_avail = multiprocessing.cpu_count()
@@ -157,17 +162,26 @@ def plot_enrichment(
     df = pd.DataFrame(data)
     # draw from aggregate to calculate modified/total in region of interest
     if len(fileNames) == 1:
-        title = "sample_" + fileNames[0].split("/")[-1]
+        title = "sample_" + fileNames[0].split("/")[-1].replace(".bam", "")
     if len(bedFiles) == 1:
-        title = "region_" + bedFiles[0].split("/")[-1]
+        title = "region_" + bedFiles[0].split("/")[-1].replace(".bed", "")
     if (len(fileNames) == 1) and (len(bedFiles) == 1):
         title = (
             "sample_"
-            + fileNames[0].split("/")[-1]
+            + fileNames[0].split("/")[-1].replace(".bam", "")
             + "_region_"
-            + bedFiles[0].split("/")[-1]
+            + bedFiles[0].split("/")[-1].replace(".bed", "")
         )
     plot_barchart(df, basemod, outDir, colors, title)
+
+    db_paths = []
+    for f in fileNames:
+        db = outDir + "/" + f.split("/")[-1].replace(".bam", "") + ".db"
+        db_paths.append(db)
+
+    plot_path = f"{outDir}/{title}_{basemod}_enrichment_barplot.png"
+    str_out = f"Outputs\n_______\nDB file: {db_paths}\nenrichment barplot: {plot_path}"
+    print(str_out)
 
 
 def get_counts(
@@ -216,6 +230,11 @@ def plot_barchart(data, basemod, outDir, colors, title):
     """
     fig, ax1 = plt.subplots()
     plt.bar("sampleName", "fractionMethylated", data=data, color=colors)
+    print("\nData for barplot")
+    print("________________\n")
+    print(f"{data.sampleName}")
+    print(f"{data.fractionMethylated}")
+    print("\n")
     sns.despine(fig)
     plt.ylabel("fraction methylated bases")
     plt.xlabel("")

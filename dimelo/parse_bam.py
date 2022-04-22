@@ -63,7 +63,7 @@ class Region(object):
                 self.strand = "+"
 
 
-def make_db(fileName, sampleName, outDir, testMode, qc, joint):
+def make_db(fileName, sampleName, outDir, testMode, qc):
     if not os.path.exists(outDir):
         os.mkdir(outDir)
 
@@ -101,27 +101,6 @@ def make_db(fileName, sampleName, outDir, testMode, qc, joint):
         ]
         create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
         tables.append(table_name)
-    # for joint occupancy plots
-    elif joint:
-        table_name = "methylationByBaseJoint_" + sampleName
-        cols = [
-            "id",
-            "read_windows",
-            "read_name",
-            "pos",
-            "prob",
-            "mod",
-            "peak_strength",
-        ]
-        dtypes = ["TEXT", "TEXT", "TEXT", "INT", "INT", "TEXT", "FLOAT"]
-        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
-        tables.append(table_name)
-
-        table_name = "methylationAggregate_" + sampleName
-        cols = ["id", "pos", "mod", "methylated_bases", "total_bases"]
-        dtypes = ["TEXT", "INT", "TEXT", "INT", "INT"]
-        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
-        tables.append(table_name)
     # for browser and enrichment plots
     else:
         table_name = "methylationByBase_" + sampleName
@@ -153,7 +132,6 @@ def parse_bam(
     extractAllBases=False,
     testMode=False,
     qc=False,
-    joint=False,
     cores=None,
 ):
     """
@@ -164,7 +142,7 @@ def parse_bam(
     outDir
         directory where SQL database is stored
     bedFile
-        name of bed file that defines regions of interest over which to extract mod calls
+        name of bed file that defines regions of interest over which to extract mod calls within window defined in by ``windowSize``. Optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
     basemod
         One of the following:
 
@@ -174,39 +152,77 @@ def parse_bam(
     center
         One of the following:
 
-        * ``'True'`` - report positions with respect to reference center (+/- window size)
+        * ``'True'`` - report positions with respect to reference center (+/- windowSize)
         * ``'False'`` - report positions in original reference space
     windowSize
-        window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True
+        window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True; still, only reads that span the regions defined in the bed file will be included
     region
-        single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end
+        single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
     threshA
         threshold above which to call an A base methylated; default is 129
     threshC
         threshold above which to call a C base methylated; default is 129
     extractAllBases
-         One of the following:
+        One of the following:
 
-        * ``'True'`` - store all base mod calls, regardles of methylation probability threshold
-        * ``'False'`` - only modifications above specified threshold are stored
+        * ``'True'`` - Store all base mod calls, regardles of methylation probability threshold. Bases stored are those that can have a modification call (A, CG, or both depending on ``basemod`` parameter) and are sequenced bases, not all bases in the reference.
+        * ``'False'`` - Only modifications above specified threshold are stored
     cores
         number of cores over which to parallelize; default is all available
 
     **Example**
 
-    >>> dm.parse_bam("dimelo/test/data/mod_mappings_subset.bam", "test", "/dimelo/dimelo_test", bedFile="dimelo/test/data/test.bed", basemod="A+CG", center=True, windowSize=500, threshA=190, threshC=190, extractAllBases=False, cores=8)
+    For regions defined by ``bedFile``:
+
+    >>> dm.parse_bam("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/dimelo_test", bedFile="dimelo/test/data/test.bed", basemod="A+CG", center=True, windowSize=500, threshA=190, threshC=190, extractAllBases=False, cores=8)
+
+    For single region defined with ``region``:
+
+    >>> dm.parse_bam("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/dimelo_test", region="chr1:2907273-2909473", basemod="A+CG", threshA=190, threshC=190, cores=8)
 
     **Return**
 
     Returns a SQL database in the specified output directory. Database can be converted into pandas dataframe with:
 
+    >>> fileName = "dimelo/test/data/mod_mappings_subset.bam"
+    >>> sampleName = "test"
+    >>> outDir = "dimelo/dimelo_test"
     >>> all_data = pd.read_sql("SELECT * from methylationByBase_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
     >>> aggregate_counts = pd.read_sql("SELECT * from methylationAggregate_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
 
+    Each database contains these two tables with columns listed below:
+
+    1. methylationByBase_sampleName
+        * id(read_name:pos)
+        * read_name
+        * chr
+        * pos
+        * prob
+        * mod
+    2. methylationAggregate_sampleName
+        * id(pos:mod)
+        * pos
+        * mod
+        * methylated_bases
+        * total_bases
+
     """
-    make_db(fileName, sampleName, outDir, testMode, qc, joint)
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
+
+    make_db(fileName, sampleName, outDir, testMode, qc)
+
+    if bedFile is None:
+        if region is None:
+            print("Either bedFile or region must be specified.")
+            return
 
     if bedFile is not None:
+        if region is not None:
+            print(
+                "The bedFile and region parameters are mutually exclusive; specify one or the other."
+            )
+            return
         # make a region object for each row of bedFile
         bed = pd.read_csv(bedFile, sep="\t", header=None)
         windows = []
@@ -214,7 +230,12 @@ def parse_bam(
             windows.append(Region(row))
 
     if region is not None:
-        windows = [region]
+        if bedFile is not None:
+            print(
+                "The bedFile and region parameters are mutually exclusive; specify one or the other."
+            )
+            return
+        windows = [Region(region)]
 
     # default number of cores is max available
     cores_avail = multiprocessing.cpu_count()
@@ -229,7 +250,7 @@ def parse_bam(
 
     batchSize = 100
 
-    Parallel(n_jobs=num_cores, verbose=10)(
+    Parallel(n_jobs=num_cores)(
         delayed(parse_reads_window)(
             fileName,
             sampleName,
@@ -246,6 +267,11 @@ def parse_bam(
         )
         for window in windows
     )
+
+    f = fileName.split("/")[-1].replace(".bam", "")
+    out_path = f"{outDir}/{f}.db"
+    str_out = f"Outputs\n_______\nDB file: {out_path}"
+    print(str_out)
 
 
 def parse_reads_window(

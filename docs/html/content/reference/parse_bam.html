@@ -44,7 +44,6 @@
 <li class="toctree-l1"><a class="reference internal" href="plot_browser.html">plot_browser</a></li>
 <li class="toctree-l1"><a class="reference internal" href="plot_enrichment.html">plot_enrichment</a></li>
 <li class="toctree-l1"><a class="reference internal" href="plot_enrichment_profile.html">plot_enrichment_profile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="plot_joint_enrichment.html">plot_joint_enrichment</a></li>
 </ul>
 
         </div>
@@ -75,15 +74,15 @@
 <h1>parse_bam<a class="headerlink" href="#parse-bam" title="Permalink to this headline"></a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="dimelo.parse_bam">
-<span class="sig-name descname"><span class="pre">parse_bam</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fileName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampleName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outDir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bedFile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basemod</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'A+CG'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">windowSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">region</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshA</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">129</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshC</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">129</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extractAllBases</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">testMode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">joint</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dimelo.parse_bam" title="Permalink to this definition"></a></dt>
-<dd><dl>
+<span class="sig-name descname"><span class="pre">parse_bam</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fileName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampleName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outDir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bedFile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basemod</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'A+CG'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">windowSize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">region</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshA</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">129</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshC</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">129</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extractAllBases</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">testMode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dimelo.parse_bam" title="Permalink to this definition"></a></dt>
+<dd><dl class="simple">
 <dt>fileName</dt><dd><p>name of bam file with Mm and Ml tags</p>
 </dd>
 <dt>sampleName</dt><dd><p>name of sample for output SQL table name labelling</p>
 </dd>
 <dt>outDir</dt><dd><p>directory where SQL database is stored</p>
 </dd>
-<dt>bedFile</dt><dd><p>name of bed file that defines regions of interest over which to extract mod calls</p>
+<dt>bedFile</dt><dd><p>name of bed file that defines regions of interest over which to extract mod calls within window defined in by <code class="docutils literal notranslate"><span class="pre">windowSize</span></code>. Optional 4th column in bed file to specify strand of region of interest as <code class="docutils literal notranslate"><span class="pre">+</span></code> or <code class="docutils literal notranslate"><span class="pre">-</span></code>. Default is to consider regions as all <code class="docutils literal notranslate"><span class="pre">+</span></code>. NB. The <code class="docutils literal notranslate"><span class="pre">bedFile</span></code> and <code class="docutils literal notranslate"><span class="pre">region</span></code> parameters are mutually exclusive; specify one or the other.</p>
 </dd>
 <dt>basemod</dt><dd><p>One of the following:</p>
 <ul class="simple">
@@ -94,39 +93,71 @@
 </dd>
 <dt>center</dt><dd><p>One of the following:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">'True'</span></code> - report positions with respect to reference center (+/- window size)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">'True'</span></code> - report positions with respect to reference center (+/- windowSize)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">'False'</span></code> - report positions in original reference space</p></li>
 </ul>
 </dd>
-<dt>windowSize</dt><dd><p>window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True</p>
+<dt>windowSize</dt><dd><p>window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True; still, only reads that span the regions defined in the bed file will be included</p>
 </dd>
-<dt>region</dt><dd><p>single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end</p>
+<dt>region</dt><dd><p>single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end. NB. The <code class="docutils literal notranslate"><span class="pre">bedFile</span></code> and <code class="docutils literal notranslate"><span class="pre">region</span></code> parameters are mutually exclusive; specify one or the other.</p>
 </dd>
 <dt>threshA</dt><dd><p>threshold above which to call an A base methylated; default is 129</p>
 </dd>
 <dt>threshC</dt><dd><p>threshold above which to call a C base methylated; default is 129</p>
 </dd>
-<dt>extractAllBases</dt><dd><blockquote>
-<div><p>One of the following:</p>
-</div></blockquote>
+<dt>extractAllBases</dt><dd><p>One of the following:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">'True'</span></code> - store all base mod calls, regardles of methylation probability threshold</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">'False'</span></code> - only modifications above specified threshold are stored</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">'True'</span></code> - Store all base mod calls, regardles of methylation probability threshold. Bases stored are those that can have a modification call (A, CG, or both depending on <code class="docutils literal notranslate"><span class="pre">basemod</span></code> parameter) and are sequenced bases, not all bases in the reference.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">'False'</span></code> - Only modifications above specified threshold are stored</p></li>
 </ul>
 </dd>
 <dt>cores</dt><dd><p>number of cores over which to parallelize; default is all available</p>
 </dd>
 </dl>
 <p><strong>Example</strong></p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dm</span><span class="o">.</span><span class="n">parse_bam</span><span class="p">(</span><span class="s2">&quot;dimelo/test/data/mod_mappings_subset.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="s2">&quot;/dimelo/dimelo_test&quot;</span><span class="p">,</span> <span class="n">bedFile</span><span class="o">=</span><span class="s2">&quot;dimelo/test/data/test.bed&quot;</span><span class="p">,</span> <span class="n">basemod</span><span class="o">=</span><span class="s2">&quot;A+CG&quot;</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">windowSize</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">threshA</span><span class="o">=</span><span class="mi">190</span><span class="p">,</span> <span class="n">threshC</span><span class="o">=</span><span class="mi">190</span><span class="p">,</span> <span class="n">extractAllBases</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">cores</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+<p>For regions defined by <code class="docutils literal notranslate"><span class="pre">bedFile</span></code>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dm</span><span class="o">.</span><span class="n">parse_bam</span><span class="p">(</span><span class="s2">&quot;dimelo/test/data/mod_mappings_subset.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="s2">&quot;dimelo/dimelo_test&quot;</span><span class="p">,</span> <span class="n">bedFile</span><span class="o">=</span><span class="s2">&quot;dimelo/test/data/test.bed&quot;</span><span class="p">,</span> <span class="n">basemod</span><span class="o">=</span><span class="s2">&quot;A+CG&quot;</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">windowSize</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">threshA</span><span class="o">=</span><span class="mi">190</span><span class="p">,</span> <span class="n">threshC</span><span class="o">=</span><span class="mi">190</span><span class="p">,</span> <span class="n">extractAllBases</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">cores</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For single region defined with <code class="docutils literal notranslate"><span class="pre">region</span></code>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dm</span><span class="o">.</span><span class="n">parse_bam</span><span class="p">(</span><span class="s2">&quot;dimelo/test/data/mod_mappings_subset.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="s2">&quot;dimelo/dimelo_test&quot;</span><span class="p">,</span> <span class="n">region</span><span class="o">=</span><span class="s2">&quot;chr1:2907273-2909473&quot;</span><span class="p">,</span> <span class="n">basemod</span><span class="o">=</span><span class="s2">&quot;A+CG&quot;</span><span class="p">,</span> <span class="n">threshA</span><span class="o">=</span><span class="mi">190</span><span class="p">,</span> <span class="n">threshC</span><span class="o">=</span><span class="mi">190</span><span class="p">,</span> <span class="n">cores</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
 </pre></div>
 </div>
 <p><strong>Return</strong></p>
 <p>Returns a SQL database in the specified output directory. Database can be converted into pandas dataframe with:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">all_data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span><span class="s2">&quot;SELECT * from methylationByBase_&quot;</span> <span class="o">+</span> <span class="n">sampleName</span><span class="p">,</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">outDir</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">fileName</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;.db&quot;</span><span class="p">))</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">fileName</span> <span class="o">=</span> <span class="s2">&quot;dimelo/test/data/mod_mappings_subset.bam&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sampleName</span> <span class="o">=</span> <span class="s2">&quot;test&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">outDir</span> <span class="o">=</span> <span class="s2">&quot;dimelo/dimelo_test&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">all_data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span><span class="s2">&quot;SELECT * from methylationByBase_&quot;</span> <span class="o">+</span> <span class="n">sampleName</span><span class="p">,</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">outDir</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">fileName</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;.db&quot;</span><span class="p">))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">aggregate_counts</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span><span class="s2">&quot;SELECT * from methylationAggregate_&quot;</span> <span class="o">+</span> <span class="n">sampleName</span><span class="p">,</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">outDir</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">fileName</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;.db&quot;</span><span class="p">))</span>
 </pre></div>
 </div>
+<p>Each database contains these two tables with columns listed below:</p>
+<ol class="arabic simple">
+<li><dl class="simple">
+<dt>methylationByBase_sampleName</dt><dd><ul class="simple">
+<li><p>id(read_name:pos)</p></li>
+<li><p>read_name</p></li>
+<li><p>chr</p></li>
+<li><p>pos</p></li>
+<li><p>prob</p></li>
+<li><p>mod</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>methylationAggregate_sampleName</dt><dd><ul class="simple">
+<li><p>id(pos:mod)</p></li>
+<li><p>pos</p></li>
+<li><p>mod</p></li>
+<li><p>methylated_bases</p></li>
+<li><p>total_bases</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ol>
 </dd></dl>
 
 </section>

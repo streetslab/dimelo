@@ -1,6 +1,9 @@
 dimelo
 ========
+
 a python package for analyzing DiMeLo-seq data
+
+https://github.com/amaslan/dimelo
 
 Installation
 --------------
@@ -19,8 +22,6 @@ Tool summary
 +-------------------------------------------------+-----------------------+-------------------------------------+--------------------------------------------+-----------------------------------------------------------------------------------+
 |:doc:`content/reference/plot_enrichment_profile` | visualization         | 1 or more BAM, 1 or more BED        | profile, single molecule plots, base abundance; option to overlay if input multiple BAM/BED                                    |
 +-------------------------------------------------+-----------------------+-------------------------------------+--------------------------------------------+-----------------------------------------------------------------------------------+
-|:doc:`content/reference/plot_joint_enrichment`   | visualization         | 1 BAM, 1 BED                        | clustered single molecule plots for reads spanning two sites of interest                                                       |
-+-------------------------------------------------+-----------------------+-------------------------------------+--------------------------------------------+-----------------------------------------------------------------------------------+
 |:doc:`content/reference/parse_bam`               | data formatting       | 1 BAM                               | sql database (to allow for custom visualization)                                                                               |
 +-------------------------------------------------+-----------------------+-------------------------------------+--------------------------------------------+-----------------------------------------------------------------------------------+
 
@@ -35,7 +36,5 @@ Tool summary
    content/reference/plot_browser
    content/reference/plot_enrichment
    content/reference/plot_enrichment_profile
-   content/reference/plot_joint_enrichment
-
 
 
