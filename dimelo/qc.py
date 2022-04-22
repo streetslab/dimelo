@@ -245,11 +245,11 @@ def qc_report(
 
     For single sample:
 
-    >>> dm.qc_report("dimelo/test/data/mod_mappings_subset.bam", "test", "/dimelo/out")
+        >>> dm.qc_report("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/dimelo_test")
 
     For multiple sample files:
 
-    >>> dm.qc_report(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "/dimelo/out")
+        >>> dm.qc_report(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/winnowmap_guppy_merge_subset.bam"], ["test1", "test2"], "dimelo/dimelo_test")
 
     **Return**
 
@@ -287,7 +287,7 @@ def qc_report(
         #     DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, "out")
 
         if sampleName is None:
-            sampleName = DB_NAME.split("/")[1][:-3]
+            sampleName = DB_NAME.split("/")[-1][:-3]
 
         plot_feature_df = pd.read_sql(
             "SELECT * from " + TABLE_NAME, con=sqlite3.connect(DB_NAME)
