@@ -118,7 +118,7 @@ def parse_bam_read(bamIn, outDir, cores=None):
         else:
             num_cores = cores
 
-    Parallel(n_jobs=num_cores, verbose=10)(
+    Parallel(n_jobs=num_cores)(
         delayed(execute_sql_command)(template_command, DB_NAME, i)
         for i in batch_read_generator(file_bamIn, 100)
     )

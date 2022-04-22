@@ -250,7 +250,7 @@ def parse_bam(
 
     batchSize = 100
 
-    Parallel(n_jobs=num_cores, verbose=10)(
+    Parallel(n_jobs=num_cores)(
         delayed(parse_reads_window)(
             fileName,
             sampleName,
