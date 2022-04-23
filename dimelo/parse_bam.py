@@ -449,6 +449,7 @@ def get_modified_reference_positions(
     TODO:
             - This is referenced in plot_joint_enrichment
             - Oh boy, what does this return? At minimum it should have a type annotation. At maximum, it should have a class.
+              - See get_mod_reference_positions_by_mod() for details
     """
     if (read.has_tag("Mm")) & (";" in read.get_tag("Mm")):
         mod1 = read.get_tag("Mm").split(";")[0].split(",", 1)[0]
@@ -531,7 +532,6 @@ def get_mod_reference_positions_by_mod(
 
     TODO:
             - What is index? What is its type? What does it represent?
-            - Pretty sure this is where I'd actually have to update things for GpC methylation? Maybe elsewhere too though?
             - Oh boy, what does this return? At minimum it should have a type annotation. At maximum, it should have a class.
                 -  -> Tuple(str, List[int], List[int])
     """
@@ -695,8 +695,8 @@ def get_mod_reference_positions_by_mod(
 
 
 def update_methylation_aggregate_db(
-    refpos_mod: List[int],
-    refpos_total: List[int],
+    refpos_mod: np.ndarray,
+    refpos_total: np.ndarray,
     basemod: str,
     center: bool,
     windowSize: int,
@@ -710,9 +710,6 @@ def update_methylation_aggregate_db(
             :param refpos_mod: list of modified reference positions
             :param refpos_total: list of all reference positions for the base in question
     df with columns pos:modification, pos, mod, methylated_bases, total_bases
-
-    TODO:
-       - verify the exact types of the refpos arguments
     """
     # store list of entries for a given read
     data = []
