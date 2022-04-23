@@ -12,7 +12,7 @@ parse_bam allows you to summarize modification calls in a sql database
 
 import multiprocessing
 import os
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -31,13 +31,32 @@ TODO:
 
 
 class Region(object):
-    def __init__(self, region):
-        """
+    def __init__(self,
+                 region: Union[str, pd.Series]):
+        """Represents a region of genetic data.
+        Attributes:
+                - chromosome: string name of the chromosome to which the region applies
+                - begin: integer start position of region
+                - end: integer end position of region
+                - size: length of region
+                - string: string representation of region
+                - strand: string specifying forward or reverse strand; either "+" or "-" (default +)
         TODO:
-                - document this
-                - it appears that the region parameter can be either a string of some sort or a row of a bed file, as returned from pd.DataFrame.iterrows()
+                - There should be no reason the second datatype can't be something like typing.Sequence, but technically a pd.Series isn't a valid Sequence. Not sure what the best way to annotate this would be.
+                - Can I re-enable errors being raised from this method?
+                - Consider changing size to be a property rather than an attribute
+                - Change string to be the magic string method
+                - Determine why the string representation exists, and why it is important
         """
+        self.chromosome = None
+        self.begin = None
+        self.end = None
+        self.size = None
+        self.string = None
+        self.strand = "+"
+        
         if isinstance(region, str):  # ":" in region:
+            # String of format "{CHROMOSOME}:{START}-{END}"
             try:
                 self.chromosome, interval = region.replace(",", "").split(":")
                 try:
@@ -48,29 +67,36 @@ class Region(object):
                 self.begin, self.end = [int(i) for i in interval.split("-")]
             except ValueError:
                 pass
+                ## OLD VERSION
                 # sys.exit(
                 #    "\n\nERROR: Window (-w/--window) inproperly formatted, "
                 #    "examples of accepted formats are:\n"
                 #    "'chr5:150200605-150423790'\n\n"
                 # )
+                ## NEW VERSION
+                # raise TypeError("Invalid region string")
             self.size = self.end - self.begin
             self.string = f"{self.chromosome}_{self.begin}_{self.end}"
-        else:
-            self.chromosome = region[1][0]
-            self.begin = region[1][1]
-            self.end = region[1][2]
+        elif isinstance(region, pd.Series):
+            # Ordered sequence containing [CHROMOSOME, START, END] and optionally [STRAND], where STRAND can be either "+" or "-"
+            self.chromosome = region[0]
+            self.begin = region[1]
+            self.end = region[2]
             self.size = self.end - self.begin
             self.string = f"{self.chromosome}_{self.begin}_{self.end}"
             # strand of motif to orient single molecules
             # if not passed just keep as all +
-            if len(region[1]) >= 4:
-                if (region[1][3] == "+") or (region[1][3] == "-"):
-                    self.strand = region[1][3]
+            if len(region) >= 4:
+                if (region[3] == "+") or (region[3] == "-"):
+                    self.strand = region[3]
                 # handle case of bed file with additional field that isn't strand +/-
                 else:
                     self.strand = "+"
             else:
                 self.strand = "+"
+        else:
+            # raise TypeError("Unknown datatype passed for Region initialization")
+            pass
 
 
 def make_db(
@@ -260,7 +286,7 @@ def parse_bam(
         # make a region object for each row of bedFile
         bed = pd.read_csv(bedFile, sep="\t", header=None)
         windows = []
-        for row in bed.iterrows():
+        for _, row in bed.iterrows():
             windows.append(Region(row))
 
     if region is not None:
@@ -327,6 +353,7 @@ def parse_reads_window(
 
     TODO:
             - Find a way to mention in documentation that this has a side effect of populating the aggregated table as well...
+            - ****Modularize row generation
     """
     bam = pysam.AlignmentFile(fileName, "rb")
     data = []
