@@ -29,7 +29,7 @@ Plotting Browser
 ------------------------
 add description here
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-22
+.. GENERATED FROM PYTHON SOURCE LINES 11-23
 
 .. code-block:: default
 
@@ -45,6 +45,7 @@ add description here
     # This will return an HTML file with single molecules displayed o
     # ver region of interest. Modified bases are colored according to colorA and colorC.
     # To return a PDF file, set static = True
+
 
 
 .. rst-class:: sphx-glr-horizontal
@@ -85,24 +86,78 @@ add description here
 
  .. code-block:: none
 
-    [Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-    [Parallel(n_jobs=8)]: Done   1 tasks      | elapsed:    2.5s
-    [Parallel(n_jobs=8)]: Done   1 out of   1 | elapsed:    2.5s finished
+    Outputs
+    _______
+    DB file: ../../dimelo/dimelo_test/mod_mappings_subset.db
     processing 1 reads for test for bam: ../../dimelo/test/data/mod_mappings_subset.bam
-    /Users/reetmishra/.conda/envs/dimeloenv1/lib/python3.7/site-packages/pandas/util/_decorators.py:311: SettingWithCopyWarning:
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/pandas/util/_decorators.py:311: SettingWithCopyWarning:
 
 
     A value is trying to be set on a copy of a slice from a DataFrame
 
     See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
 
-    /Users/reetmishra/.conda/envs/dimeloenv1/lib/python3.7/site-packages/pandas/util/_decorators.py:311: SettingWithCopyWarning:
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'rocket' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'rocket_r' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'mako' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'mako_r' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'icefire' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'icefire_r' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'vlag' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'vlag_r' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'flare' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'flare_r' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'crest' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'crest_r' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/pandas/util/_decorators.py:311: SettingWithCopyWarning:
 
 
     A value is trying to be set on a copy of a slice from a DataFrame
 
     See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
 
+    Outputs
+    _______
+    DB file: ['../../dimelo/dimelo_test/mod_mappings_subset.db']
+    browser plot: ../../dimelo/dimelo_test/methylation_browser_chr1_2907273_2909473.pdf
+    rolling average fraction bases methylated plot: ['../../dimelo/dimelo_test/test_A_sm_rolling_avg_fraction.pdf', '../../dimelo/dimelo_test/test_C_sm_rolling_avg_fraction.pdf']
+    rolling average total bases plot: ['../../dimelo/dimelo_test/test_A_sm_rolling_avg_total.pdf', '../../dimelo/dimelo_test/test_C_sm_rolling_avg_total.pdf']
 
 
 
@@ -110,7 +165,7 @@ add description here
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  8.611 seconds)
+   **Total running time of the script:** ( 0 minutes  7.419 seconds)
 
 
 .. _sphx_glr_download_auto_examples_plot_browser_example.py:

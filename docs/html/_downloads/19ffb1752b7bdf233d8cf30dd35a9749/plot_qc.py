@@ -12,16 +12,17 @@ This example doesn't do much, it just makes a simple plot
 # rST and if using one of the above IDE/plugin's, also signifies the start of a
 # 'code block'.
 
+import matplotlib.pyplot as plt
+
 # This line won't be rendered as rST because there's a space after the last block.
 import numpy as np
-import matplotlib.pyplot as plt
 
 x = np.linspace(0, 2 * np.pi, 100)
 y = np.sin(x)
 
 plt.plot(x, y)
-plt.xlabel(r'$x$')
-plt.ylabel(r'$\sin(x)$')
+plt.xlabel(r"$x$")
+plt.ylabel(r"$\sin(x)$")
 # To avoid matplotlib text output
 plt.show()
 # This is the end of the 'code block' (if using an above IDE). All code within

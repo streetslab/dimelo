@@ -29,7 +29,7 @@ Plotting Enrichment Profile
 ------------------------
 add description here
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-21
+.. GENERATED FROM PYTHON SOURCE LINES 11-27
 
 .. code-block:: default
 
@@ -38,12 +38,18 @@ add description here
 
     input_bam = "../../dimelo/test/data/mod_mappings_subset.bam"
     sample_names = ["test1", "test2"]
-    regions = ["../../dimelo/test/data/test.bed","../../dimelo/test/data/test.bed"]
+    regions = [
+        "../../dimelo/test/data/test.bed",
+        "../../dimelo/test/data/test.bed",
+    ]
     outDir = "../../dimelo/dimelo_test"
-    dm.plot_enrichment_profile(input_bam, sample_names, regions, "A", outDir, windowSize=500, dotsize=1)
+    dm.plot_enrichment_profile(
+        input_bam, sample_names, regions, "A", outDir, windowSize=500, dotsize=1
+    )
 
     # This will return an aggregate profile of fraction of bases
     # modified centered at features of interest
+
 
 
 .. image-sg:: /auto_examples/images/sphx_glr_plot_enrichment_profile_example_001.png
@@ -58,13 +64,64 @@ add description here
 
  .. code-block:: none
 
-    [Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-    [Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    2.0s remaining:    0.0s
-    [Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    2.0s finished
-    [Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-    [Parallel(n_jobs=8)]: Batch computation too fast (0.0217s.) Setting batch_size=2.
-    [Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    1.4s remaining:    0.0s
-    [Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    1.4s finished
+    Outputs
+    _______
+    DB file: ../../dimelo/dimelo_test/mod_mappings_subset.db
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'rocket' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'rocket_r' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'mako' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'mako_r' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'icefire' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'icefire_r' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'vlag' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'vlag_r' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'flare' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'flare_r' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+    Trying to register the cmap 'crest' which already exists.
+
+    /Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+    Trying to register the cmap 'crest_r' which already exists.
+
+    Outputs
+    _______
+    DB file: ../../dimelo/dimelo_test/mod_mappings_subset.db
+    Outputs
+    _______
+    DB file: ['../../dimelo/dimelo_test/mod_mappings_subset.db']
+    overlay plot: ../../dimelo/dimelo_test/sample_mod_mappings_subset_A_sm_rolling_avg_overlay.pdf
 
 
 
@@ -72,7 +129,7 @@ add description here
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  4.792 seconds)
+   **Total running time of the script:** ( 0 minutes  0.889 seconds)
 
 
 .. _sphx_glr_download_auto_examples_plot_enrichment_profile_example.py:

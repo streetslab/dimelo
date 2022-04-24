@@ -8,12 +8,25 @@ plot_browser module
 
 plot_browser plots single molecules with colored base modifications in region of interest
 
+
+Portions of code adapted from methplotlib:
+Copyright (c) 2018 Wouter De Coster
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
 """
 
 # code adapted from methplotlib
 # https://doi.org/10.1093/bioinformatics/btaa093
 
 import multiprocessing
+import os
 import sqlite3
 import sys
 
@@ -125,8 +138,8 @@ def plot_browser(
 
     **Example**
 
-    >>> dm.plot_browser("dimelo/test/data/mod_mappings_subset.bam", "test", "chr1:2907273-2909473", "A+CG", "/dimelo/dimelo_test", static=False)
-    >>> dm.plot_browser(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "chr1:2907273-2909473", "A+CG", "/dimelo/dimelo_test", static=False)
+    >>> dm.plot_browser("dimelo/test/data/mod_mappings_subset.bam", "test", "chr1:2907273-2909473", "A+CG", "dimelo/dimelo_test", static=False)
+    >>> dm.plot_browser(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/mod_mappings_subset.bam"], ["test1", "test2"], "chr1:2907273-2909473", "A+CG", "dimelo/dimelo_test", static=False)
 
     **Return**
 
@@ -134,6 +147,9 @@ def plot_browser(
         * PDFs of aggregate coverage and fraction of bases modified over region of interest.
 
     """
+
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
 
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
@@ -152,8 +168,6 @@ def plot_browser(
     if type(sampleNames) != list:
         sampleNames = [sampleNames]
 
-    w = Region(window)
-
     all_data = []
     aggregate_counts = []
     for f, n in zip(fileNames, sampleNames):
@@ -163,7 +177,7 @@ def plot_browser(
             n,
             outDir,
             basemod="A+CG",
-            region=w,
+            region=window,  # pass string representation
             extractAllBases=True,
             cores=num_cores,
         )
@@ -210,6 +224,40 @@ def plot_browser(
         colorA=colorA,
         colorC=colorC,
     )
+
+    # print output files to std out
+    if static is False:
+        ext = "html"
+    else:
+        ext = "pdf"
+
+    db_paths = []
+    f_paths = []
+    t_paths = []
+
+    for f, s in zip(fileNames, sampleNames):
+        db = outDir + "/" + f.split("/")[-1].replace(".bam", "") + ".db"
+        db_paths.append(db)
+        if "A" in basemod:
+            f_path = (
+                outDir + "/" + s + "_" + "A" + "_sm_rolling_avg_fraction.pdf"
+            )
+            t_path = outDir + "/" + s + "_" + "A" + "_sm_rolling_avg_total.pdf"
+            f_paths.append(f_path)
+            t_paths.append(t_path)
+        if "C" in basemod:
+            f_path = (
+                outDir + "/" + s + "_" + "C" + "_sm_rolling_avg_fraction.pdf"
+            )
+            t_path = outDir + "/" + s + "_" + "C" + "_sm_rolling_avg_total.pdf"
+            f_paths.append(f_path)
+            t_paths.append(t_path)
+
+    w = Region(window)
+
+    browser_path = f"{outDir}/methylation_browser_{w.string}.{ext}"
+    str_out = f"Outputs\n_______\nDB file: {db_paths}\nbrowser plot: {browser_path}\nrolling average fraction bases methylated plot: {f_paths}\nrolling average total bases plot: {t_paths}"
+    print(str_out)
 
 
 def create_subplots(num_methrows, names=None, annotation=True):

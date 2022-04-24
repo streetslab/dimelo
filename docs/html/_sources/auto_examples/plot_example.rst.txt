@@ -31,22 +31,23 @@ This is the first section! The #%% signifies to Sphinx-Gallery that
 this text should be rendered as rST and if using one of the above
 IDE/plugin’s, also signifies the start of a ‘code block’.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-30
+.. GENERATED FROM PYTHON SOURCE LINES 13-31
 
 .. code-block:: default
 
 
 
+    import matplotlib.pyplot as plt
+
     # This line won't be rendered as rST because there's a space after the last block.
     import numpy as np
-    import matplotlib.pyplot as plt
 
     x = np.linspace(0, 2 * np.pi, 100)
     y = np.sin(x)
 
     plt.plot(x, y)
-    plt.xlabel(r'$x$')
-    plt.ylabel(r'$\sin(x)$')
+    plt.xlabel(r"$x$")
+    plt.ylabel(r"$\sin(x)$")
     # To avoid matplotlib text output
     plt.show()
     # This is the end of the 'code block' (if using an above IDE). All code within
@@ -64,7 +65,7 @@ IDE/plugin’s, also signifies the start of a ‘code block’.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 31-36
+.. GENERATED FROM PYTHON SOURCE LINES 32-37
 
 This is another section header
 ------------------------------
@@ -72,11 +73,12 @@ This is another section header
 In the built documentation, it will be rendered as rST after the code above!
 This is also another code block.
 
-.. GENERATED FROM PYTHON SOURCE LINES 36-36
+.. GENERATED FROM PYTHON SOURCE LINES 37-38
 
 .. code-block:: default
 
     print("here")
+
 
 
 
@@ -94,7 +96,7 @@ This is also another code block.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  0.317 seconds)
+   **Total running time of the script:** ( 0 minutes  0.394 seconds)
 
 
 .. _sphx_glr_download_auto_examples_plot_example.py:

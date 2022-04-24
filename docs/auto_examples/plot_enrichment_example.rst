@@ -29,21 +29,27 @@ Plotting Enrichment
 ------------------------
 add description here
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-21
+.. GENERATED FROM PYTHON SOURCE LINES 11-27
 
 .. code-block:: default
 
 
     import dimelo as dm
 
-    input_bams = ["../../dimelo/test/data/mod_mappings_subset.bam", "../../dimelo/test/data/mod_mappings_subset.bam"]
+    input_bams = [
+        "../../dimelo/test/data/mod_mappings_subset.bam",
+        "../../dimelo/test/data/mod_mappings_subset.bam",
+    ]
     sample_names = ["test1", "test2"]
     regions = "../../dimelo/test/data/test.bed"
     outDir = "../../dimelo/dimelo_test"
-    dm.plot_enrichment(input_bams, sample_names, regions, "CG", outDir, threshC=129)
+    dm.plot_enrichment(
+        input_bams, sample_names, regions, "CG", outDir, threshC=129
+    )
 
     # This will return a barplot with overall fraction of bases
     # modified within regions of interest specified by bedFile(s)
+
 
 
 .. image-sg:: /auto_examples/images/sphx_glr_plot_enrichment_example_001.png
@@ -58,14 +64,28 @@ add description here
 
  .. code-block:: none
 
-    [Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-    [Parallel(n_jobs=8)]: Batch computation too fast (0.0197s.) Setting batch_size=2.
-    [Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    0.1s remaining:    0.0s
-    [Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    0.1s finished
-    [Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-    [Parallel(n_jobs=8)]: Batch computation too fast (0.0134s.) Setting batch_size=2.
-    [Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    0.1s remaining:    0.0s
-    [Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    0.1s finished
+    Outputs
+    _______
+    DB file: ../../dimelo/dimelo_test/mod_mappings_subset.db
+    Outputs
+    _______
+    DB file: ../../dimelo/dimelo_test/mod_mappings_subset.db
+
+    Data for barplot
+    ________________
+
+    0    test1
+    1    test2
+    Name: sampleName, dtype: object
+    0    0.142857
+    1    0.142857
+    Name: fractionMethylated, dtype: float64
+
+
+    Outputs
+    _______
+    DB file: ['../../dimelo/dimelo_test/mod_mappings_subset.db', '../../dimelo/dimelo_test/mod_mappings_subset.db']
+    enrichment barplot: ../../dimelo/dimelo_test/region_test_CG_enrichment_barplot.png
 
 
 
@@ -73,7 +93,7 @@ add description here
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  0.333 seconds)
+   **Total running time of the script:** ( 0 minutes  0.600 seconds)
 
 
 .. _sphx_glr_download_auto_examples_plot_enrichment_example.py:

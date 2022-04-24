@@ -46,7 +46,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_browser.html">plot_browser</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment.html">plot_enrichment</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment_profile.html">plot_enrichment_profile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_joint_enrichment.html">plot_joint_enrichment</a></li>
 </ul>
 
         </div>
@@ -104,26 +103,81 @@ to download the full example code</p>
 <li><img src="../_images/sphx_glr_plot_browser_example_004.png" srcset="../_images/sphx_glr_plot_browser_example_004.png" alt="C" class = "sphx-glr-multi-img"/></li>
 </ul>
 <p class="sphx-glr-script-out">Out:</p>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-[Parallel(n_jobs=8)]: Done   1 tasks      | elapsed:    2.5s
-[Parallel(n_jobs=8)]: Done   1 out of   1 | elapsed:    2.5s finished
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Outputs
+_______
+DB file: ../../dimelo/dimelo_test/mod_mappings_subset.db
 processing 1 reads for test for bam: ../../dimelo/test/data/mod_mappings_subset.bam
-/Users/reetmishra/.conda/envs/dimeloenv1/lib/python3.7/site-packages/pandas/util/_decorators.py:311: SettingWithCopyWarning:
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/pandas/util/_decorators.py:311: SettingWithCopyWarning:
 
 
 A value is trying to be set on a copy of a slice from a DataFrame
 
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
 
-/Users/reetmishra/.conda/envs/dimeloenv1/lib/python3.7/site-packages/pandas/util/_decorators.py:311: SettingWithCopyWarning:
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;rocket&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;rocket_r&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;mako&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;mako_r&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;icefire&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;icefire_r&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;vlag&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;vlag_r&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;flare&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;flare_r&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;crest&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;crest_r&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/pandas/util/_decorators.py:311: SettingWithCopyWarning:
 
 
 A value is trying to be set on a copy of a slice from a DataFrame
 
 See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+
+Outputs
+_______
+DB file: [&#39;../../dimelo/dimelo_test/mod_mappings_subset.db&#39;]
+browser plot: ../../dimelo/dimelo_test/methylation_browser_chr1_2907273_2909473.pdf
+rolling average fraction bases methylated plot: [&#39;../../dimelo/dimelo_test/test_A_sm_rolling_avg_fraction.pdf&#39;, &#39;../../dimelo/dimelo_test/test_C_sm_rolling_avg_fraction.pdf&#39;]
+rolling average total bases plot: [&#39;../../dimelo/dimelo_test/test_A_sm_rolling_avg_total.pdf&#39;, &#39;../../dimelo/dimelo_test/test_C_sm_rolling_avg_total.pdf&#39;]
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  8.611 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  7.419 seconds)</p>
 <div class="sphx-glr-footer class sphx-glr-footer-example docutils container" id="sphx-glr-download-auto-examples-plot-browser-example-py">
 <div class="sphx-glr-download sphx-glr-download-python docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/85ead7d138cbb374fc97938d142dccfe/plot_browser_example.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">plot_browser_example.py</span></code></a></p>

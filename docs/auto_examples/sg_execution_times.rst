@@ -5,16 +5,16 @@
 
 Computation times
 =================
-**00:08.611** total execution time for **auto_examples** files:
+**00:25.156** total execution time for **auto_examples** files:
 
 +-----------------------------------------------------------------------------------------------------------+-----------+--------+
-| :ref:`sphx_glr_auto_examples_plot_browser_example.py` (``plot_browser_example.py``)                       | 00:08.611 | 0.0 MB |
+| :ref:`sphx_glr_auto_examples_plot_qc_example.py` (``plot_qc_example.py``)                                 | 00:15.855 | 0.0 MB |
 +-----------------------------------------------------------------------------------------------------------+-----------+--------+
-| :ref:`sphx_glr_auto_examples_plot_enrichment_example.py` (``plot_enrichment_example.py``)                 | 00:00.000 | 0.0 MB |
+| :ref:`sphx_glr_auto_examples_plot_browser_example.py` (``plot_browser_example.py``)                       | 00:07.419 | 0.0 MB |
 +-----------------------------------------------------------------------------------------------------------+-----------+--------+
-| :ref:`sphx_glr_auto_examples_plot_enrichment_profile_example.py` (``plot_enrichment_profile_example.py``) | 00:00.000 | 0.0 MB |
+| :ref:`sphx_glr_auto_examples_plot_enrichment_profile_example.py` (``plot_enrichment_profile_example.py``) | 00:00.889 | 0.0 MB |
 +-----------------------------------------------------------------------------------------------------------+-----------+--------+
-| :ref:`sphx_glr_auto_examples_plot_example.py` (``plot_example.py``)                                       | 00:00.000 | 0.0 MB |
+| :ref:`sphx_glr_auto_examples_plot_enrichment_example.py` (``plot_enrichment_example.py``)                 | 00:00.600 | 0.0 MB |
 +-----------------------------------------------------------------------------------------------------------+-----------+--------+
-| :ref:`sphx_glr_auto_examples_plot_qc_example.py` (``plot_qc_example.py``)                                 | 00:00.000 | 0.0 MB |
+| :ref:`sphx_glr_auto_examples_plot_example.py` (``plot_example.py``)                                       | 00:00.394 | 0.0 MB |
 +-----------------------------------------------------------------------------------------------------------+-----------+--------+

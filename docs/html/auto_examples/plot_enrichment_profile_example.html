@@ -46,7 +46,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_browser.html">plot_browser</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment.html">plot_enrichment</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment_profile.html">plot_enrichment_profile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_joint_enrichment.html">plot_joint_enrichment</a></li>
 </ul>
 
         </div>
@@ -88,25 +87,81 @@ to download the full example code</p>
 
 <span class="n">input_bam</span> <span class="o">=</span> <span class="s2">&quot;../../dimelo/test/data/mod_mappings_subset.bam&quot;</span>
 <span class="n">sample_names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;test1&quot;</span><span class="p">,</span> <span class="s2">&quot;test2&quot;</span><span class="p">]</span>
-<span class="n">regions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;../../dimelo/test/data/test.bed&quot;</span><span class="p">,</span><span class="s2">&quot;../../dimelo/test/data/test.bed&quot;</span><span class="p">]</span>
+<span class="n">regions</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;../../dimelo/test/data/test.bed&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;../../dimelo/test/data/test.bed&quot;</span><span class="p">,</span>
+<span class="p">]</span>
 <span class="n">outDir</span> <span class="o">=</span> <span class="s2">&quot;../../dimelo/dimelo_test&quot;</span>
-<span class="n">dm</span><span class="o">.</span><span class="n">plot_enrichment_profile</span><span class="p">(</span><span class="n">input_bam</span><span class="p">,</span> <span class="n">sample_names</span><span class="p">,</span> <span class="n">regions</span><span class="p">,</span> <span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="n">outDir</span><span class="p">,</span> <span class="n">windowSize</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">dotsize</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">dm</span><span class="o">.</span><span class="n">plot_enrichment_profile</span><span class="p">(</span>
+    <span class="n">input_bam</span><span class="p">,</span> <span class="n">sample_names</span><span class="p">,</span> <span class="n">regions</span><span class="p">,</span> <span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="n">outDir</span><span class="p">,</span> <span class="n">windowSize</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">dotsize</span><span class="o">=</span><span class="mi">1</span>
+<span class="p">)</span>
 
 <span class="c1"># This will return an aggregate profile of fraction of bases</span>
 <span class="c1"># modified centered at features of interest</span>
 </pre></div>
 </div>
 <img src="../_images/sphx_glr_plot_enrichment_profile_example_001.png" srcset="../_images/sphx_glr_plot_enrichment_profile_example_001.png" alt="A" class = "sphx-glr-single-img"/><p class="sphx-glr-script-out">Out:</p>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    2.0s remaining:    0.0s
-[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    2.0s finished
-[Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-[Parallel(n_jobs=8)]: Batch computation too fast (0.0217s.) Setting batch_size=2.
-[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    1.4s remaining:    0.0s
-[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    1.4s finished
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Outputs
+_______
+DB file: ../../dimelo/dimelo_test/mod_mappings_subset.db
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;rocket&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;rocket_r&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;mako&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;mako_r&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;icefire&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;icefire_r&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;vlag&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;vlag_r&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;flare&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;flare_r&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1582: UserWarning:
+
+Trying to register the cmap &#39;crest&#39; which already exists.
+
+/Users/annie/miniconda3/envs/dimelo/lib/python3.7/site-packages/seaborn/cm.py:1583: UserWarning:
+
+Trying to register the cmap &#39;crest_r&#39; which already exists.
+
+Outputs
+_______
+DB file: ../../dimelo/dimelo_test/mod_mappings_subset.db
+Outputs
+_______
+DB file: [&#39;../../dimelo/dimelo_test/mod_mappings_subset.db&#39;]
+overlay plot: ../../dimelo/dimelo_test/sample_mod_mappings_subset_A_sm_rolling_avg_overlay.pdf
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  4.792 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  0.889 seconds)</p>
 <div class="sphx-glr-footer class sphx-glr-footer-example docutils container" id="sphx-glr-download-auto-examples-plot-enrichment-profile-example-py">
 <div class="sphx-glr-download sphx-glr-download-python docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/467ab9edebd55e05fa7fd4217922da8c/plot_enrichment_profile_example.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">plot_enrichment_profile_example.py</span></code></a></p>

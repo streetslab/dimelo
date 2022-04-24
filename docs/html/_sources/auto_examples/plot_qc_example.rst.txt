@@ -31,7 +31,7 @@ Usually as a first step after receiving bam files, we want to do a quality check
 and assess our data. This code generates a PDF report of important QC statistics
 for long read methylation modification bam files
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-25
+.. GENERATED FROM PYTHON SOURCE LINES 14-26
 
 .. code-block:: default
 
@@ -47,6 +47,7 @@ for long read methylation modification bam files
     dm.qc_report(in_bam, sample_name, out_dir)
     # now our output directory that we specified, will have a file called
     # "test_qc_report.pdf"
+
 
 
 .. image-sg:: /auto_examples/images/sphx_glr_plot_qc_example_001.png
@@ -74,7 +75,7 @@ for long read methylation modification bam files
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  11.975 seconds)
+   **Total running time of the script:** ( 0 minutes  15.855 seconds)
 
 
 .. _sphx_glr_download_auto_examples_plot_qc_example.py:

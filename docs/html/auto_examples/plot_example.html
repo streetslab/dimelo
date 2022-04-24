@@ -46,7 +46,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_browser.html">plot_browser</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment.html">plot_enrichment</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment_profile.html">plot_enrichment_profile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_joint_enrichment.html">plot_joint_enrichment</a></li>
 </ul>
 
         </div>
@@ -86,16 +85,17 @@ to download the full example code</p>
 <p>This is the first section! The #%% signifies to Sphinx-Gallery that
 this text should be rendered as rST and if using one of the above
 IDE/plugin’s, also signifies the start of a ‘code block’.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># This line won&#39;t be rendered as rST because there&#39;s a space after the last block.</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+
+<span class="c1"># This line won&#39;t be rendered as rST because there&#39;s a space after the last block.</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
 
 <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
 <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
 
 <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;$x$&#39;</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;$\sin(x)$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;$x$&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;$\sin(x)$&quot;</span><span class="p">)</span>
 <span class="c1"># To avoid matplotlib text output</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 <span class="c1"># This is the end of the &#39;code block&#39; (if using an above IDE). All code within</span>
@@ -114,7 +114,7 @@ This is also another code block.</p>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>here
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  0.317 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  0.394 seconds)</p>
 <div class="sphx-glr-footer class sphx-glr-footer-example docutils container" id="sphx-glr-download-auto-examples-plot-example-py">
 <div class="sphx-glr-download sphx-glr-download-python docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/7edd55a52439250dd2a454d660d32ddf/plot_example.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">plot_example.py</span></code></a></p>

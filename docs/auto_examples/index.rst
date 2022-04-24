@@ -54,27 +54,6 @@ Below is a gallery of examples
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This plots single molecules centered at regions of interest defined in bed file and produces ag...">
-
-.. only:: html
-
- .. figure:: /auto_examples/images/thumb/sphx_glr_plot_enrichment_profile_example_thumb.png
-     :alt: Enrichment Profile Plot Example
-
-     :ref:`sphx_glr_auto_examples_plot_enrichment_profile_example.py`
-
-.. raw:: html
-
-    </div>
-
-
-.. toctree::
-   :hidden:
-
-   /auto_examples/plot_enrichment_profile_example
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="This plots single molecules with colored base modifications in region of interest">
 
 .. only:: html
@@ -93,6 +72,27 @@ Below is a gallery of examples
    :hidden:
 
    /auto_examples/plot_browser_example
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This plots single molecules centered at regions of interest defined in bed file and produces ag...">
+
+.. only:: html
+
+ .. figure:: /auto_examples/images/thumb/sphx_glr_plot_enrichment_profile_example_thumb.png
+     :alt: Enrichment Profile Plot Example
+
+     :ref:`sphx_glr_auto_examples_plot_enrichment_profile_example.py`
+
+.. raw:: html
+
+    </div>
+
+
+.. toctree::
+   :hidden:
+
+   /auto_examples/plot_enrichment_profile_example
 
 .. raw:: html
 

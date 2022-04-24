@@ -46,7 +46,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_browser.html">plot_browser</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment.html">plot_enrichment</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment_profile.html">plot_enrichment_profile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_joint_enrichment.html">plot_joint_enrichment</a></li>
 </ul>
 
         </div>
@@ -86,28 +85,47 @@ to download the full example code</p>
 <p>add description here</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">dimelo</span> <span class="k">as</span> <span class="nn">dm</span>
 
-<span class="n">input_bams</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;../../dimelo/test/data/mod_mappings_subset.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;../../dimelo/test/data/mod_mappings_subset.bam&quot;</span><span class="p">]</span>
+<span class="n">input_bams</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;../../dimelo/test/data/mod_mappings_subset.bam&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;../../dimelo/test/data/mod_mappings_subset.bam&quot;</span><span class="p">,</span>
+<span class="p">]</span>
 <span class="n">sample_names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;test1&quot;</span><span class="p">,</span> <span class="s2">&quot;test2&quot;</span><span class="p">]</span>
 <span class="n">regions</span> <span class="o">=</span> <span class="s2">&quot;../../dimelo/test/data/test.bed&quot;</span>
 <span class="n">outDir</span> <span class="o">=</span> <span class="s2">&quot;../../dimelo/dimelo_test&quot;</span>
-<span class="n">dm</span><span class="o">.</span><span class="n">plot_enrichment</span><span class="p">(</span><span class="n">input_bams</span><span class="p">,</span> <span class="n">sample_names</span><span class="p">,</span> <span class="n">regions</span><span class="p">,</span> <span class="s2">&quot;CG&quot;</span><span class="p">,</span> <span class="n">outDir</span><span class="p">,</span> <span class="n">threshC</span><span class="o">=</span><span class="mi">129</span><span class="p">)</span>
+<span class="n">dm</span><span class="o">.</span><span class="n">plot_enrichment</span><span class="p">(</span>
+    <span class="n">input_bams</span><span class="p">,</span> <span class="n">sample_names</span><span class="p">,</span> <span class="n">regions</span><span class="p">,</span> <span class="s2">&quot;CG&quot;</span><span class="p">,</span> <span class="n">outDir</span><span class="p">,</span> <span class="n">threshC</span><span class="o">=</span><span class="mi">129</span>
+<span class="p">)</span>
 
 <span class="c1"># This will return a barplot with overall fraction of bases</span>
 <span class="c1"># modified within regions of interest specified by bedFile(s)</span>
 </pre></div>
 </div>
 <img src="../_images/sphx_glr_plot_enrichment_example_001.png" srcset="../_images/sphx_glr_plot_enrichment_example_001.png" alt="plot enrichment example" class = "sphx-glr-single-img"/><p class="sphx-glr-script-out">Out:</p>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-[Parallel(n_jobs=8)]: Batch computation too fast (0.0197s.) Setting batch_size=2.
-[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    0.1s remaining:    0.0s
-[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    0.1s finished
-[Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-[Parallel(n_jobs=8)]: Batch computation too fast (0.0134s.) Setting batch_size=2.
-[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    0.1s remaining:    0.0s
-[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    0.1s finished
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Outputs
+_______
+DB file: ../../dimelo/dimelo_test/mod_mappings_subset.db
+Outputs
+_______
+DB file: ../../dimelo/dimelo_test/mod_mappings_subset.db
+
+Data for barplot
+________________
+
+0    test1
+1    test2
+Name: sampleName, dtype: object
+0    0.142857
+1    0.142857
+Name: fractionMethylated, dtype: float64
+
+
+Outputs
+_______
+DB file: [&#39;../../dimelo/dimelo_test/mod_mappings_subset.db&#39;, &#39;../../dimelo/dimelo_test/mod_mappings_subset.db&#39;]
+enrichment barplot: ../../dimelo/dimelo_test/region_test_CG_enrichment_barplot.png
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  0.333 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  0.600 seconds)</p>
 <div class="sphx-glr-footer class sphx-glr-footer-example docutils container" id="sphx-glr-download-auto-examples-plot-enrichment-example-py">
 <div class="sphx-glr-download sphx-glr-download-python docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/3dbee5537546aa350c2b8a755b8bf8eb/plot_enrichment_example.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">plot_enrichment_example.py</span></code></a></p>

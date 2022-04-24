@@ -31,7 +31,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.autosectionlabel",
-    "sphinx_gallery.gen_gallery", #added this for sphinx gallery
+    "sphinx_gallery.gen_gallery",  # added this for sphinx gallery
 ]
 
 # Include doc string for __init__ method in the documentation
@@ -67,6 +67,6 @@ html_static_path = ["_static"]
 
 # -- Sphinx Gallery Configuration -------------------------------------------
 sphinx_gallery_conf = {
-     'examples_dirs': 'examples',   # path to your example scripts
-     'gallery_dirs': 'auto_examples',  # path to where to save gallery generated output
+    "examples_dirs": "examples",  # path to your example scripts
+    "gallery_dirs": "auto_examples",  # path to where to save gallery generated output
 }
