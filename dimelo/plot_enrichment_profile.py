@@ -188,7 +188,7 @@ def plot_enrichment_profile(
             title = "region_" + bedFiles[0].split("/")[-1].replace(".bed", "")
         plt.title(basemod)
         plt.legend(sampleNames)
-        plt.show()
+        # plt.show()
         fig.savefig(
             outDir
             + "/"
@@ -409,7 +409,7 @@ def plot_aggregate_me_frac(
         labels.append("CG")
     plt.title(basemod)
     plt.legend(labels)
-    plt.show()
+    # plt.show()
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_sm_rolling_avg.pdf"
     )
@@ -484,7 +484,7 @@ def plot_base_abundance(
     # ax.spines["left"].set_visible(False)
     # ax.get_xaxis().set_ticks([])
     plt.tight_layout()
-    plt.show()
+    # plt.show()
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_base_count.png", dpi=600
     )

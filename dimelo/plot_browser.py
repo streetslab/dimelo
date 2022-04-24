@@ -653,7 +653,7 @@ def plot_aggregate_frac(aggregate_rolling, sampleName, mod, color, outDir):
     )
     plt.title(mod)
     plt.ylabel("m" + mod + "/" + mod)
-    plt.show()
+    # plt.show()
     fig.savefig(
         outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_fraction.pdf"
     )
@@ -668,7 +668,7 @@ def plot_aggregate_total(aggregate_rolling, sampleName, mod, color, outDir):
     )
     plt.title(mod)
     plt.ylabel("total " + mod)
-    plt.show()
+    # plt.show()
     fig.savefig(
         outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_total.pdf"
     )
