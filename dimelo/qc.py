@@ -54,6 +54,9 @@ def batch_read_generator(file_bamIn, batch_size):
     yield r_list
 
 
+def logger(statement):
+    print(statement)
+
 def prob_bin(bin):
     # probability a base in the window (or across reads or across bases within a read) is methylated by:
     # calculating probability that no base in the window (or across reads) is methylated and then taking the complement
@@ -107,7 +110,7 @@ def parse_bam_read(bamIn, outDir, cores=None):
         else:
             num_cores = cores
 
-    Parallel(n_jobs=num_cores, verbose=10)(
+    Parallel(n_jobs=num_cores, verbose=0)( #used to be verbose = 10
         delayed(execute_sql_command)(template_command, DB_NAME, i)
         for i in batch_read_generator(file_bamIn, 100)
     )
@@ -234,11 +237,11 @@ def qc_report(
 
         For single sample:
 
-        >>> dm.qc_report("dimelo/test/data/mod_mappings_subset.bam", "test", "/dimelo/out")
+        >>> dm.qc_report("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/dimelo_test")
 
         For multiple sample files:
 
-        >>> dm.qc_report(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "/dimelo/out")
+        >>> dm.qc_report(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "dimelo/dimelo_test")
 
         **Return**
 
@@ -266,7 +269,7 @@ def qc_report(
     for index in range(len(fileNames)):
         filebamIn = fileNames[index]
         sampleName = sampleNames[index]
-        DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, "out", cores)
+        DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, outDir, cores)
         # if testMode:
         #     DB_NAME = outDir + "/" + filebamIn.split("/")[-1][:-4] + ".db"
         #     # DB_NAME = "out/winnowmap_guppy_merge_subset.db"
@@ -402,9 +405,29 @@ def qc_report(
         plt.title(summary_data, y=0.8)
         # plt.title("TITLE: " + str(valRL[5]), fontsize = 12, y=1.3)
 
+
         # saving as PDF
         final_file_name = outDir + "/" + sampleName + "_qc_report"
         plt.savefig(final_file_name + ".pdf", bbox_inches="tight")
+
+        print(
+            "processing "
+            + str(len(plot_feature_df["name"].unique()))
+            + " reads with methylation for "
+            + sampleName
+            + " for bam: "
+            + filebamIn
+        )
+
+        print(
+            "QC report located at: "
+            + final_file_name
+            + ".pdf"
+        )
+        print(
+            "Database located at: "
+            + DB_NAME
+        )
 
 
 def main():
