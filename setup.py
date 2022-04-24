@@ -48,8 +48,6 @@ setuptools.setup(
         "bin/dimelo-plot-browser",
         "bin/dimelo-plot-enrichment",
         "bin/dimelo-plot-enrichment-profile",
-        "bin/dimelo-plot-joint-enrichment",
-        # "bin/dimelo-enrich-sm-roi-overlay",
         "bin/dimelo-qc-report",
     ],  # command line scripts installed
     author_email="amaslan@berkeley.edu",  # Author email

@@ -48,7 +48,7 @@ def execute_sql_command(command: str, database_name: str, values) -> None:
     No return, executes the command
     """
     # will create if not present
-    conn = sqlite3.connect(database_name, timeout=30.0)
+    conn = sqlite3.connect(database_name, timeout=60.0)
     c = conn.cursor()
     if len(values) == 0:
         c.execute(command)
@@ -58,3 +58,5 @@ def execute_sql_command(command: str, database_name: str, values) -> None:
         c.execute(command, values)
     # saves the changes
     conn.commit()
+    c.close()
+    conn.close()

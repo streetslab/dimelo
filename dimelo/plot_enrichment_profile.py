@@ -11,7 +11,9 @@ plot_enrichment_profile plots single molecules centered at regions of interest d
 """
 
 import multiprocessing
+import os
 import sqlite3
+from itertools import cycle
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -50,7 +52,7 @@ def plot_enrichment_profile(
     sampleNames
         name(s) of sample for output file name labelling
     bedFiles
-        specified windows for region(s) of interest; if a 4th column is included with the strand for a motif of interest (+/-), reads will be oriented with respect to motif
+        specified windows for region(s) of interest; optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. Reads will be oriented with respect to strand.
     basemod
         One of the following:
 
@@ -84,11 +86,11 @@ def plot_enrichment_profile(
 
     For single file and region:
 
-    >>> dm.plot_enrichment_profile("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/test/data/test.bed", "A+CG", "/dimelo/dimelo_test", windowSize=500, dotsize=1)
+    >>> dm.plot_enrichment_profile("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/test/data/test.bed", "A+CG", "dimelo/dimelo_test", windowSize=500, dotsize=1)
 
     To overlay multiple regions of interest (can conversely also overlay multiple samples over a single region if a list of files is provided):
 
-    >>> dm.plot_enrichment_profile("dimelo/test/data/mod_mappings_subset.bam", ["test1","test2"], ["dimelo/test/data/test.bed","dimelo/test/data/test.bed"], "A", "/dimelo/dimelo_test", windowSize=500, dotsize=1)
+    >>> dm.plot_enrichment_profile("dimelo/test/data/mod_mappings_subset.bam", ["test1","test2"], ["dimelo/test/data/test.bed","dimelo/test/data/test.bed"], "A", "dimelo/dimelo_test", windowSize=500, dotsize=1)
 
     **Return**
 
@@ -98,6 +100,9 @@ def plot_enrichment_profile(
 
 
     """
+
+    if not os.path.isdir(outDir):
+        os.makedirs(outDir)
 
     # default number of cores is max available
     cores_avail = multiprocessing.cpu_count()
@@ -120,6 +125,11 @@ def plot_enrichment_profile(
     if type(bedFiles) != list:
         bedFiles = [bedFiles]
 
+    db_paths = []
+    for f in fileNames:
+        db = outDir + "/" + f.split("/")[-1].replace(".bam", "") + ".db"
+        db_paths.append(db)
+
     # overlay condition
     if len(fileNames) > 1 or len(bedFiles) > 1:
         if basemod == "A+CG":
@@ -134,7 +144,7 @@ def plot_enrichment_profile(
                     "only a single region file can be used when overlaying multiple bam files"
                 )
                 return
-            for f, n, c in zip(fileNames, sampleNames, colors):
+            for f, n, c in zip(fileNames, sampleNames, cycle(colors)):
                 execute_overlay(
                     f,
                     n,
@@ -156,7 +166,7 @@ def plot_enrichment_profile(
                     "only a single bam file can be used when overlaying multiple bed file regions"
                 )
                 return
-            for b, n, c in zip(bedFiles, sampleNames, colors):
+            for b, n, c in zip(bedFiles, sampleNames, cycle(colors)):
                 execute_overlay(
                     fileNames[0],
                     n,
@@ -172,10 +182,25 @@ def plot_enrichment_profile(
                     min_periods,
                     num_cores,
                 )
+        if len(fileNames) == 1:
+            title = "sample_" + fileNames[0].split("/")[-1].replace(".bam", "")
+        if len(bedFiles) == 1:
+            title = "region_" + bedFiles[0].split("/")[-1].replace(".bed", "")
         plt.title(basemod)
         plt.legend(sampleNames)
         plt.show()
-        fig.savefig(outDir + "/" + basemod + "_sm_rolling_avg_overlay.pdf")
+        fig.savefig(
+            outDir
+            + "/"
+            + title
+            + "_"
+            + basemod
+            + "_sm_rolling_avg_overlay.pdf"
+        )
+
+        overlay_path = f"{outDir}/{title}_{basemod}_sm_rolling_avg_overlay.pdf"
+        str_out = f"Outputs\n_______\nDB file: {db_paths}\noverlay plot: {overlay_path}"
+        print(str_out)
 
     # no overlay condition
     if (len(fileNames) == 1) and (len(bedFiles) == 1):
@@ -195,6 +220,25 @@ def plot_enrichment_profile(
             min_periods,
             num_cores,
         )
+
+        t_paths = []
+        if "A" in basemod:
+            t_path = (
+                outDir + "/" + sampleNames[0] + "_" + "A" + "_base_count.png"
+            )
+            t_paths.append(t_path)
+        if "C" in basemod:
+            t_path = (
+                outDir + "/" + sampleNames[0] + "_" + "C" + "_base_count.png"
+            )
+            t_paths.append(t_path)
+
+        enrichment_path = (
+            f"{outDir}/{sampleNames[0]}_{basemod}_sm_rolling_avg.pdf"
+        )
+        sm_path = f"{outDir}/{sampleNames[0]}_{basemod}_sm_scatter.png"
+        str_out = f"Outputs\n_______\nDB file: {db_paths}\nenrichment plot: {enrichment_path}\nsingle molecule plot: {sm_path}\nbase count plots: {t_paths}"
+        print(str_out)
 
 
 def execute_overlay(

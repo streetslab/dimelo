@@ -24,7 +24,18 @@ from joblib import Parallel, delayed
 from dimelo.parse_bam import make_db
 from dimelo.utils import execute_sql_command
 
-COLOR_LIST = ["#BB4430","#FFBC0A","#053C5E","#A9E5BB","#610345","#2D1E2F","#559CAD","#5E747F","#F343F4"]
+COLOR_LIST = [
+    "#BB4430",
+    "#FFBC0A",
+    "#053C5E",
+    "#A9E5BB",
+    "#610345",
+    "#2D1E2F",
+    "#559CAD",
+    "#5E747F",
+    "#F343F4",
+]
+
 
 def batch_read_generator(file_bamIn, batch_size):
     counter = 0
@@ -107,7 +118,7 @@ def parse_bam_read(bamIn, outDir, cores=None):
         else:
             num_cores = cores
 
-    Parallel(n_jobs=num_cores, verbose=10)(
+    Parallel(n_jobs=num_cores)(
         delayed(execute_sql_command)(template_command, DB_NAME, i)
         for i in batch_read_generator(file_bamIn, 100)
     )
@@ -210,52 +221,52 @@ def qc_report(
     fileNames,
     sampleNames,
     outDir,
-    colors= COLOR_LIST,
-    cores = None,
+    colors=COLOR_LIST,
+    cores=None,
 ):
     # runtime = get_runtime(parse_bam_read, filebamIn, 'out')
     # print(runtime)
 
     """
-        fileNames
-            list of names of bam files; indexed; or single file name as string
-        sampleNames
-            list of names of samples for output plot name labelling; or single sample name as string
-        outDir
-            directory to output QC summary report
-        cores
-            number of cores over which to parallelize; default is all available
-        colors
-            color list in hex for overlay plots; default is:
-            ["#BB4430","#FFBC0A","#053C5E","#A9E5BB","#610345",
-            "#2D1E2F","#559CAD","#5E747F","#F343F4"]
+    fileNames
+        list of names of bam files; indexed; or single file name as string
+    sampleNames
+        list of names of samples for output plot name labelling; or single sample name as string
+    outDir
+        directory to output QC summary report
+    cores
+        number of cores over which to parallelize; default is all available
+    colors
+        color list in hex for overlay plots; default is:
+        ["#BB4430","#FFBC0A","#053C5E","#A9E5BB","#610345",
+        "#2D1E2F","#559CAD","#5E747F","#F343F4"]
 
-        **Example**
+    **Example**
 
-        For single sample:
+    For single sample:
 
-        >>> dm.qc_report("dimelo/test/data/mod_mappings_subset.bam", "test", "/dimelo/out")
+        >>> dm.qc_report("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/dimelo_test")
 
-        For multiple sample files:
+    For multiple sample files:
 
-        >>> dm.qc_report(["dimelo/test/data/mod_mappings_subset1.bam", "dimelo/test/data/mod_mappings_subset2.bam"], ["test1", "test2"], "/dimelo/out")
+        >>> dm.qc_report(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/winnowmap_guppy_merge_subset.bam"], ["test1", "test2"], "dimelo/dimelo_test")
 
-        **Return**
+    **Return**
 
-            * PDF of QC Summary Report which includes:
-                * read length histogram
-                * mapping quality histogram
-                * average alignment quality per read histogram (if basecaller provided information)
-                * average basecall quality per read histogram (if basecaller provided information)
-                * summary table describing spread of data
-                * number of reads, number of basepairs
+        * PDF of QC Summary Report which includes:
+            * read length histogram
+            * mapping quality histogram
+            * average alignment quality per read histogram (if basecaller provided information)
+            * average basecall quality per read histogram (if basecaller provided information)
+            * summary table describing spread of data
+            * number of reads, number of basepairs
 
 
-        Sample QC Report
+    Sample QC Report
 
-        .. image:: images/sample_qc_report.png
+    .. image:: images/sample_qc_report.png
 
-        """
+    """
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
 
@@ -276,7 +287,7 @@ def qc_report(
         #     DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, "out")
 
         if sampleName is None:
-            sampleName = DB_NAME.split("/")[1][:-3]
+            sampleName = DB_NAME.split("/")[-1][:-3]
 
         plot_feature_df = pd.read_sql(
             "SELECT * from " + TABLE_NAME, con=sqlite3.connect(DB_NAME)
