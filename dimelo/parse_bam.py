@@ -21,7 +21,6 @@ from joblib import Parallel, delayed
 
 from dimelo.utils import clear_db, create_sql_table, execute_sql_command
 
-
 """
 TODO:
     - convert paths over to pathlib where possible, and update relevant type annotations
@@ -31,8 +30,7 @@ TODO:
 
 
 class Region(object):
-    def __init__(self,
-                 region: Union[str, pd.Series]):
+    def __init__(self, region: Union[str, pd.Series]):
         """Represents a region of genetic data.
         Attributes:
                 - chromosome: string name of the chromosome to which the region applies
@@ -54,7 +52,7 @@ class Region(object):
         self.size = None
         self.string = None
         self.strand = "+"
-        
+
         if isinstance(region, str):  # ":" in region:
             # String of format "{CHROMOSOME}:{START}-{END}"
             try:
@@ -66,7 +64,9 @@ class Region(object):
                     pass
                 self.begin, self.end = [int(i) for i in interval.split("-")]
             except ValueError:
-                raise TypeError("Invalid region string. Example of accepted format: 'chr5:150200605-150423790'")
+                raise TypeError(
+                    "Invalid region string. Example of accepted format: 'chr5:150200605-150423790'"
+                )
             self.size = self.end - self.begin
             self.string = f"{self.chromosome}_{self.begin}_{self.end}"
         elif isinstance(region, pd.Series):
@@ -87,15 +87,17 @@ class Region(object):
             else:
                 self.strand = "+"
         else:
-            raise TypeError("Unknown datatype passed for Region initialization")
+            raise TypeError(
+                "Unknown datatype passed for Region initialization"
+            )
 
 
 def make_db(
-        fileName: str,
-        sampleName: str,
-        outDir: str,
-        testMode: bool=False,
-        qc: bool=False,
+    fileName: str,
+    sampleName: str,
+    outDir: str,
+    testMode: bool = False,
+    qc: bool = False,
 ) -> Tuple[str, List[str]]:
     """Sets up the necessary database tables.
 
@@ -109,7 +111,7 @@ def make_db(
     Returns:
             - path to the new database
             - list of newly-created table names
-    
+
     TODO:
             - document testMode, qc mode more fully; update top-level documentation accordingly
             - make this use pathlib for path operations
@@ -121,7 +123,7 @@ def make_db(
     # TODO: These should replace the path operations once pathlib conversion is in place
     # filePath = Path(fileName)
     # outPath = Path(outDir)
-    
+
     # outPath.mkdir(parents=True, exist_ok=True)
 
     # (outPath / filePath.name).withsuffix('.db')
@@ -134,7 +136,7 @@ def make_db(
 
     if testMode:
         clear_db(DATABASE_NAME)
-        
+
     tables = []
     # for qc report
     if qc:
@@ -184,17 +186,17 @@ def parse_bam(
     fileName: str,
     sampleName: str,
     outDir: str,
-    bedFile: str=None,
-    basemod: str="A+CG",
-    center: bool=False,
-    windowSize: int=None,
-    region: str=None,
-    threshA: int=129,
-    threshC: int=129,
-    extractAllBases: bool=False,
-    testMode: bool=False,
-    qc: bool=False,
-    cores: int=None
+    bedFile: str = None,
+    basemod: str = "A+CG",
+    center: bool = False,
+    windowSize: int = None,
+    region: str = None,
+    threshA: int = 129,
+    threshC: int = 129,
+    extractAllBases: bool = False,
+    testMode: bool = False,
+    qc: bool = False,
+    cores: int = None,
 ) -> None:
     """
     fileName
@@ -351,7 +353,7 @@ def parse_reads_window(
     qc: bool,
 ) -> None:
     """Parse all reads in window and put data into methylationByBase table.
-    
+
     Args:
             :param bam: read in bam file with Mm and Ml tags
             :param fileName: name of bam file

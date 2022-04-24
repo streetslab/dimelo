@@ -615,7 +615,7 @@ def plot_aggregate(
     if "A" in basemod:
         aggregate_A = aggregate_counts[
             aggregate_counts["mod"].str.contains("A")
-        ]
+        ].copy()
         # need to sort first!
         aggregate_A.sort_values(["pos"], inplace=True)
         aggregate_A_rolling = aggregate_A.rolling(
@@ -630,7 +630,7 @@ def plot_aggregate(
     if "C" in basemod:
         aggregate_C = aggregate_counts[
             aggregate_counts["mod"].str.contains("C")
-        ]
+        ].copy()
         # need to sort first!
         aggregate_C.sort_values(["pos"], inplace=True)
         aggregate_C_rolling = aggregate_C.rolling(

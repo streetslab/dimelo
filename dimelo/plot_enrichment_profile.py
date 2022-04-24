@@ -417,7 +417,7 @@ def plot_aggregate_me_frac(
     if "A" in basemod:
         aggregate_A = aggregate_counts[
             aggregate_counts["mod"].str.contains("A")
-        ]
+        ].copy()
         # need to sort first!
         aggregate_A.sort_values(["pos"], inplace=True)
         plot_base_abundance(
@@ -430,7 +430,7 @@ def plot_aggregate_me_frac(
     if "C" in basemod:
         aggregate_C = aggregate_counts[
             aggregate_counts["mod"].str.contains("C")
-        ]
+        ].copy()
         # need to sort first!
         aggregate_C.sort_values(["pos"], inplace=True)
         plot_base_abundance(
@@ -444,7 +444,9 @@ def plot_aggregate_me_frac(
 
 # helper function to create smoothed lineplot
 def plot_aggregate_helper(aggregate_counts, mod, smooth, min_periods, color):
-    aggregate = aggregate_counts[aggregate_counts["mod"].str.contains(mod)]
+    aggregate = aggregate_counts[
+        aggregate_counts["mod"].str.contains(mod)
+    ].copy()
     # need to sort first!
     aggregate.sort_values(["pos"], inplace=True)
     aggregate_rolling = aggregate.rolling(
