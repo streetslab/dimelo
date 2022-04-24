@@ -1,6 +1,5 @@
 import unittest
 import subprocess
-from pathlib import Path
 
 import dimelo as dm
 from dimelo.test import DiMeLoTestCase
@@ -15,10 +14,13 @@ from dimelo.test import DiMeLoTestCase
 
 
 class TestParseBam(DiMeLoTestCase):
-    def setUp(self):
-        self.outDir = Path(self.tmpDir())
-        
     def test_parse_bam_bedFile(self):
+        """Tests parsing a bam file into a database, specifying windows using a bed file.
+
+        Notes:
+            - cores set to 1 to ensure that hashes come out the same each time
+            - thresholds set super low to ensure that meaningful rows are inserted for all modifications
+        """
         # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
         dm.parse_bam(fileName="dimelo/test/data/mod_mappings_subset.bam",
                      sampleName="test",
@@ -27,8 +29,8 @@ class TestParseBam(DiMeLoTestCase):
                      basemod="A+CG",
                      center=True,
                      windowSize=500,
-                     threshA=190,
-                     threshC=190,
+                     threshA=1,
+                     threshC=1,
                      extractAllBases=False,
                      cores=1
         )
@@ -41,7 +43,7 @@ class TestParseBam(DiMeLoTestCase):
         )
         self.assertEqual(
             db_hash_output.stdout,
-            b"b38a246e912e4e160d840a1650108c624774175b35e6afc98d974805\n"
+            b"d9f626468e4221a30318639f19dc2cd8a3f00fa6e12a5280c1b58204\n"
         )
 
 
