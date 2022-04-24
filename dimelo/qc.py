@@ -37,9 +37,15 @@ COLOR_LIST = [
 ]
 
 
-def batch_read_generator(file_bamIn, batch_size):
+def batch_read_generator(file_bamIn, filename, batch_size):
     counter = 0
     r_list = []
+
+    # added the next 3 lines
+    lines = pysam.idxstats(filename).splitlines()
+    total_reads = sum([int(l.split("\t")[2])
+                       for l in lines if not l.startswith("#")])
+    batch_size = 0.1 * total_reads
 
     for read in file_bamIn.fetch(until_eof=True):
         r = [
@@ -122,16 +128,16 @@ def parse_bam_read(bamIn, outDir, cores=None):
         else:
             num_cores = cores
 
-    Parallel(n_jobs=num_cores)(
+    Parallel(n_jobs=num_cores, verbose = 10)(
         delayed(execute_sql_command)(template_command, DB_NAME, i)
-        for i in batch_read_generator(file_bamIn, 100)
+        for i in batch_read_generator(file_bamIn, bamIn, 100)
     )
     return DB_NAME, tables[0]
 
 
-def get_runtime(f, inp1, inp2):
+def get_runtime(f, inp1, inp2, inp3):
     start = time.time()
-    re_val = f(inp1, inp2)
+    re_val = f(inp1, inp2, inp3)
     time.sleep(1)
     end = time.time()
     return f"Runtime of the program is {end - start}", re_val
@@ -420,15 +426,6 @@ def qc_report(
         # saving as PDF
         final_file_name = outDir + "/" + sampleName + "_qc_report"
         plt.savefig(final_file_name + ".pdf", bbox_inches="tight")
-
-        print(
-            "processing "
-            + str(len(plot_feature_df["name"].unique()))
-            + " reads with methylation for "
-            + sampleName
-            + " for bam: "
-            + filebamIn
-        )
 
         print("QC report located at: " + final_file_name + ".pdf")
         print("Database located at: " + DB_NAME)
