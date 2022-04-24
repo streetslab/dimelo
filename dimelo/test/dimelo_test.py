@@ -46,6 +46,36 @@ class TestParseBam(DiMeLoTestCase):
             b"d9f626468e4221a30318639f19dc2cd8a3f00fa6e12a5280c1b58204\n"
         )
 
+    def test_parse_bam_region(self):
+        """Tests parsing a bam file into a database, specifying windows using a region string.
+
+        Notes:
+            - cores set to 1 to ensure that hashes come out the same each time
+            - thresholds set super low to ensure that meaningful rows are inserted for all modifications
+        """
+        # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
+        dm.parse_bam(fileName="dimelo/test/data/mod_mappings_subset.bam",
+                     sampleName="test",
+                     outDir=str(self.outDir),
+                     region="chr1:2907273-2909473",
+                     basemod="A+CG",
+                     windowSize=500,
+                     threshA=1,
+                     threshC=1,
+                     cores=1
+        )
+        # TODO: When implemented elsewhere, replace this explicit database path with a modular call
+        database_path = self.outDir / "mod_mappings_subset.db"
+        # Check whether database contents are the same as expected, using sqlite3 .sha3sum command
+        db_hash_output = subprocess.run(
+            ["sqlite3", database_path, ".sha3sum"],
+            capture_output=True
+        )
+        self.assertEqual(
+            db_hash_output.stdout,
+            b"ae1b8af9121734a96dbcba0df7c0369b14e995a9cf7163a0e9769af6\n"
+        )
+
 
 # class TestDiMeLo(DiMeLoTestCase):
     
