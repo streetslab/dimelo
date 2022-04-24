@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enrichment Profile Plot Example &mdash; dimelo  documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> dimelo
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../content/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../content/reference/qc_report.html">qc_report</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../content/reference/parse_bam.html">parse_bam</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_browser.html">plot_browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment.html">plot_enrichment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment_profile.html">plot_enrichment_profile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_joint_enrichment.html">plot_joint_enrichment</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dimelo</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Enrichment Profile Plot Example</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/auto_examples/plot_enrichment_profile_example.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p>Click <a class="reference internal" href="#sphx-glr-download-auto-examples-plot-enrichment-profile-example-py"><span class="std std-ref">here</span></a>
+to download the full example code</p>
+</div>
+<section class="sphx-glr-example-title" id="enrichment-profile-plot-example">
+<span id="sphx-glr-auto-examples-plot-enrichment-profile-example-py"></span><h1>Enrichment Profile Plot Example<a class="headerlink" href="#enrichment-profile-plot-example" title="Permalink to this headline"></a></h1>
+<p>This plots single molecules centered at regions of interest defined in bed file and produces aggregate profile</p>
+<section id="plotting-enrichment-profile">
+<h2>Plotting Enrichment Profile<a class="headerlink" href="#plotting-enrichment-profile" title="Permalink to this headline"></a></h2>
+<p>add description here</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">dimelo</span> <span class="k">as</span> <span class="nn">dm</span>
+
+<span class="n">input_bam</span> <span class="o">=</span> <span class="s2">&quot;../../dimelo/test/data/mod_mappings_subset.bam&quot;</span>
+<span class="n">sample_names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;test1&quot;</span><span class="p">,</span> <span class="s2">&quot;test2&quot;</span><span class="p">]</span>
+<span class="n">regions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;../../dimelo/test/data/test.bed&quot;</span><span class="p">,</span><span class="s2">&quot;../../dimelo/test/data/test.bed&quot;</span><span class="p">]</span>
+<span class="n">outDir</span> <span class="o">=</span> <span class="s2">&quot;../../dimelo/dimelo_test&quot;</span>
+<span class="n">dm</span><span class="o">.</span><span class="n">plot_enrichment_profile</span><span class="p">(</span><span class="n">input_bam</span><span class="p">,</span> <span class="n">sample_names</span><span class="p">,</span> <span class="n">regions</span><span class="p">,</span> <span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="n">outDir</span><span class="p">,</span> <span class="n">windowSize</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">dotsize</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># This will return an aggregate profile of fraction of bases</span>
+<span class="c1"># modified centered at features of interest</span>
+</pre></div>
+</div>
+<img src="../_images/sphx_glr_plot_enrichment_profile_example_001.png" srcset="../_images/sphx_glr_plot_enrichment_profile_example_001.png" alt="A" class = "sphx-glr-single-img"/><p class="sphx-glr-script-out">Out:</p>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
+[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    2.0s remaining:    0.0s
+[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    2.0s finished
+[Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
+[Parallel(n_jobs=8)]: Batch computation too fast (0.0217s.) Setting batch_size=2.
+[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    1.4s remaining:    0.0s
+[Parallel(n_jobs=8)]: Done   3 out of   3 | elapsed:    1.4s finished
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  4.792 seconds)</p>
+<div class="sphx-glr-footer class sphx-glr-footer-example docutils container" id="sphx-glr-download-auto-examples-plot-enrichment-profile-example-py">
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/467ab9edebd55e05fa7fd4217922da8c/plot_enrichment_profile_example.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">plot_enrichment_profile_example.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/f4467d15c6691ed185f7e5a9373f3cbf/plot_enrichment_profile_example.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">plot_enrichment_profile_example.ipynb</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Annie Maslan &amp; Reet Mishra.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

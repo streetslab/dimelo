@@ -23,18 +23,18 @@
 
 This example doesn't do much, it just makes a simple plot
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-14
+.. GENERATED FROM PYTHON SOURCE LINES 8-13
 
 This is a section header
 ------------------------
-This is the first section!
-The `#%%` signifies to Sphinx-Gallery that this text should be rendered as
-rST and if using one of the above IDE/plugin's, also signifies the start of a
-'code block'.
+This is the first section! The #%% signifies to Sphinx-Gallery that
+this text should be rendered as rST and if using one of the above
+IDE/plugin’s, also signifies the start of a ‘code block’.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-30
+.. GENERATED FROM PYTHON SOURCE LINES 13-30
 
 .. code-block:: default
+
 
 
     # This line won't be rendered as rST because there's a space after the last block.
@@ -94,7 +94,7 @@ This is also another code block.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  0.320 seconds)
+   **Total running time of the script:** ( 0 minutes  0.317 seconds)
 
 
 .. _sphx_glr_download_auto_examples_plot_example.py:
