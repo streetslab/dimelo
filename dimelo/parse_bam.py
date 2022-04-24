@@ -269,34 +269,35 @@ def parse_bam(
         * total_bases
 
     """
+    # Ensure exactly one of bedFile and region are specified
+    if sum([arg is None for arg in (bedFile, region)]) != 1:
+        raise RuntimeError(
+            "Exactly one of the mutually exclusive arguments 'bedFile' or 'region' must be specified."
+        )
+    # The arguments center and windowSize are incompatible with region
+    if region is not None:
+        if center:
+            raise RuntimeError(
+                "Argument 'center' cannot be given alongside 'region'."
+            )
+        if windowSize:
+            raise RuntimeError(
+                "Argument 'windowSize' cannot be given alongside 'region'."
+            )
+    
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
 
     make_db(fileName, sampleName, outDir, testMode, qc)
 
-    if bedFile is None:
-        if region is None:
-            print("Either bedFile or region must be specified.")
-            return
-
     if bedFile is not None:
-        if region is not None:
-            print(
-                "The bedFile and region parameters are mutually exclusive; specify one or the other."
-            )
-            return
         # make a region object for each row of bedFile
         bed = pd.read_csv(bedFile, sep="\t", header=None)
         windows = []
         for _, row in bed.iterrows():
             windows.append(Region(row))
-
+            
     if region is not None:
-        if bedFile is not None:
-            print(
-                "The bedFile and region parameters are mutually exclusive; specify one or the other."
-            )
-            return
         windows = [Region(region)]
 
     # default number of cores is max available
