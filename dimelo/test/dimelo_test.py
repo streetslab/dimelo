@@ -59,7 +59,6 @@ class TestParseBam(DiMeLoTestCase):
                      outDir=str(self.outDir),
                      region="chr1:2907273-2909473",
                      basemod="A+CG",
-                     windowSize=500,
                      threshA=1,
                      threshC=1,
                      cores=1
@@ -75,6 +74,41 @@ class TestParseBam(DiMeLoTestCase):
             db_hash_output.stdout,
             b"ae1b8af9121734a96dbcba0df7c0369b14e995a9cf7163a0e9769af6\n"
         )
+
+    def test_parse_bam_bedFile_region_mutual_exclusion(self):
+        """Verifies that bedFile and region arguments remain mutually exclusive."""
+        # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
+        with self.assertRaises(RuntimeError):
+            dm.parse_bam(fileName="dimelo/test/data/mod_mappings_subset.bam",
+                         sampleName="test",
+                         outDir=str(self.outDir),
+                         bedFile="dimelo/test/data/test.bed",
+                         region="chr1:2907273-2909473"
+            )
+
+    def test_parse_bam_region_center_incompatible(self):
+        """Verifies that region and center arguments are incompatible."""
+        # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
+        with self.assertRaises(RuntimeError):
+            dm.parse_bam(fileName="dimelo/test/data/mod_mappings_subset.bam",
+                         sampleName="test",
+                         outDir=str(self.outDir),
+                         bedFile="dimelo/test/data/test.bed",
+                         region="chr1:2907273-2909473",
+                         center=True
+            )
+
+    def test_parse_bam_region_windowSize_incompatible(self):
+        """Verifies that region and windowSize arguments are incompatible."""
+        # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
+        with self.assertRaises(RuntimeError):
+            dm.parse_bam(fileName="dimelo/test/data/mod_mappings_subset.bam",
+                         sampleName="test",
+                         outDir=str(self.outDir),
+                         bedFile="dimelo/test/data/test.bed",
+                         region="chr1:2907273-2909473",
+                         windowSize=100
+            )
 
 
 # class TestDiMeLo(DiMeLoTestCase):
