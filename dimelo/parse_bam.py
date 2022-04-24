@@ -66,15 +66,7 @@ class Region(object):
                     pass
                 self.begin, self.end = [int(i) for i in interval.split("-")]
             except ValueError:
-                pass
-                ## OLD VERSION
-                # sys.exit(
-                #    "\n\nERROR: Window (-w/--window) inproperly formatted, "
-                #    "examples of accepted formats are:\n"
-                #    "'chr5:150200605-150423790'\n\n"
-                # )
-                ## NEW VERSION
-                # raise TypeError("Invalid region string")
+                raise TypeError("Invalid region string. Example of accepted format: 'chr5:150200605-150423790'")
             self.size = self.end - self.begin
             self.string = f"{self.chromosome}_{self.begin}_{self.end}"
         elif isinstance(region, pd.Series):
@@ -95,8 +87,7 @@ class Region(object):
             else:
                 self.strand = "+"
         else:
-            # raise TypeError("Unknown datatype passed for Region initialization")
-            pass
+            raise TypeError("Unknown datatype passed for Region initialization")
 
 
 def make_db(
@@ -125,7 +116,6 @@ def make_db(
             - current uses:
               parse_bam.py:234:    make_db(fileName, sampleName, outDir, testMode, qc, joint)
               qc.py:96:    DB_NAME, tables = make_db(bamIn, "", outDir, qc=True)
-            - ****Right now, qc and other modes are basically mutually exclusive. Is this functionality intended? Why should it be so?
             - Modularize and simplify sql table specification. There should be easy-to-reference top-level variables that contain the table names, columns, datatypes, etc. Not sure how they should be stored yet, however, because I do not know if/how they are going to be referenced elsewhere in the codebase.
     """
     # TODO: These should replace the path operations once pathlib conversion is in place
