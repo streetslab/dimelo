@@ -22,17 +22,18 @@ class TestParseBam(DiMeLoTestCase):
             - thresholds set super low to ensure that meaningful rows are inserted for all modifications
         """
         # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
-        dm.parse_bam(fileName="dimelo/test/data/mod_mappings_subset.bam",
-                     sampleName="test",
-                     outDir=str(self.outDir),
-                     bedFile="dimelo/test/data/test.bed",
-                     basemod="A+CG",
-                     center=True,
-                     windowSize=500,
-                     threshA=1,
-                     threshC=1,
-                     extractAllBases=False,
-                     cores=1
+        dm.parse_bam(
+            fileName="dimelo/test/data/mod_mappings_subset.bam",
+            sampleName="test",
+            outDir=str(self.outDir),
+            bedFile="dimelo/test/data/test.bed",
+            basemod="A+CG",
+            center=True,
+            windowSize=500,
+            threshA=1,
+            threshC=1,
+            extractAllBases=False,
+            cores=1
         )
         # TODO: When implemented elsewhere, replace this explicit database path with a modular call
         database_path = self.outDir / "mod_mappings_subset.db"
@@ -54,14 +55,15 @@ class TestParseBam(DiMeLoTestCase):
             - thresholds set super low to ensure that meaningful rows are inserted for all modifications
         """
         # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
-        dm.parse_bam(fileName="dimelo/test/data/mod_mappings_subset.bam",
-                     sampleName="test",
-                     outDir=str(self.outDir),
-                     region="chr1:2907273-2909473",
-                     basemod="A+CG",
-                     threshA=1,
-                     threshC=1,
-                     cores=1
+        dm.parse_bam(
+            fileName="dimelo/test/data/mod_mappings_subset.bam",
+            sampleName="test",
+            outDir=str(self.outDir),
+            region="chr1:2907273-2909473",
+            basemod="A+CG",
+            threshA=1,
+            threshC=1,
+            cores=1
         )
         # TODO: When implemented elsewhere, replace this explicit database path with a modular call
         database_path = self.outDir / "mod_mappings_subset.db"
@@ -79,36 +81,58 @@ class TestParseBam(DiMeLoTestCase):
         """Verifies that bedFile and region arguments remain mutually exclusive."""
         # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
         with self.assertRaises(RuntimeError):
-            dm.parse_bam(fileName="dimelo/test/data/mod_mappings_subset.bam",
-                         sampleName="test",
-                         outDir=str(self.outDir),
-                         bedFile="dimelo/test/data/test.bed",
-                         region="chr1:2907273-2909473"
+            dm.parse_bam(
+                fileName="dimelo/test/data/mod_mappings_subset.bam",
+                sampleName="test",
+                outDir=str(self.outDir),
+                bedFile="dimelo/test/data/test.bed",
+                region="chr1:2907273-2909473"
             )
 
     def test_parse_bam_region_center_incompatible(self):
         """Verifies that region and center arguments are incompatible."""
         # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
         with self.assertRaises(RuntimeError):
-            dm.parse_bam(fileName="dimelo/test/data/mod_mappings_subset.bam",
-                         sampleName="test",
-                         outDir=str(self.outDir),
-                         bedFile="dimelo/test/data/test.bed",
-                         region="chr1:2907273-2909473",
-                         center=True
+            dm.parse_bam(
+                fileName="dimelo/test/data/mod_mappings_subset.bam",
+                sampleName="test",
+                outDir=str(self.outDir),
+                bedFile="dimelo/test/data/test.bed",
+                region="chr1:2907273-2909473",
+                center=True
             )
 
     def test_parse_bam_region_windowSize_incompatible(self):
         """Verifies that region and windowSize arguments are incompatible."""
         # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
         with self.assertRaises(RuntimeError):
-            dm.parse_bam(fileName="dimelo/test/data/mod_mappings_subset.bam",
-                         sampleName="test",
-                         outDir=str(self.outDir),
-                         bedFile="dimelo/test/data/test.bed",
-                         region="chr1:2907273-2909473",
-                         windowSize=100
+            dm.parse_bam(
+                fileName="dimelo/test/data/mod_mappings_subset.bam",
+                sampleName="test",
+                outDir=str(self.outDir),
+                bedFile="dimelo/test/data/test.bed",
+                region="chr1:2907273-2909473",
+                windowSize=100
             )
+
+
+# class TestPlotEnrichment(DiMeLoTestCase):
+#     """
+#     TODO:
+#         - exactly one of fileNames and bedFiles must be of length one, and the other must be of length 2
+#         - only one of the basemods is valid at a time
+#     """
+#     def test_plot_enrichment_2_bams(self):
+#         dm.plot_enrichment(
+#             fileNames=["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/mod_mappings_subset.bam"],
+#             sampleNames=["test1", "test2"],
+#             bedFiles="dimelo/test/data/test.bed",
+#             basemod="CG",
+#             outDir=str(self.outDir),
+#             threshC=129
+#         )
+        
+
 
 
 # class TestDiMeLo(DiMeLoTestCase):

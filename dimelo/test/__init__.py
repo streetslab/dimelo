@@ -4,12 +4,18 @@ from pathlib import Path
 
 
 class DiMeLoTestCase(unittest.TestCase):
-    def setUp(self):
-        self._outDir = tempfile.TemporaryDirectory()
-        self.outDir = Path(self._outDir.name)
+    """
+    TODO:
+        - Should these be setUpClass/tearDownClass or setUp/tearDown? Is it okay that only one temporary directory is created each time?
+    """
+    @classmethod
+    def setUpClass(cls):
+        cls._outDir = tempfile.TemporaryDirectory()
+        cls.outDir = Path(cls._outDir.name)
 
-    def tearDown(self):
-        self._outDir.cleanup()
+    @classmethod
+    def tearDownClass(cls):
+        cls._outDir.cleanup()
     
     # def tmpFile(self):
     #     tempFile = tempfile.NamedTemporaryFile(delete=True)
