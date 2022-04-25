@@ -796,7 +796,7 @@ def main():
         help="name of bed file that defines regions of interest over which to extract mod calls"
     )
     window_group.add_argument(
-        "-r, ""--region",
+        "-r", "--region",
         help="single region over which to extract base mods, e.g. \"chr1:1-100000\""
     )
 
