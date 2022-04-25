@@ -441,17 +441,18 @@ def main():
     )
 
     # Required arguments
-    parser.add_argument(
+    required_args = parser.add_argument_group("required arguments")
+    required_args.add_argument(
         "-f", "--fileNames", required=True,
         nargs="+",
         help="bam file name(s)"
     )
-    parser.add_argument(
+    required_args.add_argument(
         "-s", "--sampleNames", required=True,
         nargs="+",
         help="sample name(s) for output labelling"
     )
-    parser.add_argument(
+    required_args.add_argument(
         "-o", "--outDir", required=True,
         help="directory to output QC summary report"
     )

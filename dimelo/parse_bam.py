@@ -775,15 +775,16 @@ def main():
     )
 
     # Required arguments
-    parser.add_argument(
+    required_args = parser.add_argument_group("required arguments")
+    required_args.add_argument(
         "-f", "--fileName", required=True,
         help="name of bam file with Mm and Ml tags"
     )
-    parser.add_argument(
+    required_args.add_argument(
         "-s", "--sampleName", required=True,
         help="name of sample for output SQL table name labelling"
     )
-    parser.add_argument(
+    required_args.add_argument(
         "-o", "--outDir", required=True,
         help="directory where SQL database is stored"
     )

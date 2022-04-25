@@ -497,27 +497,28 @@ def main():
     )
 
     # Required arguments
-    parser.add_argument(
+    required_args = parser.add_argument_group("required arguments")
+    required_args.add_argument(
         "-f", "--fileNames", required=True,
         nargs="+",
         help="bam file name(s)"
     )
-    parser.add_argument(
+    required_args.add_argument(
         "-s", "--sampleNames", required=True,
         nargs="+",
         help="sample name(s) for output file labelling"
     )
-    parser.add_argument(
+    required_args.add_argument(
         "-b", "--bedFiles", required=True,
         nargs="+",
         help="name of bed file(s) defining region(s) of interest"
     )
-    parser.add_argument(
+    required_args.add_argument(
         "-m", "--basemod", required=True,
         type=str, choices=["A", "CG", "A+CG"],
         help="which base modification to extract"
     )
-    parser.add_argument(
+    required_args.add_argument(
         "-o", "--outDir", required=True,
         help="directory to output plot"
     )
