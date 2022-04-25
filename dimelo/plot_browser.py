@@ -284,7 +284,7 @@ def create_output(fig, outfile, window, static, outDir):
     """
     if static:
         outfile = outDir + "/" + f"methylation_browser_{window.string}.pdf"
-        fig.write_image(outfile)  # scale=10
+        fig.write_image(outfile, width=1000, height=400)  # scale=10
         # pio.write_image(fig, outfile, format='pdf', scale=10)
     if not static:
         outfile = outDir + "/" + f"methylation_browser_{window.string}.html"
@@ -317,6 +317,7 @@ def methylation(
     for m, n in zip(all_data, sampleNames):
         traces.append(
             make_per_read_meth_traces_phred(
+                all_data=all_data,
                 table=m,
                 basemod=basemod,
                 colorA=colorA,
@@ -331,6 +332,7 @@ def methylation(
 
 
 def make_per_read_meth_traces_phred(
+    all_data,
     table,
     basemod,
     colorA,
@@ -370,8 +372,10 @@ def make_per_read_meth_traces_phred(
     if "C" in basemod:  # if read_table_mC is not None:
         traces.append(
             make_per_position_phred_scatter(
+                all_data=all_data,
                 read_table=read_table_mC[read_table_mC["prob"] > threshC],
                 mod="mC",
+                thresh=threshC,
                 dotsize=dotsize,
                 colorscale=cmapC,
                 offset=0.05,
@@ -380,8 +384,10 @@ def make_per_read_meth_traces_phred(
     if "A" in basemod:  # if read_table_mA is not None:
         traces.append(
             make_per_position_phred_scatter(
+                all_data=all_data,
                 read_table=read_table_mA[read_table_mA["prob"] > threshA],
                 mod="mA",
+                thresh=threshA,
                 dotsize=dotsize,
                 colorscale=cmapA,
                 offset=0.15,
@@ -391,9 +397,27 @@ def make_per_read_meth_traces_phred(
 
 
 def make_per_position_phred_scatter(
-    read_table, mod, dotsize=4, colorscale="Reds", offset=0
+    all_data, read_table, mod, thresh, dotsize=4, colorscale="Reds", offset=0
 ):
     """Make scatter plot per modified base per read"""
+    # get min and max probabilities across all for legend and color consistency for comparisons
+    if "C" in mod:
+        m = "C"
+    if "A" in mod:
+        m = "A"
+    min_overall = 255
+    max_overall = 0
+    for d in all_data:
+        min_temp = d[(d["mod"].str.contains(m)) & (d["prob"] >= thresh)][
+            "prob"
+        ].min()
+        max_temp = d[(d["mod"].str.contains(m)) & (d["prob"] >= thresh)][
+            "prob"
+        ].max()
+        if min_temp < min_overall:
+            min_overall = min_temp
+        if max_temp > max_overall:
+            max_overall = max_temp
     return go.Scatter(
         x=read_table["pos"],
         y=read_table["height"],
@@ -408,10 +432,10 @@ def make_per_position_phred_scatter(
             colorbar=dict(
                 title=mod + " probability",
                 titleside="right",
-                tickvals=[read_table["prob"].min(), read_table["prob"].max()],
+                tickvals=[min_overall, max_overall],
                 ticktext=[
-                    str(round(read_table["prob"].min() / 255, 2)),
-                    str(round(read_table["prob"].max() / 255, 3)),
+                    str(round(min_overall / 255, 2)),
+                    str(round(max_overall / 255, 2)),
                 ],
                 ticks="outside",
                 x=offset + 1,
@@ -615,7 +639,7 @@ def plot_aggregate(
     if "A" in basemod:
         aggregate_A = aggregate_counts[
             aggregate_counts["mod"].str.contains("A")
-        ]
+        ].copy()
         # need to sort first!
         aggregate_A.sort_values(["pos"], inplace=True)
         aggregate_A_rolling = aggregate_A.rolling(
@@ -630,7 +654,7 @@ def plot_aggregate(
     if "C" in basemod:
         aggregate_C = aggregate_counts[
             aggregate_counts["mod"].str.contains("C")
-        ]
+        ].copy()
         # need to sort first!
         aggregate_C.sort_values(["pos"], inplace=True)
         aggregate_C_rolling = aggregate_C.rolling(
@@ -653,7 +677,7 @@ def plot_aggregate_frac(aggregate_rolling, sampleName, mod, color, outDir):
     )
     plt.title(mod)
     plt.ylabel("m" + mod + "/" + mod)
-    plt.show()
+    # plt.show()
     fig.savefig(
         outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_fraction.pdf"
     )
@@ -668,7 +692,7 @@ def plot_aggregate_total(aggregate_rolling, sampleName, mod, color, outDir):
     )
     plt.title(mod)
     plt.ylabel("total " + mod)
-    plt.show()
+    # plt.show()
     fig.savefig(
         outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_total.pdf"
     )
