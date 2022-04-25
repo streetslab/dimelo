@@ -279,6 +279,13 @@ def main():
         help="directory to output plot"
     )
 
+    # Plotting arguments
+    plotting_args = parser.add_argument_group("plotting options")
+    plotting_args.add_argument(
+        "--colors", type=str, nargs="+",
+        help="color list in hex (e.g. \"#BB4430\") for overlay plots"
+    )
+
     # Optional arguments
     parser.add_argument(
         "-A", "--threshA", type=int,
@@ -289,10 +296,6 @@ def main():
         "-C", "--threshC", type=int,
         default=129,
         help="threshold above which to call a C base methylated"
-    )
-    parser.add_argument(
-        "--colors", type=str, nargs="+",
-        help="color list in hex (e.g. \"#BB4430\") for overlay plots"
     )
     parser.add_argument(
         "-p", "--cores", type=int,

@@ -457,11 +457,14 @@ def main():
         help="directory to output QC summary report"
     )
 
-    # Optional arguments
-    parser.add_argument(
+    # Plotting arguments
+    plotting_args = parser.add_argument_group("plotting options")
+    plotting_args.add_argument(
         "--colors", type=str, nargs="+",
         help="color list in hex (e.g. \"#BB4430\") for overlay plots"
     )
+
+    # Optional arguments
     parser.add_argument(
         "-p", "--cores", type=int,
         help="number of cores over which to parallelize"

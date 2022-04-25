@@ -707,6 +707,37 @@ def main():
         help="directory to output plot"
     )
 
+    # Smoothing options
+    smoothing_args = parser.add_argument_group("smoothing options")
+    smoothing_args.add_argument(
+        "-t", "--smooth", type=int,
+        default=1000,
+        help="window over which to smooth aggregate curve"
+    )
+    smoothing_args.add_argument(
+        "-n", "--min_periods", type=int,
+        default=100,
+        help="minimum number of bases to consider for smoothing"
+    )
+
+    # Plotting arguments
+    plotting_args = parser.add_argument_group("plotting options")
+    plotting_args.add_argument(
+        "--colorA", type=str,
+        default=COLOR_A,
+        help="color in hex (e.g. \"#BB4430\") for mA"
+    )
+    plotting_args.add_argument(
+        "--colorC", type=str,
+        default=COLOR_C,
+        help="color in hex (e.g. \"#BB4430\") for mCG"
+    )
+    plotting_args.add_argument(
+        "-d", "--dotsize", type=float,
+        default=4,
+        help="size of points"
+    )
+
     # Optional arguments
     parser.add_argument(
         "-A", "--threshA", type=int,
@@ -722,31 +753,6 @@ def main():
     # parser.add_argument(
     #     "-b", "--bedFileFeatures"
     # )
-    parser.add_argument(
-        "-t", "--smooth", type=int,
-        default=1000,
-        help="window over which to smooth aggregate curve"
-    )
-    parser.add_argument(
-        "-n", "--min_periods", type=int,
-        default=100,
-        help="minimum number of bases to consider for smoothing"
-    )
-    parser.add_argument(
-        "--colorA", type=str,
-        default=COLOR_A,
-        help="color in hex (e.g. \"#BB4430\") for mA"
-    )
-    parser.add_argument(
-        "--colorC", type=str,
-        default=COLOR_C,
-        help="color in hex (e.g. \"#BB4430\") for mCG"
-    )
-    parser.add_argument(
-        "-d", "--dotsize", type=float,
-        default=4,
-        help="size of points"
-    )
     parser.add_argument(
         "--static", action="store_true",
         help="output as PDF instead of interactive HTML"
