@@ -549,7 +549,7 @@ def main():
         help="color in hex (e.g. \"#BB4430\") for mCG"
     )
     parser.add_argument(
-        "-c", "--colors", type=str, nargs="+",
+        "--colors", type=str, nargs="+",
         default=COLOR_LIST,
         help="color list in hex (e.g. \"#BB4430\") for overlay plots"
     )

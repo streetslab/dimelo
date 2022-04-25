@@ -458,7 +458,7 @@ def main():
 
     # Optional arguments
     parser.add_argument(
-        "-c", "--colors", type=str, nargs="+",
+        "--colors", type=str, nargs="+",
         help="color list in hex (e.g. \"#BB4430\") for overlay plots"
     )
     parser.add_argument(
