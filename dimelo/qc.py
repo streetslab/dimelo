@@ -462,4 +462,4 @@ def main():
     )
 
     args = parser.parse_args()
-    print(args)
+    qc_report(**vars(args))
