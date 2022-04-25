@@ -29,6 +29,7 @@ import multiprocessing
 import os
 import sqlite3
 import sys
+import argparse
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -675,5 +676,84 @@ def plot_aggregate_total(aggregate_rolling, sampleName, mod, color, outDir):
 
 
 def main():
-    # TODO add argument parsing
-    print("main")
+    parser = argparse.ArgumentParser(
+        description="DiMeLo plot browser"
+    )
+
+    # Required arguments
+    parser.add_argument(
+        "-f", "--fileNames", required=True,
+        nargs="+",
+        help="bam file name(s)"
+    )
+    parser.add_argument(
+        "-s", "--sampleNames", required=True,
+        nargs="+",
+        help="sample name(s) for output file labelling"
+    )
+    parser.add_argument(
+        "-w", "--window", required=True,
+        type=str,
+        help="single region over which to extract base mods, e.g. \"chr1:1-100000\""
+    )
+    parser.add_argument(
+        "-m", "--basemod", required=True,
+        type=str, choices=["A", "CG", "A+CG"],
+        help="which base modification to extract"
+    )
+    parser.add_argument(
+        "-o", "--outDir", required=True,
+        help="directory to output plot"
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        "-A", "--threshA", type=int,
+        default=DEFAULT_THRESH_A,
+        help="threshold above which to call an A base methylated"
+    )
+    parser.add_argument(
+        "-C", "--threshC", type=int,
+        default=DEFAULT_THRESH_C,
+        help="threshold above which to call a C base methylated"
+    )
+    # TODO: What is this?
+    # parser.add_argument(
+    #     "-b", "--bedFileFeatures"
+    # )
+    parser.add_argument(
+        "-t", "--smooth", type=int,
+        default=1000,
+        help="window over which to smooth aggregate curve"
+    )
+    parser.add_argument(
+        "-n", "--min_periods", type=int,
+        default=100,
+        help="minimum number of bases to consider for smoothing"
+    )
+    parser.add_argument(
+        "--colorA", type=str,
+        default=COLOR_A,
+        help="color in hex (e.g. \"#BB4430\") mA"
+    )
+    parser.add_argument(
+        "--colorC", type=str,
+        default=COLOR_C,
+        help="color in hex (e.g. \"#BB4430\") mCG"
+    )
+    parser.add_argument(
+        "-d", "--dotsize", type=float,
+        default=4,
+        help="size of points"
+    )
+    parser.add_argument(
+        "--static", action="store_true",
+        help="output as PDF instead of interactive HTML"
+    )
+    parser.add_argument(
+        "-p", "--cores", type=int,
+        help="number of cores over which to parallelize"
+    )
+
+    args = parser.parse_args()
+    plot_browser(**vars(args))

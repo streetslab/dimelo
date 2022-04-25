@@ -249,7 +249,7 @@ def plot_barchart(data, basemod, outDir, colors, title):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate DiMeLo qc report"
+        description="Plot DiMeLo methylation enrichment"
     )
 
     # Required arguments

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import dimelo.plot_browswer
+from dimelo.plot_browser import main
 
 # call main(), which takes in command line arguments.
-dimelo.plot_browser.main()
+main()

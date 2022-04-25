@@ -796,7 +796,7 @@ def main():
     )
     window_group.add_argument(
         "-r, ""--region",
-        help="single region over which to extract base mods"
+        help="single region over which to extract base mods, e.g. \"chr1:1-100000\""
     )
 
     # Optional arguments
