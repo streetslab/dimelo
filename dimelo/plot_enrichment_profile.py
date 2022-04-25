@@ -463,7 +463,21 @@ def plot_base_abundance(
     cmapPurple = colors.LinearSegmentedColormap.from_list(
         "custom purple", ["white", "#2D1E2F"], N=200
     )
-    # plot base abundance
+    aggregate_counts = (
+        aggregate_counts.set_index("pos")
+        .reindex(
+            pd.Index(
+                np.arange(
+                    aggregate_counts["pos"].min(),
+                    aggregate_counts["pos"].max(),
+                    1,
+                ),
+                name="pos",
+            )
+        )
+        .reset_index()
+    )
+    aggregate_counts = aggregate_counts.fillna(0)
     fig = plt.figure()
     x = aggregate_counts["pos"].to_numpy()
     y = aggregate_counts["total_bases"].to_numpy()  # base_count
