@@ -13,6 +13,7 @@ parse_bam allows you to summarize modification calls in a sql database
 import multiprocessing
 import os
 from typing import List, Tuple, Union
+import argparse
 
 import numpy as np
 import pandas as pd
@@ -766,3 +767,65 @@ def update_methylation_aggregate_db(
             + """ SET methylated_bases = methylated_bases + ?, total_bases = total_bases + ? WHERE id = ?"""
         )
         execute_sql_command(command, DATABASE_NAME, values_subset)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Parse a bam file into DiMeLo database tables"
+    )
+
+    # Required arguments
+    parser.add_argument("fileName", help="name of bam file with Mm and Ml tags")
+    parser.add_argument("sampleName", help="name of sample for output SQL table name labelling")
+    parser.add_argument("outDir", help="directory where SQL database is stored")
+
+    # Required, mutually exclusive arguments
+    window_group = parser.add_mutually_exclusive_group(required=True)
+    window_group.add_argument(
+        "--bedFile",
+        help="name of bed file that defines regions of interest over which to extract mod calls"
+    )
+    window_group.add_argument(
+        "--region",
+        help="single region over which to extract base mods"
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        "-b", "--basemod", type=str,
+        default="A+CG", choices=["A", "CG", "A+CG"],
+        help="which base modifications to extract"
+    )
+    parser.add_argument(
+        "-A", "--threshA", type=int,
+        default=129,
+        help="threshold above which to call an A base methylated"
+    )
+    parser.add_argument(
+        "-C", "--threshC", type=int,
+        default=129,
+        help="threshold above which to call a C base methylated"
+    )
+    parser.add_argument(
+        "-e", "--extractAllBases", action="store_true",
+        help="store all base mod calls, regardless of methylation probability threshold"
+    )
+    parser.add_argument(
+        "-p", "--cores", type=int,
+        help="number of cores over which to parallelize"
+    )
+
+    
+    # TODO: only allow this when bedFile is given? Or just let it percolate through to the underlying function...
+    parser.add_argument(
+        "-c", "--center", action="store_true",
+        help="report positions with respect to center of window"
+    )
+    # TODO: This is REQUIRED when center is true. This needs to be added to the actual functionality elsewhere too...
+    parser.add_argument(
+        "-s", "--windowSize", type=int,
+        help="window size around center point of feature of interest to plot (+/-); only mods within this window are stored"
+    )
+
+    args = parser.parse_args()
+    print(args)
