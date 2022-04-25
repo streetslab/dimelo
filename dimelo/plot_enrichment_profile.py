@@ -14,6 +14,7 @@ import multiprocessing
 import os
 import sqlite3
 from itertools import cycle
+import argparse
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -491,5 +492,86 @@ def plot_base_abundance(
 
 
 def main():
-    # TODO add argument parsing
-    print("main")
+    parser = argparse.ArgumentParser(
+        description="Plot DiMeLo enrichment profile"
+    )
+
+    # Required arguments
+    parser.add_argument(
+        "-f", "--fileNames", required=True,
+        nargs="+",
+        help="bam file name(s)"
+    )
+    parser.add_argument(
+        "-s", "--sampleNames", required=True,
+        nargs="+",
+        help="sample name(s) for output file labelling"
+    )
+    parser.add_argument(
+        "-b", "--bedFiles", required=True,
+        nargs="+",
+        help="name of bed file(s) defining region(s) of interest"
+    )
+    parser.add_argument(
+        "-m", "--basemod", required=True,
+        type=str, choices=["A", "CG", "A+CG"],
+        help="which base modification to extract"
+    )
+    parser.add_argument(
+        "-o", "--outDir", required=True,
+        help="directory to output plot"
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        "-A", "--threshA", type=int,
+        default=129,
+        help="threshold above which to call an A base methylated"
+    )
+    parser.add_argument(
+        "-C", "--threshC", type=int,
+        default=129,
+        help="threshold above which to call a C base methylated"
+    )
+    parser.add_argument(
+        "-w", "--windowSize", type=int,
+        default=1000,
+        help="window size around center point of feature of interest to plot (+/-)"
+    )
+    parser.add_argument(
+        "--colorA", type=str,
+        default=COLOR_A,
+        help="color in hex (e.g. \"#BB4430\") for mA"
+    )
+    parser.add_argument(
+        "--colorC", type=str,
+        default=COLOR_C,
+        help="color in hex (e.g. \"#BB4430\") for mCG"
+    )
+    parser.add_argument(
+        "-c", "--colors", type=str, nargs="+",
+        default=COLOR_LIST,
+        help="color list in hex (e.g. \"#BB4430\") for overlay plots"
+    )
+    parser.add_argument(
+        "-d", "--dotsize", type=float,
+        default=0.5,
+        help="size of points"
+    )
+    parser.add_argument(
+        "-t", "--smooth", type=int,
+        default=50,
+        help="window over which to smooth aggregate curve"
+    )
+    parser.add_argument(
+        "-n", "--min_periods", type=int,
+        default=10,
+        help="minimum number of bases to consider for smoothing"
+    )
+    parser.add_argument(
+        "-p", "--cores", type=int,
+        help="number of cores over which to parallelize"
+    )
+
+    args = parser.parse_args()
+    plot_enrichment_profile(**vars(args))

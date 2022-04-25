@@ -734,12 +734,12 @@ def main():
     parser.add_argument(
         "--colorA", type=str,
         default=COLOR_A,
-        help="color in hex (e.g. \"#BB4430\") mA"
+        help="color in hex (e.g. \"#BB4430\") for mA"
     )
     parser.add_argument(
         "--colorC", type=str,
         default=COLOR_C,
-        help="color in hex (e.g. \"#BB4430\") mCG"
+        help="color in hex (e.g. \"#BB4430\") for mCG"
     )
     parser.add_argument(
         "-d", "--dotsize", type=float,
