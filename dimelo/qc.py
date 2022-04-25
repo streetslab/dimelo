@@ -277,12 +277,12 @@ def qc_report(
 
     .. image:: images/sample_qc_report.png
 
-    """
-    if colors is None:
-        colors = DEFAULT_COLOR_LIST
-    
+    """    
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
+
+    if colors is None:
+        colors = DEFAULT_COLOR_LIST
 
     if type(fileNames) != list:
         fileNames = [fileNames]
@@ -442,13 +442,18 @@ def main():
 
     # Required arguments
     parser.add_argument(
-        "fileNames", help="bam file name(s)"
+        "-f", "--fileNames", required=True,
+        nargs="+",
+        help="bam file name(s)"
     )
     parser.add_argument(
-        "sampleNames", help="sample name(s) for output SQL table name labelling"
+        "-s", "--sampleNames", required=True,
+        nargs="+",
+        help="sample name(s) for output labelling"
     )
     parser.add_argument(
-        "outDir", help="directory to output QC summary report"
+        "-o", "--outDir", required=True,
+        help="directory to output QC summary report"
     )
 
     # Optional arguments

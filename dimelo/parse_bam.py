@@ -776,29 +776,32 @@ def main():
 
     # Required arguments
     parser.add_argument(
-        "fileName", help="name of bam file with Mm and Ml tags"
+        "-f", "--fileName", required=True,
+        help="name of bam file with Mm and Ml tags"
     )
     parser.add_argument(
-        "sampleName", help="name of sample for output SQL table name labelling"
+        "-s", "--sampleName", required=True,
+        help="name of sample for output SQL table name labelling"
     )
     parser.add_argument(
-        "outDir", help="directory where SQL database is stored"
+        "-o", "--outDir", required=True,
+        help="directory where SQL database is stored"
     )
 
     # Required, mutually exclusive arguments
     window_group = parser.add_mutually_exclusive_group(required=True)
     window_group.add_argument(
-        "--bedFile",
+        "-b", "--bedFile",
         help="name of bed file that defines regions of interest over which to extract mod calls"
     )
     window_group.add_argument(
-        "--region",
+        "-r, ""--region",
         help="single region over which to extract base mods"
     )
 
     # Optional arguments
     parser.add_argument(
-        "-b", "--basemod", type=str,
+        "-m", "--basemod", type=str,
         default="A+CG", choices=["A", "CG", "A+CG"],
         help="which base modifications to extract"
     )
@@ -829,51 +832,9 @@ def main():
     )
     # TODO: This is REQUIRED when center is true. This needs to be added to the actual functionality elsewhere too...
     parser.add_argument(
-        "-s", "--windowSize", type=int,
+        "-w", "--windowSize", type=int,
         help="window size around center point of feature of interest to plot (+/-); only mods within this window are stored"
     )
 
     args = parser.parse_args()
     parse_bam(**vars(args))
-
-"""
-# Currenly works as expected
-## invalid; at least one of bedFile and region must be specified
-- ()
-- ('center',)
-- ('windowSize',)
-- ('center', 'windowSize')
-
-## invalid; mutually exclusive arguments
-- ('bedFile', 'region')
-- ('bedFile', 'region', 'center')
-- ('bedFile', 'region', 'windowSize')
-- ('bedFile', 'region', 'center', 'windowSize')
-
-## invalid; unsupported functionality (currently handled by parse_bam, not by argparse)
-- ('region', 'center')
-- ('region', 'windowSize')
-- ('region', 'center', 'windowSize')
-
-## valid; non-centered coords, full specified windows
-- ('bedFile',)
-- ('region',): valid; non-centered coords, full specified window
-
-# What exactly is the purpose of having to set the window size here?
-## valid; centered coords, window of given size
-- ('bedFile', 'center', 'windowSize')
-
-# Currently doesn't work as expected
-## Crashes, but not sure how best to handle it
-('bedFile', 'center'):
-- current: crashes due to comparison between None and int, because windowSize is required with center
-- short term: can either add a default window size or make windowSize required when center is given
-
-# Works, but should it?
-('bedFile', 'windowSize'):
-- current: works just fine
-- desired?: I don't think this actually does anything, which is confusing and maybe unexpected
-
-For testing:
-python bin/dimelo-parse-bam dimelo/test/data/mod_mappings_subset.bam test dimelo/dimelo_test -b A+CG -A 1 -C 1 -p 1 --bedFile dimelo/test/data/test.bed --region chr1:2907273-2909473
-"""

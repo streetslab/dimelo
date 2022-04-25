@@ -13,6 +13,7 @@ plot_enrichment plots fraction of bases modified within regions of interest defi
 import multiprocessing
 import os
 import sqlite3
+import argparse
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -20,7 +21,7 @@ import seaborn as sns
 
 from dimelo.parse_bam import parse_bam
 
-COLOR_LIST = ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
+DEFAULT_COLOR_LIST = ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
 
 
 def plot_enrichment(
@@ -31,7 +32,7 @@ def plot_enrichment(
     outDir,
     threshA=129,
     threshC=129,
-    colors=COLOR_LIST,
+    colors=None,
     cores=None,
 ):
     """
@@ -67,9 +68,11 @@ def plot_enrichment(
     Barplot with overall fraction of bases modified within regions of interest specified by bedFile(s)
 
     """
-
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
+
+    if colors is None:
+        colors = DEFAULT_COLOR_LIST
 
     # default number of cores is max available
     cores_avail = multiprocessing.cpu_count()
@@ -245,5 +248,55 @@ def plot_barchart(data, basemod, outDir, colors, title):
 
 
 def main():
-    # TODO add argument parsing
-    print("main")
+    parser = argparse.ArgumentParser(
+        description="Generate DiMeLo qc report"
+    )
+
+    # Required arguments
+    parser.add_argument(
+        "-f", "--fileNames", required=True,
+        nargs="+",
+        help="bam file name(s)"
+    )
+    parser.add_argument(
+        "-s", "--sampleNames", required=True,
+        nargs="+",
+        help="sample name(s) for output file labelling"
+    )
+    parser.add_argument(
+        "-b", "--bedFiles", required=True,
+        nargs="+",
+        help="name of bed file(s) defining region(s) of interest"
+    )
+    parser.add_argument(
+        "-m", "--basemod", required=True,
+        type=str, choices=["A", "CG"],
+        help="which base modification to extract"
+    )
+    parser.add_argument(
+        "-o", "--outDir", required=True,
+        help="directory to output plot"
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        "-A", "--threshA", type=int,
+        default=129,
+        help="threshold above which to call an A base methylated"
+    )
+    parser.add_argument(
+        "-C", "--threshC", type=int,
+        default=129,
+        help="threshold above which to call a C base methylated"
+    )
+    parser.add_argument(
+        "-c", "--colors", type=str, nargs="+",
+        help="color list in hex (e.g. \"#BB4430\") for overlay plots"
+    )
+    parser.add_argument(
+        "-p", "--cores", type=int,
+        help="number of cores over which to parallelize"
+    )
+
+    args = parser.parse_args()
+    plot_enrichment(**vars(args))
