@@ -82,11 +82,11 @@
 <dd><dl class="simple">
 <dt>fileName</dt><dd><p>name of bam file with Mm and Ml tags</p>
 </dd>
-<dt>sampleName</dt><dd><p>name of sample for output SQL table name labelling</p>
+<dt>sampleName</dt><dd><p>name of sample for output SQL table name labelling. Valid names contain [<a href="#id3"><span class="problematic" id="id4">a-zA-Z0-9_</span></a>].</p>
 </dd>
 <dt>outDir</dt><dd><p>directory where SQL database is stored</p>
 </dd>
-<dt>bedFile</dt><dd><p>name of bed file that defines regions of interest over which to extract mod calls within window defined in by <code class="docutils literal notranslate"><span class="pre">windowSize</span></code>. Optional 4th column in bed file to specify strand of region of interest as <code class="docutils literal notranslate"><span class="pre">+</span></code> or <code class="docutils literal notranslate"><span class="pre">-</span></code>. Default is to consider regions as all <code class="docutils literal notranslate"><span class="pre">+</span></code>. NB. The <code class="docutils literal notranslate"><span class="pre">bedFile</span></code> and <code class="docutils literal notranslate"><span class="pre">region</span></code> parameters are mutually exclusive; specify one or the other.</p>
+<dt>bedFile</dt><dd><p>name of bed file that defines regions of interest over which to extract mod calls. The bed file either defines regions over which to extract mod calls OR defines regions (likley motifs) over which to center positions for mod calls and then parse_bam extracts mod calls over a window flanking that region defined in by <code class="docutils literal notranslate"><span class="pre">windowSize</span></code>. Optional 4th column in bed file to specify strand of region of interest as <code class="docutils literal notranslate"><span class="pre">+</span></code> or <code class="docutils literal notranslate"><span class="pre">-</span></code>. Default is to consider regions as all <code class="docutils literal notranslate"><span class="pre">+</span></code>. NB. The <code class="docutils literal notranslate"><span class="pre">bedFile</span></code> and <code class="docutils literal notranslate"><span class="pre">region</span></code> parameters are mutually exclusive; specify one or the other.</p>
 </dd>
 <dt>basemod</dt><dd><p>One of the following:</p>
 <ul class="simple">
@@ -118,6 +118,15 @@
 <dt>cores</dt><dd><p>number of cores over which to parallelize; default is all available</p>
 </dd>
 </dl>
+<p>Valid argument combinations for <code class="docutils literal notranslate"><span class="pre">bedFile</span></code>, <code class="docutils literal notranslate"><span class="pre">center</span></code>, and <code class="docutils literal notranslate"><span class="pre">windowSize</span></code> are:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">bedFile</span></code> –&gt; extract all modified bases in regions defined in bed file</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bedfile</span></code> + <code class="docutils literal notranslate"><span class="pre">center</span></code> –&gt; extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modificiations within default windowSize of 1kb</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bedfile</span></code> + <code class="docutils literal notranslate"><span class="pre">center</span></code> + <code class="docutils literal notranslate"><span class="pre">windowSize</span></code> –&gt; extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modifications within flanking +/- windowSize</p></li>
+<li><p><a href="#id1"><span class="problematic" id="id2">``</span></a>region `` –&gt; extract all modified bases in single region</p></li>
+</ul>
+</div></blockquote>
 <p><strong>Example</strong></p>
 <p>For regions defined by <code class="docutils literal notranslate"><span class="pre">bedFile</span></code>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dm</span><span class="o">.</span><span class="n">parse_bam</span><span class="p">(</span><span class="s2">&quot;dimelo/test/data/mod_mappings_subset.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="s2">&quot;dimelo/dimelo_test&quot;</span><span class="p">,</span> <span class="n">bedFile</span><span class="o">=</span><span class="s2">&quot;dimelo/test/data/test.bed&quot;</span><span class="p">,</span> <span class="n">basemod</span><span class="o">=</span><span class="s2">&quot;A+CG&quot;</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">windowSize</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">threshA</span><span class="o">=</span><span class="mi">190</span><span class="p">,</span> <span class="n">threshC</span><span class="o">=</span><span class="mi">190</span><span class="p">,</span> <span class="n">extractAllBases</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">cores</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
