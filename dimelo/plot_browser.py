@@ -76,7 +76,7 @@ class Region(object):
                 self.begin, self.end = [int(i) for i in interval.split("-")]
             except ValueError:
                 sys.exit(
-                    "\n\nERROR: Window (-w/--window) inproperly formatted, "
+                    "\n\nERROR: Region (-w/--region) inproperly formatted, "
                     "examples of accepted formats are:\n"
                     "'chr5:150200605-150423790'\n\n"
                 )
@@ -87,7 +87,7 @@ class Region(object):
 def plot_browser(
     fileNames,
     sampleNames,
-    window,
+    region,
     basemod,
     outDir,
     threshA=DEFAULT_THRESH_A,
@@ -105,8 +105,8 @@ def plot_browser(
     fileNames
         list of names of bam files with Mm and Ml tags; indexed; or single file name as string
     sampleNames
-        list of names of samples for output plot name labelling; or single sample name as string
-    window
+        list of names of samples for output plot name labelling; or single sample name as string; valid names contain [a-zA-Z0-9_].
+    region
         formatted as for example: "chr1:1-100000"
     basemod
         One of the following:
@@ -121,7 +121,7 @@ def plot_browser(
     threshC
         threshold for calling mCG; default 129
     bedFileFeatures
-        annotation to display in browser (optional); default None
+        bedFile specifying regions to display in browser (optional); default None
     smooth
         window over which to smooth aggregate curve; default of 1000 bp
     min_periods
@@ -181,7 +181,7 @@ def plot_browser(
             n,
             outDir,
             basemod="A+CG",
-            region=window,  # pass string representation
+            region=region,  # pass string representation
             extractAllBases=True,
             cores=num_cores,
         )
@@ -215,7 +215,7 @@ def plot_browser(
         all_data=all_data,
         aggregate_counts=aggregate_counts,
         basemod=basemod,
-        window=Region(window),
+        region=Region(region),
         sampleNames=sampleNames,
         outDir=outDir,
         bed=bedFileFeatures,
@@ -257,7 +257,7 @@ def plot_browser(
             f_paths.append(f_path)
             t_paths.append(t_path)
 
-    w = Region(window)
+    w = Region(region)
 
     browser_path = f"{outDir}/methylation_browser_{w.string}.{ext}"
     str_out = f"Outputs\n_______\nDB file: {db_paths}\nbrowser plot: {browser_path}\nrolling average fraction bases methylated plot: {f_paths}\nrolling average total bases plot: {t_paths}"
@@ -282,16 +282,16 @@ def create_subplots(num_methrows, names=None, annotation=True):
     )
 
 
-def create_output(fig, outfile, window, static, outDir):
+def create_output(fig, outfile, region, static, outDir):
     """
     write output pdf or html
     """
     if static:
-        outfile = outDir + "/" + f"methylation_browser_{window.string}.pdf"
-        fig.write_image(outfile)  # scale=10
+        outfile = outDir + "/" + f"methylation_browser_{region.string}.pdf"
+        fig.write_image(outfile, width=1000, height=400)  # scale=10
         # pio.write_image(fig, outfile, format='pdf', scale=10)
     if not static:
-        outfile = outDir + "/" + f"methylation_browser_{window.string}.html"
+        outfile = outDir + "/" + f"methylation_browser_{region.string}.html"
         with open(outfile, "w+") as output:
             output.write(
                 plotly.offline.plot(
@@ -321,6 +321,7 @@ def methylation(
     for m, n in zip(all_data, sampleNames):
         traces.append(
             make_per_read_meth_traces_phred(
+                all_data=all_data,
                 table=m,
                 basemod=basemod,
                 colorA=colorA,
@@ -335,6 +336,7 @@ def methylation(
 
 
 def make_per_read_meth_traces_phred(
+    all_data,
     table,
     basemod,
     colorA,
@@ -374,8 +376,10 @@ def make_per_read_meth_traces_phred(
     if "C" in basemod:  # if read_table_mC is not None:
         traces.append(
             make_per_position_phred_scatter(
+                all_data=all_data,
                 read_table=read_table_mC[read_table_mC["prob"] > threshC],
                 mod="mC",
+                thresh=threshC,
                 dotsize=dotsize,
                 colorscale=cmapC,
                 offset=0.05,
@@ -384,8 +388,10 @@ def make_per_read_meth_traces_phred(
     if "A" in basemod:  # if read_table_mA is not None:
         traces.append(
             make_per_position_phred_scatter(
+                all_data=all_data,
                 read_table=read_table_mA[read_table_mA["prob"] > threshA],
                 mod="mA",
+                thresh=threshA,
                 dotsize=dotsize,
                 colorscale=cmapA,
                 offset=0.15,
@@ -395,9 +401,27 @@ def make_per_read_meth_traces_phred(
 
 
 def make_per_position_phred_scatter(
-    read_table, mod, dotsize=4, colorscale="Reds", offset=0
+    all_data, read_table, mod, thresh, dotsize=4, colorscale="Reds", offset=0
 ):
     """Make scatter plot per modified base per read"""
+    # get min and max probabilities across all for legend and color consistency for comparisons
+    if "C" in mod:
+        m = "C"
+    if "A" in mod:
+        m = "A"
+    min_overall = 255
+    max_overall = 0
+    for d in all_data:
+        min_temp = d[(d["mod"].str.contains(m)) & (d["prob"] >= thresh)][
+            "prob"
+        ].min()
+        max_temp = d[(d["mod"].str.contains(m)) & (d["prob"] >= thresh)][
+            "prob"
+        ].max()
+        if min_temp < min_overall:
+            min_overall = min_temp
+        if max_temp > max_overall:
+            max_overall = max_temp
     return go.Scatter(
         x=read_table["pos"],
         y=read_table["height"],
@@ -412,10 +436,10 @@ def make_per_position_phred_scatter(
             colorbar=dict(
                 title=mod + " probability",
                 titleside="right",
-                tickvals=[read_table["prob"].min(), read_table["prob"].max()],
+                tickvals=[min_overall, max_overall],
                 ticktext=[
-                    str(round(read_table["prob"].min() / 255, 2)),
-                    str(round(read_table["prob"].max() / 255, 3)),
+                    str(round(min_overall / 255, 2)),
+                    str(round(max_overall / 255, 2)),
                 ],
                 ticks="outside",
                 x=offset + 1,
@@ -481,7 +505,7 @@ def meth_browser(
     all_data,
     aggregate_counts,
     basemod,
-    window,
+    region,
     sampleNames,
     outDir,
     smooth,
@@ -525,7 +549,7 @@ def meth_browser(
             fig.add_trace(trace=meth_trace, row=y, col=1)
         fig["layout"][f"yaxis{y}"].update(title="Reads")
     if bed:
-        for annot_trace in bed_annotation(bed, window):
+        for annot_trace in bed_annotation(bed, region):
             fig.add_trace(trace=annot_trace, row=annot_row, col=1)
         y_max = -2
     if bed:
@@ -541,18 +565,18 @@ def meth_browser(
         tickformat="g",
         separatethousands=True,
         # showticklabels=True,
-        range=[window.begin, window.end],
+        range=[region.begin, region.end],
     )
     fig["layout"].update(
         barmode="overlay",
-        title=window.chromosome,
+        title=region.chromosome,
         hovermode="closest",
         plot_bgcolor="rgba(0,0,0,0)",
     )
     if num_methrows > 10:
         for i in fig["layout"]["annotations"]:
             i["font"]["size"] = 10
-    create_output(fig, outfile, window, static, outDir)
+    create_output(fig, outfile, region, static, outDir)
 
     i = 0
     for d in aggregate_counts:
@@ -561,7 +585,7 @@ def meth_browser(
             d,
             smooth,
             min_periods,
-            window,
+            region,
             basemod,
             outDir,
             colorA,
@@ -570,7 +594,7 @@ def meth_browser(
         i = i + 1
 
 
-def bed_annotation(bed, window):
+def bed_annotation(bed, region):
     return [
         go.Scatter(
             x=[begin, end],
@@ -581,12 +605,12 @@ def bed_annotation(bed, window):
             hoverinfo="text",
             showlegend=False,
         )
-        for (begin, end, name) in parse_bed(bed, window)
+        for (begin, end, name) in parse_bed(bed, region)
     ]
 
 
-def parse_bed(bed, window):
-    gr = pr.read_bed(bed)[window.chromosome, window.begin : window.end]
+def parse_bed(bed, region):
+    gr = pr.read_bed(bed)[region.chromosome, region.begin : region.end]
     df = gr.unstrand().df
     df = df.drop(columns=["Chromosome", "Score", "Strand"], errors="ignore")
     if "Name" not in df.columns:
@@ -600,7 +624,7 @@ def plot_aggregate(
     aggregate_counts,
     smooth,
     min_periods,
-    window,
+    region,
     basemod,
     outDir,
     colorA,
@@ -619,7 +643,7 @@ def plot_aggregate(
     if "A" in basemod:
         aggregate_A = aggregate_counts[
             aggregate_counts["mod"].str.contains("A")
-        ]
+        ].copy()
         # need to sort first!
         aggregate_A.sort_values(["pos"], inplace=True)
         aggregate_A_rolling = aggregate_A.rolling(
@@ -634,7 +658,7 @@ def plot_aggregate(
     if "C" in basemod:
         aggregate_C = aggregate_counts[
             aggregate_counts["mod"].str.contains("C")
-        ]
+        ].copy()
         # need to sort first!
         aggregate_C.sort_values(["pos"], inplace=True)
         aggregate_C_rolling = aggregate_C.rolling(
@@ -657,7 +681,7 @@ def plot_aggregate_frac(aggregate_rolling, sampleName, mod, color, outDir):
     )
     plt.title(mod)
     plt.ylabel("m" + mod + "/" + mod)
-    plt.show()
+    # plt.show()
     fig.savefig(
         outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_fraction.pdf"
     )
@@ -672,7 +696,7 @@ def plot_aggregate_total(aggregate_rolling, sampleName, mod, color, outDir):
     )
     plt.title(mod)
     plt.ylabel("total " + mod)
-    plt.show()
+    # plt.show()
     fig.savefig(
         outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_total.pdf"
     )

@@ -22,7 +22,6 @@ from joblib import Parallel, delayed
 
 from dimelo.utils import clear_db, create_sql_table, execute_sql_command
 
-
 """
 TODO:
     - convert paths over to pathlib where possible, and update relevant type annotations
@@ -38,8 +37,7 @@ DEFAULT_WINDOW_SIZE = 1000
 
 
 class Region(object):
-    def __init__(self,
-                 region: Union[str, pd.Series]):
+    def __init__(self, region: Union[str, pd.Series]):
         """Represents a region of genetic data.
         Attributes:
                 - chromosome: string name of the chromosome to which the region applies
@@ -61,7 +59,7 @@ class Region(object):
         self.size = None
         self.string = None
         self.strand = "+"
-        
+
         if isinstance(region, str):  # ":" in region:
             # String of format "{CHROMOSOME}:{START}-{END}"
             try:
@@ -73,7 +71,9 @@ class Region(object):
                     pass
                 self.begin, self.end = [int(i) for i in interval.split("-")]
             except ValueError:
-                raise TypeError("Invalid region string. Example of accepted format: 'chr5:150200605-150423790'")
+                raise TypeError(
+                    "Invalid region string. Example of accepted format: 'chr5:150200605-150423790'"
+                )
             self.size = self.end - self.begin
             self.string = f"{self.chromosome}_{self.begin}_{self.end}"
         elif isinstance(region, pd.Series):
@@ -94,15 +94,17 @@ class Region(object):
             else:
                 self.strand = "+"
         else:
-            raise TypeError("Unknown datatype passed for Region initialization")
+            raise TypeError(
+                "Unknown datatype passed for Region initialization"
+            )
 
 
 def make_db(
-        fileName: str,
-        sampleName: str,
-        outDir: str,
-        testMode: bool=False,
-        qc: bool=False,
+    fileName: str,
+    sampleName: str,
+    outDir: str,
+    testMode: bool = False,
+    qc: bool = False,
 ) -> Tuple[str, List[str]]:
     """Sets up the necessary database tables.
 
@@ -116,7 +118,7 @@ def make_db(
     Returns:
             - path to the new database
             - list of newly-created table names
-    
+
     TODO:
             - document testMode, qc mode more fully; update top-level documentation accordingly
             - make this use pathlib for path operations
@@ -128,7 +130,7 @@ def make_db(
     # TODO: These should replace the path operations once pathlib conversion is in place
     # filePath = Path(fileName)
     # outPath = Path(outDir)
-    
+
     # outPath.mkdir(parents=True, exist_ok=True)
 
     # (outPath / filePath.name).withsuffix('.db')
@@ -141,7 +143,7 @@ def make_db(
 
     if testMode:
         clear_db(DATABASE_NAME)
-        
+
     tables = []
     # for qc report
     if qc:
@@ -191,27 +193,25 @@ def parse_bam(
     fileName: str,
     sampleName: str,
     outDir: str,
-    bedFile: str=None,
-    basemod: str=DEFAULT_BASEMOD,
-    center: bool=False,
-    windowSize: int=DEFAULT_WINDOW_SIZE,
-    region: str=None,
-    threshA: int=DEFAULT_THRESH_A,
-    threshC: int=DEFAULT_THRESH_C,
-    extractAllBases: bool=False,
-    testMode: bool=False,
-    qc: bool=False,
-    cores: int=None
+    bedFile: str = None,
+    basemod: str = DEFAULT_BASEMOD,
+    center: bool = False,
+    windowSize: int = DEFAULT_WINDOW_SIZE,
+    region: str = None,
+    threshA: int = DEFAULT_THRESH_A,
+    threshC: int = DEFAULT_THRESH_C,
+    extractAllBases: bool = False,
+    cores: int = None
 ) -> None:
     """
     fileName
         name of bam file with Mm and Ml tags
     sampleName
-        name of sample for output SQL table name labelling
+        name of sample for output SQL table name labelling. Valid names contain [a-zA-Z0-9_].
     outDir
         directory where SQL database is stored
     bedFile
-        name of bed file that defines regions of interest over which to extract mod calls within window defined in by ``windowSize``. Optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
+        name of bed file that defines regions of interest over which to extract mod calls. The bed file either defines regions over which to extract mod calls OR defines regions (likley motifs) over which to center positions for mod calls and then parse_bam extracts mod calls over a window flanking that region defined in by ``windowSize``. Optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
     basemod
         One of the following:
 
@@ -238,6 +238,13 @@ def parse_bam(
         * ``'False'`` - Only modifications above specified threshold are stored
     cores
         number of cores over which to parallelize; default is all available
+
+    Valid argument combinations for ``bedFile``, ``center``, and ``windowSize`` are below. Regions of interest generally fall into two categories: small motifs at which to center analysis (use ``center`` = True) or full windows of interest (do not specify ``center`` or ``windowSize``).
+
+        * ``bedFile`` --> extract all modified bases in regions defined in bed file
+        * ``bedfile`` + ``center`` --> extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modificiations within default windowSize of 1kb
+        * ``bedfile`` + ``center`` + ``windowSize`` --> extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modifications within flanking +/- windowSize
+        * ``region`` --> extract all modified bases in single region
 
     **Example**
 
@@ -287,11 +294,11 @@ def parse_bam(
             raise RuntimeError(
                 "Argument 'center' cannot be given alongside 'region'."
             )
-    
+
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
 
-    make_db(fileName, sampleName, outDir, testMode, qc)
+    make_db(fileName, sampleName, outDir)
 
     if bedFile is not None:
         # make a region object for each row of bedFile
@@ -299,7 +306,7 @@ def parse_bam(
         windows = []
         for _, row in bed.iterrows():
             windows.append(Region(row))
-            
+
     if region is not None:
         windows = [Region(region)]
 
@@ -329,7 +336,6 @@ def parse_bam(
             batchSize,
             outDir,
             extractAllBases,
-            qc,
         )
         for window in windows
     )
@@ -352,10 +358,9 @@ def parse_reads_window(
     batchSize: int,
     outDir: str,
     extractAllBases: bool,
-    qc: bool,
 ) -> None:
     """Parse all reads in window and put data into methylationByBase table.
-    
+
     Args:
             :param bam: read in bam file with Mm and Ml tags
             :param fileName: name of bam file
@@ -391,7 +396,6 @@ def parse_reads_window(
             sampleName,
             outDir,
             extractAllBases,
-            qc,
         )
         # Generate rows for methylationByBase database update
         for pos, prob in zip(positions, probs):
@@ -449,7 +453,6 @@ def get_modified_reference_positions(
     sampleName: str,
     outDir: str,
     extractAllBases: bool,
-    qc: bool,
 ):
     """Extract mA and mC pos & prob information for the read
     Args:
@@ -492,7 +495,6 @@ def get_modified_reference_positions(
                 sampleName,
                 outDir,
                 extractAllBases,
-                qc,
             )
         else:
             mod1_return = (None, [None], [None])
@@ -511,7 +513,6 @@ def get_modified_reference_positions(
                 sampleName,
                 outDir,
                 extractAllBases,
-                qc,
             )
             return (mod1_return, mod2_return)
         else:
@@ -533,7 +534,6 @@ def get_mod_reference_positions_by_mod(
     sampleName: str,
     outDir: str,
     extractAllBases: bool,
-    qc: bool,
 ):
     """Get positions and probabilities of modified bases for a single read
     Args:
@@ -681,7 +681,7 @@ def get_mod_reference_positions_by_mod(
             return (None, [None], [None])
         else:
             return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
-    elif not qc:
+    else:
         update_methylation_aggregate_db(
             refpos[keep],
             refpos[all_bases_index],
@@ -699,15 +699,6 @@ def get_mod_reference_positions_by_mod(
             return (None, [None], [None])
         else:
             return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
-    else:
-        if not modsPresent:
-            return (basemod, len(np.array(refpos[all_bases_index])), [])
-        else:
-            return (
-                basemod,
-                len(np.array(refpos[all_bases_index])),
-                probabilities[prob_keep],
-            )
 
 
 def update_methylation_aggregate_db(

@@ -14,6 +14,7 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
+# import sphinx_rtd_theme
 
 # -- Project information -----------------------------------------------------
 
@@ -32,6 +33,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.autosectionlabel",
     "sphinx_gallery.gen_gallery",  # added this for sphinx gallery
+    "sphinx_rtd_theme",
 ]
 
 # Include doc string for __init__ method in the documentation

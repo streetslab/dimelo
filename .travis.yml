@@ -2,6 +2,7 @@ language: python
 python:
   - "3.7"
 install:
+  - pip install setuptools==52.0.0
   - pip install cython
   - make develop
 script:

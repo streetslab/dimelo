@@ -64,13 +64,13 @@ dependencies:
     - pytz==2021.3
     - requests==2.27.1
     - retrying==1.3.3
-    - scikit-learn==0.24.1
     - scipy==1.7.3
     - seaborn==0.11.2
     - six==1.16.0
     - snowballstemmer==2.2.0
     - sorted-nearest==0.0.33
     - sphinx==4.4.0
+    - sphinx-gallery==0.10.1
     - sphinxcontrib-applehelp==1.0.2
     - sphinxcontrib-devhelp==1.0.2
     - sphinxcontrib-htmlhelp==2.0.0

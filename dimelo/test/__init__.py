@@ -8,6 +8,7 @@ class DiMeLoTestCase(unittest.TestCase):
     TODO:
         - Should these be setUpClass/tearDownClass or setUp/tearDown? Is it okay that only one temporary directory is created each time?
     """
+
     @classmethod
     def setUpClass(cls):
         cls._outDir = tempfile.TemporaryDirectory()
@@ -16,7 +17,7 @@ class DiMeLoTestCase(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls._outDir.cleanup()
-    
+
     # def tmpFile(self):
     #     tempFile = tempfile.NamedTemporaryFile(delete=True)
     #     tempFile.close()
