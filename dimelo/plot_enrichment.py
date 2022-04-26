@@ -38,7 +38,7 @@ def plot_enrichment(
     fileNames
         name(s) of bam file with Mm and Ml tags
     sampleNames
-        name(s) of sample for output file name labelling
+        name(s) of sample for output file name labelling; valid names contain [a-zA-Z0-9_].
     bedFiles
         specified windows for region(s) of interest
     basemod

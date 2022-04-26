@@ -186,25 +186,25 @@ def parse_bam(
     fileName: str,
     sampleName: str,
     outDir: str,
-    bedFile: str=None,
-    basemod: str="A+CG",
-    center: bool=False,
-    windowSize: int=None,
-    region: str=None,
-    threshA: int=129,
-    threshC: int=129,
-    extractAllBases: bool=False,
-    cores: int=None
+    bedFile: str = None,
+    basemod: str = "A+CG",
+    center: bool = False,
+    windowSize: int = None,
+    region: str = None,
+    threshA: int = 129,
+    threshC: int = 129,
+    extractAllBases: bool = False,
+    cores: int = None,
 ) -> None:
     """
     fileName
         name of bam file with Mm and Ml tags
     sampleName
-        name of sample for output SQL table name labelling
+        name of sample for output SQL table name labelling. Valid names contain [a-zA-Z0-9_].
     outDir
         directory where SQL database is stored
     bedFile
-        name of bed file that defines regions of interest over which to extract mod calls within window defined in by ``windowSize``. Optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
+        name of bed file that defines regions of interest over which to extract mod calls. The bed file either defines regions over which to extract mod calls OR defines regions (likley motifs) over which to center positions for mod calls and then parse_bam extracts mod calls over a window flanking that region defined in by ``windowSize``. Optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
     basemod
         One of the following:
 
@@ -231,6 +231,13 @@ def parse_bam(
         * ``'False'`` - Only modifications above specified threshold are stored
     cores
         number of cores over which to parallelize; default is all available
+
+    Valid argument combinations for ``bedFile``, ``center``, and ``windowSize`` are below. Regions of interest generally fall into two categories: small motifs at which to center analysis (use ``center`` = True) or full windows of interest (do not specify ``center`` or ``windowSize``).
+
+        * ``bedFile`` --> extract all modified bases in regions defined in bed file
+        * ``bedfile`` + ``center`` --> extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modificiations within default windowSize of 1kb
+        * ``bedfile`` + ``center`` + ``windowSize`` --> extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modifications within flanking +/- windowSize
+        * ``region`` --> extract all modified bases in single region
 
     **Example**
 
@@ -284,7 +291,7 @@ def parse_bam(
             raise RuntimeError(
                 "Argument 'windowSize' cannot be given alongside 'region'."
             )
-    
+
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
 
@@ -296,7 +303,7 @@ def parse_bam(
         windows = []
         for _, row in bed.iterrows():
             windows.append(Region(row))
-            
+
     if region is not None:
         windows = [Region(region)]
 
