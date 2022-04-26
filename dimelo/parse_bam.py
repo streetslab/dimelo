@@ -192,8 +192,6 @@ def parse_bam(
     threshA: int=129,
     threshC: int=129,
     extractAllBases: bool=False,
-    testMode: bool=False,
-    qc: bool=False,
     cores: int=None
 ) -> None:
     """
@@ -272,7 +270,7 @@ def parse_bam(
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
 
-    make_db(fileName, sampleName, outDir, testMode, qc)
+    make_db(fileName, sampleName, outDir)
 
     if bedFile is None:
         if region is None:
@@ -325,7 +323,6 @@ def parse_bam(
             batchSize,
             outDir,
             extractAllBases,
-            qc,
         )
         for window in windows
     )
@@ -348,7 +345,6 @@ def parse_reads_window(
     batchSize: int,
     outDir: str,
     extractAllBases: bool,
-    qc: bool,
 ) -> None:
     """Parse all reads in window and put data into methylationByBase table.
     
@@ -387,7 +383,6 @@ def parse_reads_window(
             sampleName,
             outDir,
             extractAllBases,
-            qc,
         )
         # Generate rows for methylationByBase database update
         for pos, prob in zip(positions, probs):
@@ -445,7 +440,6 @@ def get_modified_reference_positions(
     sampleName: str,
     outDir: str,
     extractAllBases: bool,
-    qc: bool,
 ):
     """Extract mA and mC pos & prob information for the read
     Args:
@@ -488,7 +482,6 @@ def get_modified_reference_positions(
                 sampleName,
                 outDir,
                 extractAllBases,
-                qc,
             )
         else:
             mod1_return = (None, [None], [None])
@@ -507,7 +500,6 @@ def get_modified_reference_positions(
                 sampleName,
                 outDir,
                 extractAllBases,
-                qc,
             )
             return (mod1_return, mod2_return)
         else:
@@ -529,7 +521,6 @@ def get_mod_reference_positions_by_mod(
     sampleName: str,
     outDir: str,
     extractAllBases: bool,
-    qc: bool,
 ):
     """Get positions and probabilities of modified bases for a single read
     Args:
@@ -677,7 +668,7 @@ def get_mod_reference_positions_by_mod(
             return (None, [None], [None])
         else:
             return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
-    elif not qc:
+    else:
         update_methylation_aggregate_db(
             refpos[keep],
             refpos[all_bases_index],
@@ -695,15 +686,6 @@ def get_mod_reference_positions_by_mod(
             return (None, [None], [None])
         else:
             return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
-    else:
-        if not modsPresent:
-            return (basemod, len(np.array(refpos[all_bases_index])), [])
-        else:
-            return (
-                basemod,
-                len(np.array(refpos[all_bases_index])),
-                probabilities[prob_keep],
-            )
 
 
 def update_methylation_aggregate_db(
