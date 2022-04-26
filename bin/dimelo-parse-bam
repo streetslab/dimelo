@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import dimelo.parse_bam
+from dimelo.parse_bam import main
 
 # call main(), which takes in command line arguments.
-dimelo.parse_bam.main()
+main()

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import dimelo.plot_enrichment_profile
+from dimelo.plot_enrichment_profile import main
 
 # call main(), which takes in command line arguments.
-dimelo.plot_enrichment_profile.main()
+main()

@@ -14,6 +14,7 @@ import os
 import sqlite3
 import time
 from math import log
+import argparse
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,7 +25,7 @@ from joblib import Parallel, delayed
 from dimelo.parse_bam import make_db
 from dimelo.utils import execute_sql_command
 
-COLOR_LIST = [
+DEFAULT_COLOR_LIST = [
     "#BB4430",
     "#FFBC0A",
     "#053C5E",
@@ -232,7 +233,7 @@ def qc_report(
     fileNames,
     sampleNames,
     outDir,
-    colors=COLOR_LIST,
+    colors=DEFAULT_COLOR_LIST,
     cores=None,
 ):
     # runtime = get_runtime(parse_bam_read, filebamIn, 'out')
@@ -277,7 +278,7 @@ def qc_report(
 
     .. image:: images/sample_qc_report.png
 
-    """
+    """    
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
 
@@ -433,4 +434,40 @@ def qc_report(
 
 
 def main():
-    print("main")
+    parser = argparse.ArgumentParser(
+        description="Generate DiMeLo qc report"
+    )
+
+    # Required arguments
+    required_args = parser.add_argument_group("required arguments")
+    required_args.add_argument(
+        "-f", "--fileNames", required=True,
+        nargs="+",
+        help="bam file name(s)"
+    )
+    required_args.add_argument(
+        "-s", "--sampleNames", required=True,
+        nargs="+",
+        help="sample name(s) for output labelling"
+    )
+    required_args.add_argument(
+        "-o", "--outDir", required=True,
+        help="directory to output QC summary report"
+    )
+
+    # Plotting arguments
+    plotting_args = parser.add_argument_group("plotting options")
+    plotting_args.add_argument(
+        "--colors", type=str, nargs="+",
+        default=DEFAULT_COLOR_LIST,
+        help="color list in hex (e.g. \"#BB4430\") for overlay plots"
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        "-p", "--cores", type=int,
+        help="number of cores over which to parallelize"
+    )
+
+    args = parser.parse_args()
+    qc_report(**vars(args))

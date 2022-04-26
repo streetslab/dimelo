@@ -13,6 +13,7 @@ plot_enrichment plots fraction of bases modified within regions of interest defi
 import multiprocessing
 import os
 import sqlite3
+import argparse
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -20,7 +21,10 @@ import seaborn as sns
 
 from dimelo.parse_bam import parse_bam
 
-COLOR_LIST = ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
+
+DEFAULT_THRESH_A = 129
+DEFAULT_THRESH_C = 129
+DEFAULT_COLOR_LIST = ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
 
 
 def plot_enrichment(
@@ -29,9 +33,9 @@ def plot_enrichment(
     bedFiles,
     basemod,
     outDir,
-    threshA=129,
-    threshC=129,
-    colors=COLOR_LIST,
+    threshA=DEFAULT_THRESH_A,
+    threshC=DEFAULT_THRESH_C,
+    colors=DEFAULT_COLOR_LIST,
     cores=None,
 ):
     """
@@ -67,7 +71,6 @@ def plot_enrichment(
     Barplot with overall fraction of bases modified within regions of interest specified by bedFile(s)
 
     """
-
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
 
@@ -245,5 +248,60 @@ def plot_barchart(data, basemod, outDir, colors, title):
 
 
 def main():
-    # TODO add argument parsing
-    print("main")
+    parser = argparse.ArgumentParser(
+        description="Plot DiMeLo methylation enrichment"
+    )
+
+    # Required arguments
+    required_args = parser.add_argument_group("required arguments")
+    required_args.add_argument(
+        "-f", "--fileNames", required=True,
+        nargs="+",
+        help="bam file name(s)"
+    )
+    required_args.add_argument(
+        "-s", "--sampleNames", required=True,
+        nargs="+",
+        help="sample name(s) for output file labelling"
+    )
+    required_args.add_argument(
+        "-b", "--bedFiles", required=True,
+        nargs="+",
+        help="name of bed file(s) defining region(s) of interest"
+    )
+    required_args.add_argument(
+        "-m", "--basemod", required=True,
+        type=str, choices=["A", "CG"],
+        help="which base modification to extract"
+    )
+    required_args.add_argument(
+        "-o", "--outDir", required=True,
+        help="directory to output plot"
+    )
+
+    # Plotting arguments
+    plotting_args = parser.add_argument_group("plotting options")
+    plotting_args.add_argument(
+        "--colors", type=str, nargs="+",
+        default=DEFAULT_COLOR_LIST,
+        help="color list in hex (e.g. \"#BB4430\") for overlay plots"
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        "-A", "--threshA", type=int,
+        default=DEFAULT_THRESH_A,
+        help="threshold above which to call an A base methylated"
+    )
+    parser.add_argument(
+        "-C", "--threshC", type=int,
+        default=DEFAULT_THRESH_C,
+        help="threshold above which to call a C base methylated"
+    )
+    parser.add_argument(
+        "-p", "--cores", type=int,
+        help="number of cores over which to parallelize"
+    )
+
+    args = parser.parse_args()
+    plot_enrichment(**vars(args))

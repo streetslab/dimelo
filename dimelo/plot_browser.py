@@ -29,6 +29,7 @@ import multiprocessing
 import os
 import sqlite3
 import sys
+import argparse
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -45,6 +46,9 @@ COLOR_A = "#053C5E"
 COLOR_C = "#BB4430"
 DEFAULT_THRESH_A = 129
 DEFAULT_THRESH_C = 129
+DEFAULT_SMOOTH = 1000
+DEFAULT_MIN_PERIODS = 100
+DEFAULT_DOTSIZE = 4
 
 
 class DataTraces(object):
@@ -89,11 +93,11 @@ def plot_browser(
     threshA=DEFAULT_THRESH_A,
     threshC=DEFAULT_THRESH_C,
     bedFileFeatures=None,
-    smooth=1000,
-    min_periods=100,
+    smooth=DEFAULT_SMOOTH,
+    min_periods=DEFAULT_MIN_PERIODS,
     colorA=COLOR_A,
     colorC=COLOR_C,
-    dotsize=4,
+    dotsize=DEFAULT_DOTSIZE,
     static=False,
     cores=None,
 ):
@@ -699,5 +703,91 @@ def plot_aggregate_total(aggregate_rolling, sampleName, mod, color, outDir):
 
 
 def main():
-    # TODO add argument parsing
-    print("main")
+    parser = argparse.ArgumentParser(
+        description="DiMeLo plot browser"
+    )
+
+    # Required arguments
+    required_args = parser.add_argument_group("required arguments")
+    required_args.add_argument(
+        "-f", "--fileNames", required=True,
+        nargs="+",
+        help="bam file name(s)"
+    )
+    required_args.add_argument(
+        "-s", "--sampleNames", required=True,
+        nargs="+",
+        help="sample name(s) for output file labelling"
+    )
+    required_args.add_argument(
+        "-r", "--region", required=True,
+        type=str,
+        help="single region over which to extract base mods, e.g. \"chr1:1-100000\""
+    )
+    required_args.add_argument(
+        "-m", "--basemod", required=True,
+        type=str, choices=["A", "CG", "A+CG"],
+        help="which base modification to extract"
+    )
+    required_args.add_argument(
+        "-o", "--outDir", required=True,
+        help="directory to output plot"
+    )
+
+    # Smoothing options
+    smoothing_args = parser.add_argument_group("smoothing options")
+    smoothing_args.add_argument(
+        "-t", "--smooth", type=int,
+        default=DEFAULT_SMOOTH,
+        help="window over which to smooth aggregate curve"
+    )
+    smoothing_args.add_argument(
+        "-n", "--min_periods", type=int,
+        default=DEFAULT_MIN_PERIODS,
+        help="minimum number of bases to consider for smoothing"
+    )
+
+    # Plotting arguments
+    plotting_args = parser.add_argument_group("plotting options")
+    plotting_args.add_argument(
+        "--colorA", type=str,
+        default=COLOR_A,
+        help="color in hex (e.g. \"#BB4430\") for mA"
+    )
+    plotting_args.add_argument(
+        "--colorC", type=str,
+        default=COLOR_C,
+        help="color in hex (e.g. \"#BB4430\") for mCG"
+    )
+    plotting_args.add_argument(
+        "-d", "--dotsize", type=float,
+        default=DEFAULT_DOTSIZE,
+        help="size of points"
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        "-A", "--threshA", type=int,
+        default=DEFAULT_THRESH_A,
+        help="threshold above which to call an A base methylated"
+    )
+    parser.add_argument(
+        "-C", "--threshC", type=int,
+        default=DEFAULT_THRESH_C,
+        help="threshold above which to call a C base methylated"
+    )
+    parser.add_argument(
+        "-b", "--bedFileFeatures",
+        help="bed file specifying annotation to display in browser"
+    )
+    parser.add_argument(
+        "--static", action="store_true",
+        help="output as PDF instead of interactive HTML"
+    )
+    parser.add_argument(
+        "-p", "--cores", type=int,
+        help="number of cores over which to parallelize"
+    )
+
+    args = parser.parse_args()
+    plot_browser(**vars(args))

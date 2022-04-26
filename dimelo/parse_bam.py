@@ -13,6 +13,7 @@ parse_bam allows you to summarize modification calls in a sql database
 import multiprocessing
 import os
 from typing import List, Tuple, Union
+import argparse
 
 import numpy as np
 import pandas as pd
@@ -27,6 +28,12 @@ TODO:
     - Standardize comment formats
     - convert string concatenations to f-strings, to make things more readable
 """
+
+
+DEFAULT_BASEMOD = "A+CG"
+DEFAULT_THRESH_A = 129
+DEFAULT_THRESH_C = 129
+DEFAULT_WINDOW_SIZE = 1000
 
 
 class Region(object):
@@ -187,14 +194,14 @@ def parse_bam(
     sampleName: str,
     outDir: str,
     bedFile: str = None,
-    basemod: str = "A+CG",
+    basemod: str = DEFAULT_BASEMOD,
     center: bool = False,
-    windowSize: int = None,
+    windowSize: int = DEFAULT_WINDOW_SIZE,
     region: str = None,
-    threshA: int = 129,
-    threshC: int = 129,
+    threshA: int = DEFAULT_THRESH_A,
+    threshC: int = DEFAULT_THRESH_C,
     extractAllBases: bool = False,
-    cores: int = None,
+    cores: int = None
 ) -> None:
     """
     fileName
@@ -214,10 +221,10 @@ def parse_bam(
     center
         One of the following:
 
-        * ``'True'`` - report positions with respect to reference center (+/- windowSize)
+        * ``'True'`` - report positions with respect to center of motif window (+/- windowSize); only valid with bed file input
         * ``'False'`` - report positions in original reference space
     windowSize
-        window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True; still, only reads that span the regions defined in the bed file will be included
+        window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only used if center=True; still, only reads that span the regions defined in the bed file will be included
     region
         single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
     threshA
@@ -281,15 +288,11 @@ def parse_bam(
         raise RuntimeError(
             "Exactly one of the mutually exclusive arguments 'bedFile' or 'region' must be specified."
         )
-    # The arguments center and windowSize are incompatible with region
+    # The argument center is incompatible with region
     if region is not None:
         if center:
             raise RuntimeError(
                 "Argument 'center' cannot be given alongside 'region'."
-            )
-        if windowSize:
-            raise RuntimeError(
-                "Argument 'windowSize' cannot be given alongside 'region'."
             )
 
     if not os.path.isdir(outDir):
@@ -757,3 +760,73 @@ def update_methylation_aggregate_db(
             + """ SET methylated_bases = methylated_bases + ?, total_bases = total_bases + ? WHERE id = ?"""
         )
         execute_sql_command(command, DATABASE_NAME, values_subset)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Parse a bam file into DiMeLo database tables"
+    )
+
+    # Required arguments
+    required_args = parser.add_argument_group("required arguments")
+    required_args.add_argument(
+        "-f", "--fileName", required=True,
+        help="name of bam file with Mm and Ml tags"
+    )
+    required_args.add_argument(
+        "-s", "--sampleName", required=True,
+        help="name of sample for output SQL table name labelling"
+    )
+    required_args.add_argument(
+        "-o", "--outDir", required=True,
+        help="directory where SQL database is stored"
+    )
+
+    # Required, mutually exclusive arguments
+    window_group = parser.add_mutually_exclusive_group(required=True)
+    window_group.add_argument(
+        "-b", "--bedFile",
+        help="name of bed file that defines regions of interest over which to extract mod calls"
+    )
+    window_group.add_argument(
+        "-r", "--region",
+        help="single region over which to extract base mods, e.g. \"chr1:1-100000\""
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        "-m", "--basemod", type=str,
+        default=DEFAULT_BASEMOD, choices=["A", "CG", "A+CG"],
+        help="which base modifications to extract"
+    )
+    parser.add_argument(
+        "-A", "--threshA", type=int,
+        default=DEFAULT_THRESH_A,
+        help="threshold above which to call an A base methylated"
+    )
+    parser.add_argument(
+        "-C", "--threshC", type=int,
+        default=DEFAULT_THRESH_C,
+        help="threshold above which to call a C base methylated"
+    )
+    parser.add_argument(
+        "-e", "--extractAllBases", action="store_true",
+        help="store all base mod calls, regardless of methylation probability threshold"
+    )
+    parser.add_argument(
+        "-p", "--cores", type=int,
+        help="number of cores over which to parallelize"
+    )
+    
+    parser.add_argument(
+        "-c", "--center", action="store_true",
+        help="report positions with respect to center of motif window; only valid with bed file input"
+    )
+    parser.add_argument(
+        "-w", "--windowSize", type=int,
+        default=DEFAULT_WINDOW_SIZE,
+        help=f"window size around center point of feature of interest to plot (+/-); only mods within this window are stored (default: {DEFAULT_WINDOW_SIZE} bp)"
+    )
+
+    args = parser.parse_args()
+    parse_bam(**vars(args))

@@ -95,22 +95,8 @@ class TestParseBam(DiMeLoTestCase):
                 fileName="dimelo/test/data/mod_mappings_subset.bam",
                 sampleName="test",
                 outDir=str(self.outDir),
-                bedFile="dimelo/test/data/test.bed",
                 region="chr1:2907273-2909473",
                 center=True,
-            )
-
-    def test_parse_bam_region_windowSize_incompatible(self):
-        """Verifies that region and windowSize arguments are incompatible."""
-        # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
-        with self.assertRaises(RuntimeError):
-            dm.parse_bam(
-                fileName="dimelo/test/data/mod_mappings_subset.bam",
-                sampleName="test",
-                outDir=str(self.outDir),
-                bedFile="dimelo/test/data/test.bed",
-                region="chr1:2907273-2909473",
-                windowSize=100,
             )
 
 
