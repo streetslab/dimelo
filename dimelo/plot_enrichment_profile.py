@@ -25,9 +25,16 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from dimelo.parse_bam import parse_bam
 
+
+DEFAULT_THRESH_A = 129
+DEFAULT_THRESH_C = 129
+DEFAULT_WINDOW_SIZE = 1000
 COLOR_A = "#053C5E"
 COLOR_C = "#BB4430"
 COLOR_LIST = ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
+DEFAULT_DOTSIZE = 0.5
+DEFAULT_SMOOTH = 50
+DEFAULT_MIN_PERIODS = 10
 
 
 def plot_enrichment_profile(
@@ -36,15 +43,15 @@ def plot_enrichment_profile(
     bedFiles,
     basemod,
     outDir,
-    threshA=129,
-    threshC=129,
-    windowSize=1000,
+    threshA=DEFAULT_THRESH_A,
+    threshC=DEFAULT_THRESH_C,
+    windowSize=DEFAULT_WINDOW_SIZE,
     colorA=COLOR_A,
     colorC=COLOR_C,
     colors=COLOR_LIST,
-    dotsize=0.5,
-    smooth=50,
-    min_periods=10,
+    dotsize=DEFAULT_DOTSIZE,
+    smooth=DEFAULT_SMOOTH,
+    min_periods=DEFAULT_MIN_PERIODS,
     cores=None,
 ):
     """
@@ -527,12 +534,12 @@ def main():
     smoothing_args = parser.add_argument_group("smoothing options")
     smoothing_args.add_argument(
         "-t", "--smooth", type=int,
-        default=50,
+        default=DEFAULT_SMOOTH,
         help="window over which to smooth aggregate curve"
     )
     smoothing_args.add_argument(
         "-n", "--min_periods", type=int,
-        default=10,
+        default=DEFAULT_MIN_PERIODS,
         help="minimum number of bases to consider for smoothing"
     )
 
@@ -555,24 +562,24 @@ def main():
     )
     plotting_args.add_argument(
         "-d", "--dotsize", type=float,
-        default=0.5,
+        default=DEFAULT_DOTSIZE,
         help="size of points"
     )
 
     # Optional arguments
     parser.add_argument(
         "-A", "--threshA", type=int,
-        default=129,
+        default=DEFAULT_THRESH_A,
         help="threshold above which to call an A base methylated"
     )
     parser.add_argument(
         "-C", "--threshC", type=int,
-        default=129,
+        default=DEFAULT_THRESH_C,
         help="threshold above which to call a C base methylated"
     )
     parser.add_argument(
         "-w", "--windowSize", type=int,
-        default=1000,
+        default=DEFAULT_WINDOW_SIZE,
         help="window size around center point of feature of interest to plot (+/-)"
     )
     parser.add_argument(

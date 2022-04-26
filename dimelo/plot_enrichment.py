@@ -21,6 +21,9 @@ import seaborn as sns
 
 from dimelo.parse_bam import parse_bam
 
+
+DEFAULT_THRESH_A = 129
+DEFAULT_THRESH_C = 129
 DEFAULT_COLOR_LIST = ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
 
 
@@ -30,8 +33,8 @@ def plot_enrichment(
     bedFiles,
     basemod,
     outDir,
-    threshA=129,
-    threshC=129,
+    threshA=DEFAULT_THRESH_A,
+    threshC=DEFAULT_THRESH_C,
     colors=None,
     cores=None,
 ):
@@ -289,12 +292,12 @@ def main():
     # Optional arguments
     parser.add_argument(
         "-A", "--threshA", type=int,
-        default=129,
+        default=DEFAULT_THRESH_A,
         help="threshold above which to call an A base methylated"
     )
     parser.add_argument(
         "-C", "--threshC", type=int,
-        default=129,
+        default=DEFAULT_THRESH_C,
         help="threshold above which to call a C base methylated"
     )
     parser.add_argument(

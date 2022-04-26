@@ -31,6 +31,11 @@ TODO:
 """
 
 
+DEFAULT_BASEMOD = "A+CG"
+DEFAULT_THRESH_A = 129
+DEFAULT_THRESH_C = 129
+
+
 class Region(object):
     def __init__(self,
                  region: Union[str, pd.Series]):
@@ -186,12 +191,12 @@ def parse_bam(
     sampleName: str,
     outDir: str,
     bedFile: str=None,
-    basemod: str="A+CG",
+    basemod: str=DEFAULT_BASEMOD,
     center: bool=False,
     windowSize: int=None,
     region: str=None,
-    threshA: int=129,
-    threshC: int=129,
+    threshA: int=DEFAULT_THRESH_A,
+    threshC: int=DEFAULT_THRESH_C,
     extractAllBases: bool=False,
     testMode: bool=False,
     qc: bool=False,
@@ -803,17 +808,17 @@ def main():
     # Optional arguments
     parser.add_argument(
         "-m", "--basemod", type=str,
-        default="A+CG", choices=["A", "CG", "A+CG"],
+        default=DEFAULT_BASEMOD, choices=["A", "CG", "A+CG"],
         help="which base modifications to extract"
     )
     parser.add_argument(
         "-A", "--threshA", type=int,
-        default=129,
+        default=DEFAULT_THRESH_A,
         help="threshold above which to call an A base methylated"
     )
     parser.add_argument(
         "-C", "--threshC", type=int,
-        default=129,
+        default=DEFAULT_THRESH_C,
         help="threshold above which to call a C base methylated"
     )
     parser.add_argument(

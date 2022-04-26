@@ -46,6 +46,9 @@ COLOR_A = "#053C5E"
 COLOR_C = "#BB4430"
 DEFAULT_THRESH_A = 129
 DEFAULT_THRESH_C = 129
+DEFAULT_SMOOTH = 1000
+DEFAULT_MIN_PERIODS = 100
+DEFAULT_DOTSIZE = 4
 
 
 class DataTraces(object):
@@ -90,11 +93,11 @@ def plot_browser(
     threshA=DEFAULT_THRESH_A,
     threshC=DEFAULT_THRESH_C,
     bedFileFeatures=None,
-    smooth=1000,
-    min_periods=100,
+    smooth=DEFAULT_SMOOTH,
+    min_periods=DEFAULT_MIN_PERIODS,
     colorA=COLOR_A,
     colorC=COLOR_C,
-    dotsize=4,
+    dotsize=DEFAULT_DOTSIZE,
     static=False,
     cores=None,
 ):
@@ -711,12 +714,12 @@ def main():
     smoothing_args = parser.add_argument_group("smoothing options")
     smoothing_args.add_argument(
         "-t", "--smooth", type=int,
-        default=1000,
+        default=DEFAULT_SMOOTH,
         help="window over which to smooth aggregate curve"
     )
     smoothing_args.add_argument(
         "-n", "--min_periods", type=int,
-        default=100,
+        default=DEFAULT_MIN_PERIODS,
         help="minimum number of bases to consider for smoothing"
     )
 
@@ -734,7 +737,7 @@ def main():
     )
     plotting_args.add_argument(
         "-d", "--dotsize", type=float,
-        default=4,
+        default=DEFAULT_DOTSIZE,
         help="size of points"
     )
 
@@ -749,7 +752,7 @@ def main():
         default=DEFAULT_THRESH_C,
         help="threshold above which to call a C base methylated"
     )
-    # TODO: What is this?
+    # TODO: this is just a bed file
     # parser.add_argument(
     #     "-b", "--bedFileFeatures"
     # )
