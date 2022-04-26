@@ -50,7 +50,7 @@ def plot_enrichment_profile(
     fileNames
         name(s) of bam file with Mm and Ml tags
     sampleNames
-        name(s) of sample for output file name labelling
+        name(s) of sample for output file name labelling; valid names contain [a-zA-Z0-9_].
     bedFiles
         specified windows for region(s) of interest; optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. Reads will be oriented with respect to strand.
     basemod

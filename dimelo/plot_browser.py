@@ -101,7 +101,7 @@ def plot_browser(
     fileNames
         list of names of bam files with Mm and Ml tags; indexed; or single file name as string
     sampleNames
-        list of names of samples for output plot name labelling; or single sample name as string
+        list of names of samples for output plot name labelling; or single sample name as string; valid names contain [a-zA-Z0-9_].
     window
         formatted as for example: "chr1:1-100000"
     basemod
