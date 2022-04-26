@@ -29,6 +29,10 @@ Example Gallery
 ---------------
 :doc:`auto_examples/index`
 
+Basecalling & Alignment Suggestions
+------------------------------------
+:doc:`content/basecalling` 
+
 .. toctree::
    :maxdepth: 2
    :hidden:
@@ -39,5 +43,6 @@ Example Gallery
    content/reference/plot_browser
    content/reference/plot_enrichment
    content/reference/plot_enrichment_profile
+   content/basecalling
 
 
