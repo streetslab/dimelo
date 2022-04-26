@@ -720,7 +720,7 @@ def main():
         help="sample name(s) for output file labelling"
     )
     required_args.add_argument(
-        "-w", "--window", required=True,
+        "-r", "--region", required=True,
         type=str,
         help="single region over which to extract base mods, e.g. \"chr1:1-100000\""
     )
