@@ -43,8 +43,9 @@ def batch_read_generator(file_bamIn, filename, batch_size):
 
     # added the next 3 lines
     lines = pysam.idxstats(filename).splitlines()
-    total_reads = sum([int(l.split("\t")[2])
-                       for l in lines if not l.startswith("#")])
+    total_reads = sum(
+        [int(l.split("\t")[2]) for l in lines if not l.startswith("#")]
+    )
     batch_size = 0.1 * total_reads
 
     for read in file_bamIn.fetch(until_eof=True):
@@ -128,7 +129,7 @@ def parse_bam_read(bamIn, outDir, cores=None):
         else:
             num_cores = cores
 
-    Parallel(n_jobs=num_cores, verbose = 10)(
+    Parallel(n_jobs=num_cores, verbose=10)(
         delayed(execute_sql_command)(template_command, DB_NAME, i)
         for i in batch_read_generator(file_bamIn, bamIn, 100)
     )

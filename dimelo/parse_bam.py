@@ -186,15 +186,15 @@ def parse_bam(
     fileName: str,
     sampleName: str,
     outDir: str,
-    bedFile: str=None,
-    basemod: str="A+CG",
-    center: bool=False,
-    windowSize: int=None,
-    region: str=None,
-    threshA: int=129,
-    threshC: int=129,
-    extractAllBases: bool=False,
-    cores: int=None
+    bedFile: str = None,
+    basemod: str = "A+CG",
+    center: bool = False,
+    windowSize: int = None,
+    region: str = None,
+    threshA: int = 129,
+    threshC: int = 129,
+    extractAllBases: bool = False,
+    cores: int = None,
 ) -> None:
     """
     fileName
@@ -284,7 +284,7 @@ def parse_bam(
             raise RuntimeError(
                 "Argument 'windowSize' cannot be given alongside 'region'."
             )
-    
+
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
 
@@ -296,7 +296,7 @@ def parse_bam(
         windows = []
         for _, row in bed.iterrows():
             windows.append(Region(row))
-            
+
     if region is not None:
         windows = [Region(region)]
 

@@ -24,7 +24,7 @@ REQUIRED_PACKAGES = [
     "joblib==1.0.1",
     "plotly==4.14.3",
     "seaborn==0.11.2",
-    "pyranges==0.0.104",
+    "pyranges==0.0.104",  # get travis to successfully make develop
     "psutil==5.8.0",
     # "scikit-learn==0.24.1",
     "pybedtools==0.8.1",
@@ -61,5 +61,5 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.7.11",  # python version requirement
+    python_requires=">=3.7",  # python version requirement
 )
