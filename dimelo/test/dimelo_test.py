@@ -14,6 +14,9 @@ from dimelo.test import DiMeLoTestCase
 
 
 class TestParseBam(DiMeLoTestCase):
+    def test_sanity_check(self):
+        self.assertTrue(True)
+    
     def test_parse_bam_bedFile(self):
         """Tests parsing a bam file into a database, specifying windows using a bed file.
 
