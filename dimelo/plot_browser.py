@@ -117,7 +117,7 @@ def plot_browser(
     threshC
         threshold for calling mCG; default 129
     bedFileFeatures
-        annotation to display in browser (optional); default None
+        bedFile specifying regions to display in browser (optional); default None
     smooth
         window over which to smooth aggregate curve; default of 1000 bp
     min_periods
