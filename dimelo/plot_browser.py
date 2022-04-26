@@ -72,7 +72,7 @@ class Region(object):
                 self.begin, self.end = [int(i) for i in interval.split("-")]
             except ValueError:
                 sys.exit(
-                    "\n\nERROR: Window (-w/--window) inproperly formatted, "
+                    "\n\nERROR: Region (-w/--region) inproperly formatted, "
                     "examples of accepted formats are:\n"
                     "'chr5:150200605-150423790'\n\n"
                 )
@@ -83,7 +83,7 @@ class Region(object):
 def plot_browser(
     fileNames,
     sampleNames,
-    window,
+    region,
     basemod,
     outDir,
     threshA=DEFAULT_THRESH_A,
@@ -102,7 +102,7 @@ def plot_browser(
         list of names of bam files with Mm and Ml tags; indexed; or single file name as string
     sampleNames
         list of names of samples for output plot name labelling; or single sample name as string; valid names contain [a-zA-Z0-9_].
-    window
+    region
         formatted as for example: "chr1:1-100000"
     basemod
         One of the following:
@@ -177,7 +177,7 @@ def plot_browser(
             n,
             outDir,
             basemod="A+CG",
-            region=window,  # pass string representation
+            region=region,  # pass string representation
             extractAllBases=True,
             cores=num_cores,
         )
@@ -211,7 +211,7 @@ def plot_browser(
         all_data=all_data,
         aggregate_counts=aggregate_counts,
         basemod=basemod,
-        window=Region(window),
+        region=Region(region),
         sampleNames=sampleNames,
         outDir=outDir,
         bed=bedFileFeatures,
@@ -253,7 +253,7 @@ def plot_browser(
             f_paths.append(f_path)
             t_paths.append(t_path)
 
-    w = Region(window)
+    w = Region(region)
 
     browser_path = f"{outDir}/methylation_browser_{w.string}.{ext}"
     str_out = f"Outputs\n_______\nDB file: {db_paths}\nbrowser plot: {browser_path}\nrolling average fraction bases methylated plot: {f_paths}\nrolling average total bases plot: {t_paths}"
@@ -278,16 +278,16 @@ def create_subplots(num_methrows, names=None, annotation=True):
     )
 
 
-def create_output(fig, outfile, window, static, outDir):
+def create_output(fig, outfile, region, static, outDir):
     """
     write output pdf or html
     """
     if static:
-        outfile = outDir + "/" + f"methylation_browser_{window.string}.pdf"
+        outfile = outDir + "/" + f"methylation_browser_{region.string}.pdf"
         fig.write_image(outfile, width=1000, height=400)  # scale=10
         # pio.write_image(fig, outfile, format='pdf', scale=10)
     if not static:
-        outfile = outDir + "/" + f"methylation_browser_{window.string}.html"
+        outfile = outDir + "/" + f"methylation_browser_{region.string}.html"
         with open(outfile, "w+") as output:
             output.write(
                 plotly.offline.plot(
@@ -501,7 +501,7 @@ def meth_browser(
     all_data,
     aggregate_counts,
     basemod,
-    window,
+    region,
     sampleNames,
     outDir,
     smooth,
@@ -545,7 +545,7 @@ def meth_browser(
             fig.add_trace(trace=meth_trace, row=y, col=1)
         fig["layout"][f"yaxis{y}"].update(title="Reads")
     if bed:
-        for annot_trace in bed_annotation(bed, window):
+        for annot_trace in bed_annotation(bed, region):
             fig.add_trace(trace=annot_trace, row=annot_row, col=1)
         y_max = -2
     if bed:
@@ -561,18 +561,18 @@ def meth_browser(
         tickformat="g",
         separatethousands=True,
         # showticklabels=True,
-        range=[window.begin, window.end],
+        range=[region.begin, region.end],
     )
     fig["layout"].update(
         barmode="overlay",
-        title=window.chromosome,
+        title=region.chromosome,
         hovermode="closest",
         plot_bgcolor="rgba(0,0,0,0)",
     )
     if num_methrows > 10:
         for i in fig["layout"]["annotations"]:
             i["font"]["size"] = 10
-    create_output(fig, outfile, window, static, outDir)
+    create_output(fig, outfile, region, static, outDir)
 
     i = 0
     for d in aggregate_counts:
@@ -581,7 +581,7 @@ def meth_browser(
             d,
             smooth,
             min_periods,
-            window,
+            region,
             basemod,
             outDir,
             colorA,
@@ -590,7 +590,7 @@ def meth_browser(
         i = i + 1
 
 
-def bed_annotation(bed, window):
+def bed_annotation(bed, region):
     return [
         go.Scatter(
             x=[begin, end],
@@ -601,12 +601,12 @@ def bed_annotation(bed, window):
             hoverinfo="text",
             showlegend=False,
         )
-        for (begin, end, name) in parse_bed(bed, window)
+        for (begin, end, name) in parse_bed(bed, region)
     ]
 
 
-def parse_bed(bed, window):
-    gr = pr.read_bed(bed)[window.chromosome, window.begin : window.end]
+def parse_bed(bed, region):
+    gr = pr.read_bed(bed)[region.chromosome, region.begin : region.end]
     df = gr.unstrand().df
     df = df.drop(columns=["Chromosome", "Score", "Strand"], errors="ignore")
     if "Name" not in df.columns:
@@ -620,7 +620,7 @@ def plot_aggregate(
     aggregate_counts,
     smooth,
     min_periods,
-    window,
+    region,
     basemod,
     outDir,
     colorA,

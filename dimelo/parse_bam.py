@@ -232,7 +232,7 @@ def parse_bam(
     cores
         number of cores over which to parallelize; default is all available
 
-    **Valid argument combinations for ``bedFile``, ``center``, and ``windowSize`` are:**
+    Valid argument combinations for ``bedFile``, ``center``, and ``windowSize`` are:
 
         * ``bedFile`` --> extract all modified bases in regions defined in bed file
         * ``bedfile`` + ``center`` --> extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modificiations within default windowSize of 1kb
