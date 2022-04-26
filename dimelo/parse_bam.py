@@ -34,6 +34,7 @@ TODO:
 DEFAULT_BASEMOD = "A+CG"
 DEFAULT_THRESH_A = 129
 DEFAULT_THRESH_C = 129
+DEFAULT_WINDOW_SIZE = 1000
 
 
 class Region(object):
@@ -193,7 +194,7 @@ def parse_bam(
     bedFile: str=None,
     basemod: str=DEFAULT_BASEMOD,
     center: bool=False,
-    windowSize: int=None,
+    windowSize: int=DEFAULT_WINDOW_SIZE,
     region: str=None,
     threshA: int=DEFAULT_THRESH_A,
     threshC: int=DEFAULT_THRESH_C,
@@ -220,10 +221,10 @@ def parse_bam(
     center
         One of the following:
 
-        * ``'True'`` - report positions with respect to reference center (+/- windowSize)
+        * ``'True'`` - report positions with respect to center of motif window (+/- windowSize); only valid with bed file input
         * ``'False'`` - report positions in original reference space
     windowSize
-        window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only specify if center=True; still, only reads that span the regions defined in the bed file will be included
+        window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only used if center=True; still, only reads that span the regions defined in the bed file will be included
     region
         single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
     threshA
@@ -829,16 +830,14 @@ def main():
         "-p", "--cores", type=int,
         help="number of cores over which to parallelize"
     )
-
     
-    # TODO: only allow this when bedFile is given? Or just let it percolate through to the underlying function...
     parser.add_argument(
         "-c", "--center", action="store_true",
-        help="report positions with respect to center of window"
+        help="report positions with respect to center of motif window; only valid with bed file input"
     )
-    # TODO: This is REQUIRED when center is true. This needs to be added to the actual functionality elsewhere too...
     parser.add_argument(
         "-w", "--windowSize", type=int,
+        default=DEFAULT_WINDOW_SIZE,
         help="window size around center point of feature of interest to plot (+/-); only mods within this window are stored"
     )
 
