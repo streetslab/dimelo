@@ -825,7 +825,7 @@ def main():
     parser.add_argument(
         "-w", "--windowSize", type=int,
         default=DEFAULT_WINDOW_SIZE,
-        help="window size around center point of feature of interest to plot (+/-); only mods within this window are stored"
+        help=f"window size around center point of feature of interest to plot (+/-); only mods within this window are stored (default: {DEFAULT_WINDOW_SIZE} bp)"
     )
 
     args = parser.parse_args()
