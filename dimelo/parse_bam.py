@@ -232,12 +232,12 @@ def parse_bam(
     cores
         number of cores over which to parallelize; default is all available
 
-    Valid argument combinations for ``bedFile``, ``center``, and ``windowSize`` are:
+    Valid argument combinations for ``bedFile``, ``center``, and ``windowSize`` are below. Regions of interest generally fall into two categories: small motifs at which to center analysis (use ``center`` = True) or full windows of interest (do not specify ``center`` or ``windowSize``).
 
         * ``bedFile`` --> extract all modified bases in regions defined in bed file
         * ``bedfile`` + ``center`` --> extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modificiations within default windowSize of 1kb
         * ``bedfile`` + ``center`` + ``windowSize`` --> extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modifications within flanking +/- windowSize
-        * ``region `` --> extract all modified bases in single region
+        * ``region`` --> extract all modified bases in single region
 
     **Example**
 

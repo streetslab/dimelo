@@ -82,7 +82,7 @@
 <dd><dl class="simple">
 <dt>fileName</dt><dd><p>name of bam file with Mm and Ml tags</p>
 </dd>
-<dt>sampleName</dt><dd><p>name of sample for output SQL table name labelling. Valid names contain [<a href="#id3"><span class="problematic" id="id4">a-zA-Z0-9_</span></a>].</p>
+<dt>sampleName</dt><dd><p>name of sample for output SQL table name labelling. Valid names contain [<a href="#id1"><span class="problematic" id="id2">a-zA-Z0-9_</span></a>].</p>
 </dd>
 <dt>outDir</dt><dd><p>directory where SQL database is stored</p>
 </dd>
@@ -118,13 +118,13 @@
 <dt>cores</dt><dd><p>number of cores over which to parallelize; default is all available</p>
 </dd>
 </dl>
-<p>Valid argument combinations for <code class="docutils literal notranslate"><span class="pre">bedFile</span></code>, <code class="docutils literal notranslate"><span class="pre">center</span></code>, and <code class="docutils literal notranslate"><span class="pre">windowSize</span></code> are:</p>
+<p>Valid argument combinations for <code class="docutils literal notranslate"><span class="pre">bedFile</span></code>, <code class="docutils literal notranslate"><span class="pre">center</span></code>, and <code class="docutils literal notranslate"><span class="pre">windowSize</span></code> are below. Regions of interest generally fall into two categories: small motifs at which to center analysis (use <code class="docutils literal notranslate"><span class="pre">center</span></code> = True) or full windows of interest (do not specify <code class="docutils literal notranslate"><span class="pre">center</span></code> or <code class="docutils literal notranslate"><span class="pre">windowSize</span></code>).</p>
 <blockquote>
 <div><ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">bedFile</span></code> –&gt; extract all modified bases in regions defined in bed file</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">bedfile</span></code> + <code class="docutils literal notranslate"><span class="pre">center</span></code> –&gt; extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modificiations within default windowSize of 1kb</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">bedfile</span></code> + <code class="docutils literal notranslate"><span class="pre">center</span></code> + <code class="docutils literal notranslate"><span class="pre">windowSize</span></code> –&gt; extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modifications within flanking +/- windowSize</p></li>
-<li><p><a href="#id1"><span class="problematic" id="id2">``</span></a>region `` –&gt; extract all modified bases in single region</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">region</span></code> –&gt; extract all modified bases in single region</p></li>
 </ul>
 </div></blockquote>
 <p><strong>Example</strong></p>
