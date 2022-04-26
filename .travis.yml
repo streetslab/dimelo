@@ -2,6 +2,8 @@ language: python
 python:
   - "3.7"
 install:
+  - pip install install --upgrade setuptools
+  - pip install --upgrade pip
   - pip install cython
   - make develop
 script:
