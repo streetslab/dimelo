@@ -752,10 +752,10 @@ def main():
         default=DEFAULT_THRESH_C,
         help="threshold above which to call a C base methylated"
     )
-    # TODO: this is just a bed file
-    # parser.add_argument(
-    #     "-b", "--bedFileFeatures"
-    # )
+    parser.add_argument(
+        "-b", "--bedFileFeatures",
+        help="bed file specifying annotation to display in browser"
+    )
     parser.add_argument(
         "--static", action="store_true",
         help="output as PDF instead of interactive HTML"

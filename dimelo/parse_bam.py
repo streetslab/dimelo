@@ -281,15 +281,11 @@ def parse_bam(
         raise RuntimeError(
             "Exactly one of the mutually exclusive arguments 'bedFile' or 'region' must be specified."
         )
-    # The arguments center and windowSize are incompatible with region
+    # The argument center is incompatible with region
     if region is not None:
         if center:
             raise RuntimeError(
                 "Argument 'center' cannot be given alongside 'region'."
-            )
-        if windowSize:
-            raise RuntimeError(
-                "Argument 'windowSize' cannot be given alongside 'region'."
             )
     
     if not os.path.isdir(outDir):
