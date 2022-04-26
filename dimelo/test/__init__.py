@@ -12,14 +12,12 @@ class DiMeLoTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # cls._outDir = tempfile.TemporaryDirectory()
-        # cls.outDir = Path(cls._outDir.name)
-        cls.outDir = Path('dimelo/dimelo_test')
+        cls._outDir = tempfile.TemporaryDirectory()
+        cls.outDir = Path(cls._outDir.name)
 
     @classmethod
     def tearDownClass(cls):
-        # cls._outDir.cleanup()
-        shutil.rmtree(cls.outDir)
+        cls._outDir.cleanup()
 
     # def tmpFile(self):
     #     tempFile = tempfile.NamedTemporaryFile(delete=True)
