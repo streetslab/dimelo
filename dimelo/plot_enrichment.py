@@ -35,7 +35,7 @@ def plot_enrichment(
     outDir,
     threshA=DEFAULT_THRESH_A,
     threshC=DEFAULT_THRESH_C,
-    colors=None,
+    colors=DEFAULT_COLOR_LIST,
     cores=None,
 ):
     """
@@ -73,9 +73,6 @@ def plot_enrichment(
     """
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
-
-    if colors is None:
-        colors = DEFAULT_COLOR_LIST
 
     # default number of cores is max available
     cores_avail = multiprocessing.cpu_count()
@@ -286,6 +283,7 @@ def main():
     plotting_args = parser.add_argument_group("plotting options")
     plotting_args.add_argument(
         "--colors", type=str, nargs="+",
+        default=DEFAULT_COLOR_LIST,
         help="color list in hex (e.g. \"#BB4430\") for overlay plots"
     )
 

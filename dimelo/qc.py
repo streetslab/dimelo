@@ -232,7 +232,7 @@ def qc_report(
     fileNames,
     sampleNames,
     outDir,
-    colors=None,
+    colors=DEFAULT_COLOR_LIST,
     cores=None,
 ):
     # runtime = get_runtime(parse_bam_read, filebamIn, 'out')
@@ -280,9 +280,6 @@ def qc_report(
     """    
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
-
-    if colors is None:
-        colors = DEFAULT_COLOR_LIST
 
     if type(fileNames) != list:
         fileNames = [fileNames]
@@ -461,6 +458,7 @@ def main():
     plotting_args = parser.add_argument_group("plotting options")
     plotting_args.add_argument(
         "--colors", type=str, nargs="+",
+        default=DEFAULT_COLOR_LIST,
         help="color list in hex (e.g. \"#BB4430\") for overlay plots"
     )
 
