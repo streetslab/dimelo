@@ -242,7 +242,7 @@ def qc_report(
     fileNames
         list of names of bam files; indexed; or single file name as string
     sampleNames
-        list of names of samples for output plot name labelling; or single sample name as string; valid names contain [a-zA-Z0-9_].
+        list of names of samples for output plot name labelling; or single sample name as string; valid names contain [``a-zA-Z0-9_``].
     outDir
         directory to output QC summary report
     cores

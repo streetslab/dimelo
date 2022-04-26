@@ -200,7 +200,7 @@ def parse_bam(
     fileName
         name of bam file with Mm and Ml tags
     sampleName
-        name of sample for output SQL table name labelling. Valid names contain [a-zA-Z0-9_].
+        name of sample for output SQL table name labelling. Valid names contain [``a-zA-Z0-9_``].
     outDir
         directory where SQL database is stored
     bedFile
