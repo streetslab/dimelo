@@ -18,7 +18,7 @@
 .. _sphx_glr_auto_examples_plot_qc_example.py:
 
 
-QC Report Example
+QC Report
 ===========================
 
 This creates a qc report from the test bams
@@ -62,10 +62,14 @@ for long read methylation modification bam files
 
  .. code-block:: none
 
+    [Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
+    [Parallel(n_jobs=8)]: Done   3 out of  10 | elapsed:   12.0s remaining:   28.1s
+    [Parallel(n_jobs=8)]: Done   5 out of  10 | elapsed:   12.1s remaining:   12.1s
+    [Parallel(n_jobs=8)]: Done   7 out of  10 | elapsed:   12.1s remaining:    5.2s
+    [Parallel(n_jobs=8)]: Done  10 out of  10 | elapsed:   12.2s finished
     mean length:  12202
     num reads:  3243
     num bases:  39571086
-    processing 3243 reads with methylation for test for bam: ../../dimelo/test/data/winnowmap_guppy_merge_subset.bam
     QC report located at: ../../dimelo/dimelo_test/test_qc_report.pdf
     Database located at: ../../dimelo/dimelo_test/winnowmap_guppy_merge_subset.db
 
@@ -75,7 +79,7 @@ for long read methylation modification bam files
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  15.855 seconds)
+   **Total running time of the script:** ( 0 minutes  16.403 seconds)
 
 
 .. _sphx_glr_download_auto_examples_plot_qc_example.py:

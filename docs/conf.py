@@ -19,8 +19,8 @@
 # -- Project information -----------------------------------------------------
 
 project = "dimelo"
-copyright = "2022, Annie Maslan & Reet Mishra"
-author = "Annie Maslan & Reet Mishra"
+copyright = "2022, Annie Maslan & Reet Mishra & Jeremy Marcus"
+author = "Annie Maslan & Reet Mishra & Jeremy Marcus"
 
 
 # -- General configuration ---------------------------------------------------

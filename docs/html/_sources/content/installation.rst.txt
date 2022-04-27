@@ -60,6 +60,12 @@ And then call functions like this:
 
 >>> dm.function_name(...)
 
+Alternatively, functions can be accessed from the command line like this:
+
+.. code:: bash
+
+	dimelo-function-name ...
+
 
 Other notes
 ------------------------

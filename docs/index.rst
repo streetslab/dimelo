@@ -1,18 +1,12 @@
 dimelo
 ========
 
-a python package for analyzing DiMeLo-seq data
+a python package & command line tool for analyzing DiMeLo-seq data
 
-https://github.com/amaslan/dimelo
-
-Installation
---------------
-:doc:`content/installation` 
-
-Tool summary
+Functions
 --------------
 +-------------------------------------------------+-----------------------+-------------------------------------+--------------------------------------------------------------------------------------------------------------------------------+
-| tool                                            | type                  | input files                         | main output file(s)                                                                                                            |
+| function                                        | type                  | input files                         | main output file(s)                                                                                                            |
 +=================================================+=======================+=====================================+============================================+===================================================================================+
 |:doc:`content/reference/qc_report`               | QC                    | 1 or more BAM                       | summary report with figures & table for read length, mapping quality, basecall quality, etc.                                   |
 +-------------------------------------------------+-----------------------+-------------------------------------+--------------------------------------------+-----------------------------------------------------------------------------------+
@@ -25,24 +19,25 @@ Tool summary
 |:doc:`content/reference/parse_bam`               | data formatting       | 1 BAM                               | sql database (to allow for custom visualization)                                                                               |
 +-------------------------------------------------+-----------------------+-------------------------------------+--------------------------------------------+-----------------------------------------------------------------------------------+
 
-Example Gallery
----------------
+Resources
+-----------------------
+
+:doc:`content/installation` 
+
 :doc:`auto_examples/index`
 
-Basecalling & Alignment Suggestions
-------------------------------------
 :doc:`content/basecalling` 
+
+`Open Source Code <https://github.com/amaslan/dimelo>`__
+
 
 .. toctree::
    :maxdepth: 2
    :hidden:
    
    content/installation
-   content/reference/qc_report
-   content/reference/parse_bam
-   content/reference/plot_browser
-   content/reference/plot_enrichment
-   content/reference/plot_enrichment_profile
+   content/reference/tools
+   auto_examples/index
    content/basecalling
 
 
