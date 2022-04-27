@@ -32,6 +32,7 @@ REQUIRED_PACKAGES = [
     "sphinx==4.4.0",
     # "pysam==0.15.3",
     # "cython==0.29.24",
+    "sqlite==3.37.2"
 ]
 
 # Read in the project description. We define this in the README file.
