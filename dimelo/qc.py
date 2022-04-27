@@ -9,12 +9,12 @@ QC module
 qc_report provides a detailed summary report of many important quality control information including read length, mapping quality, etc.
 
 """
+import argparse
 import multiprocessing
 import os
 import sqlite3
 import time
 from math import log
-import argparse
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -278,7 +278,7 @@ def qc_report(
 
     .. image:: images/sample_qc_report.png
 
-    """    
+    """
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
 
@@ -434,39 +434,43 @@ def qc_report(
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Generate DiMeLo qc report"
-    )
+    parser = argparse.ArgumentParser(description="Generate DiMeLo qc report")
 
     # Required arguments
     required_args = parser.add_argument_group("required arguments")
     required_args.add_argument(
-        "-f", "--fileNames", required=True,
-        nargs="+",
-        help="bam file name(s)"
+        "-f", "--fileNames", required=True, nargs="+", help="bam file name(s)"
     )
     required_args.add_argument(
-        "-s", "--sampleNames", required=True,
+        "-s",
+        "--sampleNames",
+        required=True,
         nargs="+",
-        help="sample name(s) for output labelling"
+        help="sample name(s) for output labelling",
     )
     required_args.add_argument(
-        "-o", "--outDir", required=True,
-        help="directory to output QC summary report"
+        "-o",
+        "--outDir",
+        required=True,
+        help="directory to output QC summary report",
     )
 
     # Plotting arguments
     plotting_args = parser.add_argument_group("plotting options")
     plotting_args.add_argument(
-        "--colors", type=str, nargs="+",
+        "--colors",
+        type=str,
+        nargs="+",
         default=DEFAULT_COLOR_LIST,
-        help="color list in hex (e.g. \"#BB4430\") for overlay plots"
+        help='color list in hex (e.g. "#BB4430") for overlay plots',
     )
 
     # Optional arguments
     parser.add_argument(
-        "-p", "--cores", type=int,
-        help="number of cores over which to parallelize"
+        "-p",
+        "--cores",
+        type=int,
+        help="number of cores over which to parallelize",
     )
 
     args = parser.parse_args()

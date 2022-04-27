@@ -10,11 +10,11 @@ plot_enrichment_profile plots single molecules centered at regions of interest d
 
 """
 
+import argparse
 import multiprocessing
 import os
 import sqlite3
 from itertools import cycle
-import argparse
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,7 +24,6 @@ from matplotlib import colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from dimelo.parse_bam import parse_bam
-
 
 DEFAULT_THRESH_A = 129
 DEFAULT_THRESH_C = 129
@@ -522,85 +521,107 @@ def main():
     # Required arguments
     required_args = parser.add_argument_group("required arguments")
     required_args.add_argument(
-        "-f", "--fileNames", required=True,
+        "-f", "--fileNames", required=True, nargs="+", help="bam file name(s)"
+    )
+    required_args.add_argument(
+        "-s",
+        "--sampleNames",
+        required=True,
         nargs="+",
-        help="bam file name(s)"
+        help="sample name(s) for output file labelling",
     )
     required_args.add_argument(
-        "-s", "--sampleNames", required=True,
+        "-b",
+        "--bedFiles",
+        required=True,
         nargs="+",
-        help="sample name(s) for output file labelling"
+        help="name of bed file(s) defining region(s) of interest",
     )
     required_args.add_argument(
-        "-b", "--bedFiles", required=True,
-        nargs="+",
-        help="name of bed file(s) defining region(s) of interest"
+        "-m",
+        "--basemod",
+        required=True,
+        type=str,
+        choices=["A", "CG", "A+CG"],
+        help="which base modification to extract",
     )
     required_args.add_argument(
-        "-m", "--basemod", required=True,
-        type=str, choices=["A", "CG", "A+CG"],
-        help="which base modification to extract"
-    )
-    required_args.add_argument(
-        "-o", "--outDir", required=True,
-        help="directory to output plot"
+        "-o", "--outDir", required=True, help="directory to output plot"
     )
 
     # Smoothing options
     smoothing_args = parser.add_argument_group("smoothing options")
     smoothing_args.add_argument(
-        "-t", "--smooth", type=int,
+        "-t",
+        "--smooth",
+        type=int,
         default=DEFAULT_SMOOTH,
-        help="window over which to smooth aggregate curve"
+        help="window over which to smooth aggregate curve",
     )
     smoothing_args.add_argument(
-        "-n", "--min_periods", type=int,
+        "-n",
+        "--min_periods",
+        type=int,
         default=DEFAULT_MIN_PERIODS,
-        help="minimum number of bases to consider for smoothing"
+        help="minimum number of bases to consider for smoothing",
     )
 
     # Plotting arguments
     plotting_args = parser.add_argument_group("plotting options")
     plotting_args.add_argument(
-        "--colorA", type=str,
+        "--colorA",
+        type=str,
         default=COLOR_A,
-        help="color in hex (e.g. \"#BB4430\") for mA"
+        help='color in hex (e.g. "#BB4430") for mA',
     )
     plotting_args.add_argument(
-        "--colorC", type=str,
+        "--colorC",
+        type=str,
         default=COLOR_C,
-        help="color in hex (e.g. \"#BB4430\") for mCG"
+        help='color in hex (e.g. "#BB4430") for mCG',
     )
     plotting_args.add_argument(
-        "--colors", type=str, nargs="+",
+        "--colors",
+        type=str,
+        nargs="+",
         default=COLOR_LIST,
-        help="color list in hex (e.g. \"#BB4430\") for overlay plots"
+        help='color list in hex (e.g. "#BB4430") for overlay plots',
     )
     plotting_args.add_argument(
-        "-d", "--dotsize", type=float,
+        "-d",
+        "--dotsize",
+        type=float,
         default=DEFAULT_DOTSIZE,
-        help="size of points"
+        help="size of points",
     )
 
     # Optional arguments
     parser.add_argument(
-        "-A", "--threshA", type=int,
+        "-A",
+        "--threshA",
+        type=int,
         default=DEFAULT_THRESH_A,
-        help="threshold above which to call an A base methylated"
+        help="threshold above which to call an A base methylated",
     )
     parser.add_argument(
-        "-C", "--threshC", type=int,
+        "-C",
+        "--threshC",
+        type=int,
         default=DEFAULT_THRESH_C,
-        help="threshold above which to call a C base methylated"
+        help="threshold above which to call a C base methylated",
     )
     parser.add_argument(
-        "-w", "--windowSize", type=int,
+        "-w",
+        "--windowSize",
+        type=int,
         default=DEFAULT_WINDOW_SIZE,
-        help="window size around center point of feature of interest to plot (+/-)"
+        help="window size around center point of feature of interest to plot (+/-)",
     )
     parser.add_argument(
-        "-p", "--cores", type=int,
-        help="number of cores over which to parallelize"
+        "-p",
+        "--cores",
+        type=int,
+        help="number of cores over which to parallelize",
     )
 
     args = parser.parse_args()

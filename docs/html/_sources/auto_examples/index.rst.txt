@@ -4,11 +4,135 @@
 
 .. _sphx_glr_auto_examples:
 
-dimelo plot example gallery
-==================
+Example Gallery
+=======================
 
-Below is a gallery of examples
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Plot single molecules centered at regions of interest defined in bed file and produce aggregate...">
+
+.. only:: html
+
+ .. figure:: /auto_examples/images/thumb/sphx_glr_enrichment_profile_single_example_thumb.png
+     :alt: Enrichment Profile mA only
+
+     :ref:`sphx_glr_auto_examples_enrichment_profile_single_example.py`
+
+.. raw:: html
+
+    </div>
+
+
+.. toctree::
+   :hidden:
+
+   /auto_examples/enrichment_profile_single_example
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Plot overall fraction of methylated bases within multiple sets of regions of interest specified...">
+
+.. only:: html
+
+ .. figure:: /auto_examples/images/thumb/sphx_glr_enrichment_multi_bed_example_thumb.png
+     :alt: Enrichment Plot Comparison Across BEDs
+
+     :ref:`sphx_glr_auto_examples_enrichment_multi_bed_example.py`
+
+.. raw:: html
+
+    </div>
+
+
+.. toctree::
+   :hidden:
+
+   /auto_examples/enrichment_multi_bed_example
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Aggregate and single molecule plots colored by modification and centered at regions of interest...">
+
+.. only:: html
+
+ .. figure:: /auto_examples/images/thumb/sphx_glr_enrichment_profile_ma_mc_example_thumb.png
+     :alt: Enrichment Profile mA & mCG
+
+     :ref:`sphx_glr_auto_examples_enrichment_profile_ma_mc_example.py`
+
+.. raw:: html
+
+    </div>
+
+
+.. toctree::
+   :hidden:
+
+   /auto_examples/enrichment_profile_ma_mc_example
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Plot overall fraction of methylated bases within regions of interest specified by bed file acro...">
+
+.. only:: html
+
+ .. figure:: /auto_examples/images/thumb/sphx_glr_enrichment_multi_bam_example_thumb.png
+     :alt: Enrichment Plot Comparison Across BAMs
+
+     :ref:`sphx_glr_auto_examples_enrichment_multi_bam_example.py`
+
+.. raw:: html
+
+    </div>
+
+
+.. toctree::
+   :hidden:
+
+   /auto_examples/enrichment_multi_bam_example
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Aggregate fraction of methylated bases centered at regions of interest defined in bed files.">
+
+.. only:: html
+
+ .. figure:: /auto_examples/images/thumb/sphx_glr_enrichment_profile_overlay_example_thumb.png
+     :alt: Enrichment Profile Overlay
+
+     :ref:`sphx_glr_auto_examples_enrichment_profile_overlay_example.py`
+
+.. raw:: html
+
+    </div>
+
+
+.. toctree::
+   :hidden:
+
+   /auto_examples/enrichment_profile_overlay_example
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Plot single molecules with colored base modifications in a region of interest">
+
+.. only:: html
+
+ .. figure:: /auto_examples/images/thumb/sphx_glr_browser_example_thumb.png
+     :alt: Single-Molecule Browser Plot
+
+     :ref:`sphx_glr_auto_examples_browser_example.py`
+
+.. raw:: html
+
+    </div>
+
+
+.. toctree::
+   :hidden:
+
+   /auto_examples/browser_example
 
 .. raw:: html
 
@@ -17,7 +141,7 @@ Below is a gallery of examples
 .. only:: html
 
  .. figure:: /auto_examples/images/thumb/sphx_glr_plot_qc_example_thumb.png
-     :alt: QC Report Example
+     :alt: QC Report
 
      :ref:`sphx_glr_auto_examples_plot_qc_example.py`
 
@@ -30,90 +154,6 @@ Below is a gallery of examples
    :hidden:
 
    /auto_examples/plot_qc_example
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="This example doesn&#x27;t do much, it just makes a simple plot">
-
-.. only:: html
-
- .. figure:: /auto_examples/images/thumb/sphx_glr_plot_example_thumb.png
-     :alt: "This" is my example-script
-
-     :ref:`sphx_glr_auto_examples_plot_example.py`
-
-.. raw:: html
-
-    </div>
-
-
-.. toctree::
-   :hidden:
-
-   /auto_examples/plot_example
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="This plots single molecules with colored base modifications in region of interest">
-
-.. only:: html
-
- .. figure:: /auto_examples/images/thumb/sphx_glr_plot_browser_example_thumb.png
-     :alt: Browser Plot Example
-
-     :ref:`sphx_glr_auto_examples_plot_browser_example.py`
-
-.. raw:: html
-
-    </div>
-
-
-.. toctree::
-   :hidden:
-
-   /auto_examples/plot_browser_example
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="This plots single molecules centered at regions of interest defined in bed file and produces ag...">
-
-.. only:: html
-
- .. figure:: /auto_examples/images/thumb/sphx_glr_plot_enrichment_profile_example_thumb.png
-     :alt: Enrichment Profile Plot Example
-
-     :ref:`sphx_glr_auto_examples_plot_enrichment_profile_example.py`
-
-.. raw:: html
-
-    </div>
-
-
-.. toctree::
-   :hidden:
-
-   /auto_examples/plot_enrichment_profile_example
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="This plots the fraction of bases modified within regions of interest defined by a bed file">
-
-.. only:: html
-
- .. figure:: /auto_examples/images/thumb/sphx_glr_plot_enrichment_example_thumb.png
-     :alt: Enrichment Plot Example
-
-     :ref:`sphx_glr_auto_examples_plot_enrichment_example.py`
-
-.. raw:: html
-
-    </div>
-
-
-.. toctree::
-   :hidden:
-
-   /auto_examples/plot_enrichment_example
 .. raw:: html
 
     <div class="sphx-glr-clear"></div>

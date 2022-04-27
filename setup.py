@@ -42,7 +42,7 @@ setuptools.setup(
     name="dimelo",  # name of project
     install_requires=REQUIRED_PACKAGES,  # all requirements used by this package
     version=this_version,  # project version, read from version.py
-    author="Annie Maslan & Reet Mishra & Ryan Keivanfar",  # Author, shown on PyPI
+    author="Annie Maslan & Reet Mishra & Jeremy Marcus",  # Author, shown on PyPI
     scripts=[
         "bin/dimelo-parse-bam",
         "bin/dimelo-plot-browser",

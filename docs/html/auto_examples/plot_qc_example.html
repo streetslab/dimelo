@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QC Report Example &mdash; dimelo  documentation</title>
+  <title>QC Report &mdash; dimelo  documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
@@ -21,7 +21,9 @@
         <script src="../_static/doctools.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
-    <link rel="search" title="Search" href="../search.html" /> 
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Basecalling &amp; Alignment Suggestions" href="../content/basecalling.html" />
+    <link rel="prev" title="Enrichment Profile Overlay" href="enrichment_profile_overlay_example.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -39,13 +41,23 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <ul>
+              <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../content/installation.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../content/reference/qc_report.html">qc_report</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../content/reference/parse_bam.html">parse_bam</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_browser.html">plot_browser</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment.html">plot_enrichment</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../content/reference/plot_enrichment_profile.html">plot_enrichment_profile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../content/reference/tools.html">Functions</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Example Gallery</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="enrichment_profile_single_example.html">Enrichment Profile mA only</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enrichment_profile_ma_mc_example.html">Enrichment Profile mA &amp; mCG</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enrichment_multi_bed_example.html">Enrichment Plot Comparison Across BEDs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="browser_example.html">Single-Molecule Browser Plot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enrichment_multi_bam_example.html">Enrichment Plot Comparison Across BAMs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enrichment_profile_overlay_example.html">Enrichment Profile Overlay</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">QC Report</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#creating-qc-report">Creating QC Report</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../content/basecalling.html">Basecalling &amp; Alignment Suggestions</a></li>
 </ul>
 
         </div>
@@ -62,7 +74,8 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>QC Report Example</li>
+          <li><a href="index.html">Example Gallery</a> &raquo;</li>
+      <li>QC Report</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/auto_examples/plot_qc_example.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -77,8 +90,8 @@
 <p>Click <a class="reference internal" href="#sphx-glr-download-auto-examples-plot-qc-example-py"><span class="std std-ref">here</span></a>
 to download the full example code</p>
 </div>
-<section class="sphx-glr-example-title" id="qc-report-example">
-<span id="sphx-glr-auto-examples-plot-qc-example-py"></span><h1>QC Report Example<a class="headerlink" href="#qc-report-example" title="Permalink to this headline"></a></h1>
+<section class="sphx-glr-example-title" id="qc-report">
+<span id="sphx-glr-auto-examples-plot-qc-example-py"></span><h1>QC Report<a class="headerlink" href="#qc-report" title="Permalink to this headline"></a></h1>
 <p>This creates a qc report from the test bams</p>
 <section id="creating-qc-report">
 <h2>Creating QC Report<a class="headerlink" href="#creating-qc-report" title="Permalink to this headline"></a></h2>
@@ -99,15 +112,19 @@ for long read methylation modification bam files</p>
 </pre></div>
 </div>
 <img src="../_images/sphx_glr_plot_qc_example_001.png" srcset="../_images/sphx_glr_plot_qc_example_001.png" alt="test QC Summary Report,  Read Length,  Mapping Quality,  Basecall Quality,  Alignment Quality, mean length: 12202 bp; num reads: 3243; num bases: 39571086 bp" class = "sphx-glr-single-img"/><p class="sphx-glr-script-out">Out:</p>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>mean length:  12202
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
+[Parallel(n_jobs=8)]: Done   3 out of  10 | elapsed:   12.0s remaining:   28.1s
+[Parallel(n_jobs=8)]: Done   5 out of  10 | elapsed:   12.1s remaining:   12.1s
+[Parallel(n_jobs=8)]: Done   7 out of  10 | elapsed:   12.1s remaining:    5.2s
+[Parallel(n_jobs=8)]: Done  10 out of  10 | elapsed:   12.2s finished
+mean length:  12202
 num reads:  3243
 num bases:  39571086
-processing 3243 reads with methylation for test for bam: ../../dimelo/test/data/winnowmap_guppy_merge_subset.bam
 QC report located at: ../../dimelo/dimelo_test/test_qc_report.pdf
 Database located at: ../../dimelo/dimelo_test/winnowmap_guppy_merge_subset.db
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  15.855 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  16.403 seconds)</p>
 <div class="sphx-glr-footer class sphx-glr-footer-example docutils container" id="sphx-glr-download-auto-examples-plot-qc-example-py">
 <div class="sphx-glr-download sphx-glr-download-python docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/99487b2e4e6af8b9093d643b8151d7ed/plot_qc_example.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">plot_qc_example.py</span></code></a></p>
@@ -123,12 +140,15 @@ Database located at: ../../dimelo/dimelo_test/winnowmap_guppy_merge_subset.db
 
            </div>
           </div>
-          <footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="enrichment_profile_overlay_example.html" class="btn btn-neutral float-left" title="Enrichment Profile Overlay" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../content/basecalling.html" class="btn btn-neutral float-right" title="Basecalling &amp; Alignment Suggestions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
 
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2022, Annie Maslan &amp; Reet Mishra.</p>
+    <p>&#169; Copyright 2022, Annie Maslan &amp; Reet Mishra &amp; Jeremy Marcus.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

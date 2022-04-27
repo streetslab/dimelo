@@ -1,5 +1,5 @@
 """
-QC Report Example
+QC Report
 ===========================
 
 This creates a qc report from the test bams
