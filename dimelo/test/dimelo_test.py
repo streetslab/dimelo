@@ -40,15 +40,15 @@ class TestParseBam(DiMeLoTestCase):
 
         # Check whether database contents are the same as expected, using sqlite3 .sha3sum command
         try:
-            # db_hash_output = subprocess.run(
-            #     ["sqlite3", database_path, ".sha3sum"], capture_output=True,
-            #     check=True
-            # )
             db_hash_output = subprocess.run(
-                ["sqlite3", "-version"], capture_output=True,
+                ["sqlite3", database_path, ".sha3sum"], capture_output=True,
                 check=True
             )
-            raise subprocess.CalledProcessError(1, 'test', db_hash_output.stdout, db_hash_output.stderr)
+            # db_hash_output = subprocess.run(
+            #     ["sqlite3", "-version"], capture_output=True,
+            #     check=True
+            # )
+            # raise subprocess.CalledProcessError(1, 'test', db_hash_output.stdout, db_hash_output.stderr)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"CalledProcessError: {e.stdout}, {e.stderr}")
         self.assertEqual(
