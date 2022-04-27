@@ -37,15 +37,16 @@ class TestParseBam(DiMeLoTestCase):
         )
         # TODO: When implemented elsewhere, replace this explicit database path with a modular call
         database_path = self.outDir / "mod_mappings_subset.db"
-        self.assertTrue(database_path.exists())
+
         # Check whether database contents are the same as expected, using sqlite3 .sha3sum command
-        # db_hash_output = subprocess.run(
-        #     ["sqlite3", database_path, ".sha3sum"], capture_output=True
-        # )
-        # self.assertEqual(
-        #     db_hash_output.stdout,
-        #     b"d9f626468e4221a30318639f19dc2cd8a3f00fa6e12a5280c1b58204\n",
-        # )
+        db_hash_output = subprocess.run(
+            ["sqlite3", database_path, ".sha3sum"], capture_output=True,
+            check=True
+        )
+        self.assertEqual(
+            db_hash_output.stdout,
+            b"d9f626468e4221a30318639f19dc2cd8a3f00fa6e12a5280c1b58204\n",
+        )
 
     def test_parse_bam_region(self):
         """Tests parsing a bam file into a database, specifying windows using a region string.
