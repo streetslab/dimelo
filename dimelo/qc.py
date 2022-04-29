@@ -120,6 +120,7 @@ def parse_bam_read(bamIn, outDir, cores=None):
     template_command = (
         """INSERT INTO """ + tables[0] + """ VALUES(?,?,?,?,?,?,?,?,?);"""
     )
+    connect = sqlite3.connect(DB_NAME, timeout = 60.0, check_same_thread=False)
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
         num_cores = cores_avail
@@ -130,10 +131,16 @@ def parse_bam_read(bamIn, outDir, cores=None):
         else:
             num_cores = cores
 
-    Parallel(n_jobs=num_cores, verbose=10)(
-        delayed(execute_sql_command)(template_command, DB_NAME, i)
+
+    c = connect.cursor()
+    c.execute('BEGIN TRANSACTION')
+
+    Parallel(n_jobs=num_cores, verbose = 10, prefer = "threads")(
+        delayed(execute_sql_command)(template_command, DB_NAME, connect, i)
         for i in batch_read_generator(file_bamIn, bamIn, 100)
     )
+    c.close()
+    connect.close()
     return DB_NAME, tables[0]
 
 
