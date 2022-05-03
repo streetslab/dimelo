@@ -150,6 +150,9 @@ def plot_browser(
         * PDF or HTML file with single molecules displayed over region of interest. Modified bases are colored according to colorA and colorC.
         * PDFs of aggregate coverage and fraction of bases modified over region of interest.
 
+    **Example Plots**
+
+    :ref:`sphx_glr_auto_examples_browser_example.py`
     """
 
     if not os.path.isdir(outDir):

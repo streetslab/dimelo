@@ -57,7 +57,7 @@ Create (1) aggregate profile plots for mA/A and mCG/CG, (2) single-molecule plot
 
 Output
 ----------------------
-.. figure:: ../auto_examples/images/sample_deep_ctcf_mod_mappings_merge.sorted_A_sm_rolling_avg_overlay.pdf
+.. figure:: ../auto_examples/images/sample_deep_ctcf_mod_mappings_merge.sorted_A_sm_rolling_avg_overlay.png
     :align: center
 
 

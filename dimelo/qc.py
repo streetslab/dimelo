@@ -273,10 +273,9 @@ def qc_report(
             * summary table describing spread of data
             * number of reads, number of basepairs
 
+    **Example Plots**
 
-    Sample QC Report
-
-    .. image:: images/sample_qc_report.png
+    :ref:`sphx_glr_auto_examples_plot_qc_example.py`
 
     """
     if not os.path.isdir(outDir):
@@ -431,7 +430,6 @@ def qc_report(
 
         print("QC report located at: " + final_file_name + ".pdf")
         print("Database located at: " + DB_NAME)
-
 
 
 def main():

@@ -68,15 +68,15 @@ The below Python and command line options produce the same output.
 
 Output
 ----------------------
-.. figure:: ../auto_examples/images/methylation_browser_chr11_2086423_2091187.pdf
+.. figure:: ../auto_examples/images/methylation_browser_chr11_2086423_2091187.png
     :align: center
-.. figure:: ../auto_examples/images/CTCF_A_sm_rolling_avg_fraction.pdf
+.. figure:: ../auto_examples/images/CTCF_A_sm_rolling_avg_fraction.png
     :align: center
-.. figure:: ../auto_examples/images/CTCF_A_sm_rolling_avg_total.pdf
+.. figure:: ../auto_examples/images/CTCF_A_sm_rolling_avg_total.png
     :align: center
-.. figure:: ../auto_examples/images/CTCF_C_sm_rolling_avg_fraction.pdf
+.. figure:: ../auto_examples/images/CTCF_C_sm_rolling_avg_fraction.png
     :align: center
-.. figure:: ../auto_examples/images/CTCF_C_sm_rolling_avg_total.pdf
+.. figure:: ../auto_examples/images/CTCF_C_sm_rolling_avg_total.png
     :align: center
 
 

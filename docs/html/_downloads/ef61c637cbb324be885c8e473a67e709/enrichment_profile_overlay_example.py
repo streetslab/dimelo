@@ -29,5 +29,5 @@ dm.plot_enrichment_profile(
 # %%
 # Output
 # ----------------------
-# .. figure:: ../auto_examples/images/sample_deep_ctcf_mod_mappings_merge.sorted_A_sm_rolling_avg_overlay.pdf
+# .. figure:: ../auto_examples/images/sample_deep_ctcf_mod_mappings_merge.sorted_A_sm_rolling_avg_overlay.png
 #     :align: center

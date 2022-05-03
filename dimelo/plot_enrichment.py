@@ -69,6 +69,11 @@ def plot_enrichment(
 
     Barplot with overall fraction of bases modified within regions of interest specified by bedFile(s)
 
+    **Example Plots**
+
+        * :ref:`sphx_glr_auto_examples_enrichment_multi_bam_example.py`
+        * :ref:`sphx_glr_auto_examples_enrichment_multi_bed_example.py`
+
     """
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
