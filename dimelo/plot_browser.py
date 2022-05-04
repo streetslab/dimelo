@@ -380,7 +380,7 @@ def make_per_read_meth_traces_phred(
         traces.append(
             make_per_position_phred_scatter(
                 all_data=all_data,
-                read_table=read_table_mC[read_table_mC["prob"] > threshC],
+                read_table=read_table_mC[read_table_mC["prob"] >= threshC],
                 mod="mC",
                 thresh=threshC,
                 dotsize=dotsize,
@@ -392,7 +392,7 @@ def make_per_read_meth_traces_phred(
         traces.append(
             make_per_position_phred_scatter(
                 all_data=all_data,
-                read_table=read_table_mA[read_table_mA["prob"] > threshA],
+                read_table=read_table_mA[read_table_mA["prob"] >= threshA],
                 mod="mA",
                 thresh=threshA,
                 dotsize=dotsize,
@@ -439,8 +439,8 @@ def make_per_position_phred_scatter(
             colorbar=dict(
                 title=mod + " probability",
                 titleside="right",
-                tickmode="array",  # explicitly set
-                tickvals=[min_overall / 255, max_overall / 255],
+                tickmode="array",
+                tickvals=[min_overall, max_overall],
                 ticktext=[
                     str(round(min_overall / 255, 2)),
                     str(round(max_overall / 255, 2)),
