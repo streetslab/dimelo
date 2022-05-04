@@ -425,7 +425,6 @@ def make_per_position_phred_scatter(
             min_overall = min_temp
         if max_temp > max_overall:
             max_overall = max_temp
-    print(str(round(min_overall / 255, 2)))
     return go.Scatter(
         x=read_table["pos"],
         y=read_table["height"],
@@ -440,6 +439,7 @@ def make_per_position_phred_scatter(
             colorbar=dict(
                 title=mod + " probability",
                 titleside="right",
+                tickmode="array",  # explicitly set
                 tickvals=[min_overall, max_overall],
                 ticktext=[
                     str(round(min_overall / 255, 2)),
@@ -450,7 +450,7 @@ def make_per_position_phred_scatter(
                 # ticklabeloverflow = "allow",
                 # tickangle=270,
                 thickness=10,
-                x=offset + 1.1,  # 1
+                x=offset + 1,
             ),
         ),
     )
