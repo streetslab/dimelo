@@ -57,7 +57,7 @@ Create (1) aggregate profile plots for mA/A, (2) single-molecule plots for mA, a
 
 Output
 ----------------------
-.. figure:: ../auto_examples/images/quartile4_A_sm_rolling_avg.pdf
+.. figure:: ../auto_examples/images/quartile4_A_sm_rolling_avg.png
     :align: center
 .. figure:: ../auto_examples/images/quartile4_A_sm_scatter.png
 .. figure:: ../auto_examples/images/quartile4_A_base_count.png

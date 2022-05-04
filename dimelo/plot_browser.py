@@ -150,6 +150,9 @@ def plot_browser(
         * PDF or HTML file with single molecules displayed over region of interest. Modified bases are colored according to colorA and colorC.
         * PDFs of aggregate coverage and fraction of bases modified over region of interest.
 
+    **Example Plots**
+
+    :ref:`sphx_glr_auto_examples_browser_example.py`
     """
 
     if not os.path.isdir(outDir):
@@ -377,7 +380,7 @@ def make_per_read_meth_traces_phred(
         traces.append(
             make_per_position_phred_scatter(
                 all_data=all_data,
-                read_table=read_table_mC[read_table_mC["prob"] > threshC],
+                read_table=read_table_mC[read_table_mC["prob"] >= threshC],
                 mod="mC",
                 thresh=threshC,
                 dotsize=dotsize,
@@ -389,7 +392,7 @@ def make_per_read_meth_traces_phred(
         traces.append(
             make_per_position_phred_scatter(
                 all_data=all_data,
-                read_table=read_table_mA[read_table_mA["prob"] > threshA],
+                read_table=read_table_mA[read_table_mA["prob"] >= threshA],
                 mod="mA",
                 thresh=threshA,
                 dotsize=dotsize,
@@ -436,12 +439,14 @@ def make_per_position_phred_scatter(
             colorbar=dict(
                 title=mod + " probability",
                 titleside="right",
+                tickmode="array",
                 tickvals=[min_overall, max_overall],
                 ticktext=[
                     str(round(min_overall / 255, 2)),
                     str(round(max_overall / 255, 2)),
                 ],
                 ticks="outside",
+                thickness=15,
                 x=offset + 1,
             ),
         ),

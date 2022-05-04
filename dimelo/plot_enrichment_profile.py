@@ -105,6 +105,11 @@ def plot_enrichment_profile(
         * Single molecules centered at features of interest
         * Base abundance centered at features of interest
 
+    **Example Plots**
+
+        * :ref:`sphx_glr_auto_examples_enrichment_profile_single_example.py`
+        * :ref:`sphx_glr_auto_examples_enrichment_profile_ma_mc_example.py`
+        * :ref:`sphx_glr_auto_examples_enrichment_profile_overlay_example.py`
 
     """
 
