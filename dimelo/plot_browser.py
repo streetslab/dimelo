@@ -442,8 +442,8 @@ def make_per_position_phred_scatter(
                 tickmode="array",  # explicitly set
                 tickvals=[min_overall, max_overall],
                 ticktext=[
-                    str(round(min_overall / 255, 2)),
-                    str(round(max_overall / 255, 2)),
+                    str(round(min_overall / 255, 1)),
+                    str(round(max_overall / 255, 1)),
                 ],
                 ticks="outside",  # ticks="outside",
                 # ticklabelposition="outside top",
