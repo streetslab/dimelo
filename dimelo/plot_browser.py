@@ -425,6 +425,7 @@ def make_per_position_phred_scatter(
             min_overall = min_temp
         if max_temp > max_overall:
             max_overall = max_temp
+    print(str(round(min_overall / 255, 2)))
     return go.Scatter(
         x=read_table["pos"],
         y=read_table["height"],
@@ -445,11 +446,11 @@ def make_per_position_phred_scatter(
                     str(round(max_overall / 255, 2)),
                 ],
                 ticks="outside",  # ticks="outside",
-                ticklabelposition="outside top",
+                # ticklabelposition="outside top",
                 # ticklabeloverflow = "allow",
-                tickangle=270,
+                # tickangle=270,
                 thickness=10,
-                x=offset + 1,
+                x=offset + 1.1,  # 1
             ),
         ),
     )
