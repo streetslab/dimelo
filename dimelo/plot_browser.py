@@ -185,6 +185,8 @@ def plot_browser(
             outDir,
             basemod="A+CG",
             region=region,  # pass string representation
+            threshA=threshA,
+            threshC=threshC,
             extractAllBases=True,
             cores=num_cores,
         )
