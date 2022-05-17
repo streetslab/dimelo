@@ -3,18 +3,18 @@ name: dimelo
 on: [push]
 
 jobs:
-  my-job:
-    name: My Job
-    runs-on: ubuntu-latest
-    steps:
-      - name: Print a greeting
-        env:
-          MY_VAR: Hi there! My name is
-          FIRST_NAME: Mona
-          MIDDLE_NAME: The
-          LAST_NAME: Octocat
-        run: |
-          echo $MY_VAR $FIRST_NAME $MIDDLE_NAME $LAST_NAME.
+  # my-job:
+  #   name: My Job
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Print a greeting
+  #       env:
+  #         MY_VAR: Hi there! My name is
+  #         FIRST_NAME: Mona
+  #         MIDDLE_NAME: The
+  #         LAST_NAME: Octocat
+  #       run: |
+  #         echo $MY_VAR $FIRST_NAME $MIDDLE_NAME $LAST_NAME.
 
   build:
     runs-on: ubuntu-latest
@@ -32,15 +32,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install flake8 pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      - name: Lint with flake8
-        run: |
-          # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-      - name: Post-linting test
-        run: |
-          echo "I got here!"
-      # - name: Test with pytest
+      # - name: Lint with flake8
       #   run: |
-      #     pytest
+      #     # stop the build if there are Python syntax errors or undefined names
+      #     flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      #     # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+      #     flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      - name: Test with pytest
+        run: |
+          pytest
