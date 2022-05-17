@@ -34,7 +34,7 @@ jobs:
           $CONDA/bin/conda env update --file environment_linux.yml --name base
       - name: Test with pytest
         run: |
-          conda install pytest
+          $CONDA/bin/conda install pytest
           $CONDA/bin/pytest
 
   # build:

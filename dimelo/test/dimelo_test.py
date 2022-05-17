@@ -43,7 +43,7 @@ class TestParseBam(DiMeLoTestCase):
         )
         self.assertEqual(
             db_hash_output.stdout,
-            b"d9f626468e4221a30318639f19dc2cd8a3f00fa6e12a5280c1b58204\n",
+            b"d9f626468e4221a30318639f19dc2cd8a3f00fa6e12a5280c1b58203\n",
         )
 
     def test_parse_bam_region(self):
