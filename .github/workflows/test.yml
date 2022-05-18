@@ -61,9 +61,9 @@ jobs:
         run: |
           pwd
           ls -la
-      # - name: Lint with flake8
-      #   run: |
-      #     flake8
+      - name: Lint with flake8
+        run: |
+          flake8
       - name: Check format with black
         run: |
           black --check .
