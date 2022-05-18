@@ -13,6 +13,7 @@ parse_bam allows you to summarize modification calls in a sql database
 import argparse
 import multiprocessing
 import os
+import sqlite3
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -282,6 +283,15 @@ def parse_bam(
         * methylated_bases
         * total_bases
 
+    When running parse_bam with a region defined, a summary bed file is also produced to support visualizing aggregate data with any genome browser tool. The columns of this bed file are chr, start, end, methylated_bases, total_bases.
+
+    For example, to take a summary output bed and create a file with fraction of modified bases with a window size of 100 bp for visualization with the WashU browser, you could run the below commands in terminal:
+
+        * ``bedtools makewindows -g ref_genome.chromsizes.txt -w 100 > ref_genome_windows.100.bp.bed``
+        * ``bedtools map -a ref_genome_windows.100.bp.bed -b outDir/fileName_sampleName_chr_start_end_A.bed -c 4,5 -o sum,sum -null 0 | awk -v "OFS=\\t" '{if($5>0){print $1,$2,$3,$4/$5}else{print $1,$2,$3,$5}}' > outDir/fileName_sampleName_chr_start_end_A.100.bed``
+        * ``bgzip outDir/fileName_sampleName_chr_start_end_A.100.bed``
+        * ``tabix -f -p bed outDir/fileName_sampleName_chr_start_end_A.100.bed.gz``
+
     """
     # Ensure exactly one of bedFile and region are specified
     if sum([arg is None for arg in (bedFile, region)]) != 1:
@@ -340,10 +350,68 @@ def parse_bam(
         for window in windows
     )
 
+    # create summary bed files
+    if region is not None:
+        if "A" in basemod:
+            make_bed_file_output(fileName, sampleName, outDir, region, "A")
+        if "C" in basemod:
+            make_bed_file_output(fileName, sampleName, outDir, region, "C")
+
+    # output all files created to std out
     f = fileName.split("/")[-1].replace(".bam", "")
     out_path = f"{outDir}/{f}.db"
-    str_out = f"Outputs\n_______\nDB file: {out_path}"
+    if region is None:
+        str_out = f"Outputs\n_______\nDB file: {out_path}"
+    else:
+        bed_paths = []
+        if "A" in basemod:
+            bed_path = (
+                f"{outDir}/{f}_{sampleName}_{Region(region).string}_A.bed"
+            )
+            bed_paths.append(bed_path)
+        if "C" in basemod:
+            bed_path = (
+                f"{outDir}/{f}_{sampleName}_{Region(region).string}_C.bed"
+            )
+            bed_paths.append(bed_path)
+        str_out = (
+            f"Outputs\n_______\nDB file: {out_path}\nBED file: {bed_paths}"
+        )
     print(str_out)
+
+
+def make_bed_file_output(fileName, sampleName, outDir, region, mod):
+    """
+    Make output bed file that can be used to visualize aggregate with other genome browsers
+    """
+    r = Region(region)
+    f = fileName.split("/")[-1].replace(".bam", "")
+    out_path = f"{outDir}/{f}.db"
+    aggregate_counts_all = pd.read_sql(
+        "SELECT * from methylationAggregate_" + sampleName,
+        sqlite3.connect(out_path),
+    )
+    aggregate_counts_mod = aggregate_counts_all[
+        aggregate_counts_all["mod"].str.contains(mod)
+    ].copy()
+    aggregate_counts_mod["chr"] = r.chromosome
+    aggregate_counts_mod["end"] = aggregate_counts_mod["pos"] + 1
+    # columns are: id(pos:mod), pos, mod, methylated_bases, total_bases
+    dictionary_agg = {
+        "chr": aggregate_counts_mod["chr"],
+        "start": aggregate_counts_mod["pos"],
+        "end": aggregate_counts_mod["end"],
+        "mA": aggregate_counts_mod["methylated_bases"],
+        "A": aggregate_counts_mod["total_bases"],
+    }
+    bed_agg = pd.DataFrame(dictionary_agg)
+    bed_agg.sort_values(by="start", ascending=True, inplace=True)
+    bed_agg.to_csv(
+        f"{outDir}/{f}_{sampleName}_{r.string}_{mod}.bed",
+        sep="\t",
+        header=False,
+        index=False,
+    )
 
 
 def parse_reads_window(
