@@ -32,6 +32,13 @@ jobs:
         run: |
           $CONDA/bin/conda env update --file environment_linux.yml --name base
           $CONDA/bin/conda install pytest
+          $CONDA/bin/conda install flake8 black pytest
+      - name: Lint with flake8
+        run: |
+          flake8
+      - name: Check format with black
+        run: |
+          black --check .
       - name: Test with pytest
         run: |
           $CONDA/bin/pytest
