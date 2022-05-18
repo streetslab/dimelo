@@ -90,7 +90,7 @@
 </dd>
 <dt>sampleNames</dt><dd><p>name(s) of sample for output file name labelling; valid names contain [<code class="docutils literal notranslate"><span class="pre">a-zA-Z0-9_</span></code>].</p>
 </dd>
-<dt>bedFiles</dt><dd><p>specified windows for region(s) of interest; optional 4th column in bed file to specify strand of region of interest as <code class="docutils literal notranslate"><span class="pre">+</span></code> or <code class="docutils literal notranslate"><span class="pre">-</span></code>. Default is to consider regions as all <code class="docutils literal notranslate"><span class="pre">+</span></code>. Reads will be oriented with respect to strand.</p>
+<dt>bedFiles</dt><dd><p>specified windows for region(s) of interest; optional 4th column in bed file to specify strand of region of interest as <code class="docutils literal notranslate"><span class="pre">+</span></code> or <code class="docutils literal notranslate"><span class="pre">-</span></code>. Default is to consider regions as all <code class="docutils literal notranslate"><span class="pre">+</span></code>. Reads will be oriented with respect to strand. Only reads overlapping regions defined in bed file will be extracted, regardless of windowSize. Plots are centered at the center of the bed file regions.</p>
 </dd>
 <dt>basemod</dt><dd><p>One of the following:</p>
 <ul class="simple">

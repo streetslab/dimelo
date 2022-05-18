@@ -59,7 +59,7 @@ def plot_enrichment_profile(
     sampleNames
         name(s) of sample for output file name labelling; valid names contain [``a-zA-Z0-9_``].
     bedFiles
-        specified windows for region(s) of interest; optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. Reads will be oriented with respect to strand.
+        specified windows for region(s) of interest; optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. Reads will be oriented with respect to strand. Only reads overlapping regions defined in bed file will be extracted, regardless of windowSize. Plots are centered at the center of the bed file regions.
     basemod
         One of the following:
 
