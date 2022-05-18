@@ -3,11 +3,11 @@ name: dimelo
 on: [push]
 
 jobs:
-  # build-conda:
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     matrix:
-  #       python-version: ["3.7"]
+  build-conda:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.7"]
 
     steps:
       - uses: actions/checkout@v3
@@ -20,7 +20,7 @@ jobs:
         run: |
           $CONDA/bin/conda env update --file environment_linux.yml --name base
           $CONDA/bin/conda install pytest
-          $CONDA/bin/conda install flake8 black pytest
+          $CONDA/bin/conda install flake8 black isort pytest
       - name: Where am I?
         run: |
           pwd
@@ -31,6 +31,9 @@ jobs:
       - name: Check format with black
         run: |
           $CONDA/bin/black --check .
+      - name: Clean up and sort imports
+        run: |
+          $CONDA/bin/isort --check-only .
       - name: Test with pytest
         run: |
           $CONDA/bin/pytest
