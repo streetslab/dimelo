@@ -20,7 +20,7 @@ jobs:
         run: |
           $CONDA/bin/conda env update --file environment_linux.yml --name base
           $CONDA/bin/conda install pytest
-          $CONDA/bin/conda install flake8 black isort pytest
+          $CONDA/bin/conda install flake8 black pytest
       - name: Where am I?
         run: |
           pwd
@@ -31,9 +31,6 @@ jobs:
       - name: Check format with black
         run: |
           $CONDA/bin/black --check .
-      - name: Clean up and sort imports
-        run: |
-          isort --check-only .
       - name: Test with pytest
         run: |
           $CONDA/bin/pytest
