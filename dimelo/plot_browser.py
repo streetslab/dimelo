@@ -149,6 +149,12 @@ def plot_browser(
 
         * PDF or HTML file with single molecules displayed over region of interest. Modified bases are colored according to colorA and colorC.
         * PDFs of aggregate coverage and fraction of bases modified over region of interest.
+        * A summary bed file is also produced to support visualizing aggregate data with any genome browser tool. The columns of this bed file are chr, start, end, methylated_bases, total_bases. For example, to take a summary output bed and create a file with fraction of modified bases with a window size of 100 bp for visualization with the WashU browser, you could run the below commands in terminal:
+
+            * ``bedtools makewindows -g ref_genome.chromsizes.txt -w 100 > ref_genome_windows.100.bp.bed``
+            * ``bedtools map -a ref_genome_windows.100.bp.bed -b outDir/fileName_sampleName_chr_start_end_A.bed -c 4,5 -o sum,sum -null 0 | awk -v "OFS=\\t" '{if($5>0){print $1,$2,$3,$4/$5}else{print $1,$2,$3,$5}}' > outDir/fileName_sampleName_chr_start_end_A.100.bed``
+            * ``bgzip outDir/fileName_sampleName_chr_start_end_A.100.bed``
+            * ``tabix -f -p bed outDir/fileName_sampleName_chr_start_end_A.100.bed.gz``
 
     **Example Plots**
 
@@ -185,6 +191,8 @@ def plot_browser(
             outDir,
             basemod="A+CG",
             region=region,  # pass string representation
+            threshA=threshA,
+            threshC=threshC,
             extractAllBases=True,
             cores=num_cores,
         )
@@ -241,29 +249,35 @@ def plot_browser(
     db_paths = []
     f_paths = []
     t_paths = []
+    b_paths = []
 
     for f, s in zip(fileNames, sampleNames):
         db = outDir + "/" + f.split("/")[-1].replace(".bam", "") + ".db"
         db_paths.append(db)
+        f_base = f.split("/")[-1].replace(".bam", "")
         if "A" in basemod:
             f_path = (
                 outDir + "/" + s + "_" + "A" + "_sm_rolling_avg_fraction.pdf"
             )
             t_path = outDir + "/" + s + "_" + "A" + "_sm_rolling_avg_total.pdf"
+            b_path = f"{outDir}/{f_base}_{s}_{Region(region).string}_A.bed"
             f_paths.append(f_path)
             t_paths.append(t_path)
+            b_paths.append(b_path)
         if "C" in basemod:
             f_path = (
                 outDir + "/" + s + "_" + "C" + "_sm_rolling_avg_fraction.pdf"
             )
             t_path = outDir + "/" + s + "_" + "C" + "_sm_rolling_avg_total.pdf"
+            b_path = f"{outDir}/{f_base}_{s}_{Region(region).string}_C.bed"
             f_paths.append(f_path)
             t_paths.append(t_path)
+            b_paths.append(b_path)
 
     w = Region(region)
 
     browser_path = f"{outDir}/methylation_browser_{w.string}.{ext}"
-    str_out = f"Outputs\n_______\nDB file: {db_paths}\nbrowser plot: {browser_path}\nrolling average fraction bases methylated plot: {f_paths}\nrolling average total bases plot: {t_paths}"
+    str_out = f"Outputs\n_______\nDB file: {db_paths}\nbrowser plot: {browser_path}\nrolling average fraction bases methylated plot: {f_paths}\nrolling average total bases plot: {t_paths}\nsummary bed file: {b_paths}"
     print(str_out)
 
 
