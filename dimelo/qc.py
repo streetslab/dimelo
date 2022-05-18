@@ -45,7 +45,11 @@ def batch_read_generator(file_bamIn, filename, batch_size):
     # added the next 3 lines
     lines = pysam.idxstats(filename).splitlines()
     total_reads = sum(
-        [int(l.split("\t")[2]) for l in lines if not l.startswith("#")]
+        [
+            int(line.split("\t")[2])
+            for line in lines
+            if not line.startswith("#")
+        ]
     )
     batch_size = 0.1 * total_reads
 
