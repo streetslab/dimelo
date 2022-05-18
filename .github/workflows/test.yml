@@ -21,9 +21,6 @@ jobs:
   #         $CONDA/bin/conda env update --file environment_linux.yml --name base
   #         $CONDA/bin/conda install pytest
   #         $CONDA/bin/conda install flake8 black pytest
-  #     - name: Check conda environment
-  #       run: |
-  #         $CONDA/bin/conda list
   #     - name: Where am I?
   #       run: |
   #         pwd
