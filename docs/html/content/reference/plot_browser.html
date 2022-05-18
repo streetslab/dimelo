@@ -133,9 +133,19 @@
 </div>
 <p><strong>Return</strong></p>
 <blockquote>
-<div><ul class="simple">
+<div><ul>
 <li><p>PDF or HTML file with single molecules displayed over region of interest. Modified bases are colored according to colorA and colorC.</p></li>
 <li><p>PDFs of aggregate coverage and fraction of bases modified over region of interest.</p></li>
+<li><p>A summary bed file is also produced to support visualizing aggregate data with any genome browser tool. The columns of this bed file are chr, start, end, methylated_bases, total_bases. For example, to take a summary output bed and create a file with fraction of modified bases with a window size of 100 bp for visualization with the WashU browser, you could run the below commands in terminal:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">bedtools</span> <span class="pre">makewindows</span> <span class="pre">-g</span> <span class="pre">ref_genome.chromsizes.txt</span> <span class="pre">-w</span> <span class="pre">100</span> <span class="pre">&gt;</span> <span class="pre">ref_genome_windows.100.bp.bed</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bedtools</span> <span class="pre">map</span> <span class="pre">-a</span> <span class="pre">ref_genome_windows.100.bp.bed</span> <span class="pre">-b</span> <span class="pre">outDir/fileName_sampleName_chr_start_end_A.bed</span> <span class="pre">-c</span> <span class="pre">4,5</span> <span class="pre">-o</span> <span class="pre">sum,sum</span> <span class="pre">-null</span> <span class="pre">0</span> <span class="pre">|</span> <span class="pre">awk</span> <span class="pre">-v</span> <span class="pre">&quot;OFS=\t&quot;</span> <span class="pre">'{if($5&gt;0){print</span> <span class="pre">$1,$2,$3,$4/$5}else{print</span> <span class="pre">$1,$2,$3,$5}}'</span> <span class="pre">&gt;</span> <span class="pre">outDir/fileName_sampleName_chr_start_end_A.100.bed</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bgzip</span> <span class="pre">outDir/fileName_sampleName_chr_start_end_A.100.bed</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tabix</span> <span class="pre">-f</span> <span class="pre">-p</span> <span class="pre">bed</span> <span class="pre">outDir/fileName_sampleName_chr_start_end_A.100.bed.gz</span></code></p></li>
+</ul>
+</div></blockquote>
+</li>
 </ul>
 </div></blockquote>
 <p><strong>Example Plots</strong></p>
