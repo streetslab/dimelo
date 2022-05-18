@@ -35,10 +35,10 @@ jobs:
           $CONDA/bin/conda install flake8 black pytest
       - name: Lint with flake8
         run: |
-          flake8
+          $CONDA/bin/flake8
       - name: Check format with black
         run: |
-          black --check .
+          $CONDA/bin/black --check .
       - name: Test with pytest
         run: |
           $CONDA/bin/pytest
