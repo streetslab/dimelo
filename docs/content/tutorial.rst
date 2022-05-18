@@ -5,7 +5,8 @@ Follow the steps here to run the dimelo package with a test dataset.
 
 Files needed
 -------------
-Files can be found in dimelo/test/data directory.
+Files can be found in directory: ``dimelo/test/data``
+
 1. ctcf_demo.sorted.bam
 2. ctcf_demo.sorted.bam.bai
 3. ctcf_demo_peak.bed
