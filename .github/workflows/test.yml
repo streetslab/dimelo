@@ -3,40 +3,40 @@ name: dimelo
 on: [push]
 
 jobs:
-  build-conda:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.7"]
+  # build-conda:
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     matrix:
+  #       python-version: ["3.7"]
 
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v3
-        with:
-          python-version: ${{ matrix.python-version }}
-      # TODO: If we change the name of the dimelo subdirectory, this should break.
-      - name: Install dependencies
-        run: |
-          $CONDA/bin/conda env update --file environment_linux.yml --name base
-          $CONDA/bin/conda install pytest
-          $CONDA/bin/conda install flake8 black pytest
-      - name: Check conda environment
-        run: |
-          $CONDA/bin/conda list
-      - name: Where am I?
-        run: |
-          pwd
-          ls -la
-      - name: Lint with flake8
-        run: |
-          $CONDA/bin/flake8
-      - name: Check format with black
-        run: |
-          $CONDA/bin/black --check .
-      - name: Test with pytest
-        run: |
-          $CONDA/bin/pytest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - name: Set up Python ${{ matrix.python-version }}
+  #       uses: actions/setup-python@v3
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
+  #     # TODO: If we change the name of the dimelo subdirectory, this should break.
+  #     - name: Install dependencies
+  #       run: |
+  #         $CONDA/bin/conda env update --file environment_linux.yml --name base
+  #         $CONDA/bin/conda install pytest
+  #         $CONDA/bin/conda install flake8 black pytest
+  #     - name: Check conda environment
+  #       run: |
+  #         $CONDA/bin/conda list
+  #     - name: Where am I?
+  #       run: |
+  #         pwd
+  #         ls -la
+  #     - name: Lint with flake8
+  #       run: |
+  #         $CONDA/bin/flake8
+  #     - name: Check format with black
+  #       run: |
+  #         $CONDA/bin/black --check .
+  #     - name: Test with pytest
+  #       run: |
+  #         $CONDA/bin/pytest
 
   build-pip:
     runs-on: ubuntu-latest
@@ -64,9 +64,9 @@ jobs:
         run: |
           pwd
           ls -la
-      - name: Lint with flake8
-        run: |
-          flake8
+      # - name: Lint with flake8
+      #   run: |
+      #     flake8
       - name: Check format with black
         run: |
           black --check .
