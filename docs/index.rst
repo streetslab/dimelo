@@ -28,6 +28,8 @@ Resources
 
 :doc:`content/basecalling` 
 
+:doc:`content/tutorial` 
+
 `Open Source Code <https://github.com/amaslan/dimelo>`__
 
 
@@ -39,5 +41,6 @@ Resources
    content/reference/tools
    auto_examples/index
    content/basecalling
+   content/tutorial
 
 
