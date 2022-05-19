@@ -69,7 +69,7 @@ jobs:
           flake8
       - name: Check format with black
         run: |
-          black --check .
+          black --diff --check .
       - name: Clean up and sort imports
         run: |
           isort --check-only .
