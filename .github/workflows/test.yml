@@ -22,10 +22,6 @@ jobs:
           $CONDA/bin/conda env update --file environment_linux.yml --name base
           pip install flake8 black isort
           $CONDA/bin/conda install pytest
-      - name: Where am I?
-        run: |
-          pwd
-          ls -la
       - name: Lint with flake8
         run: |
           flake8
@@ -55,10 +51,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install flake8 black isort pytest
           pip install .
-      - name: Where am I?
-        run: |
-          pwd
-          ls -la
       - name: Lint with flake8
         run: |
           flake8
