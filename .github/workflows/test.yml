@@ -1,0 +1,65 @@
+name: dimelo
+
+on: [push]
+
+jobs:
+  build-conda:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.7"]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      # TODO: If we change the name of the dimelo subdirectory, conda install as written here should break.
+      # Installing format dependencies with pip for full compatibility
+      - name: Install dependencies
+        run: |
+          $CONDA/bin/conda env update --file environment_linux.yml --name base
+          pip install flake8 black isort
+          $CONDA/bin/conda install pytest
+      - name: Lint with flake8
+        run: |
+          flake8
+      - name: Check format with black
+        run: |
+          black --config pyproject.toml --diff --check .
+      - name: Clean up and sort imports
+        run: |
+          isort --check-only .
+      - name: Test with pytest
+        run: |
+          $CONDA/bin/pytest
+
+  build-pip:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.7"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort pytest
+          pip install .
+      - name: Lint with flake8
+        run: |
+          flake8
+      - name: Check format with black
+        run: |
+          black --diff --check .
+      - name: Clean up and sort imports
+        run: |
+          isort --check-only .
+      - name: Test with pytest
+        run: |
+          pytest

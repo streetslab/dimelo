@@ -82,4 +82,11 @@ Other notes
 
 	pip install -e .
 
+* Additionally, if making contributions to the codebase, install pre-commit, which will enforce the dimelo code style (black, flake8) on each of your commits:
+
+.. code:: bash
+
+	pip install pre-commit
+        pre-commit install
+
 

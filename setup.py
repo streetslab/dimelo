@@ -12,7 +12,7 @@ this_directory = os.path.abspath(os.path.dirname(__file__))
 with open(
     os.path.join(this_directory, "dimelo", "_version.py"), "wt"
 ) as fversion:
-    fversion.write('__version__ = "' + this_version + '"')
+    fversion.write(f'__version__ = "{this_version}"\n')
 
 # Define required packages. Alternatively, these could be defined in a separate
 # file and read in here.
