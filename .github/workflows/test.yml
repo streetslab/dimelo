@@ -20,7 +20,6 @@ jobs:
       - name: Install dependencies
         run: |
           $CONDA/bin/conda env update --file environment_linux.yml --name base
-          # $CONDA/bin/conda install flake8 black isort pytest
           pip install flake8 black isort
           $CONDA/bin/conda install pytest
       - name: Where am I?
@@ -29,15 +28,12 @@ jobs:
           ls -la
       - name: Lint with flake8
         run: |
-          # $CONDA/bin/flake8
           flake8
       - name: Check format with black
         run: |
-          # $CONDA/bin/black --config pyproject.toml --diff --check .
           black --config pyproject.toml --diff --check .
       - name: Clean up and sort imports
         run: |
-          # $CONDA/bin/isort --check-only .
           isort --check-only .
       - name: Test with pytest
         run: |
@@ -59,12 +55,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install flake8 black isort pytest
           pip install .
-      # - name: Lint with flake8
-      #   run: |
-      #     # stop the build if there are Python syntax errors or undefined names
-      #     flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-      #     # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-      #     flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Where am I?
         run: |
           pwd
