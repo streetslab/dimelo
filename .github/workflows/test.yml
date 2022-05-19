@@ -30,7 +30,7 @@ jobs:
           $CONDA/bin/flake8
       - name: Check format with black
         run: |
-          $CONDA/bin/black --check .
+          $CONDA/bin/black --config pyproject.toml --check .
       - name: Clean up and sort imports
         run: |
           $CONDA/bin/isort --check-only .
