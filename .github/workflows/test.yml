@@ -15,28 +15,33 @@ jobs:
         uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python-version }}
-      # TODO: If we change the name of the dimelo subdirectory, this should break.
+      # TODO: If we change the name of the dimelo subdirectory, conda install as written here should break.
+      # Installing test/format dependencies with pip for full compatibility
       - name: Install dependencies
         run: |
           $CONDA/bin/conda env update --file environment_linux.yml --name base
-          $CONDA/bin/conda install pytest
-          $CONDA/bin/conda install flake8 black isort pytest
+          # $CONDA/bin/conda install flake8 black isort pytest
+          pip install flake8 black isort pytest
       - name: Where am I?
         run: |
           pwd
           ls -la
       - name: Lint with flake8
         run: |
-          $CONDA/bin/flake8
+          # $CONDA/bin/flake8
+          flake8
       - name: Check format with black
         run: |
-          $CONDA/bin/black --config pyproject.toml --diff --check .
+          # $CONDA/bin/black --config pyproject.toml --diff --check .
+          black --config pyproject.toml --diff --check .
       - name: Clean up and sort imports
         run: |
-          $CONDA/bin/isort --check-only .
+          # $CONDA/bin/isort --check-only .
+          isort --check-only .
       - name: Test with pytest
         run: |
-          $CONDA/bin/pytest
+          # $CONDA/bin/pytest
+          pytest
 
   build-pip:
     runs-on: ubuntu-latest
