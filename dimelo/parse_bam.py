@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import pysam
 from joblib import Parallel, delayed
+from tqdm import tqdm
 
 from dimelo.utils import clear_db, create_sql_table, execute_sql_command
 
@@ -320,6 +321,14 @@ def parse_bam(
     if region is not None:
         windows = [Region(region)]
 
+    # Configure progress reporting
+    if len(windows) == 1:
+        show_read_progress = True
+    else:
+        show_read_progress = False
+        # Enable top-level progress bar for multi-window processing
+        windows = tqdm(windows, desc="Parsing windows", unit="windows")
+
     # default number of cores is max available
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
@@ -346,6 +355,7 @@ def parse_bam(
             batchSize,
             outDir,
             extractAllBases,
+            showReadProgress=show_read_progress,
         )
         for window in windows
     )
@@ -426,6 +436,7 @@ def parse_reads_window(
     batchSize: int,
     outDir: str,
     extractAllBases: bool,
+    showReadProgress: bool = False,
 ) -> None:
     """Parse all reads in window and put data into methylationByBase table.
 
@@ -439,6 +450,7 @@ def parse_reads_window(
             :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
             :param threshA: threshold above which to call an A base methylated
             :param threshC: threshold above which to call a C base methylated
+            :param showReadProgress: when true, display progress for read processing
 
     TODO:
             - Find a way to mention in documentation that this has a side effect of populating the aggregated table as well...
@@ -446,9 +458,12 @@ def parse_reads_window(
     """
     bam = pysam.AlignmentFile(fileName, "rb")
     data = []
-    for read in bam.fetch(
+    reads = bam.fetch(
         reference=window.chromosome, start=window.begin, end=window.end
-    ):
+    )
+    if showReadProgress:
+        reads = tqdm(reads, desc="Processing reads", unit="reads")
+    for read in reads:
         [
             (mod, positions, probs),
             (mod2, positions2, probs2),
