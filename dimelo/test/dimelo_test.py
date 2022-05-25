@@ -150,23 +150,44 @@ class TestParseBam(DiMeLoTestCase):
             )
 
 
-# class TestQCReport(DiMeLoTestCase):
-#     def test_qc_report_one_sample(self):
-#         dm.qc_report(
-#             fileNames=str(input_bams[0]),
-#             sampleNames=input_sample_names[0],
-#             outDir=str(self.outDir),
-#         )
-#         # dimelo/dimelo_test/test_qc_report.pdf
-#         # dimelo/dimelo_test/mod_mappings_subset.db
+# TODO: More robust qc_report tests
+class TestQCReport(DiMeLoTestCase):
+    def test_qc_report_one_sample(self):
+        bam_idx = 0
 
+        # Inputs
+        bam_file = input_bams[bam_idx]
+        sample_name = input_sample_names[bam_idx]
 
-#     def test_qc_report_multi_sample(self):
-#         dm.qc_report(
-#             fileNames=[str(f) for f in input_bams],
-#             sampleNames=input_sample_names,
-#             outDir=str(self.outDir),
-#         )
+        # Outputs
+        db_file = output_dbs[bam_idx]
+
+        dm.qc_report(
+            fileNames=str(bam_file),
+            sampleNames=sample_name,
+            outDir=str(self.outDir),
+        )
+
+        qc_report_path = self.outDir / f"{sample_name}_qc_report.pdf"
+        database_path = self.outDir / db_file
+
+        self.assertTrue(qc_report_path.exists())
+        self.assertTrue(database_path.exists())
+
+    def test_qc_report_multi_sample(self):
+        dm.qc_report(
+            fileNames=[str(f) for f in input_bams],
+            sampleNames=input_sample_names,
+            outDir=str(self.outDir),
+        )
+
+        for sample_name in input_sample_names:
+            qc_report_path = self.outDir / f"{sample_name}_qc_report.pdf"
+            self.assertTrue(qc_report_path.exists())
+
+        for db_file in output_dbs:
+            database_path = self.outDir / db_file
+            self.assertTrue(database_path.exists())
 
 
 # class TestPlotEnrichment(DiMeLoTestCase):
