@@ -1,5 +1,6 @@
 import subprocess
 import unittest
+from pathlib import Path
 
 import dimelo as dm
 from dimelo.test import DiMeLoTestCase
@@ -12,6 +13,35 @@ from dimelo.test import DiMeLoTestCase
 # extract_methylation_data_subset,
 # )
 
+"""
+Inputs
+
+NOTE: Changing any of these may require recomputing the hard-coded database
+hashes in the tests below.
+"""
+# TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
+input_bams = [
+    Path("dimelo/test/data/mod_mappings_subset.bam"),
+    Path("dimelo/test/data/winnowmap_guppy_merge_subset.bam"),
+]
+input_sample_names = ["test1", "test2"]
+input_bed = Path("dimelo/test/data/test.bed")
+
+"""
+Outputs
+"""
+# TODO: When implemented elsewhere, replace these explicit database paths with modular calls
+output_dbs = [f.with_suffix(".db").name for f in input_bams]
+
+
+def db_hash(db_path: Path) -> bytes:
+    """Computes a hash of the sqlite db at the specified path."""
+    # Use the sqlite3 .sha3sum command to compute hash
+    sqlite_output = subprocess.run(
+        ["sqlite3", db_path, ".sha3sum"], capture_output=True
+    )
+    return sqlite_output.stdout
+
 
 class TestParseBam(DiMeLoTestCase):
     def test_parse_bam_bedFile(self):
@@ -21,12 +51,21 @@ class TestParseBam(DiMeLoTestCase):
             - cores set to 1 to ensure that hashes come out the same each time
             - thresholds set super low to ensure that meaningful rows are inserted for all modifications
         """
-        # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+        sample_name = input_sample_names[bam_idx]
+        bed_file = input_bed
+
+        # Outputs
+        db_file = output_dbs[bam_idx]
+
         dm.parse_bam(
-            fileName="dimelo/test/data/mod_mappings_subset.bam",
-            sampleName="test",
+            fileName=str(bam_file),
+            sampleName=sample_name,
             outDir=str(self.outDir),
-            bedFile="dimelo/test/data/test.bed",
+            bedFile=str(bed_file),
             basemod="A+CG",
             center=True,
             windowSize=500,
@@ -35,15 +74,11 @@ class TestParseBam(DiMeLoTestCase):
             extractAllBases=False,
             cores=1,
         )
-        # TODO: When implemented elsewhere, replace this explicit database path with a modular call
-        database_path = self.outDir / "mod_mappings_subset.db"
-        # Check whether database contents are the same as expected, using sqlite3 .sha3sum command
-        db_hash_output = subprocess.run(
-            ["sqlite3", database_path, ".sha3sum"], capture_output=True
-        )
+        database_path = self.outDir / db_file
+        # Check whether database contents are the same as expected
         self.assertEqual(
-            db_hash_output.stdout,
-            b"d9f626468e4221a30318639f19dc2cd8a3f00fa6e12a5280c1b58204\n",
+            db_hash(database_path),
+            b"8a8fe3984448ee6f215d1d71c01a4d8edde7691bcdb0bf28f2c01cd2\n",
         )
 
     def test_parse_bam_region(self):
@@ -53,10 +88,18 @@ class TestParseBam(DiMeLoTestCase):
             - cores set to 1 to ensure that hashes come out the same each time
             - thresholds set super low to ensure that meaningful rows are inserted for all modifications
         """
-        # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+        sample_name = input_sample_names[bam_idx]
+
+        # Outputs
+        db_file = output_dbs[bam_idx]
+
         dm.parse_bam(
-            fileName="dimelo/test/data/mod_mappings_subset.bam",
-            sampleName="test",
+            fileName=str(bam_file),
+            sampleName=sample_name,
             outDir=str(self.outDir),
             region="chr1:2907273-2909473",
             basemod="A+CG",
@@ -64,40 +107,66 @@ class TestParseBam(DiMeLoTestCase):
             threshC=1,
             cores=1,
         )
-        # TODO: When implemented elsewhere, replace this explicit database path with a modular call
-        database_path = self.outDir / "mod_mappings_subset.db"
-        # Check whether database contents are the same as expected, using sqlite3 .sha3sum command
-        db_hash_output = subprocess.run(
-            ["sqlite3", database_path, ".sha3sum"], capture_output=True
-        )
+        database_path = self.outDir / db_file
+        # Check whether database contents are the same as expected
         self.assertEqual(
-            db_hash_output.stdout,
-            b"ae1b8af9121734a96dbcba0df7c0369b14e995a9cf7163a0e9769af6\n",
+            db_hash(database_path),
+            b"baf72c009547e8a2e87402db04695d698e648c3856bcc9b8c0c6cf8a\n",
         )
 
     def test_parse_bam_bedFile_region_mutual_exclusion(self):
         """Verifies that bedFile and region arguments remain mutually exclusive."""
-        # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+        sample_name = input_sample_names[bam_idx]
+        bed_file = input_bed
+
         with self.assertRaises(RuntimeError):
             dm.parse_bam(
-                fileName="dimelo/test/data/mod_mappings_subset.bam",
-                sampleName="test",
+                fileName=str(bam_file),
+                sampleName=sample_name,
                 outDir=str(self.outDir),
-                bedFile="dimelo/test/data/test.bed",
+                bedFile=str(bed_file),
                 region="chr1:2907273-2909473",
             )
 
     def test_parse_bam_region_center_incompatible(self):
         """Verifies that region and center arguments are incompatible."""
-        # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+        sample_name = input_sample_names[bam_idx]
+
         with self.assertRaises(RuntimeError):
             dm.parse_bam(
-                fileName="dimelo/test/data/mod_mappings_subset.bam",
-                sampleName="test",
+                fileName=str(bam_file),
+                sampleName=sample_name,
                 outDir=str(self.outDir),
                 region="chr1:2907273-2909473",
                 center=True,
             )
+
+
+# class TestQCReport(DiMeLoTestCase):
+#     def test_qc_report_one_sample(self):
+#         dm.qc_report(
+#             fileNames=str(input_bams[0]),
+#             sampleNames=input_sample_names[0],
+#             outDir=str(self.outDir),
+#         )
+#         # dimelo/dimelo_test/test_qc_report.pdf
+#         # dimelo/dimelo_test/mod_mappings_subset.db
+
+
+#     def test_qc_report_multi_sample(self):
+#         dm.qc_report(
+#             fileNames=[str(f) for f in input_bams],
+#             sampleNames=input_sample_names,
+#             outDir=str(self.outDir),
+#         )
 
 
 # class TestPlotEnrichment(DiMeLoTestCase):
