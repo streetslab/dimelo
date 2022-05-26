@@ -139,7 +139,12 @@ def parse_bam_read(bamIn, outDir, cores=None):
     # file_bamIn.reset()
     Parallel(n_jobs=num_cores)(
         delayed(execute_sql_command)(template_command, DB_NAME, i)
-        for i in tqdm(batch_read_generator(file_bamIn, bamIn), total = 10, desc = "Processing reads", unit = " batches")
+        for i in tqdm(
+            batch_read_generator(file_bamIn, bamIn),
+            total=10,
+            desc="Processing reads",
+            unit=" batches",
+        )
     )
     return DB_NAME, tables[0]
 
