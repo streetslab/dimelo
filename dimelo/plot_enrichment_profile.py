@@ -241,7 +241,7 @@ def plot_enrichment_profile(
             t_paths.append(t_path)
         if "C" in basemod:
             t_path = (
-                outDir + "/" + sampleNames[0] + "_" + "C" + "_base_count.png"
+                outDir + "/" + sampleNames[0] + "_" + "CG" + "_base_count.png"
             )
             t_paths.append(t_path)
 

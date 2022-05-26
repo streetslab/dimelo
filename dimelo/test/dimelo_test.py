@@ -161,6 +161,7 @@ class TestQCReport(DiMeLoTestCase):
 
         # Outputs
         db_file = output_dbs[bam_idx]
+        qc_report_file = f"{sample_name}_qc_report.pdf"
 
         dm.qc_report(
             fileNames=str(bam_file),
@@ -168,11 +169,8 @@ class TestQCReport(DiMeLoTestCase):
             outDir=str(self.outDir),
         )
 
-        qc_report_path = self.outDir / f"{sample_name}_qc_report.pdf"
-        self.assertTrue(qc_report_path.exists())
-
-        database_path = self.outDir / db_file
-        self.assertTrue(database_path.exists())
+        self.assertOutputFileExists(db_file)
+        self.assertOutputFileExists(qc_report_file)
 
     def test_qc_report_multi_sample(self):
         dm.qc_report(
@@ -181,13 +179,10 @@ class TestQCReport(DiMeLoTestCase):
             outDir=str(self.outDir),
         )
 
-        for sample_name in input_sample_names:
-            qc_report_path = self.outDir / f"{sample_name}_qc_report.pdf"
-            self.assertTrue(qc_report_path.exists())
-
         for db_file in output_dbs:
-            database_path = self.outDir / db_file
-            self.assertTrue(database_path.exists())
+            self.assertOutputFileExists(db_file)
+        for sample_name in input_sample_names:
+            self.assertOutputFileExists(f"{sample_name}_qc_report.pdf")
 
 
 class TestPlotBrowser(DiMeLoTestCase):
@@ -210,8 +205,7 @@ class TestPlotBrowser(DiMeLoTestCase):
             static=False,
         )
 
-        database_path = self.outDir / db_file
-        self.assertTrue(database_path.exists())
+        self.assertOutputFileExists(db_file)
 
         # TODO: It's difficult to get the output file name. Find a better way to do this check.
         n_html_files = len(list(self.outDir.glob("*.html")))
@@ -219,11 +213,10 @@ class TestPlotBrowser(DiMeLoTestCase):
 
         for basemod in ["A", "C"]:
             for plot_type in ["fraction", "total"]:
-                rolling_avg_path = (
-                    self.outDir
-                    / f"{sample_name}_{basemod}_sm_rolling_avg_{plot_type}.pdf"
+                rolling_avg_file = (
+                    f"{sample_name}_{basemod}_sm_rolling_avg_{plot_type}.pdf"
                 )
-                self.assertTrue(rolling_avg_path.exists())
+                self.assertOutputFileExists(rolling_avg_file)
 
         # TODO: It's difficult to get the output file name. Find a better way to do this check.
         n_bed_files = len(list(self.outDir.glob("*.bed")))
@@ -248,8 +241,7 @@ class TestPlotBrowser(DiMeLoTestCase):
             static=True,
         )
 
-        database_path = self.outDir / db_file
-        self.assertTrue(database_path.exists())
+        self.assertOutputFileExists(db_file)
 
         # TODO: It's difficult to get the output file name. Find a better way to do this check.
         n_pdf_files = len(list(self.outDir.glob("*.pdf")))
@@ -257,11 +249,10 @@ class TestPlotBrowser(DiMeLoTestCase):
 
         for basemod in ["A", "C"]:
             for plot_type in ["fraction", "total"]:
-                rolling_avg_path = (
-                    self.outDir
-                    / f"{sample_name}_{basemod}_sm_rolling_avg_{plot_type}.pdf"
+                rolling_avg_file = (
+                    f"{sample_name}_{basemod}_sm_rolling_avg_{plot_type}.pdf"
                 )
-                self.assertTrue(rolling_avg_path.exists())
+                self.assertOutputFileExists(rolling_avg_file)
 
         # TODO: It's difficult to get the output file name. Find a better way to do this check.
         n_bed_files = len(list(self.outDir.glob("*.bed")))
@@ -277,6 +268,7 @@ class TestPlotEnrichment(DiMeLoTestCase):
 
         # Outputs
         db_file = output_dbs[bam_idx]
+        pdf_file = f"region_{input_bed.stem}_CG_enrichment_barplot.pdf"
 
         dm.plot_enrichment(
             fileNames=[str(bam_file), str(bam_file)],
@@ -287,13 +279,8 @@ class TestPlotEnrichment(DiMeLoTestCase):
             threshC=129,
         )
 
-        database_path = self.outDir / db_file
-        self.assertTrue(database_path.exists())
-
-        pdf_path = (
-            self.outDir / f"region_{input_bed.stem}_CG_enrichment_barplot.pdf"
-        )
-        self.assertTrue(pdf_path.exists())
+        self.assertOutputFileExists(db_file)
+        self.assertOutputFileExists(pdf_file)
 
     def test_plot_enrichment_2_beds(self):
         bam_idx = 0
@@ -303,6 +290,7 @@ class TestPlotEnrichment(DiMeLoTestCase):
 
         # Outputs
         db_file = output_dbs[bam_idx]
+        pdf_file = f"sample_{bam_file.stem}_CG_enrichment_barplot.pdf"
 
         dm.plot_enrichment(
             fileNames=str(bam_file),
@@ -313,13 +301,8 @@ class TestPlotEnrichment(DiMeLoTestCase):
             threshC=129,
         )
 
-        database_path = self.outDir / db_file
-        self.assertTrue(database_path.exists())
-
-        pdf_path = (
-            self.outDir / f"sample_{bam_file.stem}_CG_enrichment_barplot.pdf"
-        )
-        self.assertTrue(pdf_path.exists())
+        self.assertOutputFileExists(db_file)
+        self.assertOutputFileExists(pdf_file)
 
     def test_plot_enrichment_incompatible_bed_bam(self):
         bam_idx = 0
@@ -350,6 +333,81 @@ class TestPlotEnrichment(DiMeLoTestCase):
                 basemod="A+CG",
                 outDir=str(self.outDir),
             )
+
+
+class TestPlotEnrichmentProfile(DiMeLoTestCase):
+    def test_plot_enrichment_profile_single(self):
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+        sample_name = input_sample_names[bam_idx]
+
+        # Outputs
+        db_file = output_dbs[bam_idx]
+        enrichment_plot = f"{sample_name}_A+CG_sm_rolling_avg.pdf"
+        single_molecule_plot = f"{sample_name}_A+CG_sm_scatter.png"
+        base_count_plots = [
+            f"{sample_name}_{basemod}_base_count.png"
+            for basemod in ["A", "CG"]
+        ]
+
+        dm.plot_enrichment_profile(
+            fileNames=str(bam_file),
+            sampleNames=sample_name,
+            bedFiles=str(input_bed),
+            basemod="A+CG",
+            outDir=str(self.outDir),
+            windowSize=500,
+            dotsize=1,
+        )
+
+        self.assertOutputFileExists(db_file)
+        self.assertOutputFileExists(enrichment_plot)
+        self.assertOutputFileExists(single_molecule_plot)
+        for f in base_count_plots:
+            self.assertOutputFileExists(f)
+
+    def test_plot_enrichment_profile_sample_overlay(self):
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+
+        # Outputs
+        db_file = output_dbs[bam_idx]
+        overlay_plot = f"sample_{bam_file.stem}_A_sm_rolling_avg_overlay.pdf"
+
+        dm.plot_enrichment_profile(
+            fileNames=str(bam_file),
+            sampleNames=input_sample_names,
+            bedFiles=[str(input_bed), str(input_bed)],
+            basemod="A",
+            outDir=str(self.outDir),
+            windowSize=500,
+            dotsize=1,
+        )
+
+        self.assertOutputFileExists(db_file)
+        self.assertOutputFileExists(overlay_plot)
+
+    def test_plot_enrichment_profile_region_overlay(self):
+        # Outputs
+        overlay_plot = f"region_{input_bed.stem}_A_sm_rolling_avg_overlay.pdf"
+
+        dm.plot_enrichment_profile(
+            fileNames=[str(f) for f in input_bams],
+            sampleNames=input_sample_names,
+            bedFiles=str(input_bed),
+            basemod="A",
+            outDir=str(self.outDir),
+            windowSize=500,
+            dotsize=1,
+        )
+
+        for db_file in output_dbs:
+            self.assertOutputFileExists(db_file)
+        self.assertOutputFileExists(overlay_plot)
 
 
 # class TestDiMeLo(DiMeLoTestCase):
