@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import pysam
 from joblib import Parallel, delayed
+from tqdm import tqdm
 
 from dimelo.parse_bam import make_db
 from dimelo.utils import execute_sql_command
@@ -38,7 +39,7 @@ DEFAULT_COLOR_LIST = [
 ]
 
 
-def batch_read_generator(file_bamIn, filename, batch_size):
+def batch_read_generator(file_bamIn, filename):
     counter = 0
     r_list = []
 
@@ -117,10 +118,10 @@ def ave_qual(quals, qround=False, tab=errs_tab(129)):
         return None
 
 
-def parse_bam_read(bamIn, outDir, cores=None):
+def parse_bam_read(bamIn, sampleName, outDir, cores=None):
     file_bamIn = pysam.AlignmentFile(bamIn, "rb")
 
-    DB_NAME, tables = make_db(bamIn, "", outDir, qc=True)
+    DB_NAME, tables = make_db(bamIn, sampleName, outDir, qc=True)
     template_command = (
         """INSERT INTO """ + tables[0] + """ VALUES(?,?,?,?,?,?,?,?,?);"""
     )
@@ -138,10 +139,19 @@ def parse_bam_read(bamIn, outDir, cores=None):
     c = connect.cursor()
     c.execute("BEGIN TRANSACTION")
 
-    Parallel(n_jobs=num_cores, verbose=10, prefer="threads")(
+    # tqdm(batch_read_generator(file_bamIn, bamIn, 100), unit="batches", desc="Processing reads", total=total_reads)
+    # total_reads = file_bamIn.count() / 10
+    # file_bamIn.reset()
+    Parallel(n_jobs=num_cores, backend="threading")(
         delayed(execute_sql_command)(template_command, DB_NAME, connect, i)
-        for i in batch_read_generator(file_bamIn, bamIn, 100)
+        for i in tqdm(
+            batch_read_generator(file_bamIn, bamIn),
+            total=10,
+            desc="Processing reads",
+            unit=" batches",
+        )
     )
+
     c.close()
     connect.close()
     return DB_NAME, tables[0]
@@ -283,6 +293,27 @@ def qc_report(
             * summary table describing spread of data
             * number of reads, number of basepairs
 
+    Returns a SQL database in the specified output directory. Database can be converted into pandas dataframe with:
+
+    >>> fileName = "dimelo/test/data/mod_mappings_subset.bam"
+    >>> sampleName = "test"
+    >>> outDir = "dimelo/dimelo_test"
+    >>> all_reads = pd.read_sql("SELECT * from reads_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
+
+
+    After QC, each database contains this table with columns listed below:
+
+    1. reads_sampleName
+        * name
+        * chr
+        * start
+        * end
+        * length
+        * strand
+        * mapq
+        * ave_baseq
+        * ave_alignq
+
     **Example Plots**
 
     :ref:`sphx_glr_auto_examples_plot_qc_example.py`
@@ -298,7 +329,9 @@ def qc_report(
     for index in range(len(fileNames)):
         filebamIn = fileNames[index]
         sampleName = sampleNames[index]
-        DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, outDir, cores)
+        DB_NAME, TABLE_NAME = parse_bam_read(
+            filebamIn, sampleName, outDir, cores
+        )
         # if testMode:
         #     DB_NAME = outDir + "/" + filebamIn.split("/")[-1][:-4] + ".db"
         #     # DB_NAME = "out/winnowmap_guppy_merge_subset.db"
@@ -423,11 +456,7 @@ def qc_report(
         summary_data = "mean length: " + str(valRL[5]) + " bp"
         summary_data = summary_data + "; num reads: " + str(len(x))
         summary_data = (
-            summary_data
-            + "; "
-            + "num bases: "
-            + str(round(valRL[5] * len(x)))
-            + " bp"
+            summary_data + "; " + "num bases: " + str(round(valRL[5] * len(x)))
         )
         fig.suptitle(sampleName + " QC Summary Report", y=1.05)
         # plt.title("mean length: " + str(valRL[5]), y = 0.8)
