@@ -149,7 +149,7 @@ def make_db(
     tables = []
     # for qc report
     if qc:
-        table_name = "reads"
+        table_name = "reads_" + sampleName
         cols = [
             "name",
             "chr",
