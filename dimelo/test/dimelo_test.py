@@ -169,9 +169,9 @@ class TestQCReport(DiMeLoTestCase):
         )
 
         qc_report_path = self.outDir / f"{sample_name}_qc_report.pdf"
-        database_path = self.outDir / db_file
-
         self.assertTrue(qc_report_path.exists())
+
+        database_path = self.outDir / db_file
         self.assertTrue(database_path.exists())
 
     def test_qc_report_multi_sample(self):
@@ -188,6 +188,84 @@ class TestQCReport(DiMeLoTestCase):
         for db_file in output_dbs:
             database_path = self.outDir / db_file
             self.assertTrue(database_path.exists())
+
+
+class TestPlotBrowser(DiMeLoTestCase):
+    def test_plot_browser_html(self):
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+        sample_name = input_sample_names[bam_idx]
+
+        # Outputs
+        db_file = output_dbs[bam_idx]
+
+        dm.plot_browser(
+            fileNames=str(bam_file),
+            sampleNames=sample_name,
+            region="chr1:2907273-2909473",
+            basemod="A+CG",
+            outDir=str(self.outDir),
+            static=False,
+        )
+
+        database_path = self.outDir / db_file
+        self.assertTrue(database_path.exists())
+
+        # TODO: It's difficult to get the output file name. Find a better way to do this check.
+        n_html_files = len(list(self.outDir.glob("*.html")))
+        self.assertEqual(n_html_files, 1)
+
+        for basemod in ["A", "C"]:
+            for plot_type in ["fraction", "total"]:
+                rolling_avg_path = (
+                    self.outDir
+                    / f"{sample_name}_{basemod}_sm_rolling_avg_{plot_type}.pdf"
+                )
+                self.assertTrue(rolling_avg_path.exists())
+
+        # TODO: It's difficult to get the output file name. Find a better way to do this check.
+        n_bed_files = len(list(self.outDir.glob("*.bed")))
+        self.assertEqual(n_bed_files, 2)
+
+    def test_plot_browser_pdf(self):
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+        sample_name = input_sample_names[bam_idx]
+
+        # Outputs
+        db_file = output_dbs[bam_idx]
+
+        dm.plot_browser(
+            fileNames=str(bam_file),
+            sampleNames=sample_name,
+            region="chr1:2907273-2909473",
+            basemod="A+CG",
+            outDir=str(self.outDir),
+            static=True,
+        )
+
+        database_path = self.outDir / db_file
+        self.assertTrue(database_path.exists())
+
+        # TODO: It's difficult to get the output file name. Find a better way to do this check.
+        n_pdf_files = len(list(self.outDir.glob("*.pdf")))
+        self.assertEqual(n_pdf_files, 5)
+
+        for basemod in ["A", "C"]:
+            for plot_type in ["fraction", "total"]:
+                rolling_avg_path = (
+                    self.outDir
+                    / f"{sample_name}_{basemod}_sm_rolling_avg_{plot_type}.pdf"
+                )
+                self.assertTrue(rolling_avg_path.exists())
+
+        # TODO: It's difficult to get the output file name. Find a better way to do this check.
+        n_bed_files = len(list(self.outDir.glob("*.bed")))
+        self.assertEqual(n_bed_files, 2)
 
 
 # class TestPlotEnrichment(DiMeLoTestCase):
