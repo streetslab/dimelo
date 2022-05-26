@@ -77,6 +77,7 @@ dependencies:
     - tabulate==0.8.9
     - threadpoolctl==3.1.0
     - toml==0.10.2
+    - tqdm==4.64.0
     - typing-extensions==4.1.1
     - urllib3==1.26.8
     - zipp==3.7.0

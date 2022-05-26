@@ -32,6 +32,7 @@ REQUIRED_PACKAGES = [
     "sphinx==4.4.0",
     # "pysam==0.15.3",
     # "cython==0.29.24",
+    "tqdm==4.64.0",
 ]
 
 # Read in the project description. We define this in the README file.
