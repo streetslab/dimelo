@@ -435,6 +435,7 @@ def qc_report(
         # saving as PDF
         final_file_name = outDir + "/" + sampleName + "_qc_report"
         plt.savefig(final_file_name + ".pdf", bbox_inches="tight")
+        plt.close()
 
         print("QC report located at: " + final_file_name + ".pdf")
         print("Database located at: " + DB_NAME)
