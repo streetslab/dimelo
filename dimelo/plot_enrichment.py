@@ -91,8 +91,7 @@ def plot_enrichment(
 
     # A+CG is not valid; only valid to look at one type of mod
     if (basemod != "A") and (basemod != "CG"):
-        print("valid basemods are A or CG")
-        return
+        raise RuntimeError("valid basemods are A or CG")
 
     # if  single bam file rather than list is entered, convert to list
     if type(fileNames) != list:
@@ -111,10 +110,9 @@ def plot_enrichment(
     if len(fileNames) > 1 or len(bedFiles) > 1:
         if len(fileNames) > 1:
             if len(bedFiles) > 1:
-                print(
+                raise RuntimeError(
                     "only a single region file can be used when analyzing multiple bam files"
                 )
-                return
             for f, n in zip(fileNames, sampleNames):
                 values = get_counts(
                     f,
@@ -131,10 +129,9 @@ def plot_enrichment(
                 data.append(a_dictionary)
         if len(bedFiles) > 1:
             if len(fileNames) > 1:
-                print(
+                raise RuntimeError(
                     "only a single bam file can be used when analyzing multiple bed file regions"
                 )
-                return
             for b, n in zip(bedFiles, sampleNames):
                 values = get_counts(
                     fileNames[0],

@@ -268,21 +268,88 @@ class TestPlotBrowser(DiMeLoTestCase):
         self.assertEqual(n_bed_files, 2)
 
 
-# class TestPlotEnrichment(DiMeLoTestCase):
-#     """
-#     TODO:
-#         - exactly one of fileNames and bedFiles must be of length one, and the other must be of length 2
-#         - only one of the basemods is valid at a time
-#     """
-#     def test_plot_enrichment_2_bams(self):
-#         dm.plot_enrichment(
-#             fileNames=["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/mod_mappings_subset.bam"],
-#             sampleNames=["test1", "test2"],
-#             bedFiles="dimelo/test/data/test.bed",
-#             basemod="CG",
-#             outDir=str(self.outDir),
-#             threshC=129
-#         )
+class TestPlotEnrichment(DiMeLoTestCase):
+    def test_plot_enrichment_2_bams(self):
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+
+        # Outputs
+        db_file = output_dbs[bam_idx]
+
+        dm.plot_enrichment(
+            fileNames=[str(bam_file), str(bam_file)],
+            sampleNames=input_sample_names,
+            bedFiles=str(input_bed),
+            basemod="CG",
+            outDir=str(self.outDir),
+            threshC=129,
+        )
+
+        database_path = self.outDir / db_file
+        self.assertTrue(database_path.exists())
+
+        pdf_path = (
+            self.outDir / f"region_{input_bed.stem}_CG_enrichment_barplot.pdf"
+        )
+        self.assertTrue(pdf_path.exists())
+
+    def test_plot_enrichment_2_beds(self):
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+
+        # Outputs
+        db_file = output_dbs[bam_idx]
+
+        dm.plot_enrichment(
+            fileNames=str(bam_file),
+            sampleNames=input_sample_names,
+            bedFiles=[str(input_bed), str(input_bed)],
+            basemod="CG",
+            outDir=str(self.outDir),
+            threshC=129,
+        )
+
+        database_path = self.outDir / db_file
+        self.assertTrue(database_path.exists())
+
+        pdf_path = (
+            self.outDir / f"sample_{bam_file.stem}_CG_enrichment_barplot.pdf"
+        )
+        self.assertTrue(pdf_path.exists())
+
+    def test_plot_enrichment_incompatible_bed_bam(self):
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+
+        with self.assertRaises(RuntimeError):
+            dm.plot_enrichment(
+                fileNames=[str(bam_file), str(bam_file)],
+                sampleNames=input_sample_names,
+                bedFiles=[str(input_bed), str(input_bed)],
+                basemod="CG",
+                outDir=str(self.outDir),
+            )
+
+    def test_plot_enrichment_incompatible_basemod(self):
+        bam_idx = 0
+
+        # Inputs
+        bam_file = input_bams[bam_idx]
+
+        with self.assertRaises(RuntimeError):
+            dm.plot_enrichment(
+                fileNames=[str(bam_file), str(bam_file)],
+                sampleNames=input_sample_names,
+                bedFiles=str(input_bed),
+                basemod="A+CG",
+                outDir=str(self.outDir),
+            )
 
 
 # class TestDiMeLo(DiMeLoTestCase):
