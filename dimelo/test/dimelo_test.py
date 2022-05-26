@@ -409,6 +409,26 @@ class TestPlotEnrichmentProfile(DiMeLoTestCase):
             self.assertOutputFileExists(db_file)
         self.assertOutputFileExists(overlay_plot)
 
+    def test_plot_enrichment_profile_overlay_incompatible_basemod(self):
+        with self.assertRaises(RuntimeError):
+            dm.plot_enrichment_profile(
+                fileNames=[str(f) for f in input_bams],
+                sampleNames=input_sample_names,
+                bedFiles=str(input_bed),
+                basemod="A+CG",
+                outDir=str(self.outDir),
+            )
+
+    def test_plot_enrichment_profile_overlay_incompatible_bed_bam(self):
+        with self.assertRaises(RuntimeError):
+            dm.plot_enrichment_profile(
+                fileNames=[str(f) for f in input_bams],
+                sampleNames=input_sample_names,
+                bedFiles=[str(input_bed), str(input_bed)],
+                basemod="A",
+                outDir=str(self.outDir),
+            )
+
 
 # class TestDiMeLo(DiMeLoTestCase):
 

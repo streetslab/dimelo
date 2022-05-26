@@ -145,17 +145,15 @@ def plot_enrichment_profile(
     # overlay condition
     if len(fileNames) > 1 or len(bedFiles) > 1:
         if basemod == "A+CG":
-            print(
+            raise RuntimeError(
                 "enrichment overlays can only be produced for a single base modification at a time"
             )
-            return
         fig = plt.figure()
         if len(fileNames) > 1:
             if len(bedFiles) > 1:
-                print(
+                raise RuntimeError(
                     "only a single region file can be used when overlaying multiple bam files"
                 )
-                return
             for f, n, c in zip(fileNames, sampleNames, cycle(colors)):
                 execute_overlay(
                     f,
@@ -174,10 +172,9 @@ def plot_enrichment_profile(
                 )
         if len(bedFiles) > 1:
             if len(fileNames) > 1:
-                print(
+                raise RuntimeError(
                     "only a single bam file can be used when overlaying multiple bed file regions"
                 )
-                return
             for b, n, c in zip(bedFiles, sampleNames, cycle(colors)):
                 execute_overlay(
                     fileNames[0],
