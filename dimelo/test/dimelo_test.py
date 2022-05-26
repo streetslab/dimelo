@@ -26,6 +26,7 @@ input_bams = [
 ]
 input_sample_names = ["test1", "test2"]
 input_bed = Path("dimelo/test/data/test.bed")
+input_region = "chr1:2907273-2909473"
 
 """
 Outputs
@@ -101,7 +102,7 @@ class TestParseBam(DiMeLoTestCase):
             fileName=str(bam_file),
             sampleName=sample_name,
             outDir=str(self.outDir),
-            region="chr1:2907273-2909473",
+            region=input_region,
             basemod="A+CG",
             threshA=1,
             threshC=1,
@@ -129,7 +130,7 @@ class TestParseBam(DiMeLoTestCase):
                 sampleName=sample_name,
                 outDir=str(self.outDir),
                 bedFile=str(bed_file),
-                region="chr1:2907273-2909473",
+                region=input_region,
             )
 
     def test_parse_bam_region_center_incompatible(self):
@@ -145,7 +146,7 @@ class TestParseBam(DiMeLoTestCase):
                 fileName=str(bam_file),
                 sampleName=sample_name,
                 outDir=str(self.outDir),
-                region="chr1:2907273-2909473",
+                region=input_region,
                 center=True,
             )
 
@@ -199,7 +200,7 @@ class TestPlotBrowser(DiMeLoTestCase):
         dm.plot_browser(
             fileNames=str(bam_file),
             sampleNames=sample_name,
-            region="chr1:2907273-2909473",
+            region=input_region,
             basemod="A+CG",
             outDir=str(self.outDir),
             static=False,
@@ -235,7 +236,7 @@ class TestPlotBrowser(DiMeLoTestCase):
         dm.plot_browser(
             fileNames=str(bam_file),
             sampleNames=sample_name,
-            region="chr1:2907273-2909473",
+            region=input_region,
             basemod="A+CG",
             outDir=str(self.outDir),
             static=True,
