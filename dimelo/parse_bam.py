@@ -458,11 +458,18 @@ def parse_reads_window(
     """
     bam = pysam.AlignmentFile(fileName, "rb")
     data = []
+    if showReadProgress:
+        total_reads = bam.count(
+            reference=window.chromosome, start=window.begin, end=window.end
+        )
+        bam.reset()
     reads = bam.fetch(
         reference=window.chromosome, start=window.begin, end=window.end
     )
     if showReadProgress:
-        reads = tqdm(reads, desc="Processing reads", unit="reads")
+        reads = tqdm(
+            reads, desc="Processing reads", unit="reads", total=total_reads
+        )
     for read in reads:
         [
             (mod, positions, probs),
