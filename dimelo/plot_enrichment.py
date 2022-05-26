@@ -245,6 +245,7 @@ def plot_barchart(data, basemod, outDir, colors, title):
     plt.savefig(
         outDir + "/" + title + "_" + basemod + "_enrichment_barplot.pdf",
     )
+    plt.close()
 
 
 def main():

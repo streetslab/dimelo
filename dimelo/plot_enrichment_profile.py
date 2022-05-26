@@ -209,6 +209,7 @@ def plot_enrichment_profile(
             + basemod
             + "_sm_rolling_avg_overlay.pdf"
         )
+        plt.close()
 
         overlay_path = f"{outDir}/{title}_{basemod}_sm_rolling_avg_overlay.pdf"
         str_out = f"Outputs\n_______\nDB file: {db_paths}\noverlay plot: {overlay_path}"
@@ -377,6 +378,7 @@ def execute_single_plot(
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_sm_scatter.png", dpi=600
     )
+    plt.close()
 
     plot_aggregate_me_frac(
         sampleName,
@@ -425,6 +427,7 @@ def plot_aggregate_me_frac(
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_sm_rolling_avg.pdf"
     )
+    plt.close()
 
     if "A" in basemod:
         aggregate_A = aggregate_counts[
@@ -516,6 +519,7 @@ def plot_base_abundance(
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_base_count.png", dpi=600
     )
+    plt.close()
 
 
 def main():
