@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import pysam
 from joblib import Parallel, delayed
+from tqdm import tqdm
 
 from dimelo.parse_bam import make_db
 from dimelo.utils import execute_sql_command
@@ -38,7 +39,7 @@ DEFAULT_COLOR_LIST = [
 ]
 
 
-def batch_read_generator(file_bamIn, filename, batch_size):
+def batch_read_generator(file_bamIn, filename):
     counter = 0
     r_list = []
 
@@ -133,10 +134,12 @@ def parse_bam_read(bamIn, outDir, cores=None):
             num_cores = cores_avail
         else:
             num_cores = cores
-
-    Parallel(n_jobs=num_cores, verbose=10)(
+    # tqdm(batch_read_generator(file_bamIn, bamIn, 100), unit="batches", desc="Processing reads", total=total_reads)
+    # total_reads = file_bamIn.count() / 10
+    # file_bamIn.reset()
+    Parallel(n_jobs=num_cores)(
         delayed(execute_sql_command)(template_command, DB_NAME, i)
-        for i in batch_read_generator(file_bamIn, bamIn, 100)
+        for i in tqdm(batch_read_generator(file_bamIn, bamIn), total = 10, desc = "Processing reads", unit = " batches")
     )
     return DB_NAME, tables[0]
 
