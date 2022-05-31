@@ -135,7 +135,7 @@ def parse_bam_read(bamIn, sampleName, outDir, cores=None):
             num_cores = cores_avail
         else:
             num_cores = cores
-            
+
     c = connect.cursor()
     c.execute("BEGIN TRANSACTION")
 
@@ -144,7 +144,7 @@ def parse_bam_read(bamIn, sampleName, outDir, cores=None):
     # file_bamIn.reset()
     Parallel(n_jobs=num_cores, backend="threading")(
         delayed(execute_sql_command)(template_command, DB_NAME, connect, i)
-      for i in tqdm(
+        for i in tqdm(
             batch_read_generator(file_bamIn, bamIn),
             total=10,
             desc="Processing reads",
@@ -170,7 +170,6 @@ def qc_plot(x, sampleName, plotType, colors, num, axes):
     if all(v is None for v in an_array):
         return plt, []
     # print(x.describe(),x.count == 0, x.shape, x.dtype)
-    # print(, an_array)
     q1 = np.quantile(an_array, 0.25)
     q3 = np.quantile(an_array, 0.75)
     iq = q3 - q1
