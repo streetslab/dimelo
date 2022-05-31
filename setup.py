@@ -24,11 +24,12 @@ REQUIRED_PACKAGES = [
     "joblib==1.0.1",
     "plotly==4.14.3",
     "seaborn==0.11.2",
-    "pyranges==0.0.104",  # get travis to successfully make develop
+    # "pyranges==0.0.104",  # get travis to successfully make develop
     "psutil==5.8.0",
     # "scikit-learn==0.24.1",
     "pybedtools==0.8.1",
     "kaleido==0.2.1",
+    "sorted-nearest=0.0.33",  # pin to 0.0.33 to avoid import error (https://github.com/pyranges/sorted_nearest/issues/5)
     "sphinx==4.4.0",
     # "pysam==0.15.3",
     # "cython==0.29.24",
