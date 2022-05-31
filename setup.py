@@ -29,7 +29,7 @@ REQUIRED_PACKAGES = [
     # "scikit-learn==0.24.1",
     "pybedtools==0.8.1",
     "kaleido==0.2.1",
-    "sorted-nearest=0.0.33",  # pin to 0.0.33 to avoid import error (https://github.com/pyranges/sorted_nearest/issues/5)
+    "sorted-nearest==0.0.33",  # pin to 0.0.33 to avoid import error (https://github.com/pyranges/sorted_nearest/issues/5)
     "sphinx==4.4.0",
     # "pysam==0.15.3",
     # "cython==0.29.24",
