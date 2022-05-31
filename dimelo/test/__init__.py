@@ -22,8 +22,3 @@ class DiMeLoTestCase(unittest.TestCase):
         """Fails test if the given file name is not found in the output directory"""
         file_path = self.outDir / file_name
         self.assertTrue(file_path.exists(), msg=f"{file_path} does not exist")
-
-    # def tmpFile(self):
-    #     tempFile = tempfile.NamedTemporaryFile(delete=True)
-    #     tempFile.close()
-    #     return tempFile.name
