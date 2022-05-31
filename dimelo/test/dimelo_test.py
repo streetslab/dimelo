@@ -154,6 +154,7 @@ class TestParseBam(DiMeLoTestCase):
 # TODO: More robust qc_report tests
 class TestQCReport(DiMeLoTestCase):
     def test_qc_report_one_sample(self):
+        """Tests generating a single qc report."""
         bam_idx = 0
 
         # Inputs
@@ -174,6 +175,7 @@ class TestQCReport(DiMeLoTestCase):
         self.assertOutputFileExists(qc_report_file)
 
     def test_qc_report_multi_sample(self):
+        """Tests generating multiple qc reports at once."""
         dm.qc_report(
             fileNames=[str(f) for f in input_bams],
             sampleNames=input_sample_names,
@@ -188,6 +190,7 @@ class TestQCReport(DiMeLoTestCase):
 
 class TestPlotBrowser(DiMeLoTestCase):
     def test_plot_browser_html(self):
+        """Tests generation of an html browser."""
         bam_idx = 0
 
         # Inputs
@@ -224,6 +227,7 @@ class TestPlotBrowser(DiMeLoTestCase):
         self.assertEqual(n_bed_files, 2)
 
     def test_plot_browser_pdf(self):
+        """Tests generation of a pdf browser."""
         bam_idx = 0
 
         # Inputs
@@ -262,6 +266,7 @@ class TestPlotBrowser(DiMeLoTestCase):
 
 class TestPlotEnrichment(DiMeLoTestCase):
     def test_plot_enrichment_2_bams(self):
+        """Tests enrichment comparison for the same region over two different bam files."""
         bam_idx = 0
 
         # Inputs
@@ -284,6 +289,7 @@ class TestPlotEnrichment(DiMeLoTestCase):
         self.assertOutputFileExists(pdf_file)
 
     def test_plot_enrichment_2_beds(self):
+        """Tests enrichment comparison for two different regions over the same bam file"""
         bam_idx = 0
 
         # Inputs
@@ -306,6 +312,7 @@ class TestPlotEnrichment(DiMeLoTestCase):
         self.assertOutputFileExists(pdf_file)
 
     def test_plot_enrichment_incompatible_bed_bam(self):
+        """Verifies that passing equal numbers of beds and bams remains an error."""
         bam_idx = 0
 
         # Inputs
@@ -321,6 +328,7 @@ class TestPlotEnrichment(DiMeLoTestCase):
             )
 
     def test_plot_enrichment_incompatible_basemod(self):
+        """Verifies that plot_enrichment remains incompatible with multi-basemod options."""
         bam_idx = 0
 
         # Inputs
@@ -338,6 +346,7 @@ class TestPlotEnrichment(DiMeLoTestCase):
 
 class TestPlotEnrichmentProfile(DiMeLoTestCase):
     def test_plot_enrichment_profile_single(self):
+        """Tests profile plotting for a single sample and region."""
         bam_idx = 0
 
         # Inputs
@@ -370,6 +379,7 @@ class TestPlotEnrichmentProfile(DiMeLoTestCase):
             self.assertOutputFileExists(f)
 
     def test_plot_enrichment_profile_sample_overlay(self):
+        """Tests profile plotting for multiple regions over a single sample."""
         bam_idx = 0
 
         # Inputs
@@ -393,6 +403,7 @@ class TestPlotEnrichmentProfile(DiMeLoTestCase):
         self.assertOutputFileExists(overlay_plot)
 
     def test_plot_enrichment_profile_region_overlay(self):
+        """Tests profile plotting for multiple samples over a single region."""
         # Outputs
         overlay_plot = f"region_{input_bed.stem}_A_sm_rolling_avg_overlay.pdf"
 
@@ -411,6 +422,7 @@ class TestPlotEnrichmentProfile(DiMeLoTestCase):
         self.assertOutputFileExists(overlay_plot)
 
     def test_plot_enrichment_profile_overlay_incompatible_basemod(self):
+        """Verifies that plot_enrichment_profile remains incompatible with multi-basemod options."""
         with self.assertRaises(RuntimeError):
             dm.plot_enrichment_profile(
                 fileNames=[str(f) for f in input_bams],
@@ -421,6 +433,7 @@ class TestPlotEnrichmentProfile(DiMeLoTestCase):
             )
 
     def test_plot_enrichment_profile_overlay_incompatible_bed_bam(self):
+        """Verifies that passing equal numbers of beds and bams remains an error."""
         with self.assertRaises(RuntimeError):
             dm.plot_enrichment_profile(
                 fileNames=[str(f) for f in input_bams],
