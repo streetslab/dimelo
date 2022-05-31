@@ -135,7 +135,7 @@ def parse_bam_read(bamIn, sampleName, outDir, cores=None):
             num_cores = cores_avail
         else:
             num_cores = cores
-
+            
     c = connect.cursor()
     c.execute("BEGIN TRANSACTION")
 
@@ -144,7 +144,7 @@ def parse_bam_read(bamIn, sampleName, outDir, cores=None):
     # file_bamIn.reset()
     Parallel(n_jobs=num_cores, backend="threading")(
         delayed(execute_sql_command)(template_command, DB_NAME, connect, i)
-        for i in tqdm(
+      for i in tqdm(
             batch_read_generator(file_bamIn, bamIn),
             total=10,
             desc="Processing reads",
@@ -315,7 +315,6 @@ def qc_report(
         * ave_alignq
 
     **Example Plots**
-
     :ref:`sphx_glr_auto_examples_plot_qc_example.py`
 
     """
