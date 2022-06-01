@@ -143,7 +143,7 @@ def parse_bam_read(bamIn, sampleName, outDir, cores=None):
     # total_reads = file_bamIn.count() / 10
     # file_bamIn.reset()
     Parallel(n_jobs=num_cores, backend="threading")(
-        delayed(execute_sql_command)(template_command, DB_NAME, connect, i)
+        delayed(execute_sql_command)(template_command, DB_NAME, i, connect)
         for i in tqdm(
             batch_read_generator(file_bamIn, bamIn),
             total=10,
