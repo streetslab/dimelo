@@ -146,7 +146,11 @@ class TestParseBam(DiMeLoTestCase):
 # TODO: More robust qc_report tests
 class TestQCReport(DiMeLoTestCase):
     def test_qc_report_one_sample(self):
-        """Tests generating a single qc report."""
+        """Tests generating a single qc report.
+
+        Notes:
+            - cores set to 1 to ensure that hashes come out the same each time
+        """
         bam_idx = 0
 
         # Inputs
@@ -161,9 +165,16 @@ class TestQCReport(DiMeLoTestCase):
             fileNames=str(bam_file),
             sampleNames=sample_name,
             outDir=str(self.outDir),
+            cores=1,
         )
 
-        self.assertOutputFileExists(db_file)
+        database_path = self.outDir / db_file
+        # Check whether database contents are the same as expected
+        self.assertEqual(
+            db_hash(database_path),
+            b"1c3299ce9a7464fd27fb666d57aa50c4b73468bf0ea808f184ef4e36\n",
+        )
+
         self.assertOutputFileExists(qc_report_file)
 
     def test_qc_report_multi_sample(self):
