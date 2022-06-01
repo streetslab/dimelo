@@ -145,17 +145,15 @@ def plot_enrichment_profile(
     # overlay condition
     if len(fileNames) > 1 or len(bedFiles) > 1:
         if basemod == "A+CG":
-            print(
+            raise RuntimeError(
                 "enrichment overlays can only be produced for a single base modification at a time"
             )
-            return
         fig = plt.figure()
         if len(fileNames) > 1:
             if len(bedFiles) > 1:
-                print(
+                raise RuntimeError(
                     "only a single region file can be used when overlaying multiple bam files"
                 )
-                return
             for f, n, c in zip(fileNames, sampleNames, cycle(colors)):
                 execute_overlay(
                     f,
@@ -174,10 +172,9 @@ def plot_enrichment_profile(
                 )
         if len(bedFiles) > 1:
             if len(fileNames) > 1:
-                print(
+                raise RuntimeError(
                     "only a single bam file can be used when overlaying multiple bed file regions"
                 )
-                return
             for b, n, c in zip(bedFiles, sampleNames, cycle(colors)):
                 execute_overlay(
                     fileNames[0],
@@ -209,6 +206,7 @@ def plot_enrichment_profile(
             + basemod
             + "_sm_rolling_avg_overlay.pdf"
         )
+        plt.close()
 
         overlay_path = f"{outDir}/{title}_{basemod}_sm_rolling_avg_overlay.pdf"
         str_out = f"Outputs\n_______\nDB file: {db_paths}\noverlay plot: {overlay_path}"
@@ -241,7 +239,7 @@ def plot_enrichment_profile(
             t_paths.append(t_path)
         if "C" in basemod:
             t_path = (
-                outDir + "/" + sampleNames[0] + "_" + "C" + "_base_count.png"
+                outDir + "/" + sampleNames[0] + "_" + "CG" + "_base_count.png"
             )
             t_paths.append(t_path)
 
@@ -377,6 +375,7 @@ def execute_single_plot(
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_sm_scatter.png", dpi=600
     )
+    plt.close()
 
     plot_aggregate_me_frac(
         sampleName,
@@ -425,6 +424,7 @@ def plot_aggregate_me_frac(
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_sm_rolling_avg.pdf"
     )
+    plt.close()
 
     if "A" in basemod:
         aggregate_A = aggregate_counts[
@@ -516,6 +516,7 @@ def plot_base_abundance(
     fig.savefig(
         outDir + "/" + sampleName + "_" + basemod + "_base_count.png", dpi=600
     )
+    plt.close()
 
 
 def main():
