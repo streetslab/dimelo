@@ -34,7 +34,7 @@ def create_sql_table(database_name, table_name, cols, d_types):
 
 
 def execute_sql_command(
-    command: str, database_name: str, conn, values
+    command: str, database_name: str, values, conn=None
 ) -> None:
     """
     Function to execute a SQL command from Python.
