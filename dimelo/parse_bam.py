@@ -692,15 +692,17 @@ def get_mod_reference_positions_by_mod(
     # deal with None for refpos from soft clipped / unaligned bases
     if "C" in basemod:
         for b in base_index:
-            if (
-                b < len(seq) - 1
-            ):  # if modified C is not the last base in the read
-                # TODO: For GpC, I want b-1 to be a G, but don't want b+1 to be a C
-                # TODO: need to check first position edge case
-                if (refpos[b] is not None) & (refpos[b + 1] is not None):
-                    if seq[b + 1] == "G":
+            if b > 0:  # if modified C is not the first base in the read
+                # For GpC, I want b-1 to be a G, but don't want b+1 to be a C
+                if (refpos[b - 1] is not None) & (refpos[b] is not None):
+                    back_check = seq[b - 1] == "G"
+                    try:
+                        forward_check = seq[b + 1] != "C"
+                    except IndexError:
+                        forward_check = True
+                    if back_check and forward_check:
                         if (
-                            abs(refpos[b + 1] - refpos[b]) == 1
+                            abs(refpos[b] - refpos[b - 1]) == 1
                         ):  # ensure there isn't a gap
                             all_bases_index.append(
                                 b
