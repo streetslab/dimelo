@@ -309,7 +309,7 @@ def parse_bam(
     if not os.path.isdir(outDir):
         os.makedirs(outDir)
 
-    make_db(fileName, sampleName, outDir)
+    DB_NAME, tables = make_db(fileName, sampleName, outDir)
 
     if bedFile is not None:
         # make a region object for each row of bedFile
@@ -341,8 +341,12 @@ def parse_bam(
             num_cores = cores
 
     batchSize = 100
+    connect = sqlite3.connect(DB_NAME, timeout=60.0, check_same_thread=False)
+    c = connect.cursor()
+    connect.isolation_level = None
+    c.execute("BEGIN TRANSACTION")
 
-    Parallel(n_jobs=num_cores)(
+    Parallel(n_jobs=num_cores, backend="threading")(
         delayed(parse_reads_window)(
             fileName,
             sampleName,
@@ -356,9 +360,13 @@ def parse_bam(
             outDir,
             extractAllBases,
             showReadProgress=show_read_progress,
+            conn=connect,
         )
         for window in windows
     )
+
+    c.close()
+    connect.close()
 
     # create summary bed files
     if region is not None:
@@ -437,6 +445,7 @@ def parse_reads_window(
     outDir: str,
     extractAllBases: bool,
     showReadProgress: bool = False,
+    conn=None,
 ) -> None:
     """Parse all reads in window and put data into methylationByBase table.
 
@@ -486,6 +495,7 @@ def parse_reads_window(
             sampleName,
             outDir,
             extractAllBases,
+            conn,
         )
         # Generate rows for methylationByBase database update
         for pos, prob in zip(positions, probs):
@@ -528,7 +538,7 @@ def parse_reads_window(
             + table_name
             + """ VALUES(?,?,?,?,?,?);"""
         )
-        execute_sql_command(command, DATABASE_NAME, data)
+        execute_sql_command(command, DATABASE_NAME, data, conn)
 
 
 def get_modified_reference_positions(
@@ -543,6 +553,7 @@ def get_modified_reference_positions(
     sampleName: str,
     outDir: str,
     extractAllBases: bool,
+    conn=None,
 ):
     """Extract mA and mC pos & prob information for the read
     Args:
@@ -585,6 +596,7 @@ def get_modified_reference_positions(
                 sampleName,
                 outDir,
                 extractAllBases,
+                conn,
             )
         else:
             mod1_return = (None, [None], [None])
@@ -603,6 +615,7 @@ def get_modified_reference_positions(
                 sampleName,
                 outDir,
                 extractAllBases,
+                conn,
             )
             return (mod1_return, mod2_return)
         else:
@@ -624,6 +637,7 @@ def get_mod_reference_positions_by_mod(
     sampleName: str,
     outDir: str,
     extractAllBases: bool,
+    conn=None,
 ):
     """Get positions and probabilities of modified bases for a single read
     Args:
@@ -764,6 +778,7 @@ def get_mod_reference_positions_by_mod(
             fileName,
             sampleName,
             outDir,
+            conn,
         )
         if extractAllBases:
             return (basemod, refpos_total_adjusted, probs)
@@ -782,6 +797,7 @@ def get_mod_reference_positions_by_mod(
             fileName,
             sampleName,
             outDir,
+            conn,
         )
         if extractAllBases:
             return (basemod, np.array(refpos[all_bases_index]), probs)
@@ -801,6 +817,7 @@ def update_methylation_aggregate_db(
     fileName: str,
     sampleName: str,
     outDir: str,
+    conn=None,
 ) -> None:
     """Updates the aggregate methylation table with all of the methylation information from a single read.
     Args:
@@ -838,7 +855,7 @@ def update_methylation_aggregate_db(
         )
 
         data_fill = [(x[0], x[1], x[2], 0, 0) for x in data]
-        execute_sql_command(command, DATABASE_NAME, data_fill)
+        execute_sql_command(command, DATABASE_NAME, data_fill, conn)
 
         # update table for all entries
         # values: methylated_bases, total_bases, id
@@ -849,7 +866,7 @@ def update_methylation_aggregate_db(
             + table_name
             + """ SET methylated_bases = methylated_bases + ?, total_bases = total_bases + ? WHERE id = ?"""
         )
-        execute_sql_command(command, DATABASE_NAME, values_subset)
+        execute_sql_command(command, DATABASE_NAME, values_subset, conn)
 
 
 def main():
