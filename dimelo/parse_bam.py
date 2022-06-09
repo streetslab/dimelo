@@ -14,7 +14,8 @@ import argparse
 import multiprocessing
 import os
 import sqlite3
-import time
+
+# import time
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -468,7 +469,7 @@ def parse_reads_window(
             - Find a way to mention in documentation that this has a side effect of populating the aggregated table as well...
             - ****Modularize row generation
     """
-    tic = time.clock()
+    # tic = time.clock()
     bam = pysam.AlignmentFile(fileName, "rb")
     data = []
     if showReadProgress:
@@ -485,7 +486,7 @@ def parse_reads_window(
         )
     counter = 0
     for read in reads:
-        tic = time.clock()
+        # tic = time.clock()
         [
             (mod, positions, probs),
             (mod2, positions2, probs2),
@@ -503,8 +504,8 @@ def parse_reads_window(
             extractAllBases,
             conn,
         )
-        toc = time.clock()
-        print("read ", counter, toc - tic)
+        # toc = time.clock()
+        # print("read ", counter, toc - tic)
         counter += 1
         # Generate rows for methylationByBase database update
         for pos, prob in zip(positions, probs):
@@ -550,8 +551,8 @@ def parse_reads_window(
         )
 
         execute_sql_command(command, DATABASE_NAME, data, conn)
-    toc = time.clock()
-    print("one window: ", toc - tic)
+    # toc = time.clock()
+    # print("one window: ", toc - tic)
 
 
 def get_modified_reference_positions(
@@ -596,7 +597,7 @@ def get_modified_reference_positions(
             base2 = base
         # if len(mod1_list) > 1 and (base in mod1 or base2 in mod1):
         if base in mod1 or base2 in mod1:
-            tic = time.clock()
+            # tic = time.clock()
             mod1_return = get_mod_reference_positions_by_mod(
                 read,
                 mod1,
@@ -612,8 +613,8 @@ def get_modified_reference_positions(
                 extractAllBases,
                 conn,
             )
-            toc = time.clock()
-            print("get_mod_refpos_by_mod: ", toc - tic)
+            # toc = time.clock()
+            # print("get_mod_refpos_by_mod: ", toc - tic)
         else:
             mod1_return = (None, [None], [None])
         # if len(mod2_list) > 1 and (base in mod2 or base2 in mod2):
@@ -749,7 +750,7 @@ def get_mod_reference_positions_by_mod(
             if b in modified_bases:
                 i = i + 1
     else:  # for m6A no need to look at neighboring base; do need to remove refpos that are None
-        tic = time.clock()
+        # tic = time.clock()
         # counter = 0
         for b in base_index:
             # if counter > 2:
@@ -781,8 +782,8 @@ def get_mod_reference_positions_by_mod(
             if b in modified_bases:
                 i = i + 1
             # counter += 1
-        toc = time.clock()
-        print("all bases: ", toc - tic, len(base_index))
+        # toc = time.clock()
+        # print("all bases: ", toc - tic, len(base_index))
     # adjust position to be centered at 0 at the center of the motif; round in case is at 0.5
     # add returning base_index for plotting mod/base_abundance
     if center is True:
