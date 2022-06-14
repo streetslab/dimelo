@@ -693,7 +693,7 @@ def get_mod_reference_positions_by_mod(
     if "C" in basemod:
         for b in base_index:
             if b > 0:  # if modified C is not the first base in the read
-                # For GpC, I want b-1 to be a G, but don't want b+1 to be a C
+                # For GpC, I want b-1 to be a G, but don't want b+1 to be a G
                 if (refpos[b - 1] is not None) & (refpos[b] is not None):
                     back_check = seq[b - 1] == "G"
                     try:
@@ -703,7 +703,11 @@ def get_mod_reference_positions_by_mod(
                     if back_check and forward_check:
                         if (
                             abs(refpos[b] - refpos[b - 1]) == 1
-                        ):  # ensure there isn't a gap
+                            and abs(refpos[b + 1] - refpos[b]) == 1
+                        ):
+                            # if (
+                            #     abs(refpos[b] - refpos[b - 1]) == 1
+                            # ):  # ensure there isn't a gap
                             all_bases_index.append(
                                 b
                             )  # add to all_bases_index whether or not modified
