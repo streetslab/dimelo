@@ -697,9 +697,9 @@ def get_mod_reference_positions_by_mod(
                 if (refpos[b - 1] is not None) & (refpos[b] is not None):
                     back_check = seq[b - 1] == "G"
                     try:
-                        forward_check = seq[b + 1] != "C"
+                        forward_check = seq[b + 1] != "G"
                     except IndexError:
-                        forward_check = True
+                        forward_check = False
                     if back_check and forward_check:
                         if (
                             abs(refpos[b] - refpos[b - 1]) == 1
