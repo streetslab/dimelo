@@ -266,10 +266,12 @@ def plot_browser(
             b_paths.append(b_path)
         if "C" in basemod:
             f_path = (
-                outDir + "/" + s + "_" + "C" + "_sm_rolling_avg_fraction.pdf"
+                outDir + "/" + s + "_" + "CG" + "_sm_rolling_avg_fraction.pdf"
             )
-            t_path = outDir + "/" + s + "_" + "C" + "_sm_rolling_avg_total.pdf"
-            b_path = f"{outDir}/{f_base}_{s}_{Region(region).string}_C.bed"
+            t_path = (
+                outDir + "/" + s + "_" + "CG" + "_sm_rolling_avg_total.pdf"
+            )
+            b_path = f"{outDir}/{f_base}_{s}_{Region(region).string}_CG.bed"
             f_paths.append(f_path)
             t_paths.append(t_path)
             b_paths.append(b_path)
@@ -698,11 +700,20 @@ def plot_aggregate_frac(aggregate_rolling, sampleName, mod, color, outDir):
         y=aggregate_rolling["frac"],
         color=color,
     )
-    plt.title(mod)
-    plt.ylabel("m" + mod + "/" + mod)
-    # plt.show()
+    if "A" in mod:
+        mod_name = "A"
+    if "C" in mod:
+        mod_name = "CG"
+
+    plt.title(mod_name)
+    plt.ylabel("m" + mod_name + "/" + mod_name)
     fig.savefig(
-        outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_fraction.pdf"
+        outDir
+        + "/"
+        + sampleName
+        + "_"
+        + mod_name
+        + "_sm_rolling_avg_fraction.pdf"
     )
     plt.close()
 
@@ -714,11 +725,20 @@ def plot_aggregate_total(aggregate_rolling, sampleName, mod, color, outDir):
         y=aggregate_rolling["total_bases"],
         color=color,
     )
-    plt.title(mod)
-    plt.ylabel("total " + mod)
-    # plt.show()
+    if "A" in mod:
+        mod_name = "A"
+    if "C" in mod:
+        mod_name = "CG"
+
+    plt.title(mod_name)
+    plt.ylabel("total " + mod_name)
     fig.savefig(
-        outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_total.pdf"
+        outDir
+        + "/"
+        + sampleName
+        + "_"
+        + mod_name
+        + "_sm_rolling_avg_total.pdf"
     )
     plt.close()
 

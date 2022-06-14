@@ -381,7 +381,7 @@ def parse_bam(
             bed_paths.append(bed_path)
         if "C" in basemod:
             bed_path = (
-                f"{outDir}/{f}_{sampleName}_{Region(region).string}_C.bed"
+                f"{outDir}/{f}_{sampleName}_{Region(region).string}_CG.bed"
             )
             bed_paths.append(bed_path)
         str_out = (
@@ -416,8 +416,12 @@ def make_bed_file_output(fileName, sampleName, outDir, region, mod):
     }
     bed_agg = pd.DataFrame(dictionary_agg)
     bed_agg.sort_values(by="start", ascending=True, inplace=True)
+    if "A" in mod:
+        mod_name = "A"
+    if "C" in mod:
+        mod_name = "CG"
     bed_agg.to_csv(
-        f"{outDir}/{f}_{sampleName}_{r.string}_{mod}.bed",
+        f"{outDir}/{f}_{sampleName}_{r.string}_{mod_name}.bed",
         sep="\t",
         header=False,
         index=False,
