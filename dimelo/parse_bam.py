@@ -704,10 +704,7 @@ def get_mod_reference_positions_by_mod(
                         if (
                             abs(refpos[b] - refpos[b - 1]) == 1
                             and abs(refpos[b + 1] - refpos[b]) == 1
-                        ):
-                            # if (
-                            #     abs(refpos[b] - refpos[b - 1]) == 1
-                            # ):  # ensure there isn't a gap
+                        ):  # ensure there isn't a gap
                             all_bases_index.append(
                                 b
                             )  # add to all_bases_index whether or not modified
