@@ -18,11 +18,11 @@ Steps
 2. Run below commands and ensure your output matches the expected plots below. This tutorial walks through running functions from python, but the dimelo package can also be used from the command line (see :doc:`../auto_examples/index`).
 
 >>> import dimelo as dm
->>> bam = "ctcf_demo.sorted.bam"
+>>> bam = "dimelo/test/data/ctcf_demo.sorted.bam"
 >>> sampleName = "CTCF_demo"
 >>> outDir = "out"
->>> bedPeak = "ctcf_demo_peak.bed"
->>> bedNotPeak = "ctcf_demo_not_peak.bed"
+>>> bedPeak = "dimelo/test/data/ctcf_demo_peak.bed"
+>>> bedNotPeak = "dimelo/test/data/ctcf_demo_not_peak.bed"
 
 >>> dm.qc_report(bam, sampleName, outDir)
 

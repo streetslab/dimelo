@@ -411,8 +411,8 @@ def make_bed_file_output(fileName, sampleName, outDir, region, mod):
         "chr": aggregate_counts_mod["chr"],
         "start": aggregate_counts_mod["pos"],
         "end": aggregate_counts_mod["end"],
-        "mA": aggregate_counts_mod["methylated_bases"],
-        "A": aggregate_counts_mod["total_bases"],
+        "methylated": aggregate_counts_mod["methylated_bases"],
+        "total": aggregate_counts_mod["total_bases"],
     }
     bed_agg = pd.DataFrame(dictionary_agg)
     bed_agg.sort_values(by="start", ascending=True, inplace=True)
