@@ -43,7 +43,6 @@ def batch_read_generator(file_bamIn, filename):
     counter = 0
     r_list = []
 
-    # added the next 3 lines
     lines = pysam.idxstats(filename).splitlines()
     total_reads = sum(
         [
@@ -83,10 +82,6 @@ def logger(statement):
 
 
 def prob_bin(bin):
-    # probability a base in the window (or across reads or across bases within a read) is methylated by:
-    # calculating probability that no base in the window (or across reads) is methylated and then taking the complement
-    # treat p=1 as 254/255 for prevent log(0)
-    # print(bin)
     probs = [
         np.log(1 - p) for p in bin if ((p < 1) and (p >= 0.5))
     ]  # only consider probabilities > 0.5 and handle 1 on next line
