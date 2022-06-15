@@ -24,14 +24,6 @@ from tqdm import tqdm
 
 from dimelo.utils import clear_db, create_sql_table, execute_sql_command
 
-"""
-TODO:
-    - convert paths over to pathlib where possible, and update relevant type annotations
-    - Standardize comment formats
-    - convert string concatenations to f-strings, to make things more readable
-"""
-
-
 DEFAULT_BASEMOD = "A+CG"
 DEFAULT_THRESH_A = 129
 DEFAULT_THRESH_C = 129
@@ -48,12 +40,6 @@ class Region(object):
                 - size: length of region
                 - string: string representation of region
                 - strand: string specifying forward or reverse strand; either "+" or "-" (default +)
-        TODO:
-                - There should be no reason the second datatype can't be something like typing.Sequence, but technically a pd.Series isn't a valid Sequence. Not sure what the best way to annotate this would be.
-                - Can I re-enable errors being raised from this method?
-                - Consider changing size to be a property rather than an attribute
-                - Change string to be the magic string method
-                - Determine why the string representation exists, and why it is important
         """
         self.chromosome = None
         self.begin = None
@@ -120,22 +106,7 @@ def make_db(
     Returns:
             - path to the new database
             - list of newly-created table names
-
-    TODO:
-            - document testMode, qc mode more fully; update top-level documentation accordingly
-            - make this use pathlib for path operations
-            - current uses:
-              parse_bam.py:234:    make_db(fileName, sampleName, outDir, testMode, qc, joint)
-              qc.py:96:    DB_NAME, tables = make_db(bamIn, "", outDir, qc=True)
-            - Modularize and simplify sql table specification. There should be easy-to-reference top-level variables that contain the table names, columns, datatypes, etc. Not sure how they should be stored yet, however, because I do not know if/how they are going to be referenced elsewhere in the codebase.
     """
-    # TODO: These should replace the path operations once pathlib conversion is in place
-    # filePath = Path(fileName)
-    # outPath = Path(outDir)
-
-    # outPath.mkdir(parents=True, exist_ok=True)
-
-    # (outPath / filePath.name).withsuffix('.db')
     if not os.path.exists(outDir):
         os.mkdir(outDir)
 
@@ -451,10 +422,6 @@ def parse_reads_window(
             :param threshA: threshold above which to call an A base methylated
             :param threshC: threshold above which to call a C base methylated
             :param showReadProgress: when true, display progress for read processing
-
-    TODO:
-            - Find a way to mention in documentation that this has a side effect of populating the aggregated table as well...
-            - ****Modularize row generation
     """
     bam = pysam.AlignmentFile(fileName, "rb")
     data = []
@@ -555,10 +522,6 @@ def get_modified_reference_positions(
             :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only applicable for center=True
     Return:
         For each mod, you get the positions where those mods are and the probabilities for those mods (parallel vectors)
-    TODO:
-            - This is referenced in plot_joint_enrichment
-            - Oh boy, what does this return? At minimum it should have a type annotation. At maximum, it should have a class.
-              - See get_mod_reference_positions_by_mod() for details
     """
     if (read.has_tag("Mm")) & (";" in read.get_tag("Mm")):
         mod1 = read.get_tag("Mm").split(";")[0].split(",", 1)[0]
@@ -635,11 +598,6 @@ def get_mod_reference_positions_by_mod(
             :param threshC: threshold above which to call a C base methylated
             :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only applicable for center=True
             :param index: 0 or 1
-
-    TODO:
-            - What is index? What is its type? What does it represent?
-            - Oh boy, what does this return? At minimum it should have a type annotation. At maximum, it should have a class.
-                -  -> Tuple(str, List[int], List[int])
     """
     modsPresent = True
     base, mod = basemod.split("+")
@@ -695,8 +653,6 @@ def get_mod_reference_positions_by_mod(
             if (
                 b < len(seq) - 1
             ):  # if modified C is not the last base in the read
-                # TODO: For GpC, I want b-1 to be a G, but don't want b+1 to be a C
-                # TODO: need to check first position edge case
                 if (refpos[b] is not None) & (refpos[b + 1] is not None):
                     if seq[b + 1] == "G":
                         if (
