@@ -126,8 +126,33 @@
 </li>
 </ul>
 </div></blockquote>
-<p><strong>Example Plots</strong></p>
-<p><a class="reference internal" href="../../auto_examples/plot_qc_example.html#sphx-glr-auto-examples-plot-qc-example-py"><span class="std std-ref">QC Report</span></a></p>
+<p>Returns a SQL database in the specified output directory. Database can be converted into pandas dataframe with:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">fileName</span> <span class="o">=</span> <span class="s2">&quot;dimelo/test/data/mod_mappings_subset.bam&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sampleName</span> <span class="o">=</span> <span class="s2">&quot;test&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">outDir</span> <span class="o">=</span> <span class="s2">&quot;dimelo/dimelo_test&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">all_reads</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span><span class="s2">&quot;SELECT * from reads_&quot;</span> <span class="o">+</span> <span class="n">sampleName</span><span class="p">,</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">outDir</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">fileName</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;.db&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>After QC, each database contains this table with columns listed below:</p>
+<ol class="arabic simple">
+<li><dl class="simple">
+<dt>reads_sampleName</dt><dd><ul class="simple">
+<li><p>name</p></li>
+<li><p>chr</p></li>
+<li><p>start</p></li>
+<li><p>end</p></li>
+<li><p>length</p></li>
+<li><p>strand</p></li>
+<li><p>mapq</p></li>
+<li><p>ave_baseq</p></li>
+<li><p>ave_alignq</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ol>
+<p><strong>Example Plots</strong>
+<a class="reference internal" href="../../auto_examples/plot_qc_example.html#sphx-glr-auto-examples-plot-qc-example-py"><span class="std std-ref">QC Report</span></a></p>
 </dd></dl>
 
 </section>

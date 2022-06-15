@@ -5,10 +5,10 @@
 
 Computation times
 =================
-**00:16.403** total execution time for **auto_examples** files:
+**00:09.085** total execution time for **auto_examples** files:
 
 +-----------------------------------------------------------------------------------------------------------------+-----------+--------+
-| :ref:`sphx_glr_auto_examples_plot_qc_example.py` (``plot_qc_example.py``)                                       | 00:16.403 | 0.0 MB |
+| :ref:`sphx_glr_auto_examples_plot_qc_example.py` (``plot_qc_example.py``)                                       | 00:09.085 | 0.0 MB |
 +-----------------------------------------------------------------------------------------------------------------+-----------+--------+
 | :ref:`sphx_glr_auto_examples_browser_example.py` (``browser_example.py``)                                       | 00:00.000 | 0.0 MB |
 +-----------------------------------------------------------------------------------------------------------------+-----------+--------+
