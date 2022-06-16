@@ -567,14 +567,11 @@ def get_modified_reference_positions(
     if (read.has_tag("Mm")) & (";" in read.get_tag("Mm")):
         mod1 = read.get_tag("Mm").split(";")[0].split(",", 1)[0]
         mod2 = read.get_tag("Mm").split(";")[1].split(",", 1)[0]
-        # mod1_list = read.get_tag("Mm").split(";")[0].split(",", 1)
-        # mod2_list = read.get_tag("Mm").split(";")[1].split(",", 1)
         base = basemod[0]  # this will be A, C, or A
         if basemod == "A+CG":
             base2 = basemod[2]  # this will be C for A+CG case
         else:  # in the case of a single mod will just be checking that single base
             base2 = base
-        # if len(mod1_list) > 1 and (base in mod1 or base2 in mod1):
         if base in mod1 or base2 in mod1:
             mod1_return = get_mod_reference_positions_by_mod(
                 read,
@@ -592,7 +589,6 @@ def get_modified_reference_positions(
             )
         else:
             mod1_return = (None, [None], [None])
-        # if len(mod2_list) > 1 and (base in mod2 or base2 in mod2):
         if base in mod2 or base2 in mod2:
             mod2_return = get_mod_reference_positions_by_mod(
                 read,

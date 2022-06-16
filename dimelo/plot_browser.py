@@ -307,8 +307,7 @@ def create_output(fig, outfile, region, static, outDir):
     """
     if static:
         outfile = outDir + "/" + f"methylation_browser_{region.string}.pdf"
-        fig.write_image(outfile, width=1000, height=400)  # scale=10
-        # pio.write_image(fig, outfile, format='pdf', scale=10)
+        fig.write_image(outfile, width=1000, height=400)
     if not static:
         outfile = outDir + "/" + f"methylation_browser_{region.string}.html"
         with open(outfile, "w+") as output:
@@ -372,13 +371,11 @@ def make_per_read_meth_traces_phred(
     traces = []
     hidden = 0
     for read in table["read_name"].unique():
-        # strand = table.loc[table["read_name"] == read, "strand"].values[0]
         try:
             traces.append(
                 make_per_read_line_trace(
                     read_range=minmax_table.loc[read],
                     y_pos=df_heights.loc[read, "height"],
-                    # strand=strand,
                 )
             )
         except KeyError:
@@ -392,7 +389,7 @@ def make_per_read_meth_traces_phred(
     read_table_mA = table[table["mod"].str.contains("A")]
     cmapA = ["white", colorA]
     cmapC = ["white", colorC]
-    if "C" in basemod:  # if read_table_mC is not None:
+    if "C" in basemod:
         traces.append(
             make_per_position_phred_scatter(
                 all_data=all_data,
@@ -404,7 +401,7 @@ def make_per_read_meth_traces_phred(
                 offset=0.05,
             )
         )
-    if "A" in basemod:  # if read_table_mA is not None:
+    if "A" in basemod:
         traces.append(
             make_per_position_phred_scatter(
                 all_data=all_data,
@@ -509,7 +506,7 @@ def assign_y_height_per_read(df, max_coverage=1000):
     ).set_index("read")
 
 
-def make_per_read_line_trace(read_range, y_pos):  # , strand):
+def make_per_read_line_trace(read_range, y_pos):
     """
     Make a grey line trace for a single read
     """
@@ -564,7 +561,6 @@ def meth_browser(
     fig = create_subplots(
         num_methrows, names=meth_traces.names, annotation=bool(bed)
     )
-    # for y, (sample_traces, sample_type) in enumerate(meth_traces, start=1):
     for y, sample_traces in enumerate(meth_traces, start=1):
         for meth_trace in sample_traces:
             fig.add_trace(trace=meth_trace, row=y, col=1)
@@ -585,7 +581,6 @@ def meth_browser(
     fig["layout"]["xaxis"].update(
         tickformat="g",
         separatethousands=True,
-        # showticklabels=True,
         range=[region.begin, region.end],
     )
     fig["layout"].update(
