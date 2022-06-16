@@ -67,8 +67,8 @@ CG base count
 .. image:: demo/CTCF_demo_A_sm_rolling_avg_total.png
     :align: center
 
-.. image:: demo/CTCF_demo_C_sm_rolling_avg_fraction.png
+.. image:: demo/CTCF_demo_CG_sm_rolling_avg_fraction.png
     :align: center
 
-.. image:: demo/CTCF_demo_C_sm_rolling_avg_total.png
+.. image:: demo/CTCF_demo_CG_sm_rolling_avg_total.png
     :align: center
