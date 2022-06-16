@@ -297,7 +297,7 @@ def qc_report(
 
     After QC, each database contains this table with columns listed below:
 
-    1. reads_sampleName
+    reads_sampleName
         * name
         * chr
         * start
