@@ -134,9 +134,6 @@ def parse_bam_read(bamIn, sampleName, outDir, cores=None):
     c = connect.cursor()
     c.execute("BEGIN TRANSACTION")
 
-    # tqdm(batch_read_generator(file_bamIn, bamIn, 100), unit="batches", desc="Processing reads", total=total_reads)
-    # total_reads = file_bamIn.count() / 10
-    # file_bamIn.reset()
     Parallel(n_jobs=num_cores, backend="threading")(
         delayed(execute_sql_command)(template_command, DB_NAME, i, connect)
         for i in tqdm(
@@ -164,7 +161,6 @@ def qc_plot(x, sampleName, plotType, colors, num, axes):
     an_array = np.array(x)
     if all(v is None for v in an_array):
         return plt, []
-    # print(x.describe(),x.count == 0, x.shape, x.dtype)
     q1 = np.quantile(an_array, 0.25)
     q3 = np.quantile(an_array, 0.75)
     iq = q3 - q1
@@ -250,8 +246,6 @@ def qc_report(
     colors=DEFAULT_COLOR_LIST,
     cores=None,
 ):
-    # runtime = get_runtime(parse_bam_read, filebamIn, 'out')
-    # print(runtime)
 
     """
     fileNames
@@ -325,13 +319,6 @@ def qc_report(
         DB_NAME, TABLE_NAME = parse_bam_read(
             filebamIn, sampleName, outDir, cores
         )
-        # if testMode:
-        #     DB_NAME = outDir + "/" + filebamIn.split("/")[-1][:-4] + ".db"
-        #     # DB_NAME = "out/winnowmap_guppy_merge_subset.db"
-        #     # DB_NAME = "out/mod_mappings_subset.db"
-        #     TABLE_NAME = "reads"
-        # else:
-        #     DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, "out")
 
         if sampleName is None:
             sampleName = DB_NAME.split("/")[-1][:-3]
@@ -339,65 +326,49 @@ def qc_report(
         plot_feature_df = pd.read_sql(
             "SELECT * from " + TABLE_NAME, con=sqlite3.connect(DB_NAME)
         )
-        # print(DB_NAME)
-        # print(plot_feature_df)
+
         fig = plt.figure(figsize=(12, 10))
         grid = plt.GridSpec(3, 2, figure=fig)
 
         ax_5 = plt.subplot2grid(shape=(3, 2), loc=(0, 0), colspan=2)
         ax_5.axis("off")
-        # pltTable = ax_5.table(cellText=report_table,
-        #                      rowLabels=rows,
-        #                      colLabels=columns,
-        #                      loc='center')
 
         keep_values = [0, 0, 0, 0]
         valRL = []
         valMQ = []
         valBQ = []
         valAQ = []
-        ###### Read Length ######
+        # Read Length
         x = plot_feature_df["length"]
         # if not x.empty:
         ax_1 = fig.add_subplot(grid[0, 0])
         pltRL, valRL = qc_plot(x, sampleName, "L", colors, 1, ax_1)
         if valRL:
             keep_values[0] = 1
-        # pltRL.savefig(outDir + "/" + sampleName + "_rlength_freq_no_outliers.pdf", bbox_inches='tight')
 
-        ###### Mapping Quality ######
+        # Mapping Quality
         x = plot_feature_df["mapq"]
         # if not x.empty:
         ax_2 = fig.add_subplot(grid[0, 1])
         pltMQ, valMQ = qc_plot(x, sampleName, "M", colors, 2, ax_2)
         if valMQ:
             keep_values[1] = 1
-        # pltMQ.savefig(outDir + "/" + sampleName + "_mapq_freq_no_outliers.pdf", bbox_inches='tight')
 
-        ###### Basecall Quality ######
+        # Basecall Quality
         x = plot_feature_df["ave_baseq"]
-        # print(x.describe(), x.shape, x.dtype)
-        # print(x, len(x), x is None)
-        # print("here")
-        # print("is x empty: ", x.empty)
-        # if not x.empty:
-        #     print("here2")
-        #     print(x.empty)
+
         ax_3 = fig.add_subplot(grid[1, 0])
         pltBQ, valBQ = qc_plot(x, sampleName, "B", colors, 3, ax_3)
         if valBQ:
             keep_values[2] = 1
-        # pltBQ.savefig(outDir + "/" + sampleName + "_baseq_freq_no_outliers.pdf", bbox_inches='tight')
 
-        ###### Alignment Quality ######
+        # Alignment Quality
         x = plot_feature_df["ave_alignq"]
-        # if not x.empty:
-        #     print(x.empty)
+
         ax_4 = fig.add_subplot(grid[1, 1])
         pltAQ, valAQ = qc_plot(x, sampleName, "A", colors, 4, ax_4)
         if valAQ:
             keep_values[3] = 1
-        # pltAQ.savefig(outDir + "/" + sampleName + "_alignq_freq_no_outliers.pdf", bbox_inches='tight')
 
         val_table = [valRL, valMQ, valBQ, valAQ]
         val_table_new = []
@@ -415,7 +386,6 @@ def qc_report(
                 columns.append(cols[i])
             else:
                 plt.delaxes(axes_stored[i])
-        # report_table = np.array([valRL, valMQ, valBQ, valAQ]).T
 
         report_table = np.array(val_table_new).T
 
@@ -423,9 +393,7 @@ def qc_report(
         print("mean length: ", valRL[5])
         print("num reads: ", len(x))
         print("num bases: ", round(valRL[5] * len(x)))
-        # print(report_table)
 
-        # print(len(report_table))
         if len(columns) <= 2:
             ax_5 = plt.subplot2grid(shape=(3, 2), loc=(1, 0), colspan=2)
         else:
@@ -437,14 +405,8 @@ def qc_report(
             colLabels=columns,
             loc="center",
         )
-        # pltTable.scale(1, 1.5)
-        # plt.subplots_adjust(wspace=0.4, hspace=0.4)
-        fig.tight_layout(w_pad=2, h_pad=4)
-        # plt.subplots_adjust(left=0.3, bottom=0.4)
-        # plt.title("", size=30)
-        # pltTable.text(12, 3.4, '', size=30)
 
-        ##############
+        fig.tight_layout(w_pad=2, h_pad=4)
 
         summary_data = "mean length: " + str(valRL[5]) + " bp"
         summary_data = summary_data + "; num reads: " + str(len(x))
@@ -452,9 +414,8 @@ def qc_report(
             summary_data + "; " + "num bases: " + str(round(valRL[5] * len(x)))
         )
         fig.suptitle(sampleName + " QC Summary Report", y=1.05)
-        # plt.title("mean length: " + str(valRL[5]), y = 0.8)
+
         plt.title(summary_data, y=0.8)
-        # plt.title("TITLE: " + str(valRL[5]), fontsize = 12, y=1.3)
 
         # saving as PDF
         final_file_name = outDir + "/" + sampleName + "_qc_report"
