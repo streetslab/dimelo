@@ -704,6 +704,7 @@ def plot_aggregate_frac(aggregate_rolling, sampleName, mod, color, outDir):
     fig.savefig(
         outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_fraction.pdf"
     )
+    plt.close()
 
 
 def plot_aggregate_total(aggregate_rolling, sampleName, mod, color, outDir):
@@ -719,6 +720,7 @@ def plot_aggregate_total(aggregate_rolling, sampleName, mod, color, outDir):
     fig.savefig(
         outDir + "/" + sampleName + "_" + mod + "_sm_rolling_avg_total.pdf"
     )
+    plt.close()
 
 
 def main():

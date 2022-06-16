@@ -227,7 +227,7 @@ def qc_plot(x, sampleName, plotType, colors, num, axes):
         round(max(x)),
         round(x.mean()),
     ]
-    return plt, values
+    return values
 
 
 def calculate_N50(x):
@@ -342,7 +342,7 @@ def qc_report(
         x = plot_feature_df["length"]
         # if not x.empty:
         ax_1 = fig.add_subplot(grid[0, 0])
-        pltRL, valRL = qc_plot(x, sampleName, "L", colors, 1, ax_1)
+        valRL = qc_plot(x, sampleName, "L", colors, 1, ax_1)
         if valRL:
             keep_values[0] = 1
 
@@ -350,7 +350,7 @@ def qc_report(
         x = plot_feature_df["mapq"]
         # if not x.empty:
         ax_2 = fig.add_subplot(grid[0, 1])
-        pltMQ, valMQ = qc_plot(x, sampleName, "M", colors, 2, ax_2)
+        valMQ = qc_plot(x, sampleName, "M", colors, 2, ax_2)
         if valMQ:
             keep_values[1] = 1
 
@@ -358,7 +358,7 @@ def qc_report(
         x = plot_feature_df["ave_baseq"]
 
         ax_3 = fig.add_subplot(grid[1, 0])
-        pltBQ, valBQ = qc_plot(x, sampleName, "B", colors, 3, ax_3)
+        valBQ = qc_plot(x, sampleName, "B", colors, 3, ax_3)
         if valBQ:
             keep_values[2] = 1
 
@@ -366,7 +366,7 @@ def qc_report(
         x = plot_feature_df["ave_alignq"]
 
         ax_4 = fig.add_subplot(grid[1, 1])
-        pltAQ, valAQ = qc_plot(x, sampleName, "A", colors, 4, ax_4)
+        valAQ = qc_plot(x, sampleName, "A", colors, 4, ax_4)
         if valAQ:
             keep_values[3] = 1
 
@@ -420,6 +420,7 @@ def qc_report(
         # saving as PDF
         final_file_name = outDir + "/" + sampleName + "_qc_report"
         plt.savefig(final_file_name + ".pdf", bbox_inches="tight")
+        plt.close()
 
         print("QC report located at: " + final_file_name + ".pdf")
         print("Database located at: " + DB_NAME)
