@@ -82,6 +82,9 @@ def logger(statement):
 
 
 def prob_bin(bin):
+    # probability a base in the window (or across reads or across bases within a read) is methylated by:
+    # calculating probability that no base in the window (or across reads) is methylated and then taking the complement
+    # treat p=1 as 254/255 for prevent log(0)
     probs = [
         np.log(1 - p) for p in bin if ((p < 1) and (p >= 0.5))
     ]  # only consider probabilities > 0.5 and handle 1 on next line
@@ -160,7 +163,7 @@ def get_runtime(f, inp1, inp2, inp3):
 def qc_plot(x, sampleName, plotType, colors, num, axes):
     an_array = np.array(x)
     if all(v is None for v in an_array):
-        return plt, []
+        return []
     q1 = np.quantile(an_array, 0.25)
     q3 = np.quantile(an_array, 0.75)
     iq = q3 - q1
