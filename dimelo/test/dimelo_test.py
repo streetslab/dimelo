@@ -8,7 +8,7 @@ from dimelo.test import DiMeLoTestCase
 """
 Inputs
 
-NOTE: Changing any of these may require recomputing the hard-coded database
+NOTE: Changing any of these paths or database contents may require recomputing the hard-coded database
 hashes in the tests below.
 """
 # TODO: Is this a reasonable way to specify input files? Where is this intended to be run from?
@@ -172,7 +172,7 @@ class TestQCReport(DiMeLoTestCase):
         # Check whether database contents are the same as expected
         self.assertEqual(
             db_hash(database_path),
-            b"1c3299ce9a7464fd27fb666d57aa50c4b73468bf0ea808f184ef4e36\n",
+            b"58ed1ba2ce0c2e0f257ead1d9f2b9239f2777b8aefbf38ea7a40e464\n",
         )
 
         self.assertOutputFileExists(qc_report_file)
