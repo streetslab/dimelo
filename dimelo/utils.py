@@ -31,9 +31,12 @@ def create_sql_table(database_name, table_name, cols, d_types):
     c.execute("""DROP TABLE IF EXISTS """ + table_name + """;""")
     c.execute("""CREATE TABLE """ + table_name + """ """ + fs + """;""")
     conn.commit()
+    c.close()
 
 
-def execute_sql_command(command: str, database_name: str, values) -> None:
+def execute_sql_command(
+    command: str, database_name: str, values, conn=None
+) -> None:
     """
     Function to execute a SQL command from Python.
     Parameters
@@ -48,8 +51,10 @@ def execute_sql_command(command: str, database_name: str, values) -> None:
     No return, executes the command
     """
     # will create if not present
-    conn = sqlite3.connect(database_name, timeout=60.0)
+    if conn is None:
+        conn = sqlite3.connect(database_name, timeout=60.0)
     c = conn.cursor()
+    # c.execute('BEGIN TRANSACTION')
     if len(values) == 0:
         c.execute(command)
     elif type(values) == list:
@@ -59,4 +64,4 @@ def execute_sql_command(command: str, database_name: str, values) -> None:
     # saves the changes
     conn.commit()
     c.close()
-    conn.close()
+    # conn.close()

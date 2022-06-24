@@ -43,7 +43,6 @@ def batch_read_generator(file_bamIn, filename):
     counter = 0
     r_list = []
 
-    # added the next 3 lines
     lines = pysam.idxstats(filename).splitlines()
     total_reads = sum(
         [
@@ -86,7 +85,6 @@ def prob_bin(bin):
     # probability a base in the window (or across reads or across bases within a read) is methylated by:
     # calculating probability that no base in the window (or across reads) is methylated and then taking the complement
     # treat p=1 as 254/255 for prevent log(0)
-    # print(bin)
     probs = [
         np.log(1 - p) for p in bin if ((p < 1) and (p >= 0.5))
     ]  # only consider probabilities > 0.5 and handle 1 on next line
@@ -118,13 +116,14 @@ def ave_qual(quals, qround=False, tab=errs_tab(129)):
         return None
 
 
-def parse_bam_read(bamIn, outDir, cores=None):
+def parse_bam_read(bamIn, sampleName, outDir, cores=None):
     file_bamIn = pysam.AlignmentFile(bamIn, "rb")
 
-    DB_NAME, tables = make_db(bamIn, "", outDir, qc=True)
+    DB_NAME, tables = make_db(bamIn, sampleName, outDir, qc=True)
     template_command = (
         """INSERT INTO """ + tables[0] + """ VALUES(?,?,?,?,?,?,?,?,?);"""
     )
+    connect = sqlite3.connect(DB_NAME, timeout=60.0, check_same_thread=False)
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
         num_cores = cores_avail
@@ -134,11 +133,12 @@ def parse_bam_read(bamIn, outDir, cores=None):
             num_cores = cores_avail
         else:
             num_cores = cores
-    # tqdm(batch_read_generator(file_bamIn, bamIn, 100), unit="batches", desc="Processing reads", total=total_reads)
-    # total_reads = file_bamIn.count() / 10
-    # file_bamIn.reset()
-    Parallel(n_jobs=num_cores)(
-        delayed(execute_sql_command)(template_command, DB_NAME, i)
+
+    c = connect.cursor()
+    c.execute("BEGIN TRANSACTION")
+
+    Parallel(n_jobs=num_cores, backend="threading")(
+        delayed(execute_sql_command)(template_command, DB_NAME, i, connect)
         for i in tqdm(
             batch_read_generator(file_bamIn, bamIn),
             total=10,
@@ -146,6 +146,9 @@ def parse_bam_read(bamIn, outDir, cores=None):
             unit=" batches",
         )
     )
+
+    c.close()
+    connect.close()
     return DB_NAME, tables[0]
 
 
@@ -161,8 +164,6 @@ def qc_plot(x, sampleName, plotType, colors, num, axes):
     an_array = np.array(x)
     if all(v is None for v in an_array):
         return []
-    # print(x.describe(),x.count == 0, x.shape, x.dtype)
-    # print(, an_array)
     q1 = np.quantile(an_array, 0.25)
     q3 = np.quantile(an_array, 0.75)
     iq = q3 - q1
@@ -248,8 +249,6 @@ def qc_report(
     colors=DEFAULT_COLOR_LIST,
     cores=None,
 ):
-    # runtime = get_runtime(parse_bam_read, filebamIn, 'out')
-    # print(runtime)
 
     """
     fileNames
@@ -285,8 +284,28 @@ def qc_report(
             * summary table describing spread of data
             * number of reads, number of basepairs
 
-    **Example Plots**
+    Returns a SQL database in the specified output directory. Database can be converted into pandas dataframe with:
 
+    >>> fileName = "dimelo/test/data/mod_mappings_subset.bam"
+    >>> sampleName = "test"
+    >>> outDir = "dimelo/dimelo_test"
+    >>> all_reads = pd.read_sql("SELECT * from reads_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
+
+
+    After QC, each database contains this table with columns listed below:
+
+    reads_sampleName
+        * name
+        * chr
+        * start
+        * end
+        * length
+        * strand
+        * mapq
+        * ave_baseq
+        * ave_alignq
+
+    **Example Plots**
     :ref:`sphx_glr_auto_examples_plot_qc_example.py`
 
     """
@@ -300,14 +319,9 @@ def qc_report(
     for index in range(len(fileNames)):
         filebamIn = fileNames[index]
         sampleName = sampleNames[index]
-        DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, outDir, cores)
-        # if testMode:
-        #     DB_NAME = outDir + "/" + filebamIn.split("/")[-1][:-4] + ".db"
-        #     # DB_NAME = "out/winnowmap_guppy_merge_subset.db"
-        #     # DB_NAME = "out/mod_mappings_subset.db"
-        #     TABLE_NAME = "reads"
-        # else:
-        #     DB_NAME, TABLE_NAME = parse_bam_read(filebamIn, "out")
+        DB_NAME, TABLE_NAME = parse_bam_read(
+            filebamIn, sampleName, outDir, cores
+        )
 
         if sampleName is None:
             sampleName = DB_NAME.split("/")[-1][:-3]
@@ -315,57 +329,42 @@ def qc_report(
         plot_feature_df = pd.read_sql(
             "SELECT * from " + TABLE_NAME, con=sqlite3.connect(DB_NAME)
         )
-        # print(DB_NAME)
-        # print(plot_feature_df)
+
         fig = plt.figure(figsize=(12, 10))
         grid = plt.GridSpec(3, 2, figure=fig)
 
         ax_5 = plt.subplot2grid(shape=(3, 2), loc=(0, 0), colspan=2)
         ax_5.axis("off")
-        # pltTable = ax_5.table(cellText=report_table,
-        #                      rowLabels=rows,
-        #                      colLabels=columns,
-        #                      loc='center')
 
         keep_values = [0, 0, 0, 0]
         valRL = []
         valMQ = []
         valBQ = []
         valAQ = []
-        ###### Read Length ######
+
+        # Read Length
         x = plot_feature_df["length"]
-        # if not x.empty:
         ax_1 = fig.add_subplot(grid[0, 0])
         valRL = qc_plot(x, sampleName, "L", colors, 1, ax_1)
         if valRL:
             keep_values[0] = 1
 
-        ###### Mapping Quality ######
+        # Mapping Quality
         x = plot_feature_df["mapq"]
-        # if not x.empty:
         ax_2 = fig.add_subplot(grid[0, 1])
         valMQ = qc_plot(x, sampleName, "M", colors, 2, ax_2)
         if valMQ:
             keep_values[1] = 1
 
-        ###### Basecall Quality ######
+        # Basecall Quality
         x = plot_feature_df["ave_baseq"]
-        # print(x.describe(), x.shape, x.dtype)
-        # print(x, len(x), x is None)
-        # print("here")
-        # print("is x empty: ", x.empty)
-        # if not x.empty:
-        #     print("here2")
-        #     print(x.empty)
         ax_3 = fig.add_subplot(grid[1, 0])
         valBQ = qc_plot(x, sampleName, "B", colors, 3, ax_3)
         if valBQ:
             keep_values[2] = 1
 
-        ###### Alignment Quality ######
+        # Alignment Quality
         x = plot_feature_df["ave_alignq"]
-        # if not x.empty:
-        #     print(x.empty)
         ax_4 = fig.add_subplot(grid[1, 1])
         valAQ = qc_plot(x, sampleName, "A", colors, 4, ax_4)
         if valAQ:
@@ -387,7 +386,6 @@ def qc_report(
                 columns.append(cols[i])
             else:
                 plt.delaxes(axes_stored[i])
-        # report_table = np.array([valRL, valMQ, valBQ, valAQ]).T
 
         report_table = np.array(val_table_new).T
 
@@ -395,9 +393,7 @@ def qc_report(
         print("mean length: ", valRL[5])
         print("num reads: ", len(x))
         print("num bases: ", round(valRL[5] * len(x)))
-        # print(report_table)
 
-        # print(len(report_table))
         if len(columns) <= 2:
             ax_5 = plt.subplot2grid(shape=(3, 2), loc=(1, 0), colspan=2)
         else:
@@ -409,28 +405,17 @@ def qc_report(
             colLabels=columns,
             loc="center",
         )
-        # pltTable.scale(1, 1.5)
-        # plt.subplots_adjust(wspace=0.4, hspace=0.4)
-        fig.tight_layout(w_pad=2, h_pad=4)
-        # plt.subplots_adjust(left=0.3, bottom=0.4)
-        # plt.title("", size=30)
-        # pltTable.text(12, 3.4, '', size=30)
 
-        ##############
+        fig.tight_layout(w_pad=2, h_pad=4)
 
         summary_data = "mean length: " + str(valRL[5]) + " bp"
         summary_data = summary_data + "; num reads: " + str(len(x))
         summary_data = (
-            summary_data
-            + "; "
-            + "num bases: "
-            + str(round(valRL[5] * len(x)))
-            + " bp"
+            summary_data + "; " + "num bases: " + str(round(valRL[5] * len(x)))
         )
         fig.suptitle(sampleName + " QC Summary Report", y=1.05)
-        # plt.title("mean length: " + str(valRL[5]), y = 0.8)
+
         plt.title(summary_data, y=0.8)
-        # plt.title("TITLE: " + str(valRL[5]), fontsize = 12, y=1.3)
 
         # saving as PDF
         final_file_name = outDir + "/" + sampleName + "_qc_report"

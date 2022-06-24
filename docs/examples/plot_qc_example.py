@@ -21,5 +21,4 @@ out_dir = "../../dimelo/dimelo_test"
 
 # next we run the "qc_report" function
 dm.qc_report(in_bam, sample_name, out_dir)
-# now our output directory that we specified, will have a file called
-# "test_qc_report.pdf"
+# now our output directory that we specified, will have a file called "test_qc_report.pdf"

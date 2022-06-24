@@ -5,10 +5,10 @@
 
 Computation times
 =================
-**00:16.403** total execution time for **auto_examples** files:
+**00:00.006** total execution time for **auto_examples** files:
 
 +-----------------------------------------------------------------------------------------------------------------+-----------+--------+
-| :ref:`sphx_glr_auto_examples_plot_qc_example.py` (``plot_qc_example.py``)                                       | 00:16.403 | 0.0 MB |
+| :ref:`sphx_glr_auto_examples_plot_qc_example 2.py` (``plot_qc_example 2.py``)                                   | 00:00.006 | 0.0 MB |
 +-----------------------------------------------------------------------------------------------------------------+-----------+--------+
 | :ref:`sphx_glr_auto_examples_browser_example.py` (``browser_example.py``)                                       | 00:00.000 | 0.0 MB |
 +-----------------------------------------------------------------------------------------------------------------+-----------+--------+
@@ -21,4 +21,6 @@ Computation times
 | :ref:`sphx_glr_auto_examples_enrichment_profile_overlay_example.py` (``enrichment_profile_overlay_example.py``) | 00:00.000 | 0.0 MB |
 +-----------------------------------------------------------------------------------------------------------------+-----------+--------+
 | :ref:`sphx_glr_auto_examples_enrichment_profile_single_example.py` (``enrichment_profile_single_example.py``)   | 00:00.000 | 0.0 MB |
++-----------------------------------------------------------------------------------------------------------------+-----------+--------+
+| :ref:`sphx_glr_auto_examples_plot_qc_example.py` (``plot_qc_example.py``)                                       | 00:00.000 | 0.0 MB |
 +-----------------------------------------------------------------------------------------------------------------+-----------+--------+

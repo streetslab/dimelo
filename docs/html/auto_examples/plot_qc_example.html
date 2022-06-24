@@ -23,7 +23,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Basecalling &amp; Alignment Suggestions" href="../content/basecalling.html" />
-    <link rel="prev" title="Single-Molecule Browser Plot" href="browser_example.html" /> 
+    <link rel="prev" title="QC Report" href="plot_qc_example%202.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -51,6 +51,7 @@
 <li class="toctree-l2"><a class="reference internal" href="enrichment_multi_bam_example.html">Enrichment Plot Comparison Across BAMs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="enrichment_profile_overlay_example.html">Enrichment Profile Overlay</a></li>
 <li class="toctree-l2"><a class="reference internal" href="browser_example.html">Single-Molecule Browser Plot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plot_qc_example%202.html">QC Report</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">QC Report</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#creating-qc-report">Creating QC Report</a></li>
 </ul>
@@ -108,16 +109,22 @@ for long read methylation modification bam files</p>
 
 <span class="c1"># next we run the &quot;qc_report&quot; function</span>
 <span class="n">dm</span><span class="o">.</span><span class="n">qc_report</span><span class="p">(</span><span class="n">in_bam</span><span class="p">,</span> <span class="n">sample_name</span><span class="p">,</span> <span class="n">out_dir</span><span class="p">)</span>
-<span class="c1"># now our output directory that we specified, will have a file called</span>
-<span class="c1"># &quot;test_qc_report.pdf&quot;</span>
+<span class="c1"># now our output directory that we specified, will have a file called &quot;test_qc_report.pdf&quot;</span>
 </pre></div>
 </div>
-<img src="../_images/sphx_glr_plot_qc_example_001.png" srcset="../_images/sphx_glr_plot_qc_example_001.png" alt="test QC Summary Report,  Read Length,  Mapping Quality,  Basecall Quality,  Alignment Quality, mean length: 12202 bp; num reads: 3243; num bases: 39571086 bp" class = "sphx-glr-single-img"/><p class="sphx-glr-script-out">Out:</p>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-[Parallel(n_jobs=8)]: Done   3 out of  10 | elapsed:   12.0s remaining:   28.1s
-[Parallel(n_jobs=8)]: Done   5 out of  10 | elapsed:   12.1s remaining:   12.1s
-[Parallel(n_jobs=8)]: Done   7 out of  10 | elapsed:   12.1s remaining:    5.2s
-[Parallel(n_jobs=8)]: Done  10 out of  10 | elapsed:   12.2s finished
+<p class="sphx-glr-script-out">Out:</p>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Processing reads:   0%|          | 0/10 [00:00&lt;?, ? batches/s]
+Processing reads:  10%|#         | 1/10 [00:00&lt;00:03,  2.37 batches/s]
+Processing reads:  20%|##        | 2/10 [00:00&lt;00:03,  2.53 batches/s]
+Processing reads:  30%|###       | 3/10 [00:01&lt;00:02,  2.48 batches/s]
+Processing reads:  40%|####      | 4/10 [00:01&lt;00:02,  2.61 batches/s]
+Processing reads:  50%|#####     | 5/10 [00:01&lt;00:01,  2.70 batches/s]
+Processing reads:  60%|######    | 6/10 [00:02&lt;00:01,  2.71 batches/s]
+Processing reads:  70%|#######   | 7/10 [00:02&lt;00:01,  2.65 batches/s]
+Processing reads:  80%|########  | 8/10 [00:03&lt;00:00,  2.50 batches/s]
+Processing reads:  90%|######### | 9/10 [00:04&lt;00:00,  1.67 batches/s]
+Processing reads: 100%|##########| 10/10 [00:05&lt;00:00,  1.40 batches/s]
+Processing reads: 100%|##########| 10/10 [00:05&lt;00:00,  1.95 batches/s]
 mean length:  12202
 num reads:  3243
 num bases:  39571086
@@ -125,7 +132,7 @@ QC report located at: ../../dimelo/dimelo_test/test_qc_report.pdf
 Database located at: ../../dimelo/dimelo_test/winnowmap_guppy_merge_subset.db
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  16.403 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> ( 0 minutes  9.085 seconds)</p>
 <div class="sphx-glr-footer class sphx-glr-footer-example docutils container" id="sphx-glr-download-auto-examples-plot-qc-example-py">
 <div class="sphx-glr-download sphx-glr-download-python docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/99487b2e4e6af8b9093d643b8151d7ed/plot_qc_example.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">plot_qc_example.py</span></code></a></p>
@@ -142,7 +149,7 @@ Database located at: ../../dimelo/dimelo_test/winnowmap_guppy_merge_subset.db
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="browser_example.html" class="btn btn-neutral float-left" title="Single-Molecule Browser Plot" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plot_qc_example%202.html" class="btn btn-neutral float-left" title="QC Report" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="../content/basecalling.html" class="btn btn-neutral float-right" title="Basecalling &amp; Alignment Suggestions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

@@ -120,7 +120,7 @@ def make_db(
     tables = []
     # for qc report
     if qc:
-        table_name = "reads"
+        table_name = "reads_" + sampleName
         cols = [
             "name",
             "chr",
@@ -495,7 +495,9 @@ def parse_reads_window(
             + table_name
             + """ VALUES(?,?,?,?,?,?);"""
         )
-        execute_sql_command(command, DATABASE_NAME, data)
+        connection = sqlite3.connect(DATABASE_NAME, timeout=60.0)
+        execute_sql_command(command, DATABASE_NAME, data, connection)
+        connection.close()
 
 
 def get_modified_reference_positions(
@@ -794,7 +796,9 @@ def update_methylation_aggregate_db(
         )
 
         data_fill = [(x[0], x[1], x[2], 0, 0) for x in data]
-        execute_sql_command(command, DATABASE_NAME, data_fill)
+        connection = sqlite3.connect(DATABASE_NAME, timeout=60.0)
+        execute_sql_command(command, DATABASE_NAME, data_fill, connection)
+        connection.close()
 
         # update table for all entries
         # values: methylated_bases, total_bases, id
@@ -805,7 +809,9 @@ def update_methylation_aggregate_db(
             + table_name
             + """ SET methylated_bases = methylated_bases + ?, total_bases = total_bases + ? WHERE id = ?"""
         )
-        execute_sql_command(command, DATABASE_NAME, values_subset)
+        connection = sqlite3.connect(DATABASE_NAME, timeout=60.0)
+        execute_sql_command(command, DATABASE_NAME, values_subset, connection)
+        connection.close()
 
 
 def main():
