@@ -341,9 +341,9 @@ def qc_report(
         valMQ = []
         valBQ = []
         valAQ = []
+
         # Read Length
         x = plot_feature_df["length"]
-        # if not x.empty:
         ax_1 = fig.add_subplot(grid[0, 0])
         valRL = qc_plot(x, sampleName, "L", colors, 1, ax_1)
         if valRL:
@@ -351,7 +351,6 @@ def qc_report(
 
         # Mapping Quality
         x = plot_feature_df["mapq"]
-        # if not x.empty:
         ax_2 = fig.add_subplot(grid[0, 1])
         valMQ = qc_plot(x, sampleName, "M", colors, 2, ax_2)
         if valMQ:
@@ -359,7 +358,6 @@ def qc_report(
 
         # Basecall Quality
         x = plot_feature_df["ave_baseq"]
-
         ax_3 = fig.add_subplot(grid[1, 0])
         valBQ = qc_plot(x, sampleName, "B", colors, 3, ax_3)
         if valBQ:
@@ -367,7 +365,6 @@ def qc_report(
 
         # Alignment Quality
         x = plot_feature_df["ave_alignq"]
-
         ax_4 = fig.add_subplot(grid[1, 1])
         valAQ = qc_plot(x, sampleName, "A", colors, 4, ax_4)
         if valAQ:
