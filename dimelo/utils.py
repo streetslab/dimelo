@@ -31,6 +31,7 @@ def create_sql_table(database_name, table_name, cols, d_types):
     c.execute("""DROP TABLE IF EXISTS """ + table_name + """;""")
     c.execute("""CREATE TABLE """ + table_name + """ """ + fs + """;""")
     conn.commit()
+    c.close()
 
 
 def execute_sql_command(
