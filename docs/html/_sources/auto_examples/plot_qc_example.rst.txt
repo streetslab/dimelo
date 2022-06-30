@@ -31,7 +31,7 @@ Usually as a first step after receiving bam files, we want to do a quality check
 and assess our data. This code generates a PDF report of important QC statistics
 for long read methylation modification bam files
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-26
+.. GENERATED FROM PYTHON SOURCE LINES 14-25
 
 .. code-block:: default
 
@@ -45,15 +45,9 @@ for long read methylation modification bam files
 
     # next we run the "qc_report" function
     dm.qc_report(in_bam, sample_name, out_dir)
-    # now our output directory that we specified, will have a file called
-    # "test_qc_report.pdf"
+    # now our output directory that we specified, will have a file called "test_qc_report.pdf"
 
 
-
-.. image-sg:: /auto_examples/images/sphx_glr_plot_qc_example_001.png
-   :alt: test QC Summary Report,  Read Length,  Mapping Quality,  Basecall Quality,  Alignment Quality, mean length: 12202 bp; num reads: 3243; num bases: 39571086 bp
-   :srcset: /auto_examples/images/sphx_glr_plot_qc_example_001.png
-   :class: sphx-glr-single-img
 
 
 .. rst-class:: sphx-glr-script-out
@@ -62,11 +56,7 @@ for long read methylation modification bam files
 
  .. code-block:: none
 
-    [Parallel(n_jobs=8)]: Using backend LokyBackend with 8 concurrent workers.
-    [Parallel(n_jobs=8)]: Done   3 out of  10 | elapsed:   12.0s remaining:   28.1s
-    [Parallel(n_jobs=8)]: Done   5 out of  10 | elapsed:   12.1s remaining:   12.1s
-    [Parallel(n_jobs=8)]: Done   7 out of  10 | elapsed:   12.1s remaining:    5.2s
-    [Parallel(n_jobs=8)]: Done  10 out of  10 | elapsed:   12.2s finished
+    Processing reads:   0%|          | 0/10 [00:00<?, ? batches/s]    Processing reads:  10%|#         | 1/10 [00:00<00:03,  2.37 batches/s]    Processing reads:  20%|##        | 2/10 [00:00<00:03,  2.53 batches/s]    Processing reads:  30%|###       | 3/10 [00:01<00:02,  2.48 batches/s]    Processing reads:  40%|####      | 4/10 [00:01<00:02,  2.61 batches/s]    Processing reads:  50%|#####     | 5/10 [00:01<00:01,  2.70 batches/s]    Processing reads:  60%|######    | 6/10 [00:02<00:01,  2.71 batches/s]    Processing reads:  70%|#######   | 7/10 [00:02<00:01,  2.65 batches/s]    Processing reads:  80%|########  | 8/10 [00:03<00:00,  2.50 batches/s]    Processing reads:  90%|######### | 9/10 [00:04<00:00,  1.67 batches/s]    Processing reads: 100%|##########| 10/10 [00:05<00:00,  1.40 batches/s]    Processing reads: 100%|##########| 10/10 [00:05<00:00,  1.95 batches/s]
     mean length:  12202
     num reads:  3243
     num bases:  39571086
@@ -79,7 +69,7 @@ for long read methylation modification bam files
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  16.403 seconds)
+   **Total running time of the script:** ( 0 minutes  9.085 seconds)
 
 
 .. _sphx_glr_download_auto_examples_plot_qc_example.py:
