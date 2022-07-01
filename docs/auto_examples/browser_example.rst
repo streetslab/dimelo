@@ -74,9 +74,9 @@ Output
     :align: center
 .. figure:: ../auto_examples/images/CTCF_A_sm_rolling_avg_total.png
     :align: center
-.. figure:: ../auto_examples/images/CTCF_C_sm_rolling_avg_fraction.png
+.. figure:: ../auto_examples/images/CTCF_CG_sm_rolling_avg_fraction.png
     :align: center
-.. figure:: ../auto_examples/images/CTCF_C_sm_rolling_avg_total.png
+.. figure:: ../auto_examples/images/CTCF_CG_sm_rolling_avg_total.png
     :align: center
 
 

@@ -218,7 +218,7 @@ class TestPlotBrowser(DiMeLoTestCase):
         n_html_files = len(list(self.outDir.glob("*.html")))
         self.assertEqual(n_html_files, 1)
 
-        for basemod in ["A", "C"]:
+        for basemod in ["A", "CG"]:
             for plot_type in ["fraction", "total"]:
                 rolling_avg_file = (
                     f"{sample_name}_{basemod}_sm_rolling_avg_{plot_type}.pdf"
@@ -255,7 +255,7 @@ class TestPlotBrowser(DiMeLoTestCase):
         n_pdf_files = len(list(self.outDir.glob("*.pdf")))
         self.assertEqual(n_pdf_files, 5)
 
-        for basemod in ["A", "C"]:
+        for basemod in ["A", "CG"]:
             for plot_type in ["fraction", "total"]:
                 rolling_avg_file = (
                     f"{sample_name}_{basemod}_sm_rolling_avg_{plot_type}.pdf"

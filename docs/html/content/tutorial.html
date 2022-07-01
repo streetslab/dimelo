@@ -96,11 +96,11 @@
 <li><p>Run below commands and ensure your output matches the expected plots below. This tutorial walks through running functions from python, but the dimelo package can also be used from the command line (see <a class="reference internal" href="../auto_examples/index.html"><span class="doc">Example Gallery</span></a>).</p></li>
 </ol>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">dimelo</span> <span class="k">as</span> <span class="nn">dm</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">bam</span> <span class="o">=</span> <span class="s2">&quot;ctcf_demo.sorted.bam&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bam</span> <span class="o">=</span> <span class="s2">&quot;dimelo/test/data/ctcf_demo.sorted.bam&quot;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">sampleName</span> <span class="o">=</span> <span class="s2">&quot;CTCF_demo&quot;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">outDir</span> <span class="o">=</span> <span class="s2">&quot;out&quot;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">bedPeak</span> <span class="o">=</span> <span class="s2">&quot;ctcf_demo_peak.bed&quot;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">bedNotPeak</span> <span class="o">=</span> <span class="s2">&quot;ctcf_demo_not_peak.bed&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bedPeak</span> <span class="o">=</span> <span class="s2">&quot;dimelo/test/data/ctcf_demo_peak.bed&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bedNotPeak</span> <span class="o">=</span> <span class="s2">&quot;dimelo/test/data/ctcf_demo_not_peak.bed&quot;</span>
 </pre></div>
 </div>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dm</span><span class="o">.</span><span class="n">qc_report</span><span class="p">(</span><span class="n">bam</span><span class="p">,</span> <span class="n">sampleName</span><span class="p">,</span> <span class="n">outDir</span><span class="p">)</span>
@@ -128,8 +128,8 @@
 <img alt="../_images/methylation_browser_chr11_2086423_20911871.png" class="align-center" src="../_images/methylation_browser_chr11_2086423_20911871.png" />
 <img alt="../_images/CTCF_demo_A_sm_rolling_avg_fraction.png" class="align-center" src="../_images/CTCF_demo_A_sm_rolling_avg_fraction.png" />
 <img alt="../_images/CTCF_demo_A_sm_rolling_avg_total.png" class="align-center" src="../_images/CTCF_demo_A_sm_rolling_avg_total.png" />
-<img alt="../_images/CTCF_demo_C_sm_rolling_avg_fraction.png" class="align-center" src="../_images/CTCF_demo_C_sm_rolling_avg_fraction.png" />
-<img alt="../_images/CTCF_demo_C_sm_rolling_avg_total.png" class="align-center" src="../_images/CTCF_demo_C_sm_rolling_avg_total.png" />
+<img alt="../_images/CTCF_demo_CG_sm_rolling_avg_fraction.png" class="align-center" src="../_images/CTCF_demo_CG_sm_rolling_avg_fraction.png" />
+<img alt="../_images/CTCF_demo_CG_sm_rolling_avg_total.png" class="align-center" src="../_images/CTCF_demo_CG_sm_rolling_avg_total.png" />
 </section>
 </section>
 

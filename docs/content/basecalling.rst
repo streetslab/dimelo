@@ -24,3 +24,5 @@ Suggestions
 4. If using Guppy & Winnowmap, the resulting bam files must be combined to create a single bam with the modified basecalls from Guppy and the mapping information from Winnowmap. 
    
     * `hybrid_guppy_winnnowmap_bam_creation <https://github.com/amaslan/dimelo-seq/blob/main/ctcf_and_h3k9me3/hybrid_guppy_winnnowmap_bam_creation>`__
+
+5. We perform basecalling separately from the sequencing run and use an EC2 instance (g4dn.metal) with multiple GPUs to speed up basecalling significantly. 
