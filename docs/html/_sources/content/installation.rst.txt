@@ -14,7 +14,7 @@ Installation from Source
 
 .. code:: bash
 
-	git clone https://github.com/amaslan/dimelo
+	git clone https://github.com/streetslab/dimelo.git
 	cd dimelo
 
 2. Create and activate a python 3.7 conda venv.

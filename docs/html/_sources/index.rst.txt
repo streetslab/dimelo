@@ -30,7 +30,7 @@ Resources
 
 :doc:`content/tutorial` 
 
-`Open Source Code <https://github.com/amaslan/dimelo>`__
+`Open Source Code <https://github.com/streetslab/dimelo>`__
 
 `DiMeLo-seq Protocol <https://www.protocols.io/view/dimelo-seq-directed-methylation-with-long-read-seq-n2bvjxe4wlk5/v2/materials>`__
 
