@@ -2,7 +2,7 @@
 QC Report
 ===========================
 
-This creates a qc report from the test bams
+Outputs quality control report from given bam files.
 
 """
 # %%

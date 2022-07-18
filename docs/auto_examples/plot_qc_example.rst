@@ -21,7 +21,7 @@
 QC Report
 ===========================
 
-This creates a qc report from the test bams
+Outputs quality control report from given bam files.
 
 .. GENERATED FROM PYTHON SOURCE LINES 9-14
 
@@ -56,7 +56,7 @@ for long read methylation modification bam files
 
  .. code-block:: none
 
-    Processing reads:   0%|          | 0/10 [00:00<?, ? batches/s]    Processing reads:  10%|#         | 1/10 [00:00<00:03,  2.37 batches/s]    Processing reads:  20%|##        | 2/10 [00:00<00:03,  2.53 batches/s]    Processing reads:  30%|###       | 3/10 [00:01<00:02,  2.48 batches/s]    Processing reads:  40%|####      | 4/10 [00:01<00:02,  2.61 batches/s]    Processing reads:  50%|#####     | 5/10 [00:01<00:01,  2.70 batches/s]    Processing reads:  60%|######    | 6/10 [00:02<00:01,  2.71 batches/s]    Processing reads:  70%|#######   | 7/10 [00:02<00:01,  2.65 batches/s]    Processing reads:  80%|########  | 8/10 [00:03<00:00,  2.50 batches/s]    Processing reads:  90%|######### | 9/10 [00:04<00:00,  1.67 batches/s]    Processing reads: 100%|##########| 10/10 [00:05<00:00,  1.40 batches/s]    Processing reads: 100%|##########| 10/10 [00:05<00:00,  1.95 batches/s]
+    Processing reads:   0%|          | 0/10 [00:00<?, ? batches/s]    Processing reads:  10%|#         | 1/10 [00:00<00:05,  1.78 batches/s]    Processing reads:  20%|##        | 2/10 [00:01<00:04,  1.92 batches/s]    Processing reads:  30%|###       | 3/10 [00:01<00:03,  1.92 batches/s]    Processing reads:  40%|####      | 4/10 [00:02<00:02,  2.05 batches/s]    Processing reads:  50%|#####     | 5/10 [00:02<00:02,  2.18 batches/s]    Processing reads:  60%|######    | 6/10 [00:02<00:01,  2.21 batches/s]    Processing reads:  70%|#######   | 7/10 [00:03<00:01,  2.19 batches/s]    Processing reads:  80%|########  | 8/10 [00:03<00:00,  2.05 batches/s]    Processing reads:  90%|######### | 9/10 [00:05<00:00,  1.39 batches/s]    Processing reads: 100%|##########| 10/10 [00:06<00:00,  1.05s/ batches]    Processing reads: 100%|##########| 10/10 [00:06<00:00,  1.45 batches/s]
     mean length:  12202
     num reads:  3243
     num bases:  39571086
@@ -69,7 +69,7 @@ for long read methylation modification bam files
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  9.085 seconds)
+   **Total running time of the script:** ( 0 minutes  12.341 seconds)
 
 
 .. _sphx_glr_download_auto_examples_plot_qc_example.py:

@@ -136,14 +136,14 @@ Example Gallery
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This creates a qc report from the test bams">
+    <div class="sphx-glr-thumbcontainer" tooltip="Outputs quality control report from given bam files.">
 
 .. only:: html
 
- .. figure:: /auto_examples/images/thumb/sphx_glr_plot_qc_example_thumb.png
+ .. figure:: /auto_examples/images/thumb/sphx_glr_qc_report_example_thumb.png
      :alt: QC Report
 
-     :ref:`sphx_glr_auto_examples_plot_qc_example.py`
+     :ref:`sphx_glr_auto_examples_qc_report_example.py`
 
 .. raw:: html
 
@@ -153,7 +153,7 @@ Example Gallery
 .. toctree::
    :hidden:
 
-   /auto_examples/plot_qc_example
+   /auto_examples/qc_report_example
 .. raw:: html
 
     <div class="sphx-glr-clear"></div>
