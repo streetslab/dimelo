@@ -52,9 +52,8 @@
 <li class="toctree-l2"><a class="reference internal" href="enrichment_profile_overlay_example.html">Enrichment Profile Overlay</a></li>
 <li class="toctree-l2"><a class="reference internal" href="browser_example.html">Single-Molecule Browser Plot</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">QC Report</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#creating-qc-report">Creating QC Report</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#python-option">1. Python option</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#command-line-option">2. Command Line Option</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#command-line-option">2. Command line option</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#output">Output</a></li>
 </ul>
 </li>
@@ -97,12 +96,9 @@ to download the full example code</p>
 <section class="sphx-glr-example-title" id="qc-report">
 <span id="sphx-glr-auto-examples-qc-report-example-py"></span><h1>QC Report<a class="headerlink" href="#qc-report" title="Permalink to this headline"></a></h1>
 <p>Outputs quality control report from given bam files.</p>
-<section id="creating-qc-report">
-<h2>Creating QC Report<a class="headerlink" href="#creating-qc-report" title="Permalink to this headline"></a></h2>
 <p>Usually as a first step after receiving bam files, we want to do a quality check
 and assess our data. This code generates a PDF report of important QC statistics
 for modified base data from Nanopore sequencing.</p>
-</section>
 <section id="python-option">
 <h2>1. Python option<a class="headerlink" href="#python-option" title="Permalink to this headline"></a></h2>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">dimelo</span> <span class="k">as</span> <span class="nn">dm</span>
@@ -119,7 +115,7 @@ for modified base data from Nanopore sequencing.</p>
 </div>
 </section>
 <section id="command-line-option">
-<h2>2. Command Line Option<a class="headerlink" href="#command-line-option" title="Permalink to this headline"></a></h2>
+<h2>2. Command line option<a class="headerlink" href="#command-line-option" title="Permalink to this headline"></a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">dimelo-qc-report</span> <span class="pre">-f</span> <span class="pre">winnowmap_guppy_merge_subset.bam</span> <span class="pre">-s</span> <span class="pre">CTCF</span> <span class="pre">-o</span> <span class="pre">./out</span></code></p>
 </section>
 <section id="output">

@@ -23,20 +23,18 @@ QC Report
 
 Outputs quality control report from given bam files.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-14
+.. GENERATED FROM PYTHON SOURCE LINES 9-12
 
-Creating QC Report
-------------------------
 Usually as a first step after receiving bam files, we want to do a quality check
 and assess our data. This code generates a PDF report of important QC statistics
 for modified base data from Nanopore sequencing.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-18
+.. GENERATED FROM PYTHON SOURCE LINES 14-16
 
 1. Python option
 ----------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-30
+.. GENERATED FROM PYTHON SOURCE LINES 16-28
 
 .. code-block:: default
 
@@ -53,13 +51,13 @@ for modified base data from Nanopore sequencing.
     # now our output directory will have a file called "CTCF_qc_report.pdf"
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 31-34
+.. GENERATED FROM PYTHON SOURCE LINES 29-32
 
-2. Command Line Option
+2. Command line option
 ----------------
 ``dimelo-qc-report -f winnowmap_guppy_merge_subset.bam -s CTCF -o ./out``
 
-.. GENERATED FROM PYTHON SOURCE LINES 37-41
+.. GENERATED FROM PYTHON SOURCE LINES 35-39
 
 Output
 ----------------------

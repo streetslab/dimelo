@@ -6,8 +6,6 @@ Outputs quality control report from given bam files.
 
 """
 # %%
-# Creating QC Report
-# ------------------------
 # Usually as a first step after receiving bam files, we want to do a quality check
 # and assess our data. This code generates a PDF report of important QC statistics
 # for modified base data from Nanopore sequencing.
@@ -28,7 +26,7 @@ dm.qc_report(bam, sampleName, outdir)
 # now our output directory will have a file called "CTCF_qc_report.pdf"
 
 # %%
-# 2. Command Line Option
+# 2. Command line option
 # ----------------
 # ``dimelo-qc-report -f winnowmap_guppy_merge_subset.bam -s CTCF -o ./out``
 
