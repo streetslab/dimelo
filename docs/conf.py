@@ -34,7 +34,9 @@ extensions = [
     "sphinx.ext.autosectionlabel",
     "sphinx_gallery.gen_gallery",  # added this for sphinx gallery
     "sphinx_rtd_theme",
+    "sphinxarg.ext",
 ]
+
 
 # Include doc string for __init__ method in the documentation
 autosummary_generate = True

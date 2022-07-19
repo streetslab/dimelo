@@ -48,7 +48,11 @@
 <li class="toctree-l2"><a class="reference internal" href="plot_browser.html">plot_browser</a></li>
 <li class="toctree-l2"><a class="reference internal" href="plot_enrichment.html">plot_enrichment</a></li>
 <li class="toctree-l2"><a class="reference internal" href="plot_enrichment_profile.html">plot_enrichment_profile</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">parse_bam</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">parse_bam</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#Named Arguments">Named Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#required arguments">required arguments</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../../auto_examples/index.html">Example Gallery</a></li>
@@ -190,6 +194,66 @@
 </div></blockquote>
 </dd></dl>
 
+<p><p>Parse a bam file into DiMeLo database tables</p>
+</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">usage</span><span class="p">:</span> <span class="n">dimelo</span><span class="o">-</span><span class="n">parse</span><span class="o">-</span><span class="n">bam</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILENAME</span> <span class="o">-</span><span class="n">s</span> <span class="n">SAMPLENAME</span> <span class="o">-</span><span class="n">o</span> <span class="n">OUTDIR</span>
+                        <span class="p">(</span><span class="o">-</span><span class="n">b</span> <span class="n">BEDFILE</span> <span class="o">|</span> <span class="o">-</span><span class="n">r</span> <span class="n">REGION</span><span class="p">)</span> <span class="p">[</span><span class="o">-</span><span class="n">m</span> <span class="p">{</span><span class="n">A</span><span class="p">,</span><span class="n">CG</span><span class="p">,</span><span class="n">A</span><span class="o">+</span><span class="n">CG</span><span class="p">}]</span> <span class="p">[</span><span class="o">-</span><span class="n">A</span> <span class="n">THRESHA</span><span class="p">]</span>
+                        <span class="p">[</span><span class="o">-</span><span class="n">C</span> <span class="n">THRESHC</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">e</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">p</span> <span class="n">CORES</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">c</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">w</span> <span class="n">WINDOWSIZE</span><span class="p">]</span>
+</pre></div>
+</div>
+<section id="Named Arguments">
+<h2>Named Arguments<a class="headerlink" href="#Named Arguments" title="Permalink to this headline"></a></h2>
+<dl class="option-list">
+<dt><kbd>-b, --bedFile</kbd></dt>
+<dd><p>name of bed file that defines regions of interest over which to extract mod calls</p>
+</dd>
+<dt><kbd>-r, --region</kbd></dt>
+<dd><p>single region over which to extract base mods, e.g. “chr1:1-100000”</p>
+</dd>
+<dt><kbd>-m, --basemod</kbd></dt>
+<dd><p>Possible choices: A, CG, A+CG</p>
+<p>which base modifications to extract</p>
+<p>Default: “A+CG”</p>
+</dd>
+<dt><kbd>-A, --threshA</kbd></dt>
+<dd><p>threshold above which to call an A base methylated</p>
+<p>Default: 129</p>
+</dd>
+<dt><kbd>-C, --threshC</kbd></dt>
+<dd><p>threshold above which to call a C base methylated</p>
+<p>Default: 129</p>
+</dd>
+<dt><kbd>-e, --extractAllBases</kbd></dt>
+<dd><p>store all base mod calls, regardless of methylation probability threshold</p>
+<p>Default: False</p>
+</dd>
+<dt><kbd>-p, --cores</kbd></dt>
+<dd><p>number of cores over which to parallelize</p>
+</dd>
+<dt><kbd>-c, --center</kbd></dt>
+<dd><p>report positions with respect to center of motif window; only valid with bed file input</p>
+<p>Default: False</p>
+</dd>
+<dt><kbd>-w, --windowSize</kbd></dt>
+<dd><p>window size around center point of feature of interest to plot (+/-); only mods within this window are stored (default: 1000 bp)</p>
+<p>Default: 1000</p>
+</dd>
+</dl>
+</section>
+<section id="required arguments">
+<h2>required arguments<a class="headerlink" href="#required arguments" title="Permalink to this headline"></a></h2>
+<dl class="option-list">
+<dt><kbd>-f, --fileName</kbd></dt>
+<dd><p>name of bam file with Mm and Ml tags</p>
+</dd>
+<dt><kbd>-s, --sampleName</kbd></dt>
+<dd><p>name of sample for output SQL table name labelling</p>
+</dd>
+<dt><kbd>-o, --outDir</kbd></dt>
+<dd><p>directory where SQL database is stored</p>
+</dd>
+</dl>
+</section>
 </section>
 
 
