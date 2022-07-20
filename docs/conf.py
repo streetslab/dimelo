@@ -34,7 +34,7 @@ extensions = [
     "sphinx.ext.autosectionlabel",
     "sphinx_gallery.gen_gallery",  # added this for sphinx gallery
     "sphinx_rtd_theme",
-    "sphinxarg.ext",
+    "sphinx_argparse_cli",
 ]
 
 

@@ -815,7 +815,7 @@ def update_methylation_aggregate_db(
         connection.close()
 
 
-def parse_bam_arg_parser() -> argparse.ArgumentParser:
+def main():
     parser = argparse.ArgumentParser(
         description="Parse a bam file into DiMeLo database tables"
     )
@@ -903,10 +903,5 @@ def parse_bam_arg_parser() -> argparse.ArgumentParser:
         help=f"window size around center point of feature of interest to plot (+/-); only mods within this window are stored (default: {DEFAULT_WINDOW_SIZE} bp)",
     )
 
-    return parser
-
-
-def main():
-    parser = parse_bam_arg_parser()
     args = parser.parse_args()
     parse_bam(**vars(args))

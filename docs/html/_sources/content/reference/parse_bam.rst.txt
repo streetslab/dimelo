@@ -5,7 +5,8 @@
 
 .. autofunction:: parse_bam
 
-.. argparse::
+.. sphinx_argparse_cli::
    :module: dimelo.parse_bam
-   :func: parse_bam_arg_parser
+   :func: main
+   :hook:
    :prog: dimelo-parse-bam
