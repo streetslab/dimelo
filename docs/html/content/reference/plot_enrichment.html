@@ -7,6 +7,7 @@
   <title>plot_enrichment &mdash; dimelo  documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/sg_gallery.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/sg_gallery-binder.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/sg_gallery-dataframe.css" type="text/css" />
@@ -46,7 +47,15 @@
 <li class="toctree-l1 current"><a class="reference internal" href="tools.html">Functions</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="qc_report.html">qc_report</a></li>
 <li class="toctree-l2"><a class="reference internal" href="plot_browser.html">plot_browser</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">plot_enrichment</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">plot_enrichment</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#dimelo-plot-enrichment---CLI-interface">dimelo-plot-enrichment - CLI interface</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dimelo-plot-enrichment-optional-arguments">dimelo-plot-enrichment optional arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dimelo-plot-enrichment-required-arguments">dimelo-plot-enrichment required arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dimelo-plot-enrichment-plotting-options">dimelo-plot-enrichment plotting options</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="plot_enrichment_profile.html">plot_enrichment_profile</a></li>
 <li class="toctree-l2"><a class="reference internal" href="parse_bam.html">parse_bam</a></li>
 </ul>
@@ -126,6 +135,40 @@
 </div></blockquote>
 </dd></dl>
 
+<section id="dimelo-plot-enrichment---CLI-interface">
+<h2>dimelo-plot-enrichment - CLI interface<a class="headerlink" href="#dimelo-plot-enrichment---CLI-interface" title="Permalink to this headline"></a></h2>
+<p>Plot DiMeLo methylation enrichment</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dimelo</span><span class="o">-</span><span class="n">plot</span><span class="o">-</span><span class="n">enrichment</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILENAMES</span> <span class="p">[</span><span class="n">FILENAMES</span> <span class="o">...</span><span class="p">]</span> <span class="o">-</span><span class="n">s</span> <span class="n">SAMPLENAMES</span> <span class="p">[</span><span class="n">SAMPLENAMES</span> <span class="o">...</span><span class="p">]</span> <span class="o">-</span><span class="n">b</span>
+                       <span class="n">BEDFILES</span> <span class="p">[</span><span class="n">BEDFILES</span> <span class="o">...</span><span class="p">]</span> <span class="o">-</span><span class="n">m</span> <span class="p">{</span><span class="n">A</span><span class="p">,</span><span class="n">CG</span><span class="p">}</span> <span class="o">-</span><span class="n">o</span> <span class="n">OUTDIR</span>
+                       <span class="p">[</span><span class="o">--</span><span class="n">colors</span> <span class="n">COLORS</span> <span class="p">[</span><span class="n">COLORS</span> <span class="o">...</span><span class="p">]]</span> <span class="p">[</span><span class="o">-</span><span class="n">A</span> <span class="n">THRESHA</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">C</span> <span class="n">THRESHC</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">p</span> <span class="n">CORES</span><span class="p">]</span>
+</pre></div>
+</div>
+<section id="dimelo-plot-enrichment-optional-arguments">
+<h3>dimelo-plot-enrichment optional arguments<a class="headerlink" href="#dimelo-plot-enrichment-optional-arguments" title="Permalink to this headline"></a></h3>
+<ul class="simple">
+<li><p id="dimelo-plot-enrichment--h"><span id="dimelo-plot-enrichment---help"></span><a class="reference internal" href="#dimelo-plot-enrichment--h" title="dimelo-plot-enrichment -h"><strong><code class="docutils literal notranslate"><span class="pre">-h</span></code></strong></a>, <a class="reference internal" href="#dimelo-plot-enrichment---help" title="dimelo-plot-enrichment --help"><strong><code class="docutils literal notranslate"><span class="pre">--help</span></code></strong></a> - show this help message and exit</p></li>
+<li><p id="dimelo-plot-enrichment--A"><span id="dimelo-plot-enrichment---threshA"></span><a class="reference internal" href="#dimelo-plot-enrichment--A" title="dimelo-plot-enrichment -A"><strong><code class="docutils literal notranslate"><span class="pre">-A</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">THRESHA</span></code>, <a class="reference internal" href="#dimelo-plot-enrichment---threshA" title="dimelo-plot-enrichment --threshA"><strong><code class="docutils literal notranslate"><span class="pre">--threshA</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">THRESHA</span></code> - threshold above which to call an A base methylated (default: <code class="docutils literal notranslate"><span class="pre">129</span></code>)</p></li>
+<li><p id="dimelo-plot-enrichment--C"><span id="dimelo-plot-enrichment---threshC"></span><a class="reference internal" href="#dimelo-plot-enrichment--C" title="dimelo-plot-enrichment -C"><strong><code class="docutils literal notranslate"><span class="pre">-C</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">THRESHC</span></code>, <a class="reference internal" href="#dimelo-plot-enrichment---threshC" title="dimelo-plot-enrichment --threshC"><strong><code class="docutils literal notranslate"><span class="pre">--threshC</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">THRESHC</span></code> - threshold above which to call a C base methylated (default: <code class="docutils literal notranslate"><span class="pre">129</span></code>)</p></li>
+<li><p id="dimelo-plot-enrichment--p"><span id="dimelo-plot-enrichment---cores"></span><a class="reference internal" href="#dimelo-plot-enrichment--p" title="dimelo-plot-enrichment -p"><strong><code class="docutils literal notranslate"><span class="pre">-p</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">CORES</span></code>, <a class="reference internal" href="#dimelo-plot-enrichment---cores" title="dimelo-plot-enrichment --cores"><strong><code class="docutils literal notranslate"><span class="pre">--cores</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">CORES</span></code> - number of cores over which to parallelize (default: <code class="docutils literal notranslate"><span class="pre">None</span></code>)</p></li>
+</ul>
+</section>
+<section id="dimelo-plot-enrichment-required-arguments">
+<h3>dimelo-plot-enrichment required arguments<a class="headerlink" href="#dimelo-plot-enrichment-required-arguments" title="Permalink to this headline"></a></h3>
+<ul class="simple">
+<li><p id="dimelo-plot-enrichment--f"><span id="dimelo-plot-enrichment---fileNames"></span><a class="reference internal" href="#dimelo-plot-enrichment--f" title="dimelo-plot-enrichment -f"><strong><code class="docutils literal notranslate"><span class="pre">-f</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">FILENAMES</span></code>, <a class="reference internal" href="#dimelo-plot-enrichment---fileNames" title="dimelo-plot-enrichment --fileNames"><strong><code class="docutils literal notranslate"><span class="pre">--fileNames</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">FILENAMES</span></code> - bam file name(s) (default: <code class="docutils literal notranslate"><span class="pre">None</span></code>)</p></li>
+<li><p id="dimelo-plot-enrichment--s"><span id="dimelo-plot-enrichment---sampleNames"></span><a class="reference internal" href="#dimelo-plot-enrichment--s" title="dimelo-plot-enrichment -s"><strong><code class="docutils literal notranslate"><span class="pre">-s</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">SAMPLENAMES</span></code>, <a class="reference internal" href="#dimelo-plot-enrichment---sampleNames" title="dimelo-plot-enrichment --sampleNames"><strong><code class="docutils literal notranslate"><span class="pre">--sampleNames</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">SAMPLENAMES</span></code> - sample name(s) for output file labelling (default: <code class="docutils literal notranslate"><span class="pre">None</span></code>)</p></li>
+<li><p id="dimelo-plot-enrichment--b"><span id="dimelo-plot-enrichment---bedFiles"></span><a class="reference internal" href="#dimelo-plot-enrichment--b" title="dimelo-plot-enrichment -b"><strong><code class="docutils literal notranslate"><span class="pre">-b</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">BEDFILES</span></code>, <a class="reference internal" href="#dimelo-plot-enrichment---bedFiles" title="dimelo-plot-enrichment --bedFiles"><strong><code class="docutils literal notranslate"><span class="pre">--bedFiles</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">BEDFILES</span></code> - name of bed file(s) defining region(s) of interest (default: <code class="docutils literal notranslate"><span class="pre">None</span></code>)</p></li>
+<li><p id="dimelo-plot-enrichment--m"><span id="dimelo-plot-enrichment---basemod"></span><a class="reference internal" href="#dimelo-plot-enrichment--m" title="dimelo-plot-enrichment -m"><strong><code class="docutils literal notranslate"><span class="pre">-m</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">BASEMOD</span></code>, <a class="reference internal" href="#dimelo-plot-enrichment---basemod" title="dimelo-plot-enrichment --basemod"><strong><code class="docutils literal notranslate"><span class="pre">--basemod</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">BASEMOD</span></code> - which base modification to extract (default: <code class="docutils literal notranslate"><span class="pre">None</span></code>)</p></li>
+<li><p id="dimelo-plot-enrichment--o"><span id="dimelo-plot-enrichment---outDir"></span><a class="reference internal" href="#dimelo-plot-enrichment--o" title="dimelo-plot-enrichment -o"><strong><code class="docutils literal notranslate"><span class="pre">-o</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">OUTDIR</span></code>, <a class="reference internal" href="#dimelo-plot-enrichment---outDir" title="dimelo-plot-enrichment --outDir"><strong><code class="docutils literal notranslate"><span class="pre">--outDir</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">OUTDIR</span></code> - directory to output plot (default: <code class="docutils literal notranslate"><span class="pre">None</span></code>)</p></li>
+</ul>
+</section>
+<section id="dimelo-plot-enrichment-plotting-options">
+<h3>dimelo-plot-enrichment plotting options<a class="headerlink" href="#dimelo-plot-enrichment-plotting-options" title="Permalink to this headline"></a></h3>
+<ul class="simple">
+<li><p id="dimelo-plot-enrichment---colors"><a class="reference internal" href="#dimelo-plot-enrichment---colors" title="dimelo-plot-enrichment --colors"><strong><code class="docutils literal notranslate"><span class="pre">--colors</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">COLORS</span></code> - color list in hex (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;#BB4430&quot;</span></code>) for overlay plots (default: <code class="docutils literal notranslate"><span class="pre">['#2D1E2F',</span> <span class="pre">'#A9E5BB',</span> <span class="pre">'#610345',</span> <span class="pre">'#559CAD',</span> <span class="pre">'#5E747F']</span></code>)</p></li>
+</ul>
+</section>
+</section>
 </section>
 
 

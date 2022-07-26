@@ -10,6 +10,7 @@ parse_bam allows you to summarize modification calls in a sql database
 
 """
 
+
 import argparse
 import multiprocessing
 import os
