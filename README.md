@@ -5,3 +5,5 @@
 dimelo is a python package and command-line tool for analysis of DiMeLo-seq &amp; nanopore modified base data.
 
 Documentation: https://streetslab.github.io/dimelo/
+
+This branch is a new package build using nanopore modkit, https://github.com/nanoporetech/modkit/, to process .bam files into bedmethyl and read-wise .txt files.
