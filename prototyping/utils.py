@@ -9,7 +9,7 @@ def check_len_equal(*args: list) -> bool:
     """
     return all(len(x) == len(args[0]) for x in args)
 
-def bar_plot(categories: np.ndarray,
+def bar_plot(categories: list[str],
              values: np.ndarray,
              y_label: str) -> Axes:
     """
@@ -17,6 +17,14 @@ def bar_plot(categories: np.ndarray,
 
     TODO: I'm not convinced we should actually be using seaborn here. It's kind of more heavy duty than we need? We're not really relying on pandas or data aggregation. But probably could refactor to match other methods.
     TODO: Set "pallete" appropriately
+
+    Args:
+        categories: parallel with values; bar labels
+        values: parallel with categories: bar heights
+        y_label: y-axis label
+    
+    Returns:
+        Axes object containing the plot
     """
     axes = sns.barplot(x=categories, y=values, hue=categories)
     axes.set(ylabel=y_label)
@@ -28,7 +36,7 @@ def line_plot(x: np.ndarray,
               vector_names: list[str],
               y_label: str) -> Axes:
     """
-    Utility for producing line plots; intended so that we can swap out plotting backends and styles easily.
+    Utility for producing overlayed line plots with the same x-axis values; intended so that we can swap out plotting backends and styles easily.
 
     Takes in one independent vector and arbitrarily many dependent vectors. Overlays all dependent vectors on the same axes versus the same dependent vector.
 
@@ -36,6 +44,16 @@ def line_plot(x: np.ndarray,
     TODO: Color pallete
     TODO: What happens if this gets vectors of different lengths? What's the intended result?
     TODO: Right now, this always generates a legend with the title "variable". I could add a parameter to specify this (by passing the var_name argument to pd.DataFrame.melt), but then that percolates upwards to other methods and I'm lazy.
+
+    Args:
+        x: parallel with each entry in vectors; x values shared across each overlayed line
+        x_label: x-axis label
+        vectors: whole list parallel with vector_names; each entry parallel with x; y values for each overlayed line
+        vector_names: parallel with vectors; names of each overlayed line; legend entries
+        y_label: y-axis label
+
+    Returns:
+        Axes object containing the plot
     """
     # construct dict of {vector_name: vector}, including the x vector using dict union operations
     data_dict = {x_label: x} | dict(zip(vector_names, vectors))

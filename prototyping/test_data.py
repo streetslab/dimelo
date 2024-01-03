@@ -9,6 +9,12 @@ def fake_peak_trace(halfsize: int) -> np.ndarray:
     This currently operates with sorted exponential vectors, because that hack generates a visually pleasing peak. Should probably do something actually meaningful.
     
     TODO: There is obviously shared and repeated functionality between the peak methods; make things more modular
+
+    Args:
+        halfsize: specifies length of output trace; final length will be 2*halfsize
+    
+    Return:
+        Array of values between 0 and 1, peaking at the middle
     """
     first_half = np.sort(rng.exponential(size=halfsize, scale=0.025))
     second_half = np.flip(np.sort(rng.exponential(size=halfsize, scale=0.025)))
@@ -21,7 +27,12 @@ def expspace_zero_one(num: int,
 
     Calculated as y = (a^x - 1) / (a - 1), a > 1.
 
-    a controls the depth of the curve; higher values result in a longer wait before going to 1.
+    Args:
+        num: total length of space to return; same as num argument to np.linspace
+        a: controls the depth of the curve; higher values result in a longer wait before going to 1.
+    
+    Return:
+        Array of values betweeen 0 and 1, spaced along an exponential curve
     """
     if a <= 1:
         raise ValueError('Value of a must be > 1.')
@@ -33,6 +44,14 @@ def fake_read_mod_calls(halfsize: int,
     Generates a read of the given size with modifications; returns 0 where there is no mod, 1 where there is a mod.
 
     TODO: More realistic read varieties
+    TODO: Fewer magic numbers
+
+    Args:
+        halfsize: specifies length of output trace; final length will be 2*halfsize
+        read_type: string name of desired read type; see match statement for available types
+    
+    Return:
+        Array of 0s and 1s, patterned appropriately
     """
     # Set the vector of p-vals for the bernoulli distribution pulls based on the requested read type
     match read_type:

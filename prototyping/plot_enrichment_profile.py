@@ -28,18 +28,30 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
     TODO: How to name this method?
     TODO: I feel like stuff like this should be shared functionality
     TODO: Stub; implement this
+    TODO: I _THINK_ this should return a value for every position, with non-modified positions as zeros
+
+    Args:
+        bedmethyl_file: Path to bedmethyl file
+        bed_file: Path to bed file specifying centered equal-length regions
+        mod_name: type of modification to extract data for
     
     Returns:
-        vector of values calculated for each position
+        vector of fraction modifiied bases (e.g. mA/A) calculated for each position; float values between 0 and 1
     """
     return test_data.fake_peak_trace(halfsize=STUB_HALFSIZE)
 
-def get_x_vector_from_bed(bed_file: Path) -> np.ndarray:
+def get_x_vector_from_bed(bed_file: Path) -> np.ndarray[int]:
     """
     Get a relative coordinate vector from the bed file centered at 0
 
     TODO: Maybe this can be made generic by providing a centering option? All it does is probably extract the length of the first region; could do so centered or not.
     TODO: Stub; implement this
+
+    Args:
+        bed_file: Path to bed file specifying centered equal-length regions
+    
+    Returns:
+        Vector of signed integer positions relative to the center of the region
     """
     return np.arange(STUB_HALFSIZE * 2) - STUB_HALFSIZE
 
@@ -52,6 +64,7 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
     Plots enrichment profiles, overlaying the resulting traces on top of each other
 
     Input files should contain sufficient information to generate modification pileup data.
+    All input lists are parallel; each index represents the settings for extracting and plotting one sample.
 
     This is the most flexile method. Say, for example, you have 3 traces to plot. Each modification file contains different types of modification. Each trace is defined by different regions. You want to name the traces something random. This will let you do all of that at once.
 
@@ -59,6 +72,15 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
     TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
     TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
     TODO: This is set up in such a way that you may be required to open the same files multiple times. Depending on the file type and loading operations, this could result in unnecessary slowdown.
+
+    Args:
+        mod_file_names: list of paths to modified base data files
+        bed_file_names: list of paths to bed files specifying centered equal-length regions
+        mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
+        sample_names: list of names to use for labeling traces in the output; legend entries
+    
+    Returns:
+        Axes object containing the plot
     """
     if not utils.check_len_equal(mod_file_names, bed_file_names, mod_names, sample_names):
         raise ValueError('Unequal number of inputs')
