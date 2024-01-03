@@ -31,6 +31,19 @@ def extract_centered_reads_from_UNKNOWN_FILE_TYPE(file: Path,
     """
     TODO: What does the bed file represent in this method? This one is breaking my brain a bit.
     TODO: Variable names in this method stink.
+    TODO: Currently assumes mod calling (thresholding probabilities) was already performed elsewhere
+
+    Args:
+        file: Path to file containing modification data for single reads
+        bed_file: Path to bed file specifying regions (WHAT DO THESE REPRESENT???)
+        mod_names: types of modification to extract data for
+    
+    Returns:
+        Returns three parallel arrays, of length (N_READS * len(mod_names)), containing the following for each index:
+        * array of positions at which the specified modification was found in a read
+        * unique integer ID for the read
+        * modification represented by the positions
+        For example, if called on a dataset with a single read and two modification types, each array would have two entries. The unique IDs would be the same, as both entries would represent the same single read. The mods and positions would be different, as they would extact different mods.
     """
     reads = []
     read_names = []
@@ -62,6 +75,14 @@ def plot_single_reads_rectangle(mod_file_name: str | Path,
     TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
     TODO: This name stinks?
     TODO: So far, this is the only method to do plotting without utility methods. Is this reasonable? Is it that unique?
+
+    Args:
+        mod_file_name: path to file containing modification data for single reads
+        bed_file_name: path to bed file specifying regions (WHAT DO THESE REPRESENT???)
+        mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
+
+    Returns:
+        Axes object containing the plot
     """
     mod_file_name = Path(mod_file_name)
     bed_file_name = Path(bed_file_name)

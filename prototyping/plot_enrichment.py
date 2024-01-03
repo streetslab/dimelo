@@ -13,6 +13,9 @@ def extract_counts_from_bedmethyl(bedmethyl_file: Path) -> tuple[int, int]:
     TODO: I feel like stuff like this should be shared functionality
     TODO: Stub; implement this
     
+    Args:
+        bedmethyl_file: Path to bedmethyl file
+    
     Returns:
         tuple containing counts of (modified_bases, total_bases)
     """
@@ -33,6 +36,13 @@ def plot_enrichment_base(mod_file_names: list[str | Path],
     TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
     TODO: Is this the top-level method? Or is it used to do more sophisticated stuff elsewhere?
         I think it's probably best for this to be the top-level method in code, and have more complex command-line interfaces? Maybe not? Discuss
+    
+    Args:
+        mod_file_names: list of paths to modified base data files
+        sample_names: list of names to use for labeling bars in the output; x-axis labels
+
+    Returns:
+        Axes object containing the plot
     """
     if not utils.check_len_equal(mod_file_names, sample_names):
         raise ValueError('Unequal number of input files and sample names')
