@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>qc_report &mdash; dimelo  documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/sg_gallery.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/sg_gallery-binder.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/sg_gallery-dataframe.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="plot_browser" href="plot_browser.html" />
+    <link rel="prev" title="Functions" href="tools.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> dimelo
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="tools.html">Functions</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">qc_report</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#dimelo-qc-report---CLI-interface">dimelo-qc-report - CLI interface</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dimelo-qc-report-optional-arguments">dimelo-qc-report optional arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dimelo-qc-report-required-arguments">dimelo-qc-report required arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dimelo-qc-report-plotting-options">dimelo-qc-report plotting options</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plot_browser.html">plot_browser</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plot_enrichment.html">plot_enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plot_enrichment_profile.html">plot_enrichment_profile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parse_bam.html">parse_bam</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../auto_examples/index.html">Example Gallery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../basecalling.html">Basecalling &amp; Alignment Suggestions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial.html">Tutorial</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">dimelo</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="tools.html">Functions</a> &raquo;</li>
+      <li>qc_report</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/content/reference/qc_report.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="qc-report">
+<h1>qc_report<a class="headerlink" href="#qc-report" title="Permalink to this headline"></a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="dimelo.qc_report">
+<span class="sig-name descname"><span class="pre">qc_report</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fileNames</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampleNames</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outDir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">['#BB4430',</span> <span class="pre">'#FFBC0A',</span> <span class="pre">'#053C5E',</span> <span class="pre">'#A9E5BB',</span> <span class="pre">'#610345',</span> <span class="pre">'#2D1E2F',</span> <span class="pre">'#559CAD',</span> <span class="pre">'#5E747F',</span> <span class="pre">'#F343F4']</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dimelo.qc_report" title="Permalink to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>fileNames</dt><dd><p>list of names of bam files; indexed; or single file name as string</p>
+</dd>
+<dt>sampleNames</dt><dd><p>list of names of samples for output plot name labelling; or single sample name as string; valid names contain [<code class="docutils literal notranslate"><span class="pre">a-zA-Z0-9_</span></code>].</p>
+</dd>
+<dt>outDir</dt><dd><p>directory to output QC summary report</p>
+</dd>
+<dt>cores</dt><dd><p>number of cores over which to parallelize; default is all available</p>
+</dd>
+<dt>colors</dt><dd><p>color list in hex for overlay plots; default is:
+[“#BB4430”,”#FFBC0A”,”#053C5E”,”#A9E5BB”,”#610345”,
+“#2D1E2F”,”#559CAD”,”#5E747F”,”#F343F4”]</p>
+</dd>
+</dl>
+<p><strong>Example</strong></p>
+<p>For single sample:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dm</span><span class="o">.</span><span class="n">qc_report</span><span class="p">(</span><span class="s2">&quot;dimelo/test/data/mod_mappings_subset.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="s2">&quot;dimelo/dimelo_test&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For multiple sample files:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dm</span><span class="o">.</span><span class="n">qc_report</span><span class="p">([</span><span class="s2">&quot;dimelo/test/data/mod_mappings_subset.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;dimelo/test/data/winnowmap_guppy_merge_subset.bam&quot;</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;test1&quot;</span><span class="p">,</span> <span class="s2">&quot;test2&quot;</span><span class="p">],</span> <span class="s2">&quot;dimelo/dimelo_test&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Return</strong></p>
+<blockquote>
+<div><ul class="simple">
+<li><dl class="simple">
+<dt>PDF of QC Summary Report which includes:</dt><dd><ul>
+<li><p>read length histogram</p></li>
+<li><p>mapping quality histogram</p></li>
+<li><p>average alignment quality per read histogram (if basecaller provided information)</p></li>
+<li><p>average basecall quality per read histogram (if basecaller provided information)</p></li>
+<li><p>summary table describing spread of data</p></li>
+<li><p>number of reads, number of basepairs</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+</div></blockquote>
+<p>Returns a SQL database in the specified output directory. Database can be converted into pandas dataframe with:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">fileName</span> <span class="o">=</span> <span class="s2">&quot;dimelo/test/data/mod_mappings_subset.bam&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sampleName</span> <span class="o">=</span> <span class="s2">&quot;test&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">outDir</span> <span class="o">=</span> <span class="s2">&quot;dimelo/dimelo_test&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">all_reads</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span><span class="s2">&quot;SELECT * from reads_&quot;</span> <span class="o">+</span> <span class="n">sampleName</span><span class="p">,</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">outDir</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">fileName</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.bam&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;.db&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>After QC, each database contains this table with columns listed below:</p>
+<dl class="simple">
+<dt>reads_sampleName</dt><dd><ul class="simple">
+<li><p>name</p></li>
+<li><p>chr</p></li>
+<li><p>start</p></li>
+<li><p>end</p></li>
+<li><p>length</p></li>
+<li><p>strand</p></li>
+<li><p>mapq</p></li>
+<li><p>ave_baseq</p></li>
+<li><p>ave_alignq</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>Example Plots</strong>
+<a class="reference internal" href="../../auto_examples/plot_qc_example.html#sphx-glr-auto-examples-plot-qc-example-py"><span class="std std-ref">QC Report</span></a></p>
+</dd></dl>
+
+<section id="dimelo-qc-report---CLI-interface">
+<h2>dimelo-qc-report - CLI interface<a class="headerlink" href="#dimelo-qc-report---CLI-interface" title="Permalink to this headline"></a></h2>
+<p>Generate DiMeLo qc report</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dimelo</span><span class="o">-</span><span class="n">qc</span><span class="o">-</span><span class="n">report</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILENAMES</span> <span class="p">[</span><span class="n">FILENAMES</span> <span class="o">...</span><span class="p">]</span> <span class="o">-</span><span class="n">s</span> <span class="n">SAMPLENAMES</span> <span class="p">[</span><span class="n">SAMPLENAMES</span> <span class="o">...</span><span class="p">]</span> <span class="o">-</span><span class="n">o</span> <span class="n">OUTDIR</span>
+                 <span class="p">[</span><span class="o">--</span><span class="n">colors</span> <span class="n">COLORS</span> <span class="p">[</span><span class="n">COLORS</span> <span class="o">...</span><span class="p">]]</span> <span class="p">[</span><span class="o">-</span><span class="n">p</span> <span class="n">CORES</span><span class="p">]</span>
+</pre></div>
+</div>
+<section id="dimelo-qc-report-optional-arguments">
+<h3>dimelo-qc-report optional arguments<a class="headerlink" href="#dimelo-qc-report-optional-arguments" title="Permalink to this headline"></a></h3>
+<ul class="simple">
+<li><p id="dimelo-qc-report--h"><span id="dimelo-qc-report---help"></span><a class="reference internal" href="#dimelo-qc-report--h" title="dimelo-qc-report -h"><strong><code class="docutils literal notranslate"><span class="pre">-h</span></code></strong></a>, <a class="reference internal" href="#dimelo-qc-report---help" title="dimelo-qc-report --help"><strong><code class="docutils literal notranslate"><span class="pre">--help</span></code></strong></a> - show this help message and exit</p></li>
+<li><p id="dimelo-qc-report--p"><span id="dimelo-qc-report---cores"></span><a class="reference internal" href="#dimelo-qc-report--p" title="dimelo-qc-report -p"><strong><code class="docutils literal notranslate"><span class="pre">-p</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">CORES</span></code>, <a class="reference internal" href="#dimelo-qc-report---cores" title="dimelo-qc-report --cores"><strong><code class="docutils literal notranslate"><span class="pre">--cores</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">CORES</span></code> - number of cores over which to parallelize (default: <code class="docutils literal notranslate"><span class="pre">None</span></code>)</p></li>
+</ul>
+</section>
+<section id="dimelo-qc-report-required-arguments">
+<h3>dimelo-qc-report required arguments<a class="headerlink" href="#dimelo-qc-report-required-arguments" title="Permalink to this headline"></a></h3>
+<ul class="simple">
+<li><p id="dimelo-qc-report--f"><span id="dimelo-qc-report---fileNames"></span><a class="reference internal" href="#dimelo-qc-report--f" title="dimelo-qc-report -f"><strong><code class="docutils literal notranslate"><span class="pre">-f</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">FILENAMES</span></code>, <a class="reference internal" href="#dimelo-qc-report---fileNames" title="dimelo-qc-report --fileNames"><strong><code class="docutils literal notranslate"><span class="pre">--fileNames</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">FILENAMES</span></code> - bam file name(s) (default: <code class="docutils literal notranslate"><span class="pre">None</span></code>)</p></li>
+<li><p id="dimelo-qc-report--s"><span id="dimelo-qc-report---sampleNames"></span><a class="reference internal" href="#dimelo-qc-report--s" title="dimelo-qc-report -s"><strong><code class="docutils literal notranslate"><span class="pre">-s</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">SAMPLENAMES</span></code>, <a class="reference internal" href="#dimelo-qc-report---sampleNames" title="dimelo-qc-report --sampleNames"><strong><code class="docutils literal notranslate"><span class="pre">--sampleNames</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">SAMPLENAMES</span></code> - sample name(s) for output labelling (default: <code class="docutils literal notranslate"><span class="pre">None</span></code>)</p></li>
+<li><p id="dimelo-qc-report--o"><span id="dimelo-qc-report---outDir"></span><a class="reference internal" href="#dimelo-qc-report--o" title="dimelo-qc-report -o"><strong><code class="docutils literal notranslate"><span class="pre">-o</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">OUTDIR</span></code>, <a class="reference internal" href="#dimelo-qc-report---outDir" title="dimelo-qc-report --outDir"><strong><code class="docutils literal notranslate"><span class="pre">--outDir</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">OUTDIR</span></code> - directory to output QC summary report (default: <code class="docutils literal notranslate"><span class="pre">None</span></code>)</p></li>
+</ul>
+</section>
+<section id="dimelo-qc-report-plotting-options">
+<h3>dimelo-qc-report plotting options<a class="headerlink" href="#dimelo-qc-report-plotting-options" title="Permalink to this headline"></a></h3>
+<ul class="simple">
+<li><p id="dimelo-qc-report---colors"><a class="reference internal" href="#dimelo-qc-report---colors" title="dimelo-qc-report --colors"><strong><code class="docutils literal notranslate"><span class="pre">--colors</span></code></strong></a> <code class="docutils literal notranslate"><span class="pre">COLORS</span></code> - color list in hex (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;#BB4430&quot;</span></code>) for overlay plots (default: <code class="docutils literal notranslate"><span class="pre">['#BB4430',</span> <span class="pre">'#FFBC0A',</span> <span class="pre">'#053C5E',</span> <span class="pre">'#A9E5BB',</span> <span class="pre">'#610345',</span> <span class="pre">'#2D1E2F',</span> <span class="pre">'#559CAD',</span> <span class="pre">'#5E747F',</span> <span class="pre">'#F343F4']</span></code>)</p></li>
+</ul>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="tools.html" class="btn btn-neutral float-left" title="Functions" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plot_browser.html" class="btn btn-neutral float-right" title="plot_browser" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Annie Maslan &amp; Reet Mishra &amp; Jeremy Marcus.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
