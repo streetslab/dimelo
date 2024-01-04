@@ -17,14 +17,14 @@ import test_data
 import pysam
 
 
-""" TEMPORARY STUB VARS """
-STUB_HALFSIZE = 100
+# """ TEMPORARY STUB VARS """
+# STUB_HALFSIZE = 100
 
 
 def extract_vector_from_bedmethyl(bedmethyl_file: Path,
                                   bed_file: Path,
                                   mod_name: str,
-                                 window_size: int) -> np.ndarray:
+                                  window_size: int) -> np.ndarray:
     """
     Generate trace for the specified modification aggregated across all regions in the given bed file.
 
@@ -37,11 +37,13 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
         bedmethyl_file: Path to bedmethyl file
         bed_file: Path to bed file specifying centered equal-length regions
         mod_name: type of modification to extract data for
+        window_size: TODO: Documentation for this; I think it's a half-size?
     
     Returns:
         vector of fraction modifiied bases (e.g. mA/A) calculated for each position; float values between 0 and 1
     """
-    if window_size>0:
+    if window_size > 0:
+        # TODO: I think this should not need to be explicitly done here; the specification for this method is that it's already a Path object. If this is intended to be user facing, we can do this, but I think it's overkill.
         bed_filepath = Path(bed_file)
         print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
         bed_filepath_processed = bed_filepath.parent / (bed_filepath.stem + '.windowed' + bed_filepath.suffix)
@@ -78,22 +80,22 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
     
     modified_fractions = np.divide(modified_base_counts,valid_base_counts,where=valid_base_counts!=0)
     return np.nan_to_num(modified_fractions)
-#     return test_data.fake_peak_trace(halfsize=STUB_HALFSIZE)
 
-def get_x_vector_from_bed(bed_file: Path) -> np.ndarray[int]:
-    """
-    Get a relative coordinate vector from the bed file centered at 0
 
-    TODO: Maybe this can be made generic by providing a centering option? All it does is probably extract the length of the first region; could do so centered or not.
-    TODO: Stub; implement this
+# def get_x_vector_from_bed(bed_file: Path) -> np.ndarray[int]:
+#     """
+#     Get a relative coordinate vector from the bed file centered at 0
 
-    Args:
-        bed_file: Path to bed file specifying centered equal-length regions
+#     TODO: Maybe this can be made generic by providing a centering option? All it does is probably extract the length of the first region; could do so centered or not.
+#     TODO: Stub; implement this
+
+#     Args:
+#         bed_file: Path to bed file specifying centered equal-length regions
     
-    Returns:
-        Vector of signed integer positions relative to the center of the region
-    """
-    return np.arange(STUB_HALFSIZE * 2) - STUB_HALFSIZE
+#     Returns:
+#         Vector of signed integer positions relative to the center of the region
+#     """
+#     return np.arange(STUB_HALFSIZE * 2) - STUB_HALFSIZE
 
 
 def plot_enrichment_profile_base(mod_file_names: list[str | Path],
@@ -136,7 +138,9 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
                 trace = extract_vector_from_bedmethyl(bedmethyl_file=mod_file,
                                                       bed_file=bed_file,
                                                       mod_name=mod_name,
-                                                     window_size=window_size)
+                                                      window_size=window_size)
+            case '.fake':
+                trace = test_data.fake_peak_trace(halfsize=window_size)
             case _:
                 raise ValueError(f'Unsupported file type for {mod_file}')
         trace_vectors.append(trace)

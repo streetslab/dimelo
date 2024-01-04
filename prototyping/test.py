@@ -15,27 +15,32 @@ plt.show()
 plt.close()
 
 """ plot_enrichment_profile testing """
-plot_enrichment_profile.plot_enrichment_profile_base(mod_file_names=['test1.bed', 'test2.bed'],
+WINDOW_SIZE = 100
+plot_enrichment_profile.plot_enrichment_profile_base(mod_file_names=['test1.fake', 'test2.fake'],
                                                      bed_file_names=['test1.bed', 'test2.bed'],
                                                      mod_names=['A', 'C'],
+                                                     window_size=WINDOW_SIZE,
                                                      sample_names=['sample1', 'sample2'])
 plt.show()
 plt.close()
-plot_enrichment_profile.plot_enrichment_profile_vary_mod(mod_file_name='test.bed',
+plot_enrichment_profile.plot_enrichment_profile_vary_mod(mod_file_name='test.fake',
                                                          bed_file_name='test.bed',
+                                                         window_size=WINDOW_SIZE,
                                                          mod_names=['A', 'C'])
 plt.show()
 plt.close()
-plot_enrichment_profile.plot_enrichment_profile_vary_regions(mod_file_name='test.bed',
+plot_enrichment_profile.plot_enrichment_profile_vary_regions(mod_file_name='test.fake',
                                                              bed_file_names=['test1.bed', 'test2.bed'],
                                                              mod_name='A',
+                                                             window_size=WINDOW_SIZE,
                                                              sample_names=['on target', 'off target'])
 plt.show()
 plt.close()
 
-plot_enrichment_profile.plot_enrichment_profile_vary_experiments(mod_file_names=['test1.bed', 'test2.bed'],
+plot_enrichment_profile.plot_enrichment_profile_vary_experiments(mod_file_names=['test1.fake', 'test2.fake'],
                                                                  bed_file_name='test.bed',
                                                                  mod_name='A',
+                                                                 window_size=WINDOW_SIZE,
                                                                  sample_names=['experiment 1', 'experiment 2'])
 plt.show()
 plt.close()

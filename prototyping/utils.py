@@ -9,6 +9,12 @@ def generate_centered_windows_bed(
     output_bed: str | Path,
     window_size: int,
 ):
+    """
+    TODO: Documentation; I think window_size is a half-size?
+    TODO: Do we anticipate always working from bed files, or should the centering functionality work on some internal region representation; would just need a bed file wrapper around it, then.
+    TODO: I think I like the way this works, where you can pass it a bed file with arbitrary regions and it will find the center --> generate windows of the appropriate size. But then again maybe we should discuss.
+    TODO: Right now, this returns even-number-length windows on the half-open interval [center_coord - window_size, center_coord + window_size). I think it should do odd-number-length windows on the closed interval. Thoughts?
+    """
     with open(output_bed,'w') as windowed_bed:
         with open(input_bed) as source_bed:
             for line in source_bed:
