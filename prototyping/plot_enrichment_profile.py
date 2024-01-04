@@ -41,21 +41,35 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
     Returns:
         vector of fraction modifiied bases (e.g. mA/A) calculated for each position; float values between 0 and 1
     """
-    source_tabix = pysam.TabixFile(bedmethyl_file)
+    if window_size>0:
+        bed_filepath = Path(bed_file)
+        print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
+        bed_filepath_processed = bed_filepath.parent / (bed_filepath.stem + '.windowed' + bed_filepath.suffix)
+        print(f'Writing new bed file {bed_filepath_processed.name}')
+        utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
+    else:
+        print(f'Invalid window size {window_size}.')
+        return -1
+    
+    source_tabix = pysam.TabixFile(str(bedmethyl_file))
     valid_base_counts = np.zeros(window_size*2)
     modified_base_counts = np.zeros(window_size*2)
+    
+    mod_motif = mod_name.split(',')[0]
+    mod_coord_in_motif = mod_name.split(',')[1]
+    
     with open(bed_file) as regions_file:
         for line in regions_file:
             fields = line.split('\t')
             center_coord = (int(fields[2])+int(fields[1]))//2
             chromosome = fields[0]
-            if chromosome=='chr1':
+            if chromosome in source_tabix.contigs:
                 if center_coord-window_size>0:
                     for row in source_tabix.fetch(chromosome,center_coord-window_size,center_coord+window_size):
                         tabix_fields = row.split('\t')
 #                         print(tabix_fields)
                         pileup_basemod = tabix_fields[3]
-                        if mod_name in pileup_basemod:
+                        if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
                             pileup_info = tabix_fields[9].split(' ')
                             pileup_coord_relative = int(tabix_fields[1])-center_coord+window_size
                             valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
@@ -85,7 +99,9 @@ def get_x_vector_from_bed(bed_file: Path) -> np.ndarray[int]:
 def plot_enrichment_profile_base(mod_file_names: list[str | Path],
                                  bed_file_names: list[str | Path],
                                  mod_names: list[str],
-                                 sample_names: list[str]) -> Axes:
+                                 window_size: int,
+                                 sample_names: list[str],
+                                ) -> Axes:
     """
     Plots enrichment profiles, overlaying the resulting traces on top of each other
 
@@ -116,15 +132,16 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
     trace_vectors = []
     for mod_file, bed_file, mod_name in zip(mod_file_names, bed_file_names, mod_names):
         match mod_file.suffix:
-            case '.bed':
+            case '.gz':
                 trace = extract_vector_from_bedmethyl(bedmethyl_file=mod_file,
                                                       bed_file=bed_file,
-                                                      mod_name=mod_name)
+                                                      mod_name=mod_name,
+                                                     window_size=window_size)
             case _:
                 raise ValueError(f'Unsupported file type for {mod_file}')
         trace_vectors.append(trace)
     
-    axes = utils.line_plot(x=get_x_vector_from_bed(bed_file=bed_file_names[0]),
+    axes = utils.line_plot(x=np.arange(-window_size,window_size),
                            x_label='pos',
                            vectors=trace_vectors,
                            vector_names=sample_names,
@@ -133,7 +150,8 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
 
 def plot_enrichment_profile_vary_mod(mod_file_name: str | Path,
                                      bed_file_name: str | Path,
-                                     mod_names: list[str]) -> Axes:
+                                     window_size: int,
+                                     mod_names: list[str],) -> Axes:
     """
     Plot enrichment profile, holding modification file and regions constant, varying modification types
     """
@@ -141,11 +159,13 @@ def plot_enrichment_profile_vary_mod(mod_file_name: str | Path,
     return plot_enrichment_profile_base(mod_file_names=[mod_file_name] * n_mods,
                                         bed_file_names=[bed_file_name] * n_mods,
                                         mod_names=mod_names,
+                                        window_size=window_size,
                                         sample_names=mod_names)
 
 def plot_enrichment_profile_vary_regions(mod_file_name: str | Path,
                                          bed_file_names: list[str | Path],
                                          mod_name: str,
+                                         window_size: int,
                                          sample_names: list[str] = None) -> Axes:
     """
     Plot enrichment profile, holding modification file and modification types constant, varying regions
@@ -158,11 +178,13 @@ def plot_enrichment_profile_vary_regions(mod_file_name: str | Path,
     return plot_enrichment_profile_base(mod_file_names=[mod_file_name] * n_beds,
                                         bed_file_names=bed_file_names,
                                         mod_names=[mod_name] * n_beds,
+                                        window_size=window_size,
                                         sample_names=sample_names)
 
 def plot_enrichment_profile_vary_experiments(mod_file_names: list[str | Path],
                                              bed_file_name: str | Path,
                                              mod_name: str,
+                                             window_size: int,
                                              sample_names: list[str] = None) -> Axes:
     """
     Plot enrichment profile, holding modification types and regions constant, varying modification files
@@ -177,4 +199,5 @@ def plot_enrichment_profile_vary_experiments(mod_file_names: list[str | Path],
     return plot_enrichment_profile_base(mod_file_names=mod_file_names,
                                         bed_file_names=[bed_file_name] * n_mod_files,
                                         mod_names=[mod_name] * n_mod_files,
+                                        window_size=window_size,
                                         sample_names=sample_names)
