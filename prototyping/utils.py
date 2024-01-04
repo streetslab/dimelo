@@ -2,6 +2,23 @@ import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
 import seaborn as sns
+from pathlib import Path
+
+def generate_centered_windows_bed(
+    input_bed: str | Path,
+    output_bed: str | Path,
+    window_size: int,
+):
+    with open(output_bed,'w') as windowed_bed:
+        with open(input_bed) as source_bed:
+            for line in source_bed:
+                fields = line.split('\t')
+                windowed_fields = fields
+                center_coord = (int(fields[1])+int(fields[2]))//2
+                windowed_fields[1] = str(center_coord - window_size)
+                windowed_fields[2] = str(center_coord + window_size)
+                windowed_line = '\t'.join(windowed_fields)
+                windowed_bed.write(windowed_line+'\n')
 
 def check_len_equal(*args: list) -> bool:
     """
