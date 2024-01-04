@@ -14,6 +14,8 @@ from matplotlib.axes import Axes
 import utils
 import test_data
 
+import pysam
+
 
 """ TEMPORARY STUB VARS """
 STUB_HALFSIZE = 100
@@ -21,7 +23,8 @@ STUB_HALFSIZE = 100
 
 def extract_vector_from_bedmethyl(bedmethyl_file: Path,
                                   bed_file: Path,
-                                  mod_name: str) -> np.ndarray:
+                                  mod_name: str,
+                                 window_size: int) -> np.ndarray:
     """
     Generate trace for the specified modification aggregated across all regions in the given bed file.
 
@@ -38,7 +41,30 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
     Returns:
         vector of fraction modifiied bases (e.g. mA/A) calculated for each position; float values between 0 and 1
     """
-    return test_data.fake_peak_trace(halfsize=STUB_HALFSIZE)
+    source_tabix = pysam.TabixFile(bedmethyl_file)
+    valid_base_counts = np.zeros(window_size*2)
+    modified_base_counts = np.zeros(window_size*2)
+    with open(bed_file) as regions_file:
+        for line in regions_file:
+            fields = line.split('\t')
+            center_coord = (int(fields[2])+int(fields[1]))//2
+            chromosome = fields[0]
+            if chromosome=='chr1':
+                if center_coord-window_size>0:
+                    for row in source_tabix.fetch(chromosome,center_coord-window_size,center_coord+window_size):
+                        tabix_fields = row.split('\t')
+#                         print(tabix_fields)
+                        pileup_basemod = tabix_fields[3]
+                        if mod_name in pileup_basemod:
+                            pileup_info = tabix_fields[9].split(' ')
+                            pileup_coord_relative = int(tabix_fields[1])-center_coord+window_size
+                            valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
+                            modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
+                        
+    
+    modified_fractions = np.divide(modified_base_counts,valid_base_counts,where=valid_base_counts!=0)
+    return np.nan_to_num(modified_fractions)
+#     return test_data.fake_peak_trace(halfsize=STUB_HALFSIZE)
 
 def get_x_vector_from_bed(bed_file: Path) -> np.ndarray[int]:
     """
