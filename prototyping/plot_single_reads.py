@@ -51,9 +51,9 @@ def extract_centered_reads_from_UNKNOWN_FILE_TYPE(file: Path,
     for mod_name in mod_names:
         match mod_name:
             case 'A':
-                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'peak') for _ in range(STUB_N_READS)]
+                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'peak', 0.7) for _ in range(STUB_N_READS)]
             case 'C':
-                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'inverse_peak') for _ in range(STUB_N_READS)]
+                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'inverse_peak', 0.4) for _ in range(STUB_N_READS)]
             case _:
                 raise ValueError(f'No stub settings for requested mod {mod_name}')
         reads += mod_reads
@@ -83,7 +83,7 @@ def plot_single_reads_rectangle(mod_file_name: str | Path,
 
     Returns:
         Axes object containing the plot
-    """
+    """ 
     mod_file_name = Path(mod_file_name)
     bed_file_name = Path(bed_file_name)
 

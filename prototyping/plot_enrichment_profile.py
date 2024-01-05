@@ -17,10 +17,6 @@ import test_data
 import pysam
 
 
-# """ TEMPORARY STUB VARS """
-# STUB_HALFSIZE = 100
-
-
 def extract_vector_from_bedmethyl(bedmethyl_file: Path,
                                   bed_file: Path,
                                   mod_name: str,
@@ -81,21 +77,14 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
     modified_fractions = np.divide(modified_base_counts,valid_base_counts,where=valid_base_counts!=0)
     return np.nan_to_num(modified_fractions)
 
-
-# def get_x_vector_from_bed(bed_file: Path) -> np.ndarray[int]:
-#     """
-#     Get a relative coordinate vector from the bed file centered at 0
-
-#     TODO: Maybe this can be made generic by providing a centering option? All it does is probably extract the length of the first region; could do so centered or not.
-#     TODO: Stub; implement this
-
-#     Args:
-#         bed_file: Path to bed file specifying centered equal-length regions
-    
-#     Returns:
-#         Vector of signed integer positions relative to the center of the region
-#     """
-#     return np.arange(STUB_HALFSIZE * 2) - STUB_HALFSIZE
+def extract_vector_fake(bedmethyl_file: Path,
+                        bed_file: Path,
+                        mod_name: str,
+                        window_size: int) -> np.ndarray:
+    """
+    Generates a fake peak trace.
+    """
+    return test_data.fake_peak_trace(halfsize=window_size, peak_height=0.15)
 
 
 def plot_enrichment_profile_base(mod_file_names: list[str | Path],
@@ -140,7 +129,10 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
                                                       mod_name=mod_name,
                                                       window_size=window_size)
             case '.fake':
-                trace = test_data.fake_peak_trace(halfsize=window_size)
+                trace = extract_vector_fake(bedmethyl_file=mod_file,
+                                            bed_file=bed_file,
+                                            mod_name=mod_name,
+                                            window_size=window_size)
             case _:
                 raise ValueError(f'Unsupported file type for {mod_file}')
         trace_vectors.append(trace)
