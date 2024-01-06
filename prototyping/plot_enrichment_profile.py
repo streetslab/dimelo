@@ -92,7 +92,7 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
                                  mod_names: list[str],
                                  window_size: int,
                                  sample_names: list[str],
-                                ) -> Axes:
+                                 smooth_window: int | None = None) -> Axes:
     """
     Plots enrichment profiles, overlaying the resulting traces on top of each other
 
@@ -105,12 +105,15 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
     TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
     TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
     TODO: This is set up in such a way that you may be required to open the same files multiple times. Depending on the file type and loading operations, this could result in unnecessary slowdown.
+    TODO: Consider having the more restrictive versions pass generic arguments as *args, **kwargs rather than reduplicating everything.
+    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
 
     Args:
         mod_file_names: list of paths to modified base data files
         bed_file_names: list of paths to bed files specifying centered equal-length regions
         mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
         sample_names: list of names to use for labeling traces in the output; legend entries
+        smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
     
     Returns:
         Axes object containing the plot
@@ -135,6 +138,8 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
                                             window_size=window_size)
             case _:
                 raise ValueError(f'Unsupported file type for {mod_file}')
+        if smooth_window is not None:
+            trace = utils.smooth_rolling_mean(trace, window=smooth_window)
         trace_vectors.append(trace)
     
     axes = utils.line_plot(x=np.arange(-window_size,window_size),
@@ -147,7 +152,8 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
 def plot_enrichment_profile_vary_mod(mod_file_name: str | Path,
                                      bed_file_name: str | Path,
                                      window_size: int,
-                                     mod_names: list[str],) -> Axes:
+                                     mod_names: list[str],
+                                     smooth_window: int | None = None) -> Axes:
     """
     Plot enrichment profile, holding modification file and regions constant, varying modification types
     """
@@ -156,13 +162,15 @@ def plot_enrichment_profile_vary_mod(mod_file_name: str | Path,
                                         bed_file_names=[bed_file_name] * n_mods,
                                         mod_names=mod_names,
                                         window_size=window_size,
-                                        sample_names=mod_names)
+                                        sample_names=mod_names,
+                                        smooth_window=smooth_window)
 
 def plot_enrichment_profile_vary_regions(mod_file_name: str | Path,
                                          bed_file_names: list[str | Path],
                                          mod_name: str,
                                          window_size: int,
-                                         sample_names: list[str] = None) -> Axes:
+                                         sample_names: list[str] = None,
+                                         smooth_window: int | None = None) -> Axes:
     """
     Plot enrichment profile, holding modification file and modification types constant, varying regions
 
@@ -175,13 +183,15 @@ def plot_enrichment_profile_vary_regions(mod_file_name: str | Path,
                                         bed_file_names=bed_file_names,
                                         mod_names=[mod_name] * n_beds,
                                         window_size=window_size,
-                                        sample_names=sample_names)
+                                        sample_names=sample_names,
+                                        smooth_window=smooth_window)
 
 def plot_enrichment_profile_vary_experiments(mod_file_names: list[str | Path],
                                              bed_file_name: str | Path,
                                              mod_name: str,
                                              window_size: int,
-                                             sample_names: list[str] = None) -> Axes:
+                                             sample_names: list[str] = None,
+                                             smooth_window: int | None = None) -> Axes:
     """
     Plot enrichment profile, holding modification types and regions constant, varying modification files
 
@@ -196,4 +206,5 @@ def plot_enrichment_profile_vary_experiments(mod_file_names: list[str | Path],
                                         bed_file_names=[bed_file_name] * n_mod_files,
                                         mod_names=[mod_name] * n_mod_files,
                                         window_size=window_size,
-                                        sample_names=sample_names)
+                                        sample_names=sample_names,
+                                        smooth_window=smooth_window)
