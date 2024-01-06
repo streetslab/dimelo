@@ -17,14 +17,10 @@ import test_data
 import pysam
 
 
-""" TEMPORARY STUB VARS """
-STUB_HALFSIZE = 100
-
-
 def extract_vector_from_bedmethyl(bedmethyl_file: Path,
                                   bed_file: Path,
                                   mod_name: str,
-                                 window_size: int) -> np.ndarray:
+                                  window_size: int) -> np.ndarray:
     """
     Generate trace for the specified modification aggregated across all regions in the given bed file.
 
@@ -37,11 +33,13 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
         bedmethyl_file: Path to bedmethyl file
         bed_file: Path to bed file specifying centered equal-length regions
         mod_name: type of modification to extract data for
+        window_size: TODO: Documentation for this; I think it's a half-size?
     
     Returns:
         vector of fraction modifiied bases (e.g. mA/A) calculated for each position; float values between 0 and 1
     """
-    if window_size>0:
+    if window_size > 0:
+        # TODO: I think this should not need to be explicitly done here; the specification for this method is that it's already a Path object. If this is intended to be user facing, we can do this, but I think it's overkill.
         bed_filepath = Path(bed_file)
         print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
         bed_filepath_processed = bed_filepath.parent / (bed_filepath.stem + '.windowed' + bed_filepath.suffix)
@@ -78,22 +76,15 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
     
     modified_fractions = np.divide(modified_base_counts,valid_base_counts,where=valid_base_counts!=0)
     return np.nan_to_num(modified_fractions)
-#     return test_data.fake_peak_trace(halfsize=STUB_HALFSIZE)
 
-def get_x_vector_from_bed(bed_file: Path) -> np.ndarray[int]:
+def extract_vector_fake(bedmethyl_file: Path,
+                        bed_file: Path,
+                        mod_name: str,
+                        window_size: int) -> np.ndarray:
     """
-    Get a relative coordinate vector from the bed file centered at 0
-
-    TODO: Maybe this can be made generic by providing a centering option? All it does is probably extract the length of the first region; could do so centered or not.
-    TODO: Stub; implement this
-
-    Args:
-        bed_file: Path to bed file specifying centered equal-length regions
-    
-    Returns:
-        Vector of signed integer positions relative to the center of the region
+    Generates a fake peak trace.
     """
-    return np.arange(STUB_HALFSIZE * 2) - STUB_HALFSIZE
+    return test_data.fake_peak_trace(halfsize=window_size, peak_height=0.15)
 
 
 def plot_enrichment_profile_base(mod_file_names: list[str | Path],
@@ -101,7 +92,7 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
                                  mod_names: list[str],
                                  window_size: int,
                                  sample_names: list[str],
-                                ) -> Axes:
+                                 smooth_window: int | None = None) -> Axes:
     """
     Plots enrichment profiles, overlaying the resulting traces on top of each other
 
@@ -114,12 +105,15 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
     TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
     TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
     TODO: This is set up in such a way that you may be required to open the same files multiple times. Depending on the file type and loading operations, this could result in unnecessary slowdown.
+    TODO: Consider having the more restrictive versions pass generic arguments as *args, **kwargs rather than reduplicating everything.
+    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
 
     Args:
         mod_file_names: list of paths to modified base data files
         bed_file_names: list of paths to bed files specifying centered equal-length regions
         mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
         sample_names: list of names to use for labeling traces in the output; legend entries
+        smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
     
     Returns:
         Axes object containing the plot
@@ -136,9 +130,16 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
                 trace = extract_vector_from_bedmethyl(bedmethyl_file=mod_file,
                                                       bed_file=bed_file,
                                                       mod_name=mod_name,
-                                                     window_size=window_size)
+                                                      window_size=window_size)
+            case '.fake':
+                trace = extract_vector_fake(bedmethyl_file=mod_file,
+                                            bed_file=bed_file,
+                                            mod_name=mod_name,
+                                            window_size=window_size)
             case _:
                 raise ValueError(f'Unsupported file type for {mod_file}')
+        if smooth_window is not None:
+            trace = utils.smooth_rolling_mean(trace, window=smooth_window)
         trace_vectors.append(trace)
     
     axes = utils.line_plot(x=np.arange(-window_size,window_size),
@@ -151,7 +152,8 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
 def plot_enrichment_profile_vary_mod(mod_file_name: str | Path,
                                      bed_file_name: str | Path,
                                      window_size: int,
-                                     mod_names: list[str],) -> Axes:
+                                     mod_names: list[str],
+                                     smooth_window: int | None = None) -> Axes:
     """
     Plot enrichment profile, holding modification file and regions constant, varying modification types
     """
@@ -160,13 +162,15 @@ def plot_enrichment_profile_vary_mod(mod_file_name: str | Path,
                                         bed_file_names=[bed_file_name] * n_mods,
                                         mod_names=mod_names,
                                         window_size=window_size,
-                                        sample_names=mod_names)
+                                        sample_names=mod_names,
+                                        smooth_window=smooth_window)
 
 def plot_enrichment_profile_vary_regions(mod_file_name: str | Path,
                                          bed_file_names: list[str | Path],
                                          mod_name: str,
                                          window_size: int,
-                                         sample_names: list[str] = None) -> Axes:
+                                         sample_names: list[str] = None,
+                                         smooth_window: int | None = None) -> Axes:
     """
     Plot enrichment profile, holding modification file and modification types constant, varying regions
 
@@ -179,13 +183,15 @@ def plot_enrichment_profile_vary_regions(mod_file_name: str | Path,
                                         bed_file_names=bed_file_names,
                                         mod_names=[mod_name] * n_beds,
                                         window_size=window_size,
-                                        sample_names=sample_names)
+                                        sample_names=sample_names,
+                                        smooth_window=smooth_window)
 
 def plot_enrichment_profile_vary_experiments(mod_file_names: list[str | Path],
                                              bed_file_name: str | Path,
                                              mod_name: str,
                                              window_size: int,
-                                             sample_names: list[str] = None) -> Axes:
+                                             sample_names: list[str] = None,
+                                             smooth_window: int | None = None) -> Axes:
     """
     Plot enrichment profile, holding modification types and regions constant, varying modification files
 
@@ -200,4 +206,5 @@ def plot_enrichment_profile_vary_experiments(mod_file_names: list[str | Path],
                                         bed_file_names=[bed_file_name] * n_mod_files,
                                         mod_names=[mod_name] * n_mod_files,
                                         window_size=window_size,
-                                        sample_names=sample_names)
+                                        sample_names=sample_names,
+                                        smooth_window=smooth_window)
