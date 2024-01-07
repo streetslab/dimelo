@@ -70,21 +70,42 @@ def fake_read_mod_positions(halfsize: int,
     See fake_read_mod_calls for details.
     """
     return np.flatnonzero(fake_read_mod_calls(halfsize=halfsize, read_type=read_type, max_prob=max_prob)) - halfsize
+    
 
 def fake_peak_trace(halfsize: int,
-                    peak_height: float) -> np.ndarray:
+                    peak_height: float,
+                    n_reads: int = 100) -> np.ndarray:
     """
     Generates a random fake peak, with measurements increasing in value up to the center point and decreasing after.
 
     Args:
         halfsize: specifies length of output trace; final length will be 2*halfsize
         peak_height: max height of peak. Must be (0, 1].
+        n_reads: number of reads to generate
     
     Return:
         Array of values between 0 and 1, peaking at the middle
     """
-    n_reads = 100
     reads = [fake_read_mod_calls(halfsize, 'peak', peak_height) for _ in range(n_reads)]
     modified_base_counts = np.sum(reads, axis=0)
     modified_fractions = np.divide(modified_base_counts, n_reads)
     return modified_fractions
+
+def fake_peak_counts(halfsize: int,
+                     peak_height: float,
+                     n_reads: int = 100) -> tuple[int, int]:
+    """
+    Generates total mod counts for a set of fake peak reads spanning some region.
+
+    Args:
+        halfsize: specifies length of output trace; final length will be 2*halfsize
+        peak_height: max height of peak. Must be (0, 1].
+        n_reads: number of reads to generate
+        
+    Return:
+        tuple containing counts of (modified bases, total_bases)
+    """
+    reads = [fake_read_mod_calls(halfsize, 'peak', peak_height) for _ in range(n_reads)]
+    modified_bases = np.sum(reads)
+    total_bases = np.sum(len(read) for read in reads)
+    return (modified_bases, total_bases)

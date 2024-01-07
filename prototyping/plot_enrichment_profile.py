@@ -77,7 +77,7 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
     modified_fractions = np.divide(modified_base_counts,valid_base_counts,where=valid_base_counts!=0)
     return np.nan_to_num(modified_fractions)
 
-def extract_vector_fake(bedmethyl_file: Path,
+def extract_vector_fake(mod_file: Path,
                         bed_file: Path,
                         mod_name: str,
                         window_size: int) -> np.ndarray:
@@ -134,7 +134,7 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
                                                       mod_name=mod_name,
                                                       window_size=window_size)
             case '.fake':
-                trace = extract_vector_fake(bedmethyl_file=mod_file,
+                trace = extract_vector_fake(mod_file=mod_file,
                                             bed_file=bed_file,
                                             mod_name=mod_name,
                                             window_size=window_size)
