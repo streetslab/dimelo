@@ -89,6 +89,17 @@ def extract_centered_reads_from_modkit_txt(
     reads = []
     read_names = []
     mods = []
+    for mod_name in mod_names:
+        match mod_name:
+            case 'A':
+                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'peak', 0.7) for _ in range(STUB_N_READS)]
+            case 'C':
+                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'inverse_peak', 0.4) for _ in range(STUB_N_READS)]
+            case _:
+                raise ValueError(f'No stub settings for requested mod {mod_name}')
+        reads += mod_reads
+        read_names.append(np.arange(len(mod_reads)))
+        mods.append([mod_name] * len(mod_reads))
     
     in_regions = 0
     out_regions = 0
@@ -141,7 +152,7 @@ def plot_single_reads_rectangle(mod_file_name: str | Path,
 
     Returns:
         Axes object containing the plot
-    """
+    """ 
     mod_file_name = Path(mod_file_name)
     bed_file_name = Path(bed_file_name)
 
