@@ -15,19 +15,39 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib.axes import Axes
+from collections import defaultdict
 
 import utils
 import test_data
-
 
 """ TEMPORARY STUB VARS """
 STUB_HALFSIZE = 500
 STUB_N_READS = 500
 
 
-def extract_centered_reads_from_UNKNOWN_FILE_TYPE(file: Path,
-                                                  bed_file: Path,
-                                                  mod_names: list[str]) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
+def binary_search_region(
+    regions,
+    chrom,
+    position,
+):
+    region_list = regions.get(chrom,[])
+    left,right = 0, len(region_list)-1
+    while left <= right:
+        mid = left + (right-left)//2
+        if region_list[mid][0] <= position <= region_list[mid][1]:
+            return True
+        elif position < region_list[mid][0]:
+            right == mid - 1
+        else:
+            left = mid + 1
+    return False
+
+def extract_centered_reads_from_modkit_txt(
+    file: Path,
+    bed_file: Path,
+    mod_names: list[str],
+    window_size:int
+) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
     """
     TODO: What does the bed file represent in this method? This one is breaking my brain a bit.
     TODO: Variable names in this method stink.
@@ -45,6 +65,27 @@ def extract_centered_reads_from_UNKNOWN_FILE_TYPE(file: Path,
         * modification represented by the positions
         For example, if called on a dataset with a single read and two modification types, each array would have two entries. The unique IDs would be the same, as both entries would represent the same single read. The mods and positions would be different, as they would extact different mods.
     """
+    if window_size>0:
+        bed_filepath = Path(bed_file)
+        print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
+        bed_filepath_processed = bed_filepath.parent / (bed_filepath.stem + '.windowed' + bed_filepath.suffix)
+        print(f'Writing new bed file {bed_filepath_processed.name}')
+        utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
+    else:
+        print(f'Invalid window size {window_size}.')
+        return -1
+    
+    regions_dict = defaultdict(list)
+    with open(bed_filepath_processed) as bed_regions:
+        for line in bed_regions:
+            fields = line.split()
+            if len(fields)>2:
+                chrom,start,end = fields[0],int(fields[1]),int(fields[2])
+                regions_dict[chrom].append((start,end))
+            
+    for chrom in regions_dict:
+        regions_dict[chrom].sort(key=lambda x: x[0])
+    
     reads = []
     read_names = []
     mods = []
@@ -60,8 +101,36 @@ def extract_centered_reads_from_UNKNOWN_FILE_TYPE(file: Path,
         read_names.append(np.arange(len(mod_reads)))
         mods.append([mod_name] * len(mod_reads))
     
-    read_names = np.concatenate(read_names)
-    mods = np.concatenate(mods)
+    in_regions = 0
+    out_regions = 0
+    with open(file) as modkit_txt:
+        next(modkit_txt)
+        for index,line in enumerate(modkit_txt):
+            fields = line.split('\t')
+            chrom = fields[3]
+            coord = int(fields[2])
+            if binary_search_region(regions_dict,chrom,coord):
+                in_regions+=1
+            else:
+                out_regions+=1
+            if index%100==0:
+                print(index,in_regions,out_regions)
+                
+    print(in_regions,out_regions)
+#     for mod_name in mod_names:
+#         match mod_name:
+#             case 'A':
+#                 mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'peak') for _ in range(STUB_N_READS)]
+#             case 'C':
+#                 mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'inverse_peak') for _ in range(STUB_N_READS)]
+#             case _:
+#                 raise ValueError(f'No stub settings for requested mod {mod_name}')
+#         reads += mod_reads
+#         read_names.append(np.arange(len(mod_reads)))
+#         mods.append([mod_name] * len(mod_reads))
+    
+#     read_names = np.concatenate(read_names)
+#     mods = np.concatenate(mods)
     return reads, read_names, mods
 
 def plot_single_reads_rectangle(mod_file_name: str | Path,
