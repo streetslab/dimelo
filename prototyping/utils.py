@@ -3,6 +3,8 @@ import pandas as pd
 from matplotlib.axes import Axes
 import seaborn as sns
 from pathlib import Path
+import h5py
+from collections import defaultdict
 
 def generate_centered_windows_bed(
     input_bed: str | Path,
@@ -18,7 +20,63 @@ def generate_centered_windows_bed(
                 windowed_fields[1] = str(center_coord - window_size)
                 windowed_fields[2] = str(center_coord + window_size)
                 windowed_line = '\t'.join(windowed_fields)
-                windowed_bed.write(windowed_line+'\n')
+                windowed_bed.write(windowed_line)
+
+def bedmethyl_to_bigwig(
+    input_bedmethyl: str | Path,
+    output_bigwig: str | Path
+):
+    return 0
+
+def read_by_base_txt_to_hdf5(
+    input_txt: str | Path,
+    output_h5: str | Path,
+    basemod: str,
+    thresh: float,
+):
+    motif,modco = tuple(basemod.split(','))
+    motif_modified_base = motif[int(modco)]
+    print(motif_modified_base)
+    with h5py.File(output_h5,'w') as h5, open(input_txt) as txt:
+        next(txt)
+        read_name = ''
+        for index,line in enumerate(txt):
+            fields = line.split('\t')
+            if read_name!=fields[0]:
+                #New read
+                #Record name
+                read_name = fields[0]
+                #Read in relevant values
+                pos_in_read = int(fields[1])
+                pos_in_genome = int(fields[2])
+                read_chrom = fields[3]
+                read_len = int(fields[9])
+                canonical_base = fields[13]
+                prob = float(fields[10])
+                #Calculate read info
+                read_start = pos_in_genome - pos_in_read
+                read_end = read_start + int(fields[9])
+                #Build read vectors
+                mod_vector = np.zeros(read_end-read_start)
+                val_vector = np.zeros(read_end-read_start)
+                
+                #Add modification to vector if type is correct
+                if canonical_base == motif_modified_base:
+                    print(pos_in_genome,read_start,len(val_vector))
+                    val_vector[pos_in_genome-read_start] = 1
+                    if prob>=thresh:
+                        mod_vector[pos_in_genome-read_start] = 1
+            else:
+                pos_in_genome = int(fields[2])
+                canonical_base = fields[13]
+                prob = float(fields[10])
+                if canonical_base == motif_modified_base:
+                    print(pos_in_genome,read_start,len(val_vector))
+                    val_vector[pos_in_genome-read_start] = 1
+                    if prob>=thresh:
+                        mod_vector[pos_in_genome-read_start] = 1
+    print(read_name,np.sum(val_vector),np.sum(mod_vector))
+    return 0
 
 def check_len_equal(*args: list) -> bool:
     """

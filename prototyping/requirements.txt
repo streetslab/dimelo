@@ -1,3 +1,6 @@
+#python 3.11 is necessary to get pysam installing with pip while still having all the function parameter checking for dimelo
 numpy
 seaborn
 pysam
+h5py
+pyBigWig
