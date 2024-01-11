@@ -54,3 +54,7 @@ coverage.xml
 
 # Sphinx documentation
 docs/_build/
+
+
+# Ignoring config for info-sec
+prototyping/parser/config.py
