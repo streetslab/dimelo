@@ -3,9 +3,12 @@ from pathlib import Path
 from matplotlib.axes import Axes
 
 import utils
+import test_data
 
 
-def extract_counts_from_bedmethyl(bedmethyl_file: Path) -> tuple[int, int]:
+def extract_counts_from_bedmethyl(bedmethyl_file: Path,
+                                  bed_file: Path,
+                                  mod_name: str) -> tuple[int, int]:
     """
     Extract number of modified bases and total number of bases from the given bedmethyl file
 
@@ -15,13 +18,26 @@ def extract_counts_from_bedmethyl(bedmethyl_file: Path) -> tuple[int, int]:
     
     Args:
         bedmethyl_file: Path to bedmethyl file
+        bed_file: Path to bed file specifying regions
+        mod_name: type of modification to extract data for
     
     Returns:
         tuple containing counts of (modified_bases, total_bases)
     """
     return (69, 420)
 
+def extract_counts_fake(mod_file: Path,
+                        bed_file: Path,
+                        mod_name: str) -> tuple[int, int]:
+    """
+    Generates a fake set of counts
+    """
+    window_halfsize = 500
+    return test_data.fake_peak_counts(halfsize=window_halfsize, peak_height=0.15)
+
 def plot_enrichment_base(mod_file_names: list[str | Path],
+                         bed_file_names: list[str | Path],
+                         mod_names: list[str],
                          sample_names: list[str]) -> Axes:
     """
     Plots enrichment comparison barplots using the given list of pre-processed input files.
@@ -34,27 +50,32 @@ def plot_enrichment_base(mod_file_names: list[str | Path],
     TODO: Clarify this documentation it's a mess. How do I say this concisely?
     TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
     TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
-    TODO: Is this the top-level method? Or is it used to do more sophisticated stuff elsewhere?
-        I think it's probably best for this to be the top-level method in code, and have more complex command-line interfaces? Maybe not? Discuss
     
     Args:
         mod_file_names: list of paths to modified base data files
+        bed_file_names: list of paths to bed files specifying regions to extract
+        mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
         sample_names: list of names to use for labeling bars in the output; x-axis labels
 
     Returns:
         Axes object containing the plot
     """
-    if not utils.check_len_equal(mod_file_names, sample_names):
-        raise ValueError('Unequal number of input files and sample names')
+    if not utils.check_len_equal(mod_file_names, bed_file_names, mod_names, sample_names):
+        raise ValueError('Unequal number of inputs')
     mod_file_names = [Path(fn) for fn in mod_file_names]
+    bed_file_names = [Path(fn) for fn in bed_file_names]
 
     mod_fractions = []
-    for mod_file_name in mod_file_names:
-        match mod_file_name.suffix:
-            case '.bed':
-                n_mod, n_total = extract_counts_from_bedmethyl(bedmethyl_file=mod_file_name)
+    for mod_file, bed_file, mod_name in zip(mod_file_names, bed_file_names, mod_names):
+        match mod_file.suffix:
+            case '.gz':
+                n_mod, n_total = extract_counts_from_bedmethyl(bedmethyl_file=mod_file)
+            case '.fake':
+                n_mod, n_total = extract_counts_fake(mod_file=mod_file,
+                                                     bed_file=bed_file,
+                                                     mod_name=mod_name)
             case _:
-                raise ValueError(f'Unsupported file type for {mod_file_name}')
+                raise ValueError(f'Unsupported file type for {mod_file}')
         try:
             mod_fractions.append(n_mod / n_total)
         except ZeroDivisionError:
