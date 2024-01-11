@@ -28,6 +28,8 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
     TODO: I feel like stuff like this should be shared functionality
     TODO: Stub; implement this
     TODO: I _THINK_ this should return a value for every position, with non-modified positions as zeros
+    TODO: Currently, this redundantly generates a centered bed file and then never uses it; still doing centering in the actual parsing loop.
+        Obvious solution is to just remove the second centering operation and reference the windowed file. But is there a smarter way to structure the code?
 
     Args:
         bedmethyl_file: Path to bedmethyl file
@@ -62,6 +64,7 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
             center_coord = (int(fields[2])+int(fields[1]))//2
             chromosome = fields[0]
             if chromosome in source_tabix.contigs:
+                # TODO: Does this mean that we throw out any windows that are too short on specifically the left side?
                 if center_coord-window_size>0:
                     for row in source_tabix.fetch(chromosome,center_coord-window_size,center_coord+window_size):
                         tabix_fields = row.split('\t')
