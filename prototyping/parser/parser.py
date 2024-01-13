@@ -1,14 +1,21 @@
-import subprocess
 import sys
 import os
+import subprocess
 import multiprocessing
+from pathlib import Path
+
+from .config import EXE_CONFIG
+
 # Get the directory one level up
 parent_dir = os.path.dirname(os.getcwd())
-
 # Add the parent directory to sys.path
 sys.path.append(parent_dir)
 import utils
-from pathlib import Path
+
+"""
+TODO: The name "parser" conflicts with a built-in python library, I think. VSCode definitely complains at me.
+"""
+
 def parse_bam_modkit_pileup(
     input_file: str | Path,
     output_path: str | Path,
@@ -22,6 +29,11 @@ def parse_bam_modkit_pileup(
     cores=None,
     log=False,
 ):
+    """
+    TODO: Documentation
+    TODO: Raise errors, maybe return bools, but don't return ints
+    TODO: Where should the windowed file be written to? Right now, seems to write to the location of the reference file; this could be confusing.
+    """
     if bed_file is not None and region_str is None:
         if window_size>0:
             bed_filepath = Path(bed_file)
@@ -66,12 +78,12 @@ def parse_bam_modkit_pileup(
         log_command=[]
     
     cores_avail = multiprocessing.cpu_count()
-    if cores>cores_avail:
-        print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
-        cores_command_list = ['--threads',str(cores_avail)]
-    elif cores is None:
+    if cores is None:
         print(f'No specified number of cores requested. {cores_avail} available on machine, allocating {cores_avail//2}')
         cores_command_list = ['--threads',str(cores_avail//2)]
+    elif cores>cores_avail:
+        print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
+        cores_command_list = ['--threads',str(cores_avail)]
     else:
         print(f'Allocating requested {cores} cores.')
         cores_command_list = ['--threads',str(cores)]
@@ -91,9 +103,10 @@ def parse_bam_modkit_pileup(
     output_bed_sorted = Path(output_path)/(output_name+'.sorted.bed')
     output_bedgz_sorted = Path(output_path)/(output_name+'.sorted.bed.gz')
     
-    pileup_command_list = (['../dependencies/modkit/modkit','pileup',
-                             input_file,
-                             output_bed]
+    pileup_command_list = ([EXE_CONFIG.modkit_exe,
+                            'pileup',
+                            input_file,
+                            output_bed]
                            + region_specifier 
                            + motif_command_list 
                            + ['--ref',ref_genome,'--filter-threshold','0'] 
@@ -105,13 +118,14 @@ def parse_bam_modkit_pileup(
     with open(output_bed_sorted,'w') as sorted_file:
         subprocess.run(['sort', '-k1,1', '-k2,2n', output_bed], stdout=sorted_file)
     with open(output_bedgz_sorted,'w') as compressed_file:
-        subprocess.run(['../dependencies/htslib/bin/bgzip',
-                    '-c',output_bed_sorted],
-                       stdout=compressed_file)
-    subprocess.run(['../dependencies/htslib/bin/tabix',
+        subprocess.run([EXE_CONFIG.bgzip_exe,
+                        '-c',output_bed_sorted],
+                        stdout=compressed_file)
+    subprocess.run([EXE_CONFIG.tabix_exe,
                     '-p','bed',output_bedgz_sorted])
 
     return output_bedgz_sorted
+
 def parse_bam_modkit_extract(
     input_file: str | Path,
     output_path: str | Path,
@@ -125,6 +139,10 @@ def parse_bam_modkit_extract(
     cores=None,
     log=False
 ):
+    """
+    TODO: Documentation
+    TODO: Raise errors, maybe return bools, but don't return ints
+    """
     if bed_file is not None and region_str is None:
         if window_size>0:
             bed_filepath = Path(bed_file)
@@ -152,12 +170,12 @@ def parse_bam_modkit_extract(
         return -1
     
     cores_avail = multiprocessing.cpu_count()
-    if cores>cores_avail:
-        print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
-        cores_command_list = ['--threads',str(cores_avail)]
-    elif cores is None:
+    if cores is None:
         print(f'No specified number of cores requested. {cores_avail} available on machine, allocating {cores_avail//2}')
         cores_command_list = ['--threads',str(cores_avail//2)]
+    elif cores>cores_avail:
+        print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
+        cores_command_list = ['--threads',str(cores_avail)]
     else:
         print(f'Allocating requested {cores} cores.')
         cores_command_list = ['--threads',str(cores)]
@@ -193,14 +211,17 @@ def parse_bam_modkit_extract(
 
 
         output_txt = Path(output_path)/(f'{output_name}.{basemod}.txt')
-        subprocess.run(['../dependencies/modkit/modkit','extract',
-                                 input_file,
-                                 output_txt]
-                                 +region_specifier
-                                 +motif_command_list
-                                 +log_command
-                                 +['--ref',ref_genome,
-                                 '--filter-threshold','0'])
+        subprocess.run(
+          [EXE_CONFIG.modkit_exe,
+          'extract',
+          input_file,
+          output_txt]
+          +region_specifier
+          +motif_command_list
+          +log_command
+          +['--ref',ref_genome,
+          '--filter-threshold','0',]
+        )
         print(f'Adding {basemod} to {output_h5}')
         utils.read_by_base_txt_to_hdf5(
             output_txt,

@@ -158,6 +158,45 @@ def extract_centered_reads_from_hdf5(
 #     mods = np.concatenate(mods)
     return (np.array(mod_coords_list),np.array(read_ints_list),np.array(mod_names_list))
 
+def extract_centered_reads_from_UNKNOWN_FILE_TYPE(file: Path,
+                                                  bed_file: Path,
+                                                  mod_names: list[str]) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
+    """
+    TODO: What does the bed file represent in this method? This one is breaking my brain a bit.
+    TODO: Variable names in this method stink.
+    TODO: Currently assumes mod calling (thresholding probabilities) was already performed elsewhere
+
+    Args:
+        file: Path to file containing modification data for single reads
+        bed_file: Path to bed file specifying regions (WHAT DO THESE REPRESENT???)
+        mod_names: types of modification to extract data for
+    
+    Returns:
+        Returns three parallel arrays, of length (N_READS * len(mod_names)), containing the following for each index:
+        * array of positions at which the specified modification was found in a read
+        * unique integer ID for the read
+        * modification represented by the positions
+        For example, if called on a dataset with a single read and two modification types, each array would have two entries. The unique IDs would be the same, as both entries would represent the same single read. The mods and positions would be different, as they would extact different mods.
+    """
+    reads = []
+    read_names = []
+    mods = []
+    for mod_name in mod_names:
+        match mod_name:
+            case 'A':
+                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'peak', 0.7) for _ in range(STUB_N_READS)]
+            case 'C':
+                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'inverse_peak', 0.4) for _ in range(STUB_N_READS)]
+            case _:
+                raise ValueError(f'No stub settings for requested mod {mod_name}')
+        reads += mod_reads
+        read_names.append(np.arange(len(mod_reads)))
+        mods.append([mod_name] * len(mod_reads))
+    
+    read_names = np.concatenate(read_names)
+    mods = np.concatenate(mods)
+    return reads, read_names, mods
+
 def plot_single_reads_rectangle(mod_file_name: str | Path,
                                 bed_file_name: str | Path,
                                 mod_names: list[str],
