@@ -42,46 +42,199 @@ def read_by_base_txt_to_hdf5(
 ):
     motif,modco = tuple(basemod.split(','))
     motif_modified_base = motif[int(modco)]
-    print(motif_modified_base)
-    with h5py.File(output_h5,'w') as h5, open(input_txt) as txt:
-        next(txt)
-        read_name = ''
+    read_name = ''
+    num_reads = 0
+    with open(input_txt) as txt:
         for index,line in enumerate(txt):
             fields = line.split('\t')
-            if read_name!=fields[0]:
-                #New read
-                #Record name
+            if index>0 and read_name!=fields[0]:
                 read_name = fields[0]
-                #Read in relevant values
-                pos_in_read = int(fields[1])
-                pos_in_genome = int(fields[2])
-                read_chrom = fields[3]
-                read_len = int(fields[9])
-                canonical_base = fields[13]
-                prob = float(fields[10])
-                #Calculate read info
-                read_start = pos_in_genome - pos_in_read
-                read_end = read_start + int(fields[9])
-                #Build read vectors
-                mod_vector = np.zeros(read_end-read_start)
-                val_vector = np.zeros(read_end-read_start)
-                
-                #Add modification to vector if type is correct
-                if canonical_base == motif_modified_base:
-                    print(pos_in_genome,read_start,len(val_vector))
-                    val_vector[pos_in_genome-read_start] = 1
-                    if prob>=thresh:
-                        mod_vector[pos_in_genome-read_start] = 1
+                num_reads+=1
+        print(f'{num_reads} reads found in {input_txt}')
+        txt.seek(0)
+        with h5py.File(output_h5,'a') as h5:
+            # Create datasets
+            dt_str = h5py.string_dtype(encoding='utf-8')
+            if thresh==0:
+                dt_vlen = h5py.vlen_dtype(np.float16)
             else:
-                pos_in_genome = int(fields[2])
-                canonical_base = fields[13]
-                prob = float(fields[10])
-                if canonical_base == motif_modified_base:
-                    print(pos_in_genome,read_start,len(val_vector))
-                    val_vector[pos_in_genome-read_start] = 1
-                    if prob>=thresh:
-                        mod_vector[pos_in_genome-read_start] = 1
-    print(read_name,np.sum(val_vector),np.sum(mod_vector))
+                dt_vlen = h5py.vlen_dtype(bool)
+            if 'read_name' in h5:
+                
+                old_size = h5['read_name'].shape[0]
+                print(f'extending from {old_size} to {old_size+num_reads}')
+                h5['read_name'].resize((old_size+num_reads,))
+            else:
+                old_size = 0
+                h5.create_dataset(
+                    'read_name', 
+                    (num_reads,), 
+                    maxshape=(None,), 
+                    dtype=dt_str,
+                    compression='gzip',
+                    compression_opts=9,
+                )
+            if 'chromosome' in h5:
+                if old_size != h5['chromosome'].shape[0]:
+                    print('size mismatch: read_name:chromosome')
+                else:
+                    h5['chromosome'].resize((old_size+num_reads,))
+            else:
+                h5.create_dataset(
+                    'chromosome', 
+                    (num_reads,), 
+                    maxshape=(None,), 
+                    dtype=dt_str,
+                    compression='gzip',
+                    compression_opts=9,
+                )
+            if 'read_start' in h5:
+                if old_size != h5['read_start'].shape[0]:
+                    print('size mismatch','read_name','read_start')
+                else:
+                    h5['read_start'].resize((old_size+num_reads,))
+            else:
+                h5.create_dataset(
+                    'read_start', 
+                    (num_reads,), 
+                    maxshape=(None,), 
+                    dtype='i',
+                    compression='gzip',
+                    compression_opts=9,
+                )
+            if 'read_end' in h5:
+                if old_size != h5['read_end'].shape[0]:
+                    print('size mismatch','read_name','read_end')
+                else:
+                    h5['read_end'].resize((old_size+num_reads,))
+            else:
+                h5.create_dataset(
+                    'read_end', 
+                    (num_reads,), 
+                    maxshape=(None,), 
+                    dtype='i',
+                    compression='gzip',
+                    compression_opts=9,
+                )
+            if 'motif' in h5:
+                if old_size != h5['motif'].shape[0]:
+                    print('size mismatch','read_name','motif')
+                else:
+                    h5['motif'].resize((old_size+num_reads,))
+            else:
+                h5.create_dataset(
+                    'motif', 
+                    (num_reads,), 
+                    maxshape=(None,), 
+                    dtype=dt_str,
+                    compression='gzip',
+                    compression_opts=9,
+                )
+            if 'mod_vector' in h5:
+                if old_size != h5['mod_vector'].shape[0]:
+                    print('size mismatch read_name:mod_vector')
+                else:
+                    h5['mod_vector'].resize((old_size+num_reads,))
+            else:
+                h5.create_dataset(
+                    'mod_vector',
+                    (num_reads,), 
+                    maxshape=(None,),
+                    dtype=dt_vlen,
+                    compression='gzip',
+                    compression_opts=9,
+                )
+            if 'val_vector' in h5:
+                if old_size != h5['val_vector'].shape[0]:
+                    print('size mismatch read_name:val_vector')
+                else:
+                    h5['val_vector'].resize((old_size+num_reads,))
+            else:
+                h5.create_dataset(
+                    'val_vector',
+                    (num_reads,), 
+                    maxshape=(None,),
+                    dtype=dt_vlen,
+                    compression='gzip',
+                    compression_opts=9,
+                )
+            
+            
+    #         next(txt)
+            read_name = ''
+            read_counter = 0
+            readlen_sum = 0
+            for index,line in enumerate(txt):
+                if index==0:
+#                     print(line)
+                    continue
+                fields = line.split('\t')
+                if read_name!=fields[0]:
+                    try:
+                        if len(read_name)>0:
+                            h5['read_name'][read_counter+old_size]=read_name
+                            h5['chromosome'][read_counter+old_size]=read_chrom
+                            h5['read_start'][read_counter+old_size]=read_start
+                            h5['read_end'][read_counter+old_size]=read_end
+                            h5['motif'][read_counter+old_size]=basemod
+                            h5['mod_vector'][read_counter+old_size]=mod_vector
+                            h5['val_vector'][read_counter+old_size]=val_vector
+                            read_counter+=1
+                    except:
+                        pass
+                    #New read
+                    #Record name
+                    read_name = fields[0]
+                    #Read in relevant values
+                    pos_in_genome = int(fields[2])
+                    read_chrom = fields[3]
+                    read_len = int(fields[9])
+                    readlen_sum+=read_len
+                    canonical_base = fields[15]
+                    prob = float(fields[10])
+                    ref_strand = fields[5]
+                    if ref_strand == '+':
+                        pos_in_read_ref = int(fields[1])
+                    elif ref_strand == '-':
+                        pos_in_read_ref = read_len - int(fields[1]) - 1
+                    #Calculate read info
+                    read_start = pos_in_genome - pos_in_read_ref
+                    read_end = read_start + read_len
+                    #Build read vectors
+                    mod_vector = np.zeros(read_len,dtype=np.float16)
+                    val_vector = np.zeros(read_len,dtype=np.float16)
+
+                    #Add modification to vector if type is correct
+                    if canonical_base == motif_modified_base:
+                        val_vector[pos_in_genome-read_start] = 1
+                        if thresh==0:
+                            mod_vector[pos_in_genome-read_start] = prob
+                        elif prob>=thresh:
+                            mod_vector[pos_in_genome-read_start] = 1
+                else:
+                    pos_in_genome = int(fields[2])
+                    canonical_base = fields[15]
+                    prob = float(fields[10])
+                    if canonical_base == motif_modified_base:
+                        val_vector[pos_in_genome-read_start] = 1
+                        if thresh==0:
+                            mod_vector[pos_in_genome-read_start] = prob
+                        elif prob>=thresh:
+                            mod_vector[pos_in_genome-read_start] = 1
+            try:
+                if len(read_name)>0:
+                        h5['read_name'][read_counter+old_size]=read_name
+                        h5['chromosome'][read_counter+old_size]=read_chrom
+                        h5['read_start'][read_counter+old_size]=read_start
+                        h5['read_end'][read_counter+old_size]=read_end
+                        h5['motif'][read_counter+old_size]=basemod
+                        h5['mod_vector'][read_counter+old_size]=mod_vector
+                        h5['val_vector'][read_counter+old_size]=val_vector
+                        read_counter+=1
+            except:
+                pass
+            
+            print(readlen_sum/read_counter)
     return 0
 
 def check_len_equal(*args: list) -> bool:
