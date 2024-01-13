@@ -70,7 +70,7 @@ def extract_centered_reads_from_hdf5(
     if window_size>0:
         bed_filepath = Path(bed_file)
         print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-        bed_filepath_processed = bed_filepath.parent / (bed_filepath.stem + '.windowed' + bed_filepath.suffix)
+        bed_filepath_processed = file.parent / (bed_filepath.stem + f'.windowed{window_size}-for-readout' + bed_filepath.suffix)
         print(f'Writing new bed file {bed_filepath_processed.name}')
         utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
     else:

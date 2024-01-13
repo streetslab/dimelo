@@ -44,7 +44,7 @@ def extract_vector_from_bedmethyl(bedmethyl_file: Path,
         # TODO: I think this should not need to be explicitly done here; the specification for this method is that it's already a Path object. If this is intended to be user facing, we can do this, but I think it's overkill.
         bed_filepath = Path(bed_file)
         print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-        bed_filepath_processed = bed_filepath.parent / (bed_filepath.stem + '.windowed' + bed_filepath.suffix)
+        bed_filepath_processed = bedmethyl_file.parent / (bed_filepath.stem + f'.windowed{window_size}-for-readout' + bed_filepath.suffix)
         print(f'Writing new bed file {bed_filepath_processed.name}')
         utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
     else:
