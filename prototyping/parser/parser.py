@@ -1,10 +1,11 @@
 import sys
 import os
+import shutil
 import subprocess
 import multiprocessing
 from pathlib import Path
 
-from .config import EXE_CONFIG
+from config import EXE_CONFIG
 
 # Get the directory one level up
 parent_dir = os.path.dirname(os.getcwd())
@@ -18,14 +19,14 @@ TODO: The name "parser" conflicts with a built-in python library, I think. VSCod
 
 def parse_bam_modkit_pileup(
     input_file: str | Path,
-    output_path: str | Path,
     output_name: str,
     ref_genome: str | Path,
+    output_directory: str | Path = None,
     region_str=None,
     bed_file=None,
     basemods = ['A,0','CG,0','GCH,1'],
     thresh = 0,
-    window_size=-1,
+    window_size=0,
     cores=None,
     log=False,
 ):
@@ -34,31 +35,39 @@ def parse_bam_modkit_pileup(
     TODO: Raise errors, maybe return bools, but don't return ints
     TODO: Where should the windowed file be written to? Right now, seems to write to the location of the reference file; this could be confusing.
     """
+    
+    if output_directory is None:
+        output_directory = Path(input_file).parent
+        print(f'No output directory provided, using input directory {output_directory}')
+    
+    output_path = Path(output_directory)/output_name
+    if os.path.exists(output_path):
+        shutil.rmtree(output_path)
+    os.makedirs(output_path,exist_ok=True)
+    
     if bed_file is not None and region_str is None:
         if window_size>0:
             bed_filepath = Path(bed_file)
             print(f'Processing from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-            bed_filepath_processed = bed_filepath.parent / (bed_filepath.stem + '.windowed' + bed_filepath.suffix)
+            bed_filepath_processed = output_path / (bed_filepath.stem + f'.windowed{window_size}-for-pileup' + bed_filepath.suffix)
             print(f'Writing new bed file {bed_filepath_processed.name}')
             utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
             region_specifier = ['--include-bed',bed_filepath_processed]
-        elif window_size==-1:
+        elif window_size==0:
             bed_filepath_processed = Path(bed_file)
             print(f'Processing from {bed_filepath_processed.name} using unmodified bed regions.')
             region_specifier = ['--include-bed',bed_filepath_processed]
         else:
-            print(f'Error: invalid window size {window_size}bp')
-            return -1
+            raise(f'Error: invalid window size {window_size}bp')
     elif bed_file is None and region_str is not None:
-        if window_size==-1:
+        if window_size==0:
             print(f'Processing from region {region_str}.')
             region_specifier = ['--region',region_str]
         else:
             print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
             region_specifier = ['--region',region_str]
     else:
-        print('Error: cannot process both a region and a bed file.')
-        return -1
+        raise('Error: cannot process both a region and a bed file.')
     
     motif_command_list = []
     if len(basemods)>0:
@@ -68,11 +77,10 @@ def parse_bam_modkit_pileup(
             motif_command_list.append(motif_details[0])
             motif_command_list.append(motif_details[1])
     else:
-        print('Error: no basemods specified. Nothing to process.')
-        return -1
+        raise('Error: no basemods specified. Nothing to process.')
     
     if log:
-        print('logging to ',Path(output_path)/'pileup-log')
+        print('Logging to ',Path(output_path)/'pileup-log')
         log_command=['--log-filepath',Path(output_path)/'pileup-log']
     else:
         log_command=[]
@@ -99,9 +107,9 @@ def parse_bam_modkit_pileup(
         print(f'Modification threshold of {thresh} will be treated as coming from range 0-1.')
         mod_thresh_list = ['--mod-thresholds', f'm:{thresh}','--mod-thresholds', f'a:{thresh}']
         
-    output_bed = Path(output_path)/(output_name+'.bed')
-    output_bed_sorted = Path(output_path)/(output_name+'.sorted.bed')
-    output_bedgz_sorted = Path(output_path)/(output_name+'.sorted.bed.gz')
+    output_bed = Path(output_path)/('pileup.bed')
+    output_bed_sorted = Path(output_path)/('pileup.sorted.bed')
+    output_bedgz_sorted = Path(output_path)/('pileup.sorted.bed.gz')
     
     pileup_command_list = ([EXE_CONFIG.modkit_exe,
                             'pileup',
@@ -128,9 +136,9 @@ def parse_bam_modkit_pileup(
 
 def parse_bam_modkit_extract(
     input_file: str | Path,
-    output_path: str | Path,
     output_name: str,
     ref_genome: str | Path,
+    output_directory: str | Path = None,
     region_str=None,
     bed_file=None,
     basemods = ['A,0','CG,0','GCH,1'],
@@ -141,33 +149,37 @@ def parse_bam_modkit_extract(
 ):
     """
     TODO: Documentation
-    TODO: Raise errors, maybe return bools, but don't return ints
     """
+    
+    if output_directory is None:
+        output_directory = Path(input_file).parent
+        print(f'No output directory provided, using input directory {output_directory}')  
+        
+    output_path = Path(output_directory)/output_name
+    
     if bed_file is not None and region_str is None:
         if window_size>0:
             bed_filepath = Path(bed_file)
             print(f'Processing from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-            bed_filepath_processed = bed_filepath.parent / (bed_filepath.stem + '.windowed' + bed_filepath.suffix)
+            bed_filepath_processed = output_path / (bed_filepath.stem + f'.windowed{window_size}-for-extract' + bed_filepath.suffix)
             print(f'Writing new bed file {bed_filepath_processed.name}')
             utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
             region_specifier = ['--include-bed',bed_filepath_processed]
-        elif window_size==-1:
+        elif window_size==0:
             bed_filepath_processed = Path(bed_file)
             print(f'Processing from {bed_filepath_processed.name} using unmodified bed regions.')
             region_specifier = ['--include-bed',bed_filepath_processed]
         else:
-            print(f'Error: invalid window size {window_size}bp')
-            return -1
+            raise(f'Error: invalid window size {window_size}bp')
     elif bed_file is None and region_str is not None:
-        if window_size==-1:
+        if window_size==0:
             print(f'Processing from region {region_str}.')
             region_specifier = ['--region',region_str]
         else:
             print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
             region_specifier = ['--region',region_str]
     else:
-        print('Error: cannot process both a region and a bed file.')
-        return -1
+        raise('Error: cannot process both a region and a bed file.')
     
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
@@ -191,7 +203,7 @@ def parse_bam_modkit_extract(
         print(f'Modification threshold of {thresh} will be treated as coming from range 0-1.')
         mod_thresh_list = ['--mod-thresholds', f'm:{thresh}','--mod-thresholds', f'a:{thresh}']
     
-    output_h5 = Path(output_path)/(f'{output_name}.h5')
+    output_h5 = Path(output_path)/(f'reads.combined_basemods.h5')
     with open(output_h5,'w') as f:
         pass
     for basemod in basemods:    
@@ -210,7 +222,7 @@ def parse_bam_modkit_extract(
 
 
 
-        output_txt = Path(output_path)/(f'{output_name}.{basemod}.txt')
+        output_txt = Path(output_path)/(f'reads.{basemod}.txt')
         subprocess.run(
           [EXE_CONFIG.modkit_exe,
           'extract',
