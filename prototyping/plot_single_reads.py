@@ -15,7 +15,9 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib.axes import Axes
+import matplotlib.pyplot as plt
 from collections import defaultdict
+import h5py
 
 import utils
 import test_data
@@ -42,11 +44,11 @@ def binary_search_region(
             left = mid + 1
     return False
 
-def extract_centered_reads_from_modkit_txt(
+def extract_centered_reads_from_hdf5(
     file: Path,
     bed_file: Path,
     mod_names: list[str],
-    window_size:int
+    window_size:int=0,
 ) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
     """
     TODO: What does the bed file represent in this method? This one is breaking my brain a bit.
@@ -72,8 +74,9 @@ def extract_centered_reads_from_modkit_txt(
         print(f'Writing new bed file {bed_filepath_processed.name}')
         utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
     else:
-        print(f'Invalid window size {window_size}.')
-        return -1
+        bed_filepath = Path(bed_file)
+        print(f'Using window size defined by bed file {bed_filepath.name}.')
+        bed_filepath_processed = bed_filepath
     
     regions_dict = defaultdict(list)
     with open(bed_filepath_processed) as bed_regions:
@@ -86,37 +89,59 @@ def extract_centered_reads_from_modkit_txt(
     for chrom in regions_dict:
         regions_dict[chrom].sort(key=lambda x: x[0])
     
-    reads = []
-    read_names = []
-    mods = []
-    for mod_name in mod_names:
-        match mod_name:
-            case 'A':
-                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'peak', 0.7) for _ in range(STUB_N_READS)]
-            case 'C':
-                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'inverse_peak', 0.4) for _ in range(STUB_N_READS)]
-            case _:
-                raise ValueError(f'No stub settings for requested mod {mod_name}')
-        reads += mod_reads
-        read_names.append(np.arange(len(mod_reads)))
-        mods.append([mod_name] * len(mod_reads))
+    mod_coords_list = []
+    read_ints_list = []
+    mod_names_list = []
+#     for mod_name in mod_names:
+#         match mod_name:
+#             case 'A,0':
+#                 mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'peak', 0.7) for _ in range(STUB_N_READS)]
+#             case 'CG,0':
+#                 mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'inverse_peak', 0.4) for _ in range(STUB_N_READS)]
+#             case _:
+#                 raise ValueError(f'No stub settings for requested mod {mod_name}')
+#         reads += mod_reads
+#         read_names.append(np.arange(len(mod_reads)))
+#         mods.append([mod_name] * len(mod_reads))
     
     in_regions = 0
     out_regions = 0
-    with open(file) as modkit_txt:
-        next(modkit_txt)
-        for index,line in enumerate(modkit_txt):
-            fields = line.split('\t')
-            chrom = fields[3]
-            coord = int(fields[2])
-            if binary_search_region(regions_dict,chrom,coord):
-                in_regions+=1
-            else:
-                out_regions+=1
-            if index%100==0:
-                print(index,in_regions,out_regions)
+    with h5py.File(file,'r') as h5:
+        read_names = np.array(h5['read_name'],dtype=str)
+        unique_read_names, first_indices = np.unique(read_names,return_index=True)
+        string_to_int = {read_name: index for index, read_name in zip(first_indices,unique_read_names)}
+        read_ints = np.array([string_to_int[read_name] for read_name in read_names])
+        read_chromosomes = np.array(h5['chromosome'],dtype=str)
+        read_starts = np.array(h5['read_start'])
+        read_ends = np.array(h5['read_end'])
+        read_motifs = np.array(h5['motif'],dtype=str)   
+#         print('starts',read_starts)
+#         print('ends',read_ends)
+        for chrom,region_list in regions_dict.items():
+            for mod_name in mod_names:
+                for region_start,region_end in region_list:
+#                     print(chrom,region_start,region_end)
+                    center_coord = (region_start+region_end)//2
+                    relevant_read_indices = np.flatnonzero(
+                        (read_ends > region_start) & 
+                        (read_starts < region_end) & 
+                        (read_motifs == mod_name) & 
+                        (read_chromosomes == chrom)
+                    )
+#                     print(relevant_read_indices)
+                    for read_index in relevant_read_indices:
+                        mod_vector = np.array(h5['mod_vector'][read_index])
+                        read_start = read_starts[read_index]
+                        read_int = read_ints[read_index]
+                        mod_indices = np.flatnonzero(mod_vector)
+                        for mod_index in mod_indices:
+                            mod_coord_absolute = mod_index+read_start
+                            if region_start < mod_coord_absolute < region_end:
+                                mod_coords_list.append(mod_coord_absolute-center_coord)
+                                read_ints_list.append(read_int)
+                                mod_names_list.append(mod_name)
                 
-    print(in_regions,out_regions)
+#     print(in_regions,out_regions)
 #     for mod_name in mod_names:
 #         match mod_name:
 #             case 'A':
@@ -131,11 +156,12 @@ def extract_centered_reads_from_modkit_txt(
     
 #     read_names = np.concatenate(read_names)
 #     mods = np.concatenate(mods)
-    return reads, read_names, mods
+    return (np.array(mod_coords_list),np.array(read_ints_list),np.array(mod_names_list))
 
 def plot_single_reads_rectangle(mod_file_name: str | Path,
                                 bed_file_name: str | Path,
-                                mod_names: list[str]) -> Axes:
+                                mod_names: list[str],
+                                window_size: int = 0) -> Axes:
     """
     Plots centered single reads as a scatterplot, cut off at the boundaries of the requested regions?
 
@@ -158,9 +184,12 @@ def plot_single_reads_rectangle(mod_file_name: str | Path,
 
     match mod_file_name.suffix:
         case _:
-            reads, read_names, mods = extract_centered_reads_from_UNKNOWN_FILE_TYPE(file=mod_file_name,
-                                                                                    bed_file=bed_file_name,
-                                                                                    mod_names=mod_names)
+            reads, read_names, mods = extract_centered_reads_from_hdf5(
+                file=mod_file_name,
+                bed_file=bed_file_name,
+                mod_names=mod_names,
+                window_size=window_size,
+            )
 
     # Convert data frame where each row represents a read to a data frame where each row represents a single modified position in a read
     df = pd.DataFrame({
@@ -177,6 +206,22 @@ def plot_single_reads_rectangle(mod_file_name: str | Path,
         s=0.5,
         marker="s",
         linewidth=0,
-        legend=None,
     )
+    # Retrieve the existing legend
+    legend = axes.legend_
+
+    # Update legend properties
+    legend.set_title('Mod')
+    for handle in legend.legendHandles:
+        handle.set_markersize(10)  # Set a larger marker size for legend
+#     handles,labels = axes.get_legend_handles_labels()
+#     # Create a new legend with larger marker size
+#     new_handles = [plt.Line2D([], [], 
+#                               marker='s', 
+#                               linestyle='', 
+#                               color=handle.get_color(), 
+#                               markersize=10) 
+#                    for handle in handles] # Skip the first handle as it is the legend title
+#     axes.legend(new_handles, labels[1:], title='Mod', loc='upper right')
+    
     return axes

@@ -19,7 +19,8 @@ def parse_bam_modkit_pileup(
     basemods = ['A,0','CG,0','GCH,1'],
     thresh = 0,
     window_size=-1,
-    cores=None
+    cores=None,
+    log=False,
 ):
     if bed_file is not None and region_str is None:
         if window_size>0:
@@ -57,6 +58,12 @@ def parse_bam_modkit_pileup(
     else:
         print('Error: no basemods specified. Nothing to process.')
         return -1
+    
+    if log:
+        print('logging to ',Path(output_path)/'pileup-log')
+        log_command=['--log-filepath',Path(output_path)/'pileup-log']
+    else:
+        log_command=[]
     
     cores_avail = multiprocessing.cpu_count()
     if cores>cores_avail:
@@ -91,7 +98,8 @@ def parse_bam_modkit_pileup(
                            + motif_command_list 
                            + ['--ref',ref_genome,'--filter-threshold','0'] 
                            + mod_thresh_list 
-                           + cores_command_list)
+                           + cores_command_list
+                           + log_command)
     
     subprocess.run(pileup_command_list)
     with open(output_bed_sorted,'w') as sorted_file:
@@ -102,9 +110,8 @@ def parse_bam_modkit_pileup(
                        stdout=compressed_file)
     subprocess.run(['../dependencies/htslib/bin/tabix',
                     '-p','bed',output_bedgz_sorted])
-                             
-#     result = subprocess.run(['ls', '-l'], capture_output=True, text=True)
-    return 0
+
+    return output_bedgz_sorted
 def parse_bam_modkit_extract(
     input_file: str | Path,
     output_path: str | Path,
@@ -115,7 +122,8 @@ def parse_bam_modkit_extract(
     basemods = ['A,0','CG,0','GCH,1'],
     thresh = 0,
     window_size=-1,
-    cores=None
+    cores=None,
+    log=False
 ):
     if bed_file is not None and region_str is None:
         if window_size>0:
@@ -143,17 +151,6 @@ def parse_bam_modkit_extract(
         print('Error: cannot process both a region and a bed file.')
         return -1
     
-    motif_command_list = []
-    if len(basemods)>0:
-        for basemod in basemods:
-            motif_details = basemod.split(',')
-            motif_command_list.append('--motif')
-            motif_command_list.append(motif_details[0])
-            motif_command_list.append(motif_details[1])
-    else:
-        print('Error: no basemods specified. Nothing to process.')
-        return -1
-    
     cores_avail = multiprocessing.cpu_count()
     if cores>cores_avail:
         print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
@@ -176,14 +173,39 @@ def parse_bam_modkit_extract(
         print(f'Modification threshold of {thresh} will be treated as coming from range 0-1.')
         mod_thresh_list = ['--mod-thresholds', f'm:{thresh}','--mod-thresholds', f'a:{thresh}']
     
-    output_txt = Path(output_path)/(output_name+'.txt')
-    subprocess.run(['../dependencies/modkit/modkit','extract',
-                             input_file,
-                             output_txt,
-                             '--region',region_str,
-                             '--motif' ,'CG','0',
-                             '--ref',genome_str,
-                             '--filter-threshold','0',
-                             '--mod-thresholds', f'm:{thresh}',
-                             '--mod-thresholds', f'a:{thresh}'])
-    return 0
+    output_h5 = Path(output_path)/(f'{output_name}.h5')
+    with open(output_h5,'w') as f:
+        pass
+    for basemod in basemods:    
+        print(f'Extracting {basemod} sites')
+        motif_command_list = []
+        motif_details = basemod.split(',')
+        motif_command_list.append('--motif')
+        motif_command_list.append(motif_details[0])
+        motif_command_list.append(motif_details[1])
+
+        if log:
+            print('logging to ',Path(output_path)/'extract-log')
+            log_command=['--log-filepath',Path(output_path)/f'extract-log']
+        else:
+            log_command=[]
+
+
+
+        output_txt = Path(output_path)/(f'{output_name}.{basemod}.txt')
+        subprocess.run(['../dependencies/modkit/modkit','extract',
+                                 input_file,
+                                 output_txt]
+                                 +region_specifier
+                                 +motif_command_list
+                                 +log_command
+                                 +['--ref',ref_genome,
+                                 '--filter-threshold','0'])
+        print(f'Adding {basemod} to {output_h5}')
+        utils.read_by_base_txt_to_hdf5(
+            output_txt,
+            output_h5,
+            basemod,
+            thresh,
+        )
+    return output_h5
