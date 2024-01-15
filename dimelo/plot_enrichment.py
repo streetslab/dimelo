@@ -4,8 +4,8 @@ import numpy as np
 from matplotlib.axes import Axes
 import pysam
 
-import utils
-import test_data
+from . import utils
+from . import test_data
 
 
 def extract_counts_from_bedmethyl(bedmethyl_file: Path,

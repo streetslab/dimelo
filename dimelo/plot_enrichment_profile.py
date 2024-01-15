@@ -11,8 +11,8 @@ from pathlib import Path
 import numpy as np
 from matplotlib.axes import Axes
 
-import utils
-import test_data
+from . import utils
+from . import test_data
 
 import pysam
 

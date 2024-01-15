@@ -19,8 +19,8 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 import h5py
 
-import utils
-import test_data
+from . import utils
+from . import test_data
 
 """ TEMPORARY STUB VARS """
 STUB_HALFSIZE = 500

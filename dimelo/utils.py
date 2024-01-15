@@ -234,8 +234,8 @@ def read_by_base_txt_to_hdf5(
             except:
                 pass
             
-            print(readlen_sum/read_counter)
-    return 0
+#             print(readlen_sum/read_counter)
+    return
 
 def check_len_equal(*args: list) -> bool:
     """
