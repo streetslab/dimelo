@@ -26,24 +26,6 @@ import test_data
 STUB_HALFSIZE = 500
 STUB_N_READS = 500
 
-
-def binary_search_region(
-    regions,
-    chrom,
-    position,
-):
-    region_list = regions.get(chrom,[])
-    left,right = 0, len(region_list)-1
-    while left <= right:
-        mid = left + (right-left)//2
-        if region_list[mid][0] <= position <= region_list[mid][1]:
-            return True
-        elif position < region_list[mid][0]:
-            right == mid - 1
-        else:
-            left = mid + 1
-    return False
-
 def extract_centered_reads_from_hdf5(
     file: Path,
     bed_file: Path,

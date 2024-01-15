@@ -156,6 +156,9 @@ def parse_bam_modkit_extract(
         print(f'No output directory provided, using input directory {output_directory}')  
         
     output_path = Path(output_directory)/output_name
+    if os.path.exists(output_path):
+        shutil.rmtree(output_path)
+    os.makedirs(output_path,exist_ok=True)
     
     if bed_file is not None and region_str is None:
         if window_size>0:
