@@ -143,7 +143,7 @@ def parse_bam_extract(
     bed_file=None,
     basemods = ['A,0','CG,0','GCH,1'],
     thresh = 0,
-    window_size=-1,
+    window_size=0,
     cores=None,
     log=False
 ):
@@ -182,7 +182,7 @@ def parse_bam_extract(
             print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
             region_specifier = ['--region',region_str]
     else:
-        raise('Error: cannot process both a region and a bed file.')
+        raise ValueError('Error: cannot process both a region and a bed file.')
     
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
