@@ -7,17 +7,17 @@ from pathlib import Path
 
 from .config import EXE_CONFIG
 
-# Get the directory one level up
-parent_dir = os.path.dirname(os.getcwd())
-# Add the parent directory to sys.path
-sys.path.append(parent_dir)
-import utils
+# # Get the directory one level up
+# parent_dir = os.path.dirname(os.getcwd())
+# # Add the parent directory to sys.path
+# sys.path.append(parent_dir)
+from . import utils
 
 """
 TODO: The name "parser" conflicts with a built-in python library, I think. VSCode definitely complains at me.
 """
 
-def parse_bam_modkit_pileup(
+def parse_bam_pileup(
     input_file: str | Path,
     output_name: str,
     ref_genome: str | Path,
@@ -134,7 +134,7 @@ def parse_bam_modkit_pileup(
 
     return output_bedgz_sorted
 
-def parse_bam_modkit_extract(
+def parse_bam_extract(
     input_file: str | Path,
     output_name: str,
     ref_genome: str | Path,
