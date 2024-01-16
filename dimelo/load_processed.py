@@ -1,32 +1,158 @@
-"""
-I'm conflicted about how to handle some of this.
-
-There are two different ways of doing single read plotting: "rectangular" and "whole read".
-"rectangular" means displaying exactly the requested region.
-"whole read" means displaying the entirety of any read overlapping the requested region.
-Probably need separate methods for all of this? Is there shared functionality? Do they live in the same file? Etc.
-
-I'm beginning to lose the thread of where we check for regions making sense.
-Maybe this is an argument for an internal region class that makes checking easy? I don't know.
-"""
 from pathlib import Path
-
-import numpy as np
-import pandas as pd
-import seaborn as sns
-from matplotlib.axes import Axes
-import matplotlib.pyplot as plt
 from collections import defaultdict
+
+import pysam
+import numpy as np
 import h5py
 
-from . import utils
 from . import test_data
+from . import utils
+
+def counts_from_bedmethyl(bedmethyl_file: Path,
+                          bed_file: Path,
+                          mod_name: str) -> tuple[int, int]:
+    """
+    Extract number of modified bases and total number of bases from the given bedmethyl file
+
+    TODO: How to name this method?
+    TODO: I feel like stuff like this should be shared functionality
+    TODO: Stub; implement this
+    
+    Args:
+        bedmethyl_file: Path to bedmethyl file
+        bed_file: Path to bed file specifying regions
+        mod_name: type of modification to extract data for
+    
+    Returns:
+        tuple containing counts of (modified_bases, total_bases)
+    """
+    # Deleted the windowing stuff from the plot_enrichment_profile
+
+    source_tabix = pysam.TabixFile(str(bedmethyl_file))
+    # Don't need vectors, just need counts; also not guaranteed that windows are the same length?
+    # valid_base_counts = np.zeros(window_size*2)
+    # modified_base_counts = np.zeros(window_size*2)
+    valid_base_count = 0
+    modified_base_count = 0
+    
+    mod_motif = mod_name.split(',')[0]
+    mod_coord_in_motif = mod_name.split(',')[1]
+
+    with open(bed_file) as regions_file:
+        for line in regions_file:
+            # pythonic condensed operation for extracting important fields
+            # fields = line.split('\t')
+            chromosome, start_pos, end_pos, *_ = line.split('\t')
+            start_pos = int(start_pos)
+            end_pos = int(end_pos)
+            # Removing centering
+            # center_coord = (int(fields[2])+int(fields[1]))//2
+            # chromosome = fields[0]
+            if chromosome in source_tabix.contigs:
+                # Removing centering
+                # if center_coord-window_size>0:
+                # for row in source_tabix.fetch(chromosome,center_coord-window_size,center_coord+window_size):
+                for row in source_tabix.fetch(chromosome, start_pos, end_pos):
+                    tabix_fields = row.split('\t')
+                    pileup_basemod = tabix_fields[3]
+                    if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
+                        pileup_info = tabix_fields[9].split(' ')
+                        # Removing centering
+                        # pileup_coord_relative = int(tabix_fields[1])-center_coord+window_size
+                        # But actually don't need this because don't care about positions
+                        # pileup_coord_relative = int(tabix_fields[1]) - end_pos
+                        # valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
+                        # modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
+                        valid_base_count += int(pileup_info[0])
+                        modified_base_count += int(pileup_info[2])
+
+    return (modified_base_count, valid_base_count)
+
+def counts_from_fake(mod_file: Path,
+                     bed_file: Path,
+                     mod_name: str) -> tuple[int, int]:
+    """
+    Generates a fake set of counts
+    """
+    window_halfsize = 500
+    return test_data.fake_peak_counts(halfsize=window_halfsize, peak_height=0.15)
+
+def vector_from_bedmethyl(bedmethyl_file: Path,
+                          bed_file: Path,
+                          mod_name: str,
+                          window_size: int) -> np.ndarray:
+    """
+    Generate trace for the specified modification aggregated across all regions in the given bed file.
+
+    TODO: How to name this method?
+    TODO: I feel like stuff like this should be shared functionality
+    TODO: Stub; implement this
+    TODO: I _THINK_ this should return a value for every position, with non-modified positions as zeros
+    TODO: Currently, this redundantly generates a centered bed file and then never uses it; still doing centering in the actual parsing loop.
+        Obvious solution is to just remove the second centering operation and reference the windowed file. But is there a smarter way to structure the code?
+
+    Args:
+        bedmethyl_file: Path to bedmethyl file
+        bed_file: Path to bed file specifying centered equal-length regions
+        mod_name: type of modification to extract data for
+        window_size: TODO: Documentation for this; I think it's a half-size?
+    
+    Returns:
+        vector of fraction modifiied bases (e.g. mA/A) calculated for each position; float values between 0 and 1
+    """
+    if window_size > 0:
+        # TODO: I think this should not need to be explicitly done here; the specification for this method is that it's already a Path object. If this is intended to be user facing, we can do this, but I think it's overkill.
+        bed_filepath = Path(bed_file)
+        print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
+        bed_filepath_processed = bedmethyl_file.parent / (bed_filepath.stem + f'.windowed{window_size}-for-readout' + bed_filepath.suffix)
+        print(f'Writing new bed file {bed_filepath_processed.name}')
+        utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
+    else:
+        print(f'Invalid window size {window_size}.')
+        return -1
+    
+    source_tabix = pysam.TabixFile(str(bedmethyl_file))
+    valid_base_counts = np.zeros(window_size*2, dtype=int)
+    modified_base_counts = np.zeros(window_size*2, dtype=int)
+    
+    mod_motif = mod_name.split(',')[0]
+    mod_coord_in_motif = mod_name.split(',')[1]
+    
+    with open(bed_file) as regions_file:
+        for line in regions_file:
+            fields = line.split('\t')
+            center_coord = (int(fields[2])+int(fields[1]))//2
+            chromosome = fields[0]
+            if chromosome in source_tabix.contigs:
+                # TODO: Does this mean that we throw out any windows that are too short on specifically the left side?
+                if center_coord-window_size>0:
+                    for row in source_tabix.fetch(chromosome,center_coord-window_size,center_coord+window_size):
+                        tabix_fields = row.split('\t')
+#                         print(tabix_fields)
+                        pileup_basemod = tabix_fields[3]
+                        if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
+                            pileup_info = tabix_fields[9].split(' ')
+                            pileup_coord_relative = int(tabix_fields[1])-center_coord+window_size
+                            valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
+                            modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
+                        
+    modified_fractions = np.divide(modified_base_counts,valid_base_counts, out=np.zeros_like(modified_base_counts, dtype=float), where=valid_base_counts!=0)
+    return modified_fractions
+
+def vector_from_fake(mod_file: Path,
+                     bed_file: Path,
+                     mod_name: str,
+                     window_size: int) -> np.ndarray:
+    """
+    Generates a fake peak trace.
+    """
+    return test_data.fake_peak_trace(halfsize=window_size, peak_height=0.15)
 
 """ TEMPORARY STUB VARS """
 STUB_HALFSIZE = 500
 STUB_N_READS = 500
 
-def extract_centered_reads_from_hdf5(
+def reads_from_hdf5(
     file: Path,
     bed_file: Path,
     mod_names: list[str],
@@ -140,9 +266,9 @@ def extract_centered_reads_from_hdf5(
 #     mods = np.concatenate(mods)
     return (np.array(mod_coords_list),np.array(read_ints_list),np.array(mod_names_list))
 
-def extract_centered_reads_from_UNKNOWN_FILE_TYPE(file: Path,
-                                                  bed_file: Path,
-                                                  mod_names: list[str]) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
+def reads_from_fake(file: Path,
+                    bed_file: Path,
+                    mod_names: list[str]) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
     """
     TODO: What does the bed file represent in this method? This one is breaking my brain a bit.
     TODO: Variable names in this method stink.
@@ -178,71 +304,3 @@ def extract_centered_reads_from_UNKNOWN_FILE_TYPE(file: Path,
     read_names = np.concatenate(read_names)
     mods = np.concatenate(mods)
     return reads, read_names, mods
-
-def plot_single_reads_rectangle(mod_file_name: str | Path,
-                                bed_file_name: str | Path,
-                                mod_names: list[str],
-                                window_size: int = 0) -> Axes:
-    """
-    Plots centered single reads as a scatterplot, cut off at the boundaries of the requested regions?
-
-    TODO: Clarify this documentation it's a mess. How do I say this concisely?
-    TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
-    TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
-    TODO: This name stinks?
-    TODO: So far, this is the only method to do plotting without utility methods. Is this reasonable? Is it that unique?
-
-    Args:
-        mod_file_name: path to file containing modification data for single reads
-        bed_file_name: path to bed file specifying regions (WHAT DO THESE REPRESENT???)
-        mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
-
-    Returns:
-        Axes object containing the plot
-    """ 
-    mod_file_name = Path(mod_file_name)
-    bed_file_name = Path(bed_file_name)
-
-    match mod_file_name.suffix:
-        case _:
-            reads, read_names, mods = extract_centered_reads_from_hdf5(
-                file=mod_file_name,
-                bed_file=bed_file_name,
-                mod_names=mod_names,
-                window_size=window_size,
-            )
-
-    # Convert data frame where each row represents a read to a data frame where each row represents a single modified position in a read
-    df = pd.DataFrame({
-        'read_name': read_names,
-        'mod': mods,
-        'pos': reads
-    }).explode('pos')
-    axes = sns.scatterplot(
-        data=df,
-        x="pos",
-        y="read_name",
-        hue="mod",
-        # palette=colors,
-        s=0.5,
-        marker="s",
-        linewidth=0,
-    )
-    # Retrieve the existing legend
-    legend = axes.legend_
-
-    # Update legend properties
-    legend.set_title('Mod')
-    for handle in legend.legendHandles:
-        handle.set_markersize(10)  # Set a larger marker size for legend
-#     handles,labels = axes.get_legend_handles_labels()
-#     # Create a new legend with larger marker size
-#     new_handles = [plt.Line2D([], [], 
-#                               marker='s', 
-#                               linestyle='', 
-#                               color=handle.get_color(), 
-#                               markersize=10) 
-#                    for handle in handles] # Skip the first handle as it is the legend title
-#     axes.legend(new_handles, labels[1:], title='Mod', loc='upper right')
-    
-    return axes
