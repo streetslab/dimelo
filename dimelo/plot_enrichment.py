@@ -9,7 +9,8 @@ from . import load_processed
 def plot_enrichment(mod_file_names: list[str | Path],
                     bed_file_names: list[str | Path],
                     mod_names: list[str],
-                    sample_names: list[str]) -> Axes:
+                    sample_names: list[str],
+                    **kwargs) -> Axes:
     """
     Plots enrichment comparison barplots using the given list of pre-processed input files.
 
@@ -27,6 +28,7 @@ def plot_enrichment(mod_file_names: list[str | Path],
         bed_file_names: list of paths to bed files specifying regions to extract
         mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
         sample_names: list of names to use for labeling bars in the output; x-axis labels
+        kwargs: other keyword parameters passed through to utils.bar_plot
 
     Returns:
         Axes object containing the plot
@@ -54,7 +56,7 @@ def plot_enrichment(mod_file_names: list[str | Path],
         except ZeroDivisionError:
             mod_fractions.append(0)
     
-    axes = utils.bar_plot(categories=sample_names, values=mod_fractions, y_label='fraction modified bases')
+    axes = utils.bar_plot(categories=sample_names, values=mod_fractions, y_label='fraction modified bases', **kwargs)
     return axes
 
 

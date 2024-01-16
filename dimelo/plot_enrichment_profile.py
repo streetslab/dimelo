@@ -20,7 +20,8 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
                                  mod_names: list[str],
                                  sample_names: list[str],
                                  window_size: int,
-                                 smooth_window: int | None = None) -> Axes:
+                                 smooth_window: int | None = None,
+                                 **kwargs) -> Axes:
     """
     Plots enrichment profiles, overlaying the resulting traces on top of each other
 
@@ -44,6 +45,7 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
         sample_names: list of names to use for labeling traces in the output; legend entries
         window_size: TODO: Documentation for this; I think it's a half-size?
         smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
+        kwargs: other keyword parameters passed through to utils.line_plot
     
     Returns:
         Axes object containing the plot
@@ -72,11 +74,12 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
             trace = utils.smooth_rolling_mean(trace, window=smooth_window)
         trace_vectors.append(trace)
     
-    axes = utils.line_plot(x=np.arange(-window_size,window_size),
-                           x_label='pos',
-                           vectors=trace_vectors,
-                           vector_names=sample_names,
-                           y_label='fraction modified bases')
+    axes = utils.line_plot(indep_vector=np.arange(-window_size,window_size),
+                           indep_name='pos',
+                           dep_vectors=trace_vectors,
+                           dep_names=sample_names,
+                           y_label='fraction modified bases',
+                           **kwargs)
     return axes
 
 def plot_enrichment_profile_vary_mod(mod_file_name: str | Path,
