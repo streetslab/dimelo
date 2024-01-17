@@ -16,6 +16,63 @@ This module contains code to convert .bam files into both human-readable and
 indexed random-access pileup and read-wise processed outputs.
 """
 
+# This provides the mapping of canonical bases to sets of valid mode names
+BASEMOD_NAMES_DICT = {
+    'A':{'a'},
+    'C':{'m'},
+}
+
+def check_bam_format(
+    input_file: str | Path,
+    basemods: list,
+) -> bool:
+    """
+    Check whether a .bam file is formatted appropriately for modkit
+
+    Args:
+        input_file: a formatted .bam file with a .bai index
+        basemods: a list of base modification motifs
+    
+    Returns:
+        bool: True means we meet the format requirements, False means we don't
+        
+    """
+    basemods_found_dict = {}
+    for basemod in basemods:
+        motif,pos = basemod.split(',')
+        base = motif[int(pos)]
+        basemods_found_dict[base] = False
+    
+    input_bam = pysam.AlignmentFile(input_file)
+    for read in input_bam.fetch():
+        read_dict = read.to_dict()
+        for tag_string in read_dict['tags']:
+            tag_fields = tag_string.split(',')[0].split(':')
+            tag = tag_fields[0]
+            # tag_type = tag_fields[1]
+            tag_value = tag_fields[2]
+            if tag=='Mm' or tag=='Ml':
+                raise ValueError('Base modification tags are out of spec (Mm and Ml instead of MM and ML). Use modkit update-tags to fix.')
+            elif tag=='MM':
+                if tag_value[-1]!='?' and tag_value[-1]!='.':
+                    raise ValueError(f'Base modification tags are out of spec. Need ? or ., got {tag_value}')
+                else:
+                    if tag_value[2] in BASEMOD_NAMES_DICT[tag_value[0]]:
+                        basemods_found_dict[tag_value[0]] = True
+                    else:
+                        raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}')
+        if all(basemods_found_dict.values()):
+            return True
+    else:
+        missing_bases = []
+        for base,found in basemods_found_dict.items():
+            if not found:
+                missing_bases.append(base)
+        print(f'WARNING: no modified values found for {missing_bases}')
+    
+
+    
+
 def pileup(
     input_file: str | Path,
     output_name: str,
