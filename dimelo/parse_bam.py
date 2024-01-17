@@ -18,13 +18,40 @@ indexed random-access pileup and read-wise processed outputs.
 
 # This provides the mapping of canonical bases to sets of valid mode names
 BASEMOD_NAMES_DICT = {
-    'A':{'a'},
-    'C':{'m'},
+    'A':{'a','Y'},
+    'C':{'m','Z'},
 }
+
+# This should be updated in tandem with the environment.yml nanoporetech::modkit version
+EXPECTED_MODKIT_VERSION = '0.2.4'
+
+# Specifies how many reads to check for the base modifications of interest.
+NUM_READS_TO_CHECK = 500
+
+# Add conda env bin folder to path if it is not already present
+current_interpreter = sys.executable
+env_bin_path = os.path.dirname(current_interpreter)
+if env_bin_path not in os.environ['PATH']:
+    print(f'PATH does not include the conda environment /bin folder. Adding {env_bin_path}.')
+    os.environ['PATH'] = f'{env_bin_path}:{os.environ["PATH"]}'
+    print(f'PATH is now {os.environ["PATH"]}')
+
+# Check modkit on first import
+try:
+    result = subprocess.run(['modkit','--version'], stdout=subprocess.PIPE, text=True)
+    modkit_version = result.stdout
+    if modkit_version.split()[1] == EXPECTED_MODKIT_VERSION:
+        print(f'modkit found with expected version {EXPECTED_MODKIT_VERSION}')
+    else:
+        print(f'modkit found with unexpected version {modkit_version.split()[1]}. Versions other than {EXPECTED_MODKIT_VERSION} may exhibit unexpected behavior. It is recommended that you use v{EXPECTED_MODKIT_VERSION}')
+except:
+    print('Executable not found for modkit. Install dimelo using "conda env create -f environment.yml" or install modkit manually to your conda environment using "conda install nanoporetech::modkit==0.2.4". Without modkit you cannot run parse_bam functions.')
+
+
 
 def check_bam_format(
     input_file: str | Path,
-    basemods: list,
+    basemods: list = ['A,0','CG,0'],
 ) -> bool:
     """
     Check whether a .bam file is formatted appropriately for modkit
@@ -44,7 +71,7 @@ def check_bam_format(
         basemods_found_dict[base] = False
     
     input_bam = pysam.AlignmentFile(input_file)
-    for read in input_bam.fetch():
+    for counter,read in enumerate(input_bam.fetch()):
         read_dict = read.to_dict()
         for tag_string in read_dict['tags']:
             tag_fields = tag_string.split(',')[0].split(':')
@@ -52,25 +79,66 @@ def check_bam_format(
             # tag_type = tag_fields[1]
             tag_value = tag_fields[2]
             if tag=='Mm' or tag=='Ml':
-                raise ValueError('Base modification tags are out of spec (Mm and Ml instead of MM and ML). Use modkit update-tags to fix.')
+                raise ValueError(f'Base modification tags are out of spec (Mm and Ml instead of MM and ML). \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam" in the command line with your conda environment active and then trying with the new file. For megalodon basecalling/modcalling, you may also need to pass "--mode ambiguous"')
             elif tag=='MM':
                 if tag_value[-1]!='?' and tag_value[-1]!='.':
-                    raise ValueError(f'Base modification tags are out of spec. Need ? or ., got {tag_value}')
+                    raise ValueError(f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered implicity. \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.')
                 else:
                     if tag_value[2] in BASEMOD_NAMES_DICT[tag_value[0]]:
                         basemods_found_dict[tag_value[0]] = True
                     else:
-                        raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}')
+                        raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {BASEMOD_NAMES_DICT[tag_value[0]]}. \n\nConsider using "modkit adjust-mods {str(input_file)} new_file.bam" and then trying with the new file. For megalodon basecalling/modcalling, pass "--convert Z m --convert Y a" to correctly name 5mC and N6mA.')
         if all(basemods_found_dict.values()):
             return True
-    else:
-        missing_bases = []
-        for base,found in basemods_found_dict.items():
-            if not found:
-                missing_bases.append(base)
-        print(f'WARNING: no modified values found for {missing_bases}')
+        if counter>=NUM_READS_TO_CHECK:
+            missing_bases = []
+            for base,found in basemods_found_dict.items():
+                if not found:
+                    missing_bases.append(base)
+            print(f'WARNING: no modified values found for {missing_bases} in the first {counter} reads. Do you expect this file to contain these modifications? parse_bam is looking for {basemods} but only found modifications on {[base for base, found in basemods_found_dict.items() if found]}. \n\nConsider passing only the basemods that you expect to be present in your file.')
+            break
+        
+def create_region_specifier(
+    output_path,
+    bed_file,
+    region_str,
+    window_size,
+):
+    """
+    Creates commands to pass to modkit based on bed_file regions.
+    """
     
-
+    bed_filepath_processed = None
+    if bed_file is not None and region_str is None:
+        if window_size is None:
+            bed_filepath_processed = Path(bed_file)
+            print(f'Processing from {bed_filepath_processed.name} using unmodified bed regions.')
+            region_specifier = ['--include-bed',bed_filepath_processed]
+        if window_size>0:
+            bed_filepath = Path(bed_file)
+            print(f'Processing from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
+            bed_filepath_processed = output_path / (bed_filepath.stem + f'.windowed{window_size}-for-pileup' + bed_filepath.suffix)
+            print(f'Writing new bed file {bed_filepath_processed.name}')
+            utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
+            region_specifier = ['--include-bed',bed_filepath_processed]
+        else:
+            raise(f'Error: invalid window size {window_size}bp')
+    elif bed_file is None and region_str is not None:
+        if window_size is None:
+            print(f'Processing from region {region_str}.')
+            region_specifier = ['--region',region_str]
+        else:
+            print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
+            region_specifier = ['--region',region_str]
+    elif bed_file is None and region_str is None:
+        print('No region(s) specified, processing the entire genome.')
+        region_specifier = []
+        if window_size is not None:
+            print('A window_size was specified but will be ignored.')
+    else:
+        raise ValueError('Error: cannot process both a region and a bed file.')  
+    
+    return region_specifier, bed_filepath_processed
     
 
 def pileup(
@@ -157,34 +225,12 @@ def pileup(
         shutil.rmtree(output_path)
     os.makedirs(output_path,exist_ok=True)
     
-    if bed_file is not None and region_str is None:
-        if window_size>0:
-            bed_filepath = Path(bed_file)
-            print(f'Processing from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-            bed_filepath_processed = output_path / (bed_filepath.stem + f'.windowed{window_size}-for-pileup' + bed_filepath.suffix)
-            print(f'Writing new bed file {bed_filepath_processed.name}')
-            utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
-            region_specifier = ['--include-bed',bed_filepath_processed]
-        elif window_size==0:
-            bed_filepath_processed = Path(bed_file)
-            print(f'Processing from {bed_filepath_processed.name} using unmodified bed regions.')
-            region_specifier = ['--include-bed',bed_filepath_processed]
-        else:
-            raise(f'Error: invalid window size {window_size}bp')
-    elif bed_file is None and region_str is not None:
-        if window_size==0:
-            print(f'Processing from region {region_str}.')
-            region_specifier = ['--region',region_str]
-        else:
-            print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
-            region_specifier = ['--region',region_str]
-    elif bed_file is None and region_str is None:
-        print('No region(s) specified, processing the entire genome.')
-        region_specifier = []
-        if window_size is not None:
-            print('A window_size was specified but will be ignored.')
-    else:
-        raise ValueError('Error: cannot process both a region and a bed file.')
+    region_specifier, bed_filepath_processed = create_region_specifier(
+        output_path,
+        bed_file,
+        region_str,
+        window_size,
+    )
     
     motif_command_list = []
     if len(basemods)>0:
@@ -214,15 +260,17 @@ def pileup(
         cores_command_list = ['--threads',str(cores)]
         
     
-    if thresh<=0:
+    if thresh is None:
         print('No valid base modification threshold provided. Using adaptive threshold selection via modkit.')
         mod_thresh_list = []
     elif thresh>1:
         print(f'Modification threshold of {thresh} assumed to be for range 0-255. {thresh}/255={thresh/255} will be sent to modkit.')
         mod_thresh_list = ['--mod-thresholds', f'm:{thresh/255}','--mod-thresholds', f'a:{thresh/255}']
-    else:
+    elif thresh>0:
         print(f'Modification threshold of {thresh} will be treated as coming from range 0-1.')
         mod_thresh_list = ['--mod-thresholds', f'm:{thresh}','--mod-thresholds', f'a:{thresh}']
+    else:
+        raise ValueError(f'Modification threshold of {thresh} does not make sense.')
         
     output_bed = Path(output_path)/('pileup.bed')
     output_bed_sorted = Path(output_path)/('pileup.sorted.bed')
@@ -564,34 +612,12 @@ def extract(
         shutil.rmtree(output_path)
     os.makedirs(output_path,exist_ok=True)
     
-    if bed_file is not None and region_str is None:
-        if window_size>0:
-            bed_filepath = Path(bed_file)
-            print(f'Processing from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-            bed_filepath_processed = output_path / (bed_filepath.stem + f'.windowed{window_size}-for-extract' + bed_filepath.suffix)
-            print(f'Writing new bed file {bed_filepath_processed.name}')
-            utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
-            region_specifier = ['--include-bed',bed_filepath_processed]
-        elif window_size==0:
-            bed_filepath_processed = Path(bed_file)
-            print(f'Processing from {bed_filepath_processed.name} using unmodified bed regions.')
-            region_specifier = ['--include-bed',bed_filepath_processed]
-        else:
-            raise(f'Error: invalid window size {window_size}bp')
-    elif bed_file is None and region_str is not None:
-        if window_size==0:
-            print(f'Processing from region {region_str}.')
-            region_specifier = ['--region',region_str]
-        else:
-            print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
-            region_specifier = ['--region',region_str]
-    elif bed_file is None and region_str is None:
-        print('No region(s) specified, processing the entire genome.')
-        region_specifier = []
-        if window_size is not None:
-            print('A window_size was specified but will be ignored.')    
-    else:
-        raise ValueError('Error: cannot process both a region and a bed file.')
+    region_specifier, bed_filepath_processed = create_region_specifier(
+        output_path,
+        bed_file,
+        region_str,
+        window_size,
+    )
     
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
@@ -605,7 +631,7 @@ def extract(
         cores_command_list = ['--threads',str(cores)]
         
     
-    if thresh<=0:
+    if thresh is None:
         print('No valid base modification threshold provided. Raw probs will be saved.')
         mod_thresh_list = []
     elif thresh>1:
