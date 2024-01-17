@@ -1,0 +1,8 @@
+name: dimelo_modkit_parsing
+channels:
+  - conda-forge
+  - nanoporetech
+  - defaults
+dependencies:
+  - python=3.11
+  - nanoporetech::modkit==0.2.4

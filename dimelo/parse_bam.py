@@ -9,8 +9,6 @@ import numpy as np
 import h5py
 import pysam
 
-from .config import EXE_CONFIG
-
 from . import utils
 
 """
@@ -18,7 +16,7 @@ This module contains code to convert .bam files into both human-readable and
 indexed random-access pileup and read-wise processed outputs.
 """
 
-def parse_bam_pileup(
+def pileup(
     input_file: str | Path,
     output_name: str,
     ref_genome: str | Path,
@@ -173,7 +171,7 @@ def parse_bam_pileup(
     output_bed_sorted = Path(output_path)/('pileup.sorted.bed')
     output_bedgz_sorted = Path(output_path)/('pileup.sorted.bed.gz')
     
-    pileup_command_list = ([EXE_CONFIG.modkit_exe,
+    pileup_command_list = (['modkit',
                             'pileup',
                             input_file,
                             output_bed]
@@ -425,7 +423,7 @@ def read_by_base_txt_to_hdf5(
 #             print(readlen_sum/read_counter)
     return
 
-def parse_bam_extract(
+def extract(
     input_file: str | Path,
     output_name: str,
     ref_genome: str | Path,
@@ -581,7 +579,7 @@ def parse_bam_extract(
 
         output_txt = Path(output_path)/(f'reads.{basemod}.txt')
         subprocess.run(
-          [EXE_CONFIG.modkit_exe,
+          ['modkit',
           'extract',
           input_file,
           output_txt]
