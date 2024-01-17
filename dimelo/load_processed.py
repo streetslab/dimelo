@@ -15,8 +15,6 @@ def counts_from_bedmethyl(bedmethyl_file: Path,
     Extract number of modified bases and total number of bases from the given bedmethyl file
 
     TODO: How to name this method?
-    TODO: I feel like stuff like this should be shared functionality
-    TODO: Stub; implement this
     
     Args:
         bedmethyl_file: Path to bedmethyl file
@@ -68,14 +66,16 @@ def counts_from_bedmethyl(bedmethyl_file: Path,
 
     return (modified_base_count, valid_base_count)
 
-def counts_from_fake(mod_file: Path,
-                     bed_file: Path,
-                     mod_name: str) -> tuple[int, int]:
+def counts_from_fake(*args,
+                     **kwargs) -> tuple[int, int]:
     """
-    Generates a fake set of counts
+    Generates a fake set of enrichment counts. Ignores all arguments.
+
+    Returns:
+        tuple containing counts of (modified_bases, total_bases)
     """
     window_halfsize = 500
-    return test_data.fake_peak_counts(halfsize=window_halfsize, peak_height=0.15)
+    return test_data.fake_peak_enrichment(halfsize=window_halfsize, peak_height=0.15)
 
 def vector_from_bedmethyl(bedmethyl_file: Path,
                           bed_file: Path,
@@ -86,7 +86,6 @@ def vector_from_bedmethyl(bedmethyl_file: Path,
 
     TODO: How to name this method?
     TODO: I feel like stuff like this should be shared functionality
-    TODO: Stub; implement this
     TODO: I _THINK_ this should return a value for every position, with non-modified positions as zeros
     TODO: Currently, this redundantly generates a centered bed file and then never uses it; still doing centering in the actual parsing loop.
         Obvious solution is to just remove the second centering operation and reference the windowed file. But is there a smarter way to structure the code?
@@ -139,18 +138,19 @@ def vector_from_bedmethyl(bedmethyl_file: Path,
     modified_fractions = np.divide(modified_base_counts,valid_base_counts, out=np.zeros_like(modified_base_counts, dtype=float), where=valid_base_counts!=0)
     return modified_fractions
 
-def vector_from_fake(mod_file: Path,
-                     bed_file: Path,
-                     mod_name: str,
-                     window_size: int) -> np.ndarray:
+def vector_from_fake(window_size: int,
+                     *args,
+                     **kwargs) -> np.ndarray:
     """
-    Generates a fake peak trace.
-    """
-    return test_data.fake_peak_trace(halfsize=window_size, peak_height=0.15)
+    Generates a fake peak trace. Ignores all arguments except window_size.
 
-""" TEMPORARY STUB VARS """
-STUB_HALFSIZE = 500
-STUB_N_READS = 500
+    Args:
+        window_size: halfsize of the window; how far the window stretches on either side of the center point
+    
+    Returns:
+        vector of fraction modifiied bases calculated for each position; float values between 0 and 1
+    """
+    return test_data.fake_peak_enrichment_profile(halfsize=window_size, peak_height=0.15)
 
 def reads_from_hdf5(
     file: Path,
@@ -200,17 +200,6 @@ def reads_from_hdf5(
     mod_coords_list = []
     read_ints_list = []
     mod_names_list = []
-#     for mod_name in mod_names:
-#         match mod_name:
-#             case 'A,0':
-#                 mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'peak', 0.7) for _ in range(STUB_N_READS)]
-#             case 'CG,0':
-#                 mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'inverse_peak', 0.4) for _ in range(STUB_N_READS)]
-#             case _:
-#                 raise ValueError(f'No stub settings for requested mod {mod_name}')
-#         reads += mod_reads
-#         read_names.append(np.arange(len(mod_reads)))
-#         mods.append([mod_name] * len(mod_reads))
     
     in_regions = 0
     out_regions = 0
@@ -249,35 +238,18 @@ def reads_from_hdf5(
                                 read_ints_list.append(read_int)
                                 mod_names_list.append(mod_name)
                 
-#     print(in_regions,out_regions)
-#     for mod_name in mod_names:
-#         match mod_name:
-#             case 'A':
-#                 mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'peak') for _ in range(STUB_N_READS)]
-#             case 'C':
-#                 mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'inverse_peak') for _ in range(STUB_N_READS)]
-#             case _:
-#                 raise ValueError(f'No stub settings for requested mod {mod_name}')
-#         reads += mod_reads
-#         read_names.append(np.arange(len(mod_reads)))
-#         mods.append([mod_name] * len(mod_reads))
-    
-#     read_names = np.concatenate(read_names)
-#     mods = np.concatenate(mods)
     return (np.array(mod_coords_list),np.array(read_ints_list),np.array(mod_names_list))
 
-def reads_from_fake(file: Path,
-                    bed_file: Path,
-                    mod_names: list[str]) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
+def reads_from_fake(mod_names: list[str],
+                    *args,
+                    **kwargs) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
     """
-    TODO: What does the bed file represent in this method? This one is breaking my brain a bit.
-    TODO: Variable names in this method stink.
-    TODO: Currently assumes mod calling (thresholding probabilities) was already performed elsewhere
+    Generates a set of reads with modifications, spanning a region of some specified size. Ignores all arguments except for mod_names.
+
+    TODO: Is integer index still correct for this?
 
     Args:
-        file: Path to file containing modification data for single reads
-        bed_file: Path to bed file specifying regions (WHAT DO THESE REPRESENT???)
-        mod_names: types of modification to extract data for
+        mod_names: types of modification to extract data for; see below for valid choices
     
     Returns:
         Returns three parallel arrays, of length (N_READS * len(mod_names)), containing the following for each index:
@@ -286,15 +258,18 @@ def reads_from_fake(file: Path,
         * modification represented by the positions
         For example, if called on a dataset with a single read and two modification types, each array would have two entries. The unique IDs would be the same, as both entries would represent the same single read. The mods and positions would be different, as they would extact different mods.
     """
+    window_halfsize = 500
+    n_reads = 500
+
     reads = []
     read_names = []
     mods = []
     for mod_name in mod_names:
         match mod_name:
             case 'A':
-                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'peak', 0.7) for _ in range(STUB_N_READS)]
+                mod_reads = [test_data.fake_read_mod_positions(window_halfsize, 'peak', 0.7) for _ in range(n_reads)]
             case 'C':
-                mod_reads = [test_data.fake_read_mod_positions(STUB_HALFSIZE, 'inverse_peak', 0.4) for _ in range(STUB_N_READS)]
+                mod_reads = [test_data.fake_read_mod_positions(window_halfsize, 'inverse_peak', 0.4) for _ in range(n_reads)]
             case _:
                 raise ValueError(f'No stub settings for requested mod {mod_name}')
         reads += mod_reads

@@ -68,7 +68,7 @@ def by_modification(mod_file_name: str | Path,
     """
     Plot enrichment bar plots, holding modification file and regions constant, varying modification types
 
-    TODO: There are no *args or **kwargs currently, but there probably will be for plotting methods?
+    See plot_enrichment for details.
     """
     n_mods = len(mod_names)
     return plot_enrichment(mod_file_names=[mod_file_name] * n_mods,
@@ -86,8 +86,10 @@ def by_regions(mod_file_name: str | Path,
                **kwargs) -> Axes:
     """
     Plot enrichment bar plots, holding modification file and modification types constant, varying regions
+    
+    Note: Sample names default to the names of the bed files.
 
-    Sample names default to the names of the bed files (?)
+    See plot_enrichment for details.
     """
     if sample_names is None:
         sample_names = bed_file_names
@@ -108,9 +110,9 @@ def by_dataset(mod_file_names: list[str | Path],
     """
     Plot enrichment bar plots, holding modification types and regions constant, varying modification files
 
-    Sample names default to the names of the modification files (?)
+    Note: Sample names default to the names of the modification files.
 
-    TODO: This name stinks
+    See plot_enrichment for details.
     """
     if sample_names is None:
         sample_names = mod_file_names

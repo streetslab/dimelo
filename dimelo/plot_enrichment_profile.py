@@ -89,6 +89,8 @@ def by_modification(mod_file_name: str | Path,
                     **kwargs) -> Axes:
     """
     Plot enrichment profile, holding modification file and regions constant, varying modification types
+
+    See plot_enrichment_profile for details.
     """
     n_mods = len(mod_names)
     return plot_enrichment_profile(mod_file_names=[mod_file_name] * n_mods,
@@ -107,7 +109,9 @@ def by_regions(mod_file_name: str | Path,
     """
     Plot enrichment profile, holding modification file and modification types constant, varying regions
 
-    Sample names default to the names of the bed files (?)
+    Note: Sample names default to the names of the bed files.
+
+    See plot_enrichment_profile for details.
     """
     if sample_names is None:
         sample_names = bed_file_names
@@ -128,9 +132,9 @@ def by_dataset(mod_file_names: list[str | Path],
     """
     Plot enrichment profile, holding modification types and regions constant, varying modification files
 
-    Sample names default to the names of the modification files (?)
+    Note: Sample names default to the names of the modification files.
 
-    TODO: This name stinks
+    See plot_enrichment_profile for details.
     """
     if sample_names is None:
         sample_names = mod_file_names

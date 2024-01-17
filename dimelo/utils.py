@@ -101,15 +101,19 @@ def smooth_rolling_mean(vector: np.ndarray[float],
                         min_periods: int = 1) -> np.ndarray:
     """
     Smooths the given vector, using rolling centered windows of the given size.
-
     See pandas rolling documentation for details; documentation for relevant arguments copied here.
 
-    TODO: It feels a little silly to be delegating smoothing to pandas, but this works. Consider refactoring?
-    TODO: Is it reasonable for min_periods to be default 1? That makes some sense for plotting, but might make analysis misleading in the future.
+    Note: Because this operation is always centered, min_periods only has an effect if it is less than half of window size.
+
+    TODO: Is pandas the most efficient implementation for this?
+    TODO: Is it reasonable for min_periods to be default 1? That makes some sense for plotting, but might make analysis misleading in the future, compared to defaulting to window size.
 
     Args:
         vector: the vector of values to smooth
         window: size of the moving window
         min_periods: minimum number of observations in window to output a value; otherwise, result is np.nan
+    
+    Returns:
+        Vector of smoothed values
     """
     return pd.Series(vector).rolling(window=window, min_periods=min_periods, center=True).mean().values
