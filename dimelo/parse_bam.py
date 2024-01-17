@@ -16,6 +16,9 @@ This module contains code to convert .bam files into both human-readable and
 indexed random-access pileup and read-wise processed outputs.
 """
 
+"""
+Global variables
+"""
 # This provides the mapping of canonical bases to sets of valid mode names
 BASEMOD_NAMES_DICT = {
     'A':{'a','Y'},
@@ -28,6 +31,10 @@ EXPECTED_MODKIT_VERSION = '0.2.4'
 # Specifies how many reads to check for the base modifications of interest.
 NUM_READS_TO_CHECK = 500
 
+
+"""
+Import checks
+"""
 # Add conda env bin folder to path if it is not already present
 current_interpreter = sys.executable
 env_bin_path = os.path.dirname(current_interpreter)
@@ -47,100 +54,9 @@ try:
 except:
     print('Executable not found for modkit. Install dimelo using "conda env create -f environment.yml" or install modkit manually to your conda environment using "conda install nanoporetech::modkit==0.2.4". Without modkit you cannot run parse_bam functions.')
 
-
-
-def check_bam_format(
-    input_file: str | Path,
-    basemods: list = ['A,0','CG,0'],
-) -> bool:
-    """
-    Check whether a .bam file is formatted appropriately for modkit
-
-    Args:
-        input_file: a formatted .bam file with a .bai index
-        basemods: a list of base modification motifs
-    
-    Returns:
-        bool: True means we meet the format requirements, False means we don't
-        
-    """
-    basemods_found_dict = {}
-    for basemod in basemods:
-        motif,pos = basemod.split(',')
-        base = motif[int(pos)]
-        basemods_found_dict[base] = False
-    
-    input_bam = pysam.AlignmentFile(input_file)
-    for counter,read in enumerate(input_bam.fetch()):
-        read_dict = read.to_dict()
-        for tag_string in read_dict['tags']:
-            tag_fields = tag_string.split(',')[0].split(':')
-            tag = tag_fields[0]
-            # tag_type = tag_fields[1]
-            tag_value = tag_fields[2]
-            if tag=='Mm' or tag=='Ml':
-                raise ValueError(f'Base modification tags are out of spec (Mm and Ml instead of MM and ML). \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam" in the command line with your conda environment active and then trying with the new file. For megalodon basecalling/modcalling, you may also need to pass "--mode ambiguous"')
-            elif tag=='MM':
-                if tag_value[-1]!='?' and tag_value[-1]!='.':
-                    raise ValueError(f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered implicity. \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.')
-                else:
-                    if tag_value[2] in BASEMOD_NAMES_DICT[tag_value[0]]:
-                        basemods_found_dict[tag_value[0]] = True
-                    else:
-                        raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {BASEMOD_NAMES_DICT[tag_value[0]]}. \n\nConsider using "modkit adjust-mods {str(input_file)} new_file.bam" and then trying with the new file. For megalodon basecalling/modcalling, pass "--convert Z m --convert Y a" to correctly name 5mC and N6mA.')
-        if all(basemods_found_dict.values()):
-            return True
-        if counter>=NUM_READS_TO_CHECK:
-            missing_bases = []
-            for base,found in basemods_found_dict.items():
-                if not found:
-                    missing_bases.append(base)
-            print(f'WARNING: no modified values found for {missing_bases} in the first {counter} reads. Do you expect this file to contain these modifications? parse_bam is looking for {basemods} but only found modifications on {[base for base, found in basemods_found_dict.items() if found]}. \n\nConsider passing only the basemods that you expect to be present in your file.')
-            break
-        
-def create_region_specifier(
-    output_path,
-    bed_file,
-    region_str,
-    window_size,
-):
-    """
-    Creates commands to pass to modkit based on bed_file regions.
-    """
-    
-    bed_filepath_processed = None
-    if bed_file is not None and region_str is None:
-        if window_size is None:
-            bed_filepath_processed = Path(bed_file)
-            print(f'Processing from {bed_filepath_processed.name} using unmodified bed regions.')
-            region_specifier = ['--include-bed',bed_filepath_processed]
-        if window_size>0:
-            bed_filepath = Path(bed_file)
-            print(f'Processing from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-            bed_filepath_processed = output_path / (bed_filepath.stem + f'.windowed{window_size}-for-pileup' + bed_filepath.suffix)
-            print(f'Writing new bed file {bed_filepath_processed.name}')
-            utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
-            region_specifier = ['--include-bed',bed_filepath_processed]
-        else:
-            raise(f'Error: invalid window size {window_size}bp')
-    elif bed_file is None and region_str is not None:
-        if window_size is None:
-            print(f'Processing from region {region_str}.')
-            region_specifier = ['--region',region_str]
-        else:
-            print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
-            region_specifier = ['--region',region_str]
-    elif bed_file is None and region_str is None:
-        print('No region(s) specified, processing the entire genome.')
-        region_specifier = []
-        if window_size is not None:
-            print('A window_size was specified but will be ignored.')
-    else:
-        raise ValueError('Error: cannot process both a region and a bed file.')  
-    
-    return region_specifier, bed_filepath_processed
-    
-
+"""
+User-facing parse operations: pileup and extract
+"""
 def pileup(
     input_file: str | Path,
     output_name: str,
@@ -216,6 +132,8 @@ def pileup(
         
     """
     
+    check_bam_format(input_file)
+    
     if output_directory is None:
         output_directory = Path(input_file).parent
         print(f'No output directory provided, using input directory {output_directory}')
@@ -259,27 +177,25 @@ def pileup(
         print(f'Allocating requested {cores} cores.')
         cores_command_list = ['--threads',str(cores)]
         
-    
+    mod_thresh_list = []
     if thresh is None:
-        print('No valid base modification threshold provided. Using adaptive threshold selection via modkit.')
-        mod_thresh_list = []
-    elif thresh>1:
-        print(f'Modification threshold of {thresh} assumed to be for range 0-255. {thresh}/255={thresh/255} will be sent to modkit.')
-        mod_thresh_list = ['--mod-thresholds', f'm:{thresh/255}','--mod-thresholds', f'a:{thresh/255}']
-    elif thresh>0:
-        print(f'Modification threshold of {thresh} will be treated as coming from range 0-1.')
-        mod_thresh_list = ['--mod-thresholds', f'm:{thresh}','--mod-thresholds', f'a:{thresh}']
+        print('No base modification threshold provided. Using adaptive threshold selection via modkit.')
+    elif thresh<=0:
+        raise ValueError(f'Threshold {thresh} cannot be used for pileup, please pick a positive nonzero value.')
     else:
-        raise ValueError(f'Modification threshold of {thresh} does not make sense.')
+        adjusted_threshold = adjust_threshold(thresh)
+        for modnames_set in BASEMOD_NAMES_DICT.values():
+            for modname in modnames_set:
+                mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
         
-    output_bed = Path(output_path)/('pileup.bed')
-    output_bed_sorted = Path(output_path)/('pileup.sorted.bed')
+    output_bedmethyl = Path(output_path)/('pileup.bed')
+    output_bedmethyl_sorted = Path(output_path)/('pileup.sorted.bed')
     output_bedgz_sorted = Path(output_path)/('pileup.sorted.bed.gz')
     
     pileup_command_list = (['modkit',
                             'pileup',
                             input_file,
-                            output_bed]
+                            output_bedmethyl]
                            + region_specifier 
                            + motif_command_list 
                            + ['--ref',ref_genome,'--filter-threshold','0'] 
@@ -288,19 +204,293 @@ def pileup(
                            + log_command)
     
     subprocess.run(pileup_command_list)
-    with open(output_bed_sorted,'w') as sorted_file:
-        subprocess.run(['sort', '-k1,1', '-k2,2n', output_bed], stdout=sorted_file)
-    # with open(output_bedgz_sorted,'w') as compressed_file:
-    #     subprocess.run([EXE_CONFIG.bgzip_exe,
-    #                     '-c',output_bed_sorted],
-    #                     stdout=compressed_file)
-    # subprocess.run([EXE_CONFIG.tabix_exe,
-    #                 '-p','bed',output_bedgz_sorted])
-    pysam.tabix_compress(output_bed_sorted,output_bedgz_sorted,force=True)
+    
+    with open(output_bedmethyl_sorted,'w') as sorted_file:
+        subprocess.run(['sort', '-k1,1', '-k2,2n', output_bedmethyl], stdout=sorted_file)
+    pysam.tabix_compress(output_bedmethyl_sorted,output_bedgz_sorted,force=True)
     pysam.tabix_index(str(output_bedgz_sorted),preset='bed',force=True)
-
+    
+    if clean_intermediate:
+        if bed_file is not None and str(bed_filepath_processed)!=str(bed_file):
+            os.remove(bed_filepath_processed)
+        os.remove(output_bedmethyl)
+        os.remove(output_bedmethyl_sorted)
+    
     return output_bedgz_sorted
 
+def extract(
+    input_file: str | Path,
+    output_name: str,
+    ref_genome: str | Path,
+    output_directory: str | Path = None,
+    region_str: str = None,
+    bed_file: str | Path = None,
+    basemods: list = ['A,0','CG,0','GCH,1'],
+    thresh: float = 0,
+    window_size: int = 0,
+    cores: int = None,
+    log: bool = False,
+    clean_intermediate: bool = True,) -> Path:
+
+    """
+    Takes a file containing long read sequencing data aligned 
+    to a reference genome with modification calls for one or more base/context 
+    and pulls out data from each individual read. The intermediate outputs contain
+    a plain-text list of all base modifications, split out by type. The compressed
+    and indexed output contains vectors of valid and modified positions within each
+    read.
+
+    The current implementation of this method uses modkit, a tool built by 
+    Nanopore Technologies, along with h5py to build the final output file.
+
+    https://github.com/nanoporetech/modkit/
+
+    Args:
+        output_file: a string or Path object pointing to the location of a .bam file.
+            The file should follow at least v1.6 of the .bam file specifications, 
+            found here: https://samtools.github.io/hts-specs/
+            https://samtools.github.io/hts-specs/SAMv1.pdf 
+
+            The file needs to have modifications stored in the standard format,
+            with MM and ML tags (NOT mm and ml) and mod names m for 5mC and a 
+            for 6mA.
+
+            Furthermore, the file must have a .bam.bai index file with the same name.
+            You can create an index if needed using samtools index.
+        output_name: a string that will be used to create an output folder
+            containing the intermediate and final outputs, along with any logs.
+        ref_genome: a string of Path objecting pointing to the .fasta file
+            for the reference genome to which the .bam file is aligned.
+        output_directory: optional str or Path pointing to an output directory.
+            If left as None, outputs will be stored in a new folder within the input
+            directory.
+        region_str: optional string in format chr{num}:{start}-{end} specifying a single
+            region to process. Mutually exclusive with bed_file.
+        bed_file: optional string or Path for a .bed file containing one or more regions
+            of the genome to process. Mutually exclusive with region_str.
+        basemods: a list of strings specifying which base modifications to look for.
+            The basemods are each specified as {sequence_motif},{position_of_modification}.
+            For example, a methylated adenine is specified as 'A,0' and CpG methylation
+            is specified as 'CG,0'.
+        thresh: float point number specifying the base modification probability threshold
+            used to delineate modificaton calls as True or False. When set to None, modkit
+            will select its own threshold automatically based on the data.
+        window_size: an integer specifying a window around the center of each bed_file
+            region. If set to None, the bed_file is used unmodified. If set to a non-zero
+            positive integer, the bed_file regions are replaced by new regions with that
+            window size in either direction of the center of the original bed_file regions.
+            This is used for e.g. extracting information from around known motifs or peaks.
+        cores: an integer specifying how many parallel cores modkit gets to use. 
+            By default modkit will use all of the available cores on the machine.
+        log: a boolean specifying whether to output logs into the output folder.
+        clean_intermediate: a boolean specifying whether to clean up to keep intermediate
+            outputs. The final processed files are not human-readable, whereas the intermediate
+            outputs are. However, intermediate outputs can also be quite large.
+
+    Returns:
+        Path object pointing to the compressed and indexed output .h5 file, ready for
+        plotting functions.
+
+    """
+    
+    check_bam_format(input_file)
+    
+    if output_directory is None:
+        output_directory = Path(input_file).parent
+        print(f'No output directory provided, using input directory {output_directory}')  
+        
+    output_path = Path(output_directory)/output_name
+    if os.path.exists(output_path):
+        shutil.rmtree(output_path)
+    os.makedirs(output_path,exist_ok=True)
+    
+    region_specifier, bed_filepath_processed = create_region_specifier(
+        output_path,
+        bed_file,
+        region_str,
+        window_size,
+    )
+    
+    cores_avail = multiprocessing.cpu_count()
+    if cores is None:
+        print(f'No specified number of cores requested. {cores_avail} available on machine, allocating {cores_avail//2}')
+        cores_command_list = ['--threads',str(cores_avail//2)]
+    elif cores>cores_avail:
+        print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
+        cores_command_list = ['--threads',str(cores_avail)]
+    else:
+        print(f'Allocating requested {cores} cores.')
+        cores_command_list = ['--threads',str(cores)]
+        
+    mod_thresh_list = []
+    if thresh is None:
+        print('No valid base modification threshold provided. Raw probs will be saved.')
+    if thresh<=0:
+        print(f'With a thresh of {thresh}, modkit will simply save all tagged modifications.')
+    else:
+        adjusted_threshold = adjust_threshold(thresh)
+        for modnames_set in BASEMOD_NAMES_DICT.values():
+            for modname in modnames_set:
+                mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
+    
+    output_h5 = Path(output_path)/(f'reads.combined_basemods.h5')
+    with open(output_h5,'w') as f:
+        pass
+    for basemod in basemods:    
+        print(f'Extracting {basemod} sites')
+        motif_command_list = []
+        motif_details = basemod.split(',')
+        motif_command_list.append('--motif')
+        motif_command_list.append(motif_details[0])
+        motif_command_list.append(motif_details[1])
+
+        if log:
+            print('logging to ',Path(output_path)/'extract-log')
+            log_command=['--log-filepath',Path(output_path)/f'extract-log']
+        else:
+            log_command=[]
+
+
+
+        output_txt = Path(output_path)/(f'reads.{basemod}.txt')
+        
+        extract_command_list = (['modkit',
+          'extract',
+          input_file,
+          output_txt]
+          +region_specifier
+          +motif_command_list
+          +log_command
+          +['--ref',ref_genome,
+          '--filter-threshold','0',])
+        subprocess.run(extract_command_list)
+        
+        print(f'Adding {basemod} to {output_h5}')
+        read_by_base_txt_to_hdf5(
+            output_txt,
+            output_h5,
+            basemod,
+            thresh,
+        )
+        if clean_intermediate:
+            os.remove(output_txt)
+
+    return output_h5
+
+"""
+Helper functions to facilitate bam parse operations
+
+check_bam_format: verify that a bam is formatted correctly to be processed.
+create_region_specifier: create a list to append to the modkit call for specifying genomic regions.
+adjust_threshold: backwards-compatible threshold adjustment, i.e. taking 0-255 thresholds and turning
+    them into 0-1.
+read_by_base_txt_to_hdf5: convert modkit extract txt into an .h5 file for rapid read access.
+"""
+
+def check_bam_format(
+    input_file: str | Path,
+    basemods: list = ['A,0','CG,0'],
+) -> bool:
+    """
+    Check whether a .bam file is formatted appropriately for modkit
+
+    Args:
+        input_file: a formatted .bam file with a .bai index
+        basemods: a list of base modification motifs
+    
+    Returns:
+        None. If the function returns, you are ok. 
+        
+    """
+    basemods_found_dict = {}
+    for basemod in basemods:
+        motif,pos = basemod.split(',')
+        base = motif[int(pos)]
+        basemods_found_dict[base] = False
+    
+    input_bam = pysam.AlignmentFile(input_file)
+    for counter,read in enumerate(input_bam.fetch()):
+        read_dict = read.to_dict()
+        for tag_string in read_dict['tags']:
+            tag_fields = tag_string.split(',')[0].split(':')
+            tag = tag_fields[0]
+            # tag_type = tag_fields[1]
+            tag_value = tag_fields[2]
+            if tag=='Mm' or tag=='Ml':
+                raise ValueError(f'Base modification tags are out of spec (Mm and Ml instead of MM and ML). \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam" in the command line with your conda environment active and then trying with the new file. For megalodon basecalling/modcalling, you may also need to pass "--mode ambiguous"')
+            elif tag=='MM':
+                if tag_value[-1]!='?' and tag_value[-1]!='.':
+                    raise ValueError(f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered to be implicit. \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.')
+                else:
+                    if tag_value[2] in BASEMOD_NAMES_DICT[tag_value[0]]:
+                        basemods_found_dict[tag_value[0]] = True
+                    else:
+                        raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {BASEMOD_NAMES_DICT[tag_value[0]]}. \n\nIf you know what your mod names correspond to in terms of the latest .bam standard, consider using "modkit adjust-mods {str(input_file)} new_file.bam --convert 5mC_name m --convert N6mA_name a --convert other_basemod_name correct_label" and then trying with the new file. Note: currently supported mod names are {BASEMOD_NAMES_DICT}')
+        if all(basemods_found_dict.values()):
+            return
+        if counter>=NUM_READS_TO_CHECK:
+            missing_bases = []
+            for base,found in basemods_found_dict.items():
+                if not found:
+                    missing_bases.append(base)
+            print(f'WARNING: no modified values found for {missing_bases} in the first {counter} reads. Do you expect this file to contain these modifications? parse_bam is looking for {basemods} but only found modifications on {[base for base, found in basemods_found_dict.items() if found]}. \n\nConsider passing only the basemods that you expect to be present in your file.')
+            return
+        
+def create_region_specifier(
+    output_path,
+    bed_file,
+    region_str,
+    window_size,
+):
+    """
+    Creates commands to pass to modkit based on bed_file regions.
+    """
+    
+    bed_filepath_processed = None
+    if bed_file is not None and region_str is None:
+        if window_size is None:
+            bed_filepath_processed = Path(bed_file)
+            print(f'Processing from {bed_filepath_processed.name} using unmodified bed regions.')
+            region_specifier = ['--include-bed',bed_filepath_processed]
+        if window_size>0:
+            bed_filepath = Path(bed_file)
+            print(f'Processing from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
+            bed_filepath_processed = output_path / (bed_filepath.stem + f'.windowed{window_size}-for-pileup' + bed_filepath.suffix)
+            print(f'Writing new bed file {bed_filepath_processed.name}')
+            utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
+            region_specifier = ['--include-bed',bed_filepath_processed]
+        else:
+            raise(f'Error: invalid window size {window_size}bp')
+    elif bed_file is None and region_str is not None:
+        if window_size is None:
+            print(f'Processing from region {region_str}.')
+            region_specifier = ['--region',region_str]
+        else:
+            print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
+            region_specifier = ['--region',region_str]
+    elif bed_file is None and region_str is None:
+        print('No region(s) specified, processing the entire genome.')
+        region_specifier = []
+        if window_size is not None:
+            print('A window_size was specified but will be ignored.')
+    else:
+        raise ValueError('Error: cannot process both a region and a bed file.')  
+    
+    return region_specifier, bed_filepath_processed
+
+def adjust_threshold(
+    thresh,
+):
+    if thresh>0:
+        if thresh>1:
+            print(f'Modification threshold of {thresh} assumed to be for range 0-255. {thresh}/255={thresh/255} will be sent to modkit.')
+            thresh_scaled = thresh/255
+        else:
+            print(f'Modification threshold of {thresh} will be treated as coming from range 0-1.')
+            thresh_scaled = thresh
+            
+        return thresh_scaled
+    return thresh
 
 def read_by_base_txt_to_hdf5(
     input_txt: str | Path,
@@ -527,156 +717,3 @@ def read_by_base_txt_to_hdf5(
 
 #             print(readlen_sum/read_counter)
     return
-
-def extract(
-    input_file: str | Path,
-    output_name: str,
-    ref_genome: str | Path,
-    output_directory: str | Path = None,
-    region_str: str = None,
-    bed_file: str | Path = None,
-    basemods: list = ['A,0','CG,0','GCH,1'],
-    thresh: float = 0,
-    window_size: int = 0,
-    cores: int = None,
-    log: bool = False,
-    clean_intermediate: bool = True,) -> Path:
-
-    """
-    Takes a file containing long read sequencing data aligned 
-    to a reference genome with modification calls for one or more base/context 
-    and pulls out data from each individual read. The intermediate outputs contain
-    a plain-text list of all base modifications, split out by type. The compressed
-    and indexed output contains vectors of valid and modified positions within each
-    read.
-
-    The current implementation of this method uses modkit, a tool built by 
-    Nanopore Technologies, along with h5py to build the final output file.
-
-    https://github.com/nanoporetech/modkit/
-
-    Args:
-        output_file: a string or Path object pointing to the location of a .bam file.
-            The file should follow at least v1.6 of the .bam file specifications, 
-            found here: https://samtools.github.io/hts-specs/
-            https://samtools.github.io/hts-specs/SAMv1.pdf 
-
-            The file needs to have modifications stored in the standard format,
-            with MM and ML tags (NOT mm and ml) and mod names m for 5mC and a 
-            for 6mA.
-
-            Furthermore, the file must have a .bam.bai index file with the same name.
-            You can create an index if needed using samtools index.
-        output_name: a string that will be used to create an output folder
-            containing the intermediate and final outputs, along with any logs.
-        ref_genome: a string of Path objecting pointing to the .fasta file
-            for the reference genome to which the .bam file is aligned.
-        output_directory: optional str or Path pointing to an output directory.
-            If left as None, outputs will be stored in a new folder within the input
-            directory.
-        region_str: optional string in format chr{num}:{start}-{end} specifying a single
-            region to process. Mutually exclusive with bed_file.
-        bed_file: optional string or Path for a .bed file containing one or more regions
-            of the genome to process. Mutually exclusive with region_str.
-        basemods: a list of strings specifying which base modifications to look for.
-            The basemods are each specified as {sequence_motif},{position_of_modification}.
-            For example, a methylated adenine is specified as 'A,0' and CpG methylation
-            is specified as 'CG,0'.
-        thresh: float point number specifying the base modification probability threshold
-            used to delineate modificaton calls as True or False. When set to None, modkit
-            will select its own threshold automatically based on the data.
-        window_size: an integer specifying a window around the center of each bed_file
-            region. If set to None, the bed_file is used unmodified. If set to a non-zero
-            positive integer, the bed_file regions are replaced by new regions with that
-            window size in either direction of the center of the original bed_file regions.
-            This is used for e.g. extracting information from around known motifs or peaks.
-        cores: an integer specifying how many parallel cores modkit gets to use. 
-            By default modkit will use all of the available cores on the machine.
-        log: a boolean specifying whether to output logs into the output folder.
-        clean_intermediate: a boolean specifying whether to clean up to keep intermediate
-            outputs. The final processed files are not human-readable, whereas the intermediate
-            outputs are. However, intermediate outputs can also be quite large.
-
-    Returns:
-        Path object pointing to the compressed and indexed output .h5 file, ready for
-        plotting functions.
-
-    """
-    
-    if output_directory is None:
-        output_directory = Path(input_file).parent
-        print(f'No output directory provided, using input directory {output_directory}')  
-        
-    output_path = Path(output_directory)/output_name
-    if os.path.exists(output_path):
-        shutil.rmtree(output_path)
-    os.makedirs(output_path,exist_ok=True)
-    
-    region_specifier, bed_filepath_processed = create_region_specifier(
-        output_path,
-        bed_file,
-        region_str,
-        window_size,
-    )
-    
-    cores_avail = multiprocessing.cpu_count()
-    if cores is None:
-        print(f'No specified number of cores requested. {cores_avail} available on machine, allocating {cores_avail//2}')
-        cores_command_list = ['--threads',str(cores_avail//2)]
-    elif cores>cores_avail:
-        print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
-        cores_command_list = ['--threads',str(cores_avail)]
-    else:
-        print(f'Allocating requested {cores} cores.')
-        cores_command_list = ['--threads',str(cores)]
-        
-    
-    if thresh is None:
-        print('No valid base modification threshold provided. Raw probs will be saved.')
-        mod_thresh_list = []
-    elif thresh>1:
-        print(f'Modification threshold of {thresh} assumed to be for range 0-255. {thresh}/255={thresh/255} will be sent to modkit.')
-        mod_thresh_list = ['--mod-thresholds', f'm:{thresh/255}','--mod-thresholds', f'a:{thresh/255}']
-    else:
-        print(f'Modification threshold of {thresh} will be treated as coming from range 0-1.')
-        mod_thresh_list = ['--mod-thresholds', f'm:{thresh}','--mod-thresholds', f'a:{thresh}']
-    
-    output_h5 = Path(output_path)/(f'reads.combined_basemods.h5')
-    with open(output_h5,'w') as f:
-        pass
-    for basemod in basemods:    
-        print(f'Extracting {basemod} sites')
-        motif_command_list = []
-        motif_details = basemod.split(',')
-        motif_command_list.append('--motif')
-        motif_command_list.append(motif_details[0])
-        motif_command_list.append(motif_details[1])
-
-        if log:
-            print('logging to ',Path(output_path)/'extract-log')
-            log_command=['--log-filepath',Path(output_path)/f'extract-log']
-        else:
-            log_command=[]
-
-
-
-        output_txt = Path(output_path)/(f'reads.{basemod}.txt')
-        subprocess.run(
-          ['modkit',
-          'extract',
-          input_file,
-          output_txt]
-          +region_specifier
-          +motif_command_list
-          +log_command
-          +['--ref',ref_genome,
-          '--filter-threshold','0',]
-        )
-        print(f'Adding {basemod} to {output_h5}')
-        read_by_base_txt_to_hdf5(
-            output_txt,
-            output_h5,
-            basemod,
-            thresh,
-        )
-    return output_h5
