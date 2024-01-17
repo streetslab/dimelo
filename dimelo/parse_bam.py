@@ -7,17 +7,15 @@ from pathlib import Path
 
 import numpy as np
 import h5py
+import pysam
 
 from .config import EXE_CONFIG
 
-# # Get the directory one level up
-# parent_dir = os.path.dirname(os.getcwd())
-# # Add the parent directory to sys.path
-# sys.path.append(parent_dir)
 from . import utils
 
 """
-TODO: The name "parser" conflicts with a built-in python library, I think. VSCode definitely complains at me.
+This module contains code to convert .bam files into both human-readable and 
+indexed random-access pileup and read-wise processed outputs.
 """
 
 def parse_bam_pileup(
@@ -25,18 +23,74 @@ def parse_bam_pileup(
     output_name: str,
     ref_genome: str | Path,
     output_directory: str | Path = None,
-    region_str=None,
-    bed_file=None,
-    basemods = ['A,0','CG,0','GCH,1'],
-    thresh = 0,
-    window_size=0,
-    cores=None,
-    log=False,
-):
+    region_str: str = None,
+    bed_file: str | Path = None,
+    basemods: list = ['A,0','CG,0','GCH,1'],
+    thresh: float = None,
+    window_size: int = 0,
+    cores: int = None,
+    log: bool = False,
+    clean_intermediate: bool = True,) -> Path:
+
     """
-    TODO: Documentation
-    TODO: Raise errors, maybe return bools, but don't return ints
-    TODO: Where should the windowed file be written to? Right now, seems to write to the location of the reference file; this could be confusing.
+    Takes a file containing long read sequencing data aligned 
+    to a reference genome with modification calls for one or more base/context 
+    and creates a pileup. A pileup is a genome-position-wise sum of both reads with
+    bases that could have the modification in question and of reads that are in
+    fact modified.
+
+    The current implementation of this method uses modkit, a tool built by 
+    Nanopore Technologies, along with htslib tools compress and index the output
+    bedmethyl file.
+
+    https://github.com/nanoporetech/modkit/
+
+    Args:
+        output_file: a string or Path object pointing to the location of a .bam file.
+            The file should follow at least v1.6 of the .bam file specifications, 
+            found here: https://samtools.github.io/hts-specs/
+            https://samtools.github.io/hts-specs/SAMv1.pdf 
+
+            The file needs to have modifications stored in the standard format,
+            with MM and ML tags (NOT mm and ml) and mod names m for 5mC and a 
+            for 6mA.
+
+            Furthermore, the file must have a .bam.bai index file with the same name.
+            You can create an index if needed using samtools index.
+        output_name: a string that will be used to create an output folder
+            containing the intermediate and final outputs, along with any logs.
+        ref_genome: a string of Path objecting pointing to the .fasta file
+            for the reference genome to which the .bam file is aligned.
+        output_directory: optional str or Path pointing to an output directory.
+            If left as None, outputs will be stored in a new folder within the input
+            directory.
+        region_str: optional string in format chr{num}:{start}-{end} specifying a single
+            region to process. Mutually exclusive with bed_file.
+        bed_file: optional string or Path for a .bed file containing one or more regions
+            of the genome to process. Mutually exclusive with region_str.
+        basemods: a list of strings specifying which base modifications to look for.
+            The basemods are each specified as {sequence_motif},{position_of_modification}.
+            For example, a methylated adenine is specified as 'A,0' and CpG methylation
+            is specified as 'CG,0'.
+        thresh: float point number specifying the base modification probability threshold
+            used to delineate modificaton calls as True or False. When set to None, modkit
+            will select its own threshold automatically based on the data.
+        window_size: an integer specifying a window around the center of each bed_file
+            region. If set to None, the bed_file is used unmodified. If set to a non-zero
+            positive integer, the bed_file regions are replaced by new regions with that
+            window size in either direction of the center of the original bed_file regions.
+            This is used for e.g. extracting information from around known motifs or peaks.
+        cores: an integer specifying how many parallel cores modkit gets to use. 
+            By default modkit will use all of the available cores on the machine.
+        log: a boolean specifying whether to output logs into the output folder.
+        clean_intermediate: a boolean specifying whether to clean up to keep intermediate
+            outputs. The final processed files are not human-readable, whereas the intermediate
+            outputs are. However, intermediate outputs can also be quite large.
+
+    Returns:
+        Path object pointing to the compressed and indexed .bed.gz bedmethyl file, ready 
+        for plotting functions.
+        
     """
     
     if output_directory is None:
@@ -69,8 +123,13 @@ def parse_bam_pileup(
         else:
             print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
             region_specifier = ['--region',region_str]
+    elif bed_file is None and region_str is None:
+        print('No region(s) specified, processing the entire genome.')
+        region_specifier = []
+        if window_size is not None:
+            print('A window_size was specified but will be ignored.')
     else:
-        raise('Error: cannot process both a region and a bed file.')
+        raise ValueError('Error: cannot process both a region and a bed file.')
     
     motif_command_list = []
     if len(basemods)>0:
@@ -128,12 +187,14 @@ def parse_bam_pileup(
     subprocess.run(pileup_command_list)
     with open(output_bed_sorted,'w') as sorted_file:
         subprocess.run(['sort', '-k1,1', '-k2,2n', output_bed], stdout=sorted_file)
-    with open(output_bedgz_sorted,'w') as compressed_file:
-        subprocess.run([EXE_CONFIG.bgzip_exe,
-                        '-c',output_bed_sorted],
-                        stdout=compressed_file)
-    subprocess.run([EXE_CONFIG.tabix_exe,
-                    '-p','bed',output_bedgz_sorted])
+    # with open(output_bedgz_sorted,'w') as compressed_file:
+    #     subprocess.run([EXE_CONFIG.bgzip_exe,
+    #                     '-c',output_bed_sorted],
+    #                     stdout=compressed_file)
+    # subprocess.run([EXE_CONFIG.tabix_exe,
+    #                 '-p','bed',output_bedgz_sorted])
+    pysam.tabix_compress(output_bed_sorted,output_bedgz_sorted,force=True)
+    pysam.tabix_index(str(output_bedgz_sorted),preset='bed',force=True)
 
     return output_bedgz_sorted
 
@@ -142,8 +203,31 @@ def read_by_base_txt_to_hdf5(
     input_txt: str | Path,
     output_h5: str | Path,
     basemod: str,
-    thresh: float,
-):
+    thresh: float=None,
+) -> None:
+    """
+    Takes in a txt file generated by modkit extract and appends
+    all the data from a specified basemod into an hdf5 file. If a thresh is specified, it
+    also binarizes the mod calls.
+
+    Args:
+        input_txt: a string or Path pointing to a modkit extracted base-by-base modifications
+            file. This file is assumed to have been created by modkit v0.2.4, other versions may
+            have a different format and may not function normally.
+        output_h5: a string or Path pointing to a valid place to save an .h5 file. If this
+            file already exists, it will not be cleared and will simply be appended to. If it does
+            not exist it will be created and datasets will be added for read_name, chromosome, read_start,
+            read_end, base modification motif, mod_vector, and val_vector.
+        basemod: a string specifying a single base modification. Basemods are specified as 
+            {sequence_motif},{position_of_modification}. For example, a methylated adenine is specified 
+            as 'A,0' and CpG methylation is specified as 'CG,0'.
+        thresh: a floating point threshold for base modification calling, between zero and one. 
+            If specified as None, raw probabilities will be saved in the .h5 output.
+
+    Returns:
+        None
+
+    """
     motif,modco = tuple(basemod.split(','))
     motif_modified_base = motif[int(modco)]
     read_name = ''
@@ -159,7 +243,7 @@ def read_by_base_txt_to_hdf5(
         with h5py.File(output_h5,'a') as h5:
             # Create datasets
             dt_str = h5py.string_dtype(encoding='utf-8')
-            if thresh==0:
+            if thresh==None:
                 dt_vlen = h5py.vlen_dtype(np.float16)
             else:
                 dt_vlen = h5py.vlen_dtype(bool)
@@ -311,7 +395,7 @@ def read_by_base_txt_to_hdf5(
                     #Add modification to vector if type is correct
                     if canonical_base == motif_modified_base:
                         val_vector[pos_in_genome-read_start] = 1
-                        if thresh==0:
+                        if thresh==None:
                             mod_vector[pos_in_genome-read_start] = prob
                         elif prob>=thresh:
                             mod_vector[pos_in_genome-read_start] = 1
@@ -321,7 +405,7 @@ def read_by_base_txt_to_hdf5(
                     prob = float(fields[10])
                     if canonical_base == motif_modified_base:
                         val_vector[pos_in_genome-read_start] = 1
-                        if thresh==0:
+                        if thresh==None:
                             mod_vector[pos_in_genome-read_start] = prob
                         elif prob>=thresh:
                             mod_vector[pos_in_genome-read_start] = 1
@@ -346,16 +430,74 @@ def parse_bam_extract(
     output_name: str,
     ref_genome: str | Path,
     output_directory: str | Path = None,
-    region_str=None,
-    bed_file=None,
-    basemods = ['A,0','CG,0','GCH,1'],
-    thresh = 0,
-    window_size=0,
-    cores=None,
-    log=False
-):
+    region_str: str = None,
+    bed_file: str | Path = None,
+    basemods: list = ['A,0','CG,0','GCH,1'],
+    thresh: float = 0,
+    window_size: int = 0,
+    cores: int = None,
+    log: bool = False,
+    clean_intermediate: bool = True,) -> Path:
+
     """
-    TODO: Documentation
+    Takes a file containing long read sequencing data aligned 
+    to a reference genome with modification calls for one or more base/context 
+    and pulls out data from each individual read. The intermediate outputs contain
+    a plain-text list of all base modifications, split out by type. The compressed
+    and indexed output contains vectors of valid and modified positions within each
+    read.
+
+    The current implementation of this method uses modkit, a tool built by 
+    Nanopore Technologies, along with h5py to build the final output file.
+
+    https://github.com/nanoporetech/modkit/
+
+    Args:
+        output_file: a string or Path object pointing to the location of a .bam file.
+            The file should follow at least v1.6 of the .bam file specifications, 
+            found here: https://samtools.github.io/hts-specs/
+            https://samtools.github.io/hts-specs/SAMv1.pdf 
+
+            The file needs to have modifications stored in the standard format,
+            with MM and ML tags (NOT mm and ml) and mod names m for 5mC and a 
+            for 6mA.
+
+            Furthermore, the file must have a .bam.bai index file with the same name.
+            You can create an index if needed using samtools index.
+        output_name: a string that will be used to create an output folder
+            containing the intermediate and final outputs, along with any logs.
+        ref_genome: a string of Path objecting pointing to the .fasta file
+            for the reference genome to which the .bam file is aligned.
+        output_directory: optional str or Path pointing to an output directory.
+            If left as None, outputs will be stored in a new folder within the input
+            directory.
+        region_str: optional string in format chr{num}:{start}-{end} specifying a single
+            region to process. Mutually exclusive with bed_file.
+        bed_file: optional string or Path for a .bed file containing one or more regions
+            of the genome to process. Mutually exclusive with region_str.
+        basemods: a list of strings specifying which base modifications to look for.
+            The basemods are each specified as {sequence_motif},{position_of_modification}.
+            For example, a methylated adenine is specified as 'A,0' and CpG methylation
+            is specified as 'CG,0'.
+        thresh: float point number specifying the base modification probability threshold
+            used to delineate modificaton calls as True or False. When set to None, modkit
+            will select its own threshold automatically based on the data.
+        window_size: an integer specifying a window around the center of each bed_file
+            region. If set to None, the bed_file is used unmodified. If set to a non-zero
+            positive integer, the bed_file regions are replaced by new regions with that
+            window size in either direction of the center of the original bed_file regions.
+            This is used for e.g. extracting information from around known motifs or peaks.
+        cores: an integer specifying how many parallel cores modkit gets to use. 
+            By default modkit will use all of the available cores on the machine.
+        log: a boolean specifying whether to output logs into the output folder.
+        clean_intermediate: a boolean specifying whether to clean up to keep intermediate
+            outputs. The final processed files are not human-readable, whereas the intermediate
+            outputs are. However, intermediate outputs can also be quite large.
+
+    Returns:
+        Path object pointing to the compressed and indexed output .h5 file, ready for
+        plotting functions.
+
     """
     
     if output_directory is None:
@@ -388,6 +530,11 @@ def parse_bam_extract(
         else:
             print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
             region_specifier = ['--region',region_str]
+    elif bed_file is None and region_str is None:
+        print('No region(s) specified, processing the entire genome.')
+        region_specifier = []
+        if window_size is not None:
+            print('A window_size was specified but will be ignored.')    
     else:
         raise ValueError('Error: cannot process both a region and a bed file.')
     
