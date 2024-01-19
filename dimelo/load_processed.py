@@ -94,7 +94,7 @@ def vector_from_bedmethyl(bedmethyl_file: Path,
         bedmethyl_file: Path to bedmethyl file
         bed_file: Path to bed file specifying centered equal-length regions
         mod_name: type of modification to extract data for
-        window_size: TODO: Documentation for this; I think it's a half-size?
+        window_size: the extent in either direction for windows around the center of regions.
     
     Returns:
         vector of fraction modifiied bases (e.g. mA/A) calculated for each position; float values between 0 and 1
@@ -156,17 +156,23 @@ def reads_from_hdf5(
     file: Path,
     bed_file: Path,
     mod_names: list[str],
-    window_size:int=0,
+    window_size: int = None,
 ) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
     """
-    TODO: What does the bed file represent in this method? This one is breaking my brain a bit.
-    TODO: Variable names in this method stink.
-    TODO: Currently assumes mod calling (thresholding probabilities) was already performed elsewhere
+    Pulls a list of read data out of an hdf5 file containing processed read vectors.
 
     Args:
-        file: Path to file containing modification data for single reads
-        bed_file: Path to bed file specifying regions (WHAT DO THESE REPRESENT???)
-        mod_names: types of modification to extract data for
+        file: Path to an hdf5 (.h5) file containing modification data for single reads,
+            stored in datasets read_name, chromosome, read_start,
+            read_end, base modification motif, mod_vector, and val_vector.
+        bed_file: Path to bed file specifying regions from which to draw reads. These
+            should all be regions for which your original .bam file had reads extracted,
+            although by design this method will not raise an error if any region contains
+            zero reads, as this may simply be a matter of low read depth.
+        mod_names: types of modification to extract data for. Basemods are specified as 
+            {sequence_motif},{position_of_modification}. For example, a methylated adenine is specified 
+            as 'A,0' and CpG methylation is specified as 'CG,0'.
+        window_size: 
     
     Returns:
         Returns three parallel arrays, of length (N_READS * len(mod_names)), containing the following for each index:
@@ -175,16 +181,18 @@ def reads_from_hdf5(
         * modification represented by the positions
         For example, if called on a dataset with a single read and two modification types, each array would have two entries. The unique IDs would be the same, as both entries would represent the same single read. The mods and positions would be different, as they would extact different mods.
     """
-    if window_size>0:
+    if window_size is None:
+        bed_filepath = Path(bed_file)
+        print(f'Using window size defined by bed file {bed_filepath.name}.')
+        bed_filepath_processed = bed_filepath
+    elif window_size>0:
         bed_filepath = Path(bed_file)
         print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
         bed_filepath_processed = file.parent / (bed_filepath.stem + f'.windowed{window_size}-for-readout' + bed_filepath.suffix)
         print(f'Writing new bed file {bed_filepath_processed.name}')
         utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
     else:
-        bed_filepath = Path(bed_file)
-        print(f'Using window size defined by bed file {bed_filepath.name}.')
-        bed_filepath_processed = bed_filepath
+        raise ValueError(f'Invalid window_size of {window_size}')
     
     regions_dict = defaultdict(list)
     with open(bed_filepath_processed) as bed_regions:
@@ -201,8 +209,6 @@ def reads_from_hdf5(
     read_ints_list = []
     mod_names_list = []
     
-    in_regions = 0
-    out_regions = 0
     with h5py.File(file,'r') as h5:
         read_names = np.array(h5['read_name'],dtype=str)
         unique_read_names, first_indices = np.unique(read_names,return_index=True)
@@ -212,12 +218,12 @@ def reads_from_hdf5(
         read_starts = np.array(h5['read_start'])
         read_ends = np.array(h5['read_end'])
         read_motifs = np.array(h5['motif'],dtype=str)   
-#         print('starts',read_starts)
-#         print('ends',read_ends)
+
+        # Go through the regions one by one
         for chrom,region_list in regions_dict.items():
             for mod_name in mod_names:
                 for region_start,region_end in region_list:
-#                     print(chrom,region_start,region_end)
+                    # Finds reads that are within the window you want
                     center_coord = (region_start+region_end)//2
                     relevant_read_indices = np.flatnonzero(
                         (read_ends > region_start) & 
@@ -225,7 +231,7 @@ def reads_from_hdf5(
                         (read_motifs == mod_name) & 
                         (read_chromosomes == chrom)
                     )
-#                     print(relevant_read_indices)
+                    # For each read, adds all of its elements to the lists that will be getting returned
                     for read_index in relevant_read_indices:
                         mod_vector = np.array(h5['mod_vector'][read_index])
                         read_start = read_starts[read_index]
