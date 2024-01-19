@@ -15,12 +15,13 @@ from . import utils
 from . import load_processed
 
 
-def plot_enrichment_profile_base(mod_file_names: list[str | Path],
-                                 bed_file_names: list[str | Path],
-                                 mod_names: list[str],
-                                 sample_names: list[str],
-                                 window_size: int,
-                                 smooth_window: int | None = None) -> Axes:
+def plot_enrichment_profile(mod_file_names: list[str | Path],
+                            bed_file_names: list[str | Path],
+                            mod_names: list[str],
+                            sample_names: list[str],
+                            window_size: int,
+                            smooth_window: int | None = None,
+                            **kwargs) -> Axes:
     """
     Plots enrichment profiles, overlaying the resulting traces on top of each other
 
@@ -44,6 +45,7 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
         sample_names: list of names to use for labeling traces in the output; legend entries
         window_size: TODO: Documentation for this; I think it's a half-size?
         smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
+        kwargs: other keyword parameters passed through to utils.line_plot
     
     Returns:
         Axes object containing the plot
@@ -72,69 +74,74 @@ def plot_enrichment_profile_base(mod_file_names: list[str | Path],
             trace = utils.smooth_rolling_mean(trace, window=smooth_window)
         trace_vectors.append(trace)
     
-    axes = utils.line_plot(x=np.arange(-window_size,window_size),
-                           x_label='pos',
-                           vectors=trace_vectors,
-                           vector_names=sample_names,
-                           y_label='fraction modified bases')
+    axes = utils.line_plot(indep_vector=np.arange(-window_size,window_size),
+                           indep_name='pos',
+                           dep_vectors=trace_vectors,
+                           dep_names=sample_names,
+                           y_label='fraction modified bases',
+                           **kwargs)
     return axes
 
-def plot_enrichment_profile_vary_mod(mod_file_name: str | Path,
-                                     bed_file_name: str | Path,
-                                     mod_names: list[str],
-                                     *args,
-                                     **kwargs) -> Axes:
+def by_modification(mod_file_name: str | Path,
+                    bed_file_name: str | Path,
+                    mod_names: list[str],
+                    *args,
+                    **kwargs) -> Axes:
     """
     Plot enrichment profile, holding modification file and regions constant, varying modification types
+
+    See plot_enrichment_profile for details.
     """
     n_mods = len(mod_names)
-    return plot_enrichment_profile_base(mod_file_names=[mod_file_name] * n_mods,
-                                        bed_file_names=[bed_file_name] * n_mods,
-                                        mod_names=mod_names,
-                                        sample_names=mod_names,
-                                        *args,
-                                        **kwargs)
+    return plot_enrichment_profile(mod_file_names=[mod_file_name] * n_mods,
+                                   bed_file_names=[bed_file_name] * n_mods,
+                                   mod_names=mod_names,
+                                   sample_names=mod_names,
+                                   *args,
+                                   **kwargs)
 
-def plot_enrichment_profile_vary_regions(mod_file_name: str | Path,
-                                         bed_file_names: list[str | Path],
-                                         mod_name: str,
-                                         sample_names: list[str] = None,
-                                         *args,
-                                         **kwargs) -> Axes:
+def by_regions(mod_file_name: str | Path,
+               bed_file_names: list[str | Path],
+               mod_name: str,
+               sample_names: list[str] = None,
+               *args,
+               **kwargs) -> Axes:
     """
     Plot enrichment profile, holding modification file and modification types constant, varying regions
 
-    Sample names default to the names of the bed files (?)
+    Note: Sample names default to the names of the bed files.
+
+    See plot_enrichment_profile for details.
     """
     if sample_names is None:
         sample_names = bed_file_names
     n_beds = len(bed_file_names)
-    return plot_enrichment_profile_base(mod_file_names=[mod_file_name] * n_beds,
-                                        bed_file_names=bed_file_names,
-                                        mod_names=[mod_name] * n_beds,
-                                        sample_names=sample_names,
-                                        *args,
-                                        **kwargs)
+    return plot_enrichment_profile(mod_file_names=[mod_file_name] * n_beds,
+                                   bed_file_names=bed_file_names,
+                                   mod_names=[mod_name] * n_beds,
+                                   sample_names=sample_names,
+                                   *args,
+                                   **kwargs)
 
-def plot_enrichment_profile_vary_experiments(mod_file_names: list[str | Path],
-                                             bed_file_name: str | Path,
-                                             mod_name: str,
-                                             sample_names: list[str] = None,
-                                             *args,
-                                             **kwargs) -> Axes:
+def by_dataset(mod_file_names: list[str | Path],
+               bed_file_name: str | Path,
+               mod_name: str,
+               sample_names: list[str] = None,
+               *args,
+               **kwargs) -> Axes:
     """
     Plot enrichment profile, holding modification types and regions constant, varying modification files
 
-    Sample names default to the names of the modification files (?)
+    Note: Sample names default to the names of the modification files.
 
-    TODO: This name stinks
+    See plot_enrichment_profile for details.
     """
     if sample_names is None:
         sample_names = mod_file_names
     n_mod_files = len(mod_file_names)
-    return plot_enrichment_profile_base(mod_file_names=mod_file_names,
-                                        bed_file_names=[bed_file_name] * n_mod_files,
-                                        mod_names=[mod_name] * n_mod_files,
-                                        sample_names=sample_names,
-                                        *args,
-                                        **kwargs)
+    return plot_enrichment_profile(mod_file_names=mod_file_names,
+                                   bed_file_names=[bed_file_name] * n_mod_files,
+                                   mod_names=[mod_name] * n_mod_files,
+                                   sample_names=sample_names,
+                                   *args,
+                                   **kwargs)

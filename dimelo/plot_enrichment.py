@@ -9,7 +9,8 @@ from . import load_processed
 def plot_enrichment(mod_file_names: list[str | Path],
                     bed_file_names: list[str | Path],
                     mod_names: list[str],
-                    sample_names: list[str]) -> Axes:
+                    sample_names: list[str],
+                    **kwargs) -> Axes:
     """
     Plots enrichment comparison barplots using the given list of pre-processed input files.
 
@@ -27,6 +28,7 @@ def plot_enrichment(mod_file_names: list[str | Path],
         bed_file_names: list of paths to bed files specifying regions to extract
         mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
         sample_names: list of names to use for labeling bars in the output; x-axis labels
+        kwargs: other keyword parameters passed through to utils.bar_plot
 
     Returns:
         Axes object containing the plot
@@ -54,7 +56,7 @@ def plot_enrichment(mod_file_names: list[str | Path],
         except ZeroDivisionError:
             mod_fractions.append(0)
     
-    axes = utils.bar_plot(categories=sample_names, values=mod_fractions, y_label='fraction modified bases')
+    axes = utils.bar_plot(categories=sample_names, values=mod_fractions, y_label='fraction modified bases', **kwargs)
     return axes
 
 
@@ -66,7 +68,7 @@ def by_modification(mod_file_name: str | Path,
     """
     Plot enrichment bar plots, holding modification file and regions constant, varying modification types
 
-    TODO: There are no *args or **kwargs currently, but there probably will be for plotting methods?
+    See plot_enrichment for details.
     """
     n_mods = len(mod_names)
     return plot_enrichment(mod_file_names=[mod_file_name] * n_mods,
@@ -84,8 +86,10 @@ def by_regions(mod_file_name: str | Path,
                **kwargs) -> Axes:
     """
     Plot enrichment bar plots, holding modification file and modification types constant, varying regions
+    
+    Note: Sample names default to the names of the bed files.
 
-    Sample names default to the names of the bed files (?)
+    See plot_enrichment for details.
     """
     if sample_names is None:
         sample_names = bed_file_names
@@ -106,9 +110,9 @@ def by_dataset(mod_file_names: list[str | Path],
     """
     Plot enrichment bar plots, holding modification types and regions constant, varying modification files
 
-    Sample names default to the names of the modification files (?)
+    Note: Sample names default to the names of the modification files.
 
-    TODO: This name stinks
+    See plot_enrichment for details.
     """
     if sample_names is None:
         sample_names = mod_file_names
