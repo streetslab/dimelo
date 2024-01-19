@@ -66,10 +66,10 @@ def pileup(
     bed_file: str | Path = None,
     basemods: list = ['A,0','CG,0','GCH,1'],
     thresh: float = None,
-    window_size: int = 0,
+    window_size: int = None,
     cores: int = None,
     log: bool = False,
-    clean_intermediate: bool = True,) -> Path:
+    cleanup: bool = True,) -> Path:
 
     """
     Takes a file containing long read sequencing data aligned 
@@ -132,16 +132,27 @@ def pileup(
         
     """
     
-    check_bam_format(input_file)
+    check_bam_format(input_file,basemods)
     
     if output_directory is None:
         output_directory = Path(input_file).parent
         print(f'No output directory provided, using input directory {output_directory}')
-    
+          
     output_path = Path(output_directory)/output_name
+
+    output_bedmethyl = Path(output_path)/('pileup.bed')
+    output_bedmethyl_sorted = Path(output_path)/('pileup.sorted.bed')
+    output_bedgz_sorted = Path(output_path)/('pileup.sorted.bed.gz')  
+    
     if os.path.exists(output_path):
-        shutil.rmtree(output_path)
-    os.makedirs(output_path,exist_ok=True)
+        if os.path.exists(output_bedmethyl):
+            os.remove(output_bedmethyl)
+        if os.path.exists(output_bedmethyl_sorted):
+            os.remove(output_bedmethyl_sorted)
+        if os.path.exists(output_bedgz_sorted):
+            os.remove(output_bedgz_sorted)
+    else:
+        os.makedirs(output_path,exist_ok=True)
     
     region_specifier, bed_filepath_processed = create_region_specifier(
         output_path,
@@ -187,10 +198,6 @@ def pileup(
         for modnames_set in BASEMOD_NAMES_DICT.values():
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
-        
-    output_bedmethyl = Path(output_path)/('pileup.bed')
-    output_bedmethyl_sorted = Path(output_path)/('pileup.sorted.bed')
-    output_bedgz_sorted = Path(output_path)/('pileup.sorted.bed.gz')
     
     pileup_command_list = (['modkit',
                             'pileup',
@@ -210,7 +217,7 @@ def pileup(
     pysam.tabix_compress(output_bedmethyl_sorted,output_bedgz_sorted,force=True)
     pysam.tabix_index(str(output_bedgz_sorted),preset='bed',force=True)
     
-    if clean_intermediate:
+    if cleanup:
         if bed_file is not None and str(bed_filepath_processed)!=str(bed_file):
             os.remove(bed_filepath_processed)
         os.remove(output_bedmethyl)
@@ -230,7 +237,7 @@ def extract(
     window_size: int = 0,
     cores: int = None,
     log: bool = False,
-    clean_intermediate: bool = True,) -> Path:
+    cleanup: bool = True,) -> Path:
 
     """
     Takes a file containing long read sequencing data aligned 
@@ -293,16 +300,20 @@ def extract(
 
     """
     
-    check_bam_format(input_file)
+    check_bam_format(input_file,basemods)
     
     if output_directory is None:
         output_directory = Path(input_file).parent
         print(f'No output directory provided, using input directory {output_directory}')  
         
     output_path = Path(output_directory)/output_name
+    output_h5 = Path(output_path)/(f'reads.combined_basemods.h5')
+    
     if os.path.exists(output_path):
-        shutil.rmtree(output_path)
-    os.makedirs(output_path,exist_ok=True)
+        if os.path.exists(output_h5):
+            os.remove(output_h5)
+    else:
+        os.makedirs(output_path,exist_ok=True)
     
     region_specifier, bed_filepath_processed = create_region_specifier(
         output_path,
@@ -333,9 +344,6 @@ def extract(
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
     
-    output_h5 = Path(output_path)/(f'reads.combined_basemods.h5')
-    with open(output_h5,'w') as f:
-        pass
     for basemod in basemods:    
         print(f'Extracting {basemod} sites')
         motif_command_list = []
@@ -353,6 +361,9 @@ def extract(
 
 
         output_txt = Path(output_path)/(f'reads.{basemod}.txt')
+        
+        if os.path.exists(output_txt):
+            os.remove(output_txt)
         
         extract_command_list = (['modkit',
           'extract',
@@ -372,7 +383,7 @@ def extract(
             basemod,
             thresh,
         )
-        if clean_intermediate:
+        if cleanup:
             os.remove(output_txt)
 
     return output_h5
@@ -409,32 +420,41 @@ def check_bam_format(
         basemods_found_dict[base] = False
     
     input_bam = pysam.AlignmentFile(input_file)
-    for counter,read in enumerate(input_bam.fetch()):
-        read_dict = read.to_dict()
-        for tag_string in read_dict['tags']:
-            tag_fields = tag_string.split(',')[0].split(':')
-            tag = tag_fields[0]
-            # tag_type = tag_fields[1]
-            tag_value = tag_fields[2]
-            if tag=='Mm' or tag=='Ml':
-                raise ValueError(f'Base modification tags are out of spec (Mm and Ml instead of MM and ML). \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam" in the command line with your conda environment active and then trying with the new file. For megalodon basecalling/modcalling, you may also need to pass "--mode ambiguous"')
-            elif tag=='MM':
-                if tag_value[-1]!='?' and tag_value[-1]!='.':
-                    raise ValueError(f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered to be implicit. \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.')
-                else:
-                    if tag_value[2] in BASEMOD_NAMES_DICT[tag_value[0]]:
-                        basemods_found_dict[tag_value[0]] = True
+    
+    try:
+        for counter,read in enumerate(input_bam.fetch()):
+            read_dict = read.to_dict()
+            for tag_string in read_dict['tags']:
+                tag_fields = tag_string.split(',')[0].split(':')
+                tag = tag_fields[0]
+                # tag_type = tag_fields[1]
+                tag_value = tag_fields[2]
+                if tag=='Mm' or tag=='Ml':
+                    raise ValueError(f'Base modification tags are out of spec (Mm and Ml instead of MM and ML). \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam" in the command line with your conda environment active and then trying with the new file. For megalodon basecalling/modcalling, you may also need to pass "--mode ambiguous"')
+                elif tag=='MM':
+                    if tag_value[-1]!='?' and tag_value[-1]!='.':
+                        raise ValueError(f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered to be implicit. \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.')
                     else:
-                        raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {BASEMOD_NAMES_DICT[tag_value[0]]}. \n\nIf you know what your mod names correspond to in terms of the latest .bam standard, consider using "modkit adjust-mods {str(input_file)} new_file.bam --convert 5mC_name m --convert N6mA_name a --convert other_basemod_name correct_label" and then trying with the new file. Note: currently supported mod names are {BASEMOD_NAMES_DICT}')
-        if all(basemods_found_dict.values()):
-            return
-        if counter>=NUM_READS_TO_CHECK:
-            missing_bases = []
-            for base,found in basemods_found_dict.items():
-                if not found:
-                    missing_bases.append(base)
-            print(f'WARNING: no modified values found for {missing_bases} in the first {counter} reads. Do you expect this file to contain these modifications? parse_bam is looking for {basemods} but only found modifications on {[base for base, found in basemods_found_dict.items() if found]}. \n\nConsider passing only the basemods that you expect to be present in your file.')
-            return
+                        if tag_value[2] in BASEMOD_NAMES_DICT[tag_value[0]]:
+                            basemods_found_dict[tag_value[0]] = True
+                        else:
+                            raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {BASEMOD_NAMES_DICT[tag_value[0]]}. \n\nIf you know what your mod names correspond to in terms of the latest .bam standard, consider using "modkit adjust-mods {str(input_file)} new_file.bam --convert 5mC_name m --convert N6mA_name a --convert other_basemod_name correct_label" and then trying with the new file. Note: currently supported mod names are {BASEMOD_NAMES_DICT}')
+            if all(basemods_found_dict.values()):
+                return
+            if counter>=NUM_READS_TO_CHECK:
+                missing_bases = []
+                for base,found in basemods_found_dict.items():
+                    if not found:
+                        missing_bases.append(base)
+                print(f'WARNING: no modified values found for {missing_bases} in the first {counter} reads. Do you expect this file to contain these modifications? parse_bam is looking for {basemods} but only found modifications on {[base for base, found in basemods_found_dict.items() if found]}. \n\nConsider passing only the basemods that you expect to be present in your file.')
+                return
+    except ValueError as e:
+        if 'fetch called on bamfile without index' in str(e):
+            raise ValueError(f'{e}. Consider using "samtools index {str(input_file)}" to create an index if your .bam is already sorted.')
+        else:
+            raise
+    except:
+        raise
         
 def create_region_specifier(
     output_path,
@@ -452,7 +472,7 @@ def create_region_specifier(
             bed_filepath_processed = Path(bed_file)
             print(f'Processing from {bed_filepath_processed.name} using unmodified bed regions.')
             region_specifier = ['--include-bed',bed_filepath_processed]
-        if window_size>0:
+        elif window_size>0:
             bed_filepath = Path(bed_file)
             print(f'Processing from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
             bed_filepath_processed = output_path / (bed_filepath.stem + f'.windowed{window_size}-for-pileup' + bed_filepath.suffix)
@@ -460,7 +480,7 @@ def create_region_specifier(
             utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
             region_specifier = ['--include-bed',bed_filepath_processed]
         else:
-            raise(f'Error: invalid window size {window_size}bp')
+            raise ValueError(f'Error: invalid window size {window_size}bp')
     elif bed_file is None and region_str is not None:
         if window_size is None:
             print(f'Processing from region {region_str}.')
