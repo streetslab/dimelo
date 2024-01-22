@@ -3,7 +3,11 @@
 
 ### Prerequisites
 
-Platforms: Mac and Linux operating systems, ARM (e.g. M1/M2 mac) and x86 (e.g. Intel mac) architectures. *For Windows, the only option is currently to build modkit yourself from the rust source code, or find a pre-built executable somewhere. Without modkit, you can run the plotting functionality of the package but not the bam_parsing functionality.*
+Platforms: Mac and Linux operating systems, ARM (e.g. M1/M2 mac) and x86 (e.g. Intel mac) architectures. 
+
+**For Windows,  we recommend using Google Colab.** 
+
+*The only option to install on Windows locally is currently to build modkit yourself from the rust [source code](https://github.com/nanoporetech/modkit), or find a pre-built executable somewhere. Without modkit, you can run the plotting functionality of the package but not the bam_parsing functionality.*
 
 Conda installation: https://www.anaconda.com/download
 
@@ -15,7 +19,7 @@ Clone the repo
 git clone -b modkit_parsing_main https://github.com/streetslab/dimelo
 ```
 
-### Download modkit and install python 3.11 in a new virtual environment
+### Set up virtual environment
 
 Navigate into the dimelo directory
 
@@ -23,7 +27,7 @@ Navigate into the dimelo directory
 cd dimelo
 ```
 
-Create a conda environment using environment.yml. This will make a new conda environment with the name `dimelo_modkit_parsing`.
+Create a conda environment using environment.yml. This will make a new conda environment with the name `dimelo_modkit_parsing` and python 3.11 and nanportech::modkit.
 
 ```
 conda env create -f environment.yml
