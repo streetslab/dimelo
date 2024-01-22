@@ -70,17 +70,9 @@ def plot_reads(mod_file_name: str | Path,
     legend = axes.legend_
 
     # Update legend properties
-    legend.set_title('Mod')
-    for handle in legend.legendHandles:
-        handle.set_markersize(10)  # Set a larger marker size for legend
-#     handles,labels = axes.get_legend_handles_labels()
-#     # Create a new legend with larger marker size
-#     new_handles = [plt.Line2D([], [], 
-#                               marker='s', 
-#                               linestyle='', 
-#                               color=handle.get_color(), 
-#                               markersize=10) 
-#                    for handle in handles] # Skip the first handle as it is the legend title
-#     axes.legend(new_handles, labels[1:], title='Mod', loc='upper right')
+    if legend is not None:
+        legend.set_title('Mod')
+        for handle in legend.legendHandles:
+            handle.set_markersize(10)  # Set a larger marker size for legend
     
     return axes
