@@ -12,19 +12,19 @@ def plot_enrichment(mod_file_names: list[str | Path],
                     sample_names: list[str],
                     **kwargs) -> Axes:
     """
-    Plots enrichment comparison barplots using the given list of pre-processed input files.
+    Plot enrichment comparison barplots using the given list of pre-processed input files.
 
-    Input files should contain sufficient information to generate modification pileup data.
-    Each file is expected to entirely represent one relevant test condition. All modification events in the file are used.
+    Each input list is expected to be parallel and the same length. Each index represents one analysis condition across the lists.
+    Using the same file for multiple conditions requires adding the same file multiple times, in the appropriate indices.
 
-    For example, each input file might represent different DiMeLo experiments, evaluated in the same regions. Alternatively, each input file might represent the same DiMeLo experiment, evalueted at different sets of regions.
+    This is the most flexible method for enrichment plotting. For most use cases, consider
+    using one of the plot_enrichment.by_* methods.
 
-    TODO: Clarify this documentation it's a mess. How do I say this concisely?
     TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
     TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
     
     Args:
-        mod_file_names: list of paths to modified base data files
+        mod_file_names: list of paths to modified base pileup data files
         bed_file_names: list of paths to bed files specifying regions to extract
         mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
         sample_names: list of names to use for labeling bars in the output; x-axis labels
