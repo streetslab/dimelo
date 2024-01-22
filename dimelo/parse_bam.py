@@ -135,7 +135,7 @@ def pileup(
         input_file, ref_genome, output_directory, bed_file
     )
     
-    check_bam_format(input_file,basemods)
+    check_bam_format(input_file, basemods)
     
     # TODO: Add .tbi file? Add windowed bed file too, maybe?
     output_path, (output_bedmethyl, output_bedmethyl_sorted, output_bedgz_sorted) = prep_outputs(
@@ -194,10 +194,7 @@ def pileup(
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
     
-    pileup_command_list = (['modkit',
-                            'pileup',
-                            input_file,
-                            output_bedmethyl]
+    pileup_command_list = (['modkit', 'pileup', input_file, output_bedmethyl]
                            + region_specifier 
                            + motif_command_list 
                            + ['--ref',ref_genome,'--filter-threshold','0'] 
@@ -299,7 +296,7 @@ def extract(
         input_file, ref_genome, output_directory, bed_file
     )
     
-    check_bam_format(input_file,basemods)
+    check_bam_format(input_file, basemods)
 
     # TODO: Add intermediate mod-specific .txt files?
     output_path, (output_h5,) = prep_outputs(
@@ -358,15 +355,12 @@ def extract(
         if os.path.exists(output_txt):
             os.remove(output_txt)
         
-        extract_command_list = (['modkit',
-          'extract',
-          input_file,
-          output_txt]
-          +region_specifier
-          +motif_command_list
-          +log_command
-          +['--ref',ref_genome,
-          '--filter-threshold','0',])
+        extract_command_list = (['modkit', 'extract', input_file, output_txt]
+                                + region_specifier
+                                + motif_command_list
+                                + cores_command_list
+                                + log_command
+                                + ['--ref',ref_genome, '--filter-threshold','0',])
         subprocess.run(extract_command_list)
         
         print(f'Adding {basemod} to {output_h5}')
