@@ -26,15 +26,13 @@ def plot_reads(mod_file_name: str | Path,
     """
     Plots centered single reads as a scatterplot, cut off at the boundaries of the requested regions?
 
-    TODO: Clarify this documentation it's a mess. How do I say this concisely?
     TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
     TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
-    TODO: This name stinks?
     TODO: So far, this is the only method to do plotting without utility methods. Is this reasonable? Is it that unique?
 
     Args:
         mod_file_name: path to file containing modification data for single reads
-        bed_file_name: path to bed file specifying regions (WHAT DO THESE REPRESENT???)
+        bed_file_name: path to bed file specifying regions to extract
         mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
 
     Returns:
