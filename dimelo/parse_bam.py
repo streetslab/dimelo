@@ -131,29 +131,21 @@ def pileup(
         for plotting functions.
         
     """
+    input_file, ref_genome, output_directory, bed_file = sanitize_path_args(
+        input_file, ref_genome, output_directory, bed_file
+    )
     
-    check_bam_format(input_file,basemods)
+    check_bam_format(input_file, basemods)
     
-    if output_directory is None:
-        output_directory = Path(input_file).parent
-        print(f'No output directory provided, using input directory {output_directory}')
-          
-    output_path = Path(output_directory)/output_name
-
-    output_bedmethyl = Path(output_path)/('pileup.bed')
-    output_bedmethyl_sorted = Path(output_path)/('pileup.sorted.bed')
-    output_bedgz_sorted = Path(output_path)/('pileup.sorted.bed.gz')  
+    # TODO: Add .tbi file? Add windowed bed file too, maybe?
+    output_path, (output_bedmethyl, output_bedmethyl_sorted, output_bedgz_sorted) = prep_outputs(
+        output_directory=output_directory,
+        output_name=output_name,
+        input_file=input_file,
+        output_file_names=['pileup.bed', 'pileup.sorted.bed', 'pileup.sorted.bed.gz']
+    )
     
-    if os.path.exists(output_path):
-        if os.path.exists(output_bedmethyl):
-            os.remove(output_bedmethyl)
-        if os.path.exists(output_bedmethyl_sorted):
-            os.remove(output_bedmethyl_sorted)
-        if os.path.exists(output_bedgz_sorted):
-            os.remove(output_bedgz_sorted)
-    else:
-        os.makedirs(output_path,exist_ok=True)
-    
+    # TODO: This is mildly confusing. I get what it's doing, but it's hard to follow / names are bad. Also, why is it used in cleanup here, but not in extract?
     region_specifier, bed_filepath_processed = create_region_specifier(
         output_path,
         bed_file,
@@ -164,6 +156,7 @@ def pileup(
     motif_command_list = []
     if len(basemods)>0:
         for basemod in basemods:
+            # TODO: Can be split out to method; same functionality as in extract
             motif_details = basemod.split(',')
             motif_command_list.append('--motif')
             motif_command_list.append(motif_details[0])
@@ -177,6 +170,7 @@ def pileup(
     else:
         log_command=[]
     
+    # TODO: This should be a method, like create_region_specifier, or just combined into a prep method for the start...
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
         print(f'No specified number of cores requested. {cores_avail} available on machine, allocating {cores_avail//2}')
@@ -187,7 +181,8 @@ def pileup(
     else:
         print(f'Allocating requested {cores} cores.')
         cores_command_list = ['--threads',str(cores)]
-        
+
+    # TODO: This is SO SO SO similar to extract; just the ValueError vs. printing. I think this can be resolved
     mod_thresh_list = []
     if thresh is None:
         print('No base modification threshold provided. Using adaptive threshold selection via modkit.')
@@ -199,10 +194,7 @@ def pileup(
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
     
-    pileup_command_list = (['modkit',
-                            'pileup',
-                            input_file,
-                            output_bedmethyl]
+    pileup_command_list = (['modkit', 'pileup', input_file, output_bedmethyl]
                            + region_specifier 
                            + motif_command_list 
                            + ['--ref',ref_genome,'--filter-threshold','0'] 
@@ -217,6 +209,7 @@ def pileup(
     pysam.tabix_compress(output_bedmethyl_sorted,output_bedgz_sorted,force=True)
     pysam.tabix_index(str(output_bedgz_sorted),preset='bed',force=True)
     
+    # TODO: Can cleanup be consolidated?
     if cleanup:
         if bed_file is not None and str(bed_filepath_processed)!=str(bed_file):
             os.remove(bed_filepath_processed)
@@ -299,21 +292,19 @@ def extract(
         plotting functions.
 
     """
+    input_file, ref_genome, output_directory, bed_file = sanitize_path_args(
+        input_file, ref_genome, output_directory, bed_file
+    )
     
-    check_bam_format(input_file,basemods)
-    
-    if output_directory is None:
-        output_directory = Path(input_file).parent
-        print(f'No output directory provided, using input directory {output_directory}')  
-        
-    output_path = Path(output_directory)/output_name
-    output_h5 = Path(output_path)/(f'reads.combined_basemods.h5')
-    
-    if os.path.exists(output_path):
-        if os.path.exists(output_h5):
-            os.remove(output_h5)
-    else:
-        os.makedirs(output_path,exist_ok=True)
+    check_bam_format(input_file, basemods)
+
+    # TODO: Add intermediate mod-specific .txt files?
+    output_path, (output_h5,) = prep_outputs(
+        output_directory=output_directory,
+        output_name=output_name,
+        input_file=input_file,
+        output_file_names=['reads.combined_basemods.h5']
+    )
     
     region_specifier, bed_filepath_processed = create_region_specifier(
         output_path,
@@ -352,28 +343,24 @@ def extract(
         motif_command_list.append(motif_details[0])
         motif_command_list.append(motif_details[1])
 
+        # TODO: I think this should be outside the loop; makes it match pileup
         if log:
             print('logging to ',Path(output_path)/'extract-log')
             log_command=['--log-filepath',Path(output_path)/f'extract-log']
         else:
             log_command=[]
 
-
-
         output_txt = Path(output_path)/(f'reads.{basemod}.txt')
         
         if os.path.exists(output_txt):
             os.remove(output_txt)
         
-        extract_command_list = (['modkit',
-          'extract',
-          input_file,
-          output_txt]
-          +region_specifier
-          +motif_command_list
-          +log_command
-          +['--ref',ref_genome,
-          '--filter-threshold','0',])
+        extract_command_list = (['modkit', 'extract', input_file, output_txt]
+                                + region_specifier
+                                + motif_command_list
+                                + cores_command_list
+                                + log_command
+                                + ['--ref',ref_genome, '--filter-threshold','0',])
         subprocess.run(extract_command_list)
         
         print(f'Adding {basemod} to {output_h5}')
@@ -545,6 +532,7 @@ def read_by_base_txt_to_hdf5(
     motif_modified_base = motif[int(modco)]
     read_name = ''
     num_reads = 0
+    # TODO: I think the function calls can be consolidated; lots of repetition
     with open(input_txt) as txt:
         for index,line in enumerate(txt):
             fields = line.split('\t')
@@ -737,3 +725,46 @@ def read_by_base_txt_to_hdf5(
 
 #             print(readlen_sum/read_counter)
     return
+
+def sanitize_path_args(*args) -> tuple:
+    """
+    Coerce all given arguments to Path objects, leaving Nones as Nones.
+    """
+    return tuple(Path(f) if f is not None else f for f in args)
+
+
+def prep_outputs(output_directory: Path | None,
+                 output_name: str,
+                 input_file: Path,
+                 output_file_names: list[str]) -> tuple[Path, list[Path]]:
+    """
+    As a side effect, if files exist that match the requested outputs, they are deleted.
+
+    TODO: Is it kind of silly that this takes in input_file? Maybe should take in some generic default parameter, or this default should be set outside this method?
+    Args:
+        output_directory: Path pointing to an output directory.
+            If left as None, outputs will be stored in a new folder within the input
+            directory.
+        output_name: a string that will be used to create an output folder
+            containing the intermediate and final outputs, along with any logs.
+        input_file: Path to input file; used to define default output directory
+        output_file_names: list of names of desired output files
+
+    Returns:
+        * Path to top-level output directory
+        * List of Paths to requested output files
+    """
+    if output_directory is None:
+        output_directory = input_file.parent
+        print(f'No output directory provided, using input directory {output_directory}')
+          
+    output_path = output_directory / output_name
+
+    output_files = [output_path / file_name for file_name in output_file_names]
+
+    # Ensure output path exists, and that any of the specified output files do not already exist (necessary for some outputs)
+    output_path.mkdir(parents=True, exist_ok=True)
+    for output_file in output_files:
+        output_file.unlink(missing_ok=True)
+
+    return output_path, output_files
