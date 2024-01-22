@@ -21,7 +21,7 @@ Global variables
 """
 # This provides the mapping of canonical bases to sets of valid mode names
 BASEMOD_NAMES_DICT = {
-    'A':{'a','Y'},
+    'A':{'A','a','Y'},
     'C':{'m','Z'},
 }
 
@@ -336,8 +336,10 @@ def extract(
     mod_thresh_list = []
     if thresh is None:
         print('No valid base modification threshold provided. Raw probs will be saved.')
-    if thresh<=0:
+        adjusted_threshold = None
+    elif thresh<=0:
         print(f'With a thresh of {thresh}, modkit will simply save all tagged modifications.')
+        adjusted_threshold = 0
     else:
         adjusted_threshold = adjust_threshold(thresh)
         for modnames_set in BASEMOD_NAMES_DICT.values():
@@ -381,7 +383,7 @@ def extract(
             output_txt,
             output_h5,
             basemod,
-            thresh,
+            adjusted_threshold,
         )
         if cleanup:
             os.remove(output_txt)
@@ -435,10 +437,11 @@ def check_bam_format(
                     if tag_value[-1]!='?' and tag_value[-1]!='.':
                         raise ValueError(f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered to be implicit. \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.')
                     else:
-                        if tag_value[2] in BASEMOD_NAMES_DICT[tag_value[0]]:
-                            basemods_found_dict[tag_value[0]] = True
-                        else:
-                            raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {BASEMOD_NAMES_DICT[tag_value[0]]}. \n\nIf you know what your mod names correspond to in terms of the latest .bam standard, consider using "modkit adjust-mods {str(input_file)} new_file.bam --convert 5mC_name m --convert N6mA_name a --convert other_basemod_name correct_label" and then trying with the new file. Note: currently supported mod names are {BASEMOD_NAMES_DICT}')
+                        if tag_value[0] in basemods_found_dict.keys():
+                            if tag_value[2] in BASEMOD_NAMES_DICT[tag_value[0]]:
+                                basemods_found_dict[tag_value[0]] = True
+                            else:
+                                raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {BASEMOD_NAMES_DICT[tag_value[0]]}. \n\nIf you know what your mod names correspond to in terms of the latest .bam standard, consider using "modkit adjust-mods {str(input_file)} new_file.bam --convert 5mC_name m --convert N6mA_name a --convert other_basemod_name correct_label" and then trying with the new file. Note: currently supported mod names are {BASEMOD_NAMES_DICT}')
             if all(basemods_found_dict.values()):
                 return
             if counter>=NUM_READS_TO_CHECK:
@@ -670,60 +673,22 @@ def read_by_base_txt_to_hdf5(
 #                     print(line)
                     continue
                 fields = line.split('\t')
+                pos_in_genome = int(fields[2])
+                canonical_base = fields[15]
+                prob = float(fields[10])
+                
                 if read_name!=fields[0]:
-                    try:
-                        if len(read_name)>0:
-                            h5['read_name'][read_counter+old_size]=read_name
-                            h5['chromosome'][read_counter+old_size]=read_chrom
-                            h5['read_start'][read_counter+old_size]=read_start
-                            h5['read_end'][read_counter+old_size]=read_end
-                            h5['motif'][read_counter+old_size]=basemod
-                            h5['mod_vector'][read_counter+old_size]=mod_vector
-                            h5['val_vector'][read_counter+old_size]=val_vector
-                            read_counter+=1
-                    except:
-                        pass
-                    #New read
-                    #Record name
-                    read_name = fields[0]
-                    #Read in relevant values
-                    pos_in_genome = int(fields[2])
-                    read_chrom = fields[3]
-                    read_len = int(fields[9])
-                    readlen_sum+=read_len
-                    canonical_base = fields[15]
-                    prob = float(fields[10])
-                    ref_strand = fields[5]
-                    if ref_strand == '+':
-                        pos_in_read_ref = int(fields[1])
-                    elif ref_strand == '-':
-                        pos_in_read_ref = read_len - int(fields[1]) - 1
-                    #Calculate read info
-                    read_start = pos_in_genome - pos_in_read_ref
-                    read_end = read_start + read_len
-                    #Build read vectors
-                    mod_vector = np.zeros(read_len,dtype=np.float16)
-                    val_vector = np.zeros(read_len,dtype=np.float16)
-
-                    #Add modification to vector if type is correct
-                    if canonical_base == motif_modified_base:
-                        val_vector[pos_in_genome-read_start] = 1
-                        if thresh==None:
-                            mod_vector[pos_in_genome-read_start] = prob
-                        elif prob>=thresh:
-                            mod_vector[pos_in_genome-read_start] = 1
-                else:
-                    pos_in_genome = int(fields[2])
-                    canonical_base = fields[15]
-                    prob = float(fields[10])
-                    if canonical_base == motif_modified_base:
-                        val_vector[pos_in_genome-read_start] = 1
-                        if thresh==None:
-                            mod_vector[pos_in_genome-read_start] = prob
-                        elif prob>=thresh:
-                            mod_vector[pos_in_genome-read_start] = 1
-            try:
-                if len(read_name)>0:
+                    # Record the read details unless this is the first read
+                    if index>1:
+                        if len(val_coordinates_list)>0:
+                            read_len_along_ref = max(val_coordinates_list)+1
+                        else:
+                            read_len_along_ref = read_len
+                        mod_vector = np.zeros(read_len_along_ref,dtype=float)
+                        mod_vector[val_coordinates_list] = mod_values_list
+                        val_vector = np.zeros(read_len_along_ref,dtype=int)
+                        val_vector[val_coordinates_list] = 1
+                        # Build mod_vector and val_vector from lists
                         h5['read_name'][read_counter+old_size]=read_name
                         h5['chromosome'][read_counter+old_size]=read_chrom
                         h5['read_start'][read_counter+old_size]=read_start
@@ -732,8 +697,53 @@ def read_by_base_txt_to_hdf5(
                         h5['mod_vector'][read_counter+old_size]=mod_vector
                         h5['val_vector'][read_counter+old_size]=val_vector
                         read_counter+=1
-            except:
-                pass
+                    # Set the read name of the next read
+                    read_name=fields[0]
+                    # Store some relevant read metadata
+                    read_chrom = fields[3]
+                    read_len = int(fields[9])                    
+                    ref_strand = fields[5]
+                    if ref_strand == '+':
+                        pos_in_read_ref = int(fields[1])
+                    elif ref_strand == '-':
+                        pos_in_read_ref = read_len - int(fields[1]) - 1
+                    #Calculate read info
+                    read_start = pos_in_genome - pos_in_read_ref
+                    read_end = read_start + read_len
+                    # Instantiate lists
+                    mod_values_list = []
+                    val_coordinates_list = []
 
-#             print(readlen_sum/read_counter)
+                # Regardless of whether its a new read or not, 
+                # add modification to vector if motif type is correct
+                # for the motif in question
+                if canonical_base == motif_modified_base:
+                    val_coordinates_list.append(pos_in_genome-read_start)
+                    if thresh==None:
+                        mod_values_list.append(prob)
+                    elif prob>=thresh:
+                        mod_values_list.append(1)
+                    else:
+                        mod_values_list.append(0)
+
+
+            # Save the last read
+            if len(read_name)>0:
+                # Build the vectors
+                if len(val_coordinates_list)>0:
+                    read_len_along_ref = max(val_coordinates_list)+1
+                else:
+                    read_len_along_ref = read_len
+                mod_vector = np.zeros(read_len_along_ref,dtype=float)
+                mod_vector[val_coordinates_list] = mod_values_list
+                val_vector = np.zeros(read_len_along_ref,dtype=int)
+                val_vector[val_coordinates_list] = 1
+                h5['read_name'][read_counter+old_size]=read_name
+                h5['chromosome'][read_counter+old_size]=read_chrom
+                h5['read_start'][read_counter+old_size]=read_start
+                h5['read_end'][read_counter+old_size]=read_end
+                h5['motif'][read_counter+old_size]=basemod
+                h5['mod_vector'][read_counter+old_size]=mod_vector
+                h5['val_vector'][read_counter+old_size]=val_vector
+                read_counter+=1
     return
