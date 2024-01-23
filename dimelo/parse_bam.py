@@ -63,7 +63,7 @@ def pileup(
     ref_genome: str | Path,
     output_directory: str | Path = None,
     region_str: str = None,
-    bed_file: str | Path = None,
+    bed_files: list[str | Path] = None,
     basemods: list = ['A,0','CG,0','GCH,1'],
     thresh: float = None,
     window_size: int = None,
@@ -131,8 +131,9 @@ def pileup(
         for plotting functions.
         
     """
-    input_file, ref_genome, output_directory, bed_file = sanitize_path_args(
-        input_file, ref_genome, output_directory, bed_file
+    bed_files = [Path(bed_file) for bed_file in bed_files]
+    input_file, ref_genome, output_directory = sanitize_path_args(
+        input_file, ref_genome, output_directory
     )
     
     check_bam_format(input_file, basemods)
@@ -146,9 +147,9 @@ def pileup(
     )
     
     # TODO: This is mildly confusing. I get what it's doing, but it's hard to follow / names are bad. Also, why is it used in cleanup here, but not in extract?
-    region_specifier, bed_filepath_processed = create_region_specifier(
+    region_specifier, bed_filepath_processed, bed_filepath_merged = create_region_specifier(
         output_path,
-        bed_file,
+        bed_files,
         region_str,
         window_size,
     )
@@ -211,8 +212,10 @@ def pileup(
     
     # TODO: Can cleanup be consolidated?
     if cleanup:
-        if bed_file is not None and str(bed_filepath_processed)!=str(bed_file):
-            os.remove(bed_filepath_processed)
+        if bed_filepath_processed is not None:
+            bed_filepath_processed.unlink()
+        if bed_filepath_merged is not None:
+            bed_filepath_merged.unlink()
         os.remove(output_bedmethyl)
         os.remove(output_bedmethyl_sorted)
     
@@ -224,7 +227,7 @@ def extract(
     ref_genome: str | Path,
     output_directory: str | Path = None,
     region_str: str = None,
-    bed_file: str | Path = None,
+    bed_files: list[str | Path] = None,
     basemods: list = ['A,0','CG,0','GCH,1'],
     thresh: float = 0,
     window_size: int = 0,
@@ -292,8 +295,9 @@ def extract(
         plotting functions.
 
     """
-    input_file, ref_genome, output_directory, bed_file = sanitize_path_args(
-        input_file, ref_genome, output_directory, bed_file
+    bed_files = [Path(bed_file) for bed_file in bed_files]
+    input_file, ref_genome, output_directory = sanitize_path_args(
+        input_file, ref_genome, output_directory
     )
     
     check_bam_format(input_file, basemods)
@@ -306,9 +310,9 @@ def extract(
         output_file_names=['reads.combined_basemods.h5']
     )
     
-    region_specifier, bed_filepath_processed = create_region_specifier(
+    region_specifier, bed_filepath_processed, bed_filepath_merged = create_region_specifier(
         output_path,
-        bed_file,
+        bed_files,
         region_str,
         window_size,
     )
@@ -374,7 +378,12 @@ def extract(
         )
         if cleanup:
             os.remove(output_txt)
-
+    if cleanup:
+        if bed_filepath_processed is not None:
+            bed_filepath_processed.unlink()
+        if bed_filepath_merge is not None:
+            bed_filepath_merged.unlink()
+            
     return output_h5
 
 """
@@ -448,7 +457,7 @@ def check_bam_format(
         
 def create_region_specifier(
     output_path,
-    bed_file,
+    bed_files,
     region_str,
     window_size,
 ):
@@ -457,17 +466,19 @@ def create_region_specifier(
     """
     
     bed_filepath_processed = None
-    if bed_file is not None and region_str is None:
+    bed_filepath_merged = None
+    if bed_files is not None and region_str is None and len(bed_files)>0:
+        bed_filepath_processed = output_path / 'regions.processed.bed'
         if window_size is None:
-            bed_filepath_processed = Path(bed_file)
-            print(f'Processing from {bed_filepath_processed.name} using unmodified bed regions.')
+            utils.merge_bed_files(bed_files,bed_filepath_processed)
+            print(f'Processing from {[Path(bed_file).name for bed_file in bed_files]} using unmodified bed regions.')
             region_specifier = ['--include-bed',bed_filepath_processed]
         elif window_size>0:
-            bed_filepath = Path(bed_file)
-            print(f'Processing from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-            bed_filepath_processed = output_path / (bed_filepath.stem + f'.windowed{window_size}-for-pileup' + bed_filepath.suffix)
+            print(f'Processing from {[Path(bed_file).name for bed_file in bed_files]} using even {window_size}bp windows in either direction from bed region centers.')
+            bed_filepath_merged = output_path / 'regions.merged.bed'
+            utils.merge_bed_files(bed_files, bed_filepath_merged)
             print(f'Writing new bed file {bed_filepath_processed.name}')
-            utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
+            utils.generate_centered_windows_bed(bed_filepath_merged,bed_filepath_processed,window_size)
             region_specifier = ['--include-bed',bed_filepath_processed]
         else:
             raise ValueError(f'Error: invalid window size {window_size}bp')
@@ -486,7 +497,7 @@ def create_region_specifier(
     else:
         raise ValueError('Error: cannot process both a region and a bed file.')  
     
-    return region_specifier, bed_filepath_processed
+    return region_specifier, bed_filepath_processed, bed_filepath_merged
 
 def adjust_threshold(
     thresh,

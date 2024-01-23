@@ -64,8 +64,8 @@ def plot_enrichment_profile(mod_file_names: list[str | Path],
         if smooth_window is not None:
             trace = utils.smooth_rolling_mean(trace, window=smooth_window)
         trace_vectors.append(trace)
-    
-    axes = utils.line_plot(indep_vector=np.arange(-window_size,window_size),
+
+    axes = utils.line_plot(indep_vector=np.arange(-len(trace_vectors[0])//2,len(trace_vectors[0])//2+len(trace_vectors[0])%2),
                            indep_name='pos',
                            dep_vectors=trace_vectors,
                            dep_names=sample_names,

@@ -77,12 +77,12 @@ def counts_from_fake(*args,
     window_halfsize = 500
     return test_data.fake_peak_enrichment(halfsize=window_halfsize, peak_height=0.15)
 
-def vector_from_bedmethyl(bedmethyl_file: Path,
-                          bed_file: Path,
+def vector_from_bedmethyl(bedmethyl_file: str | Path,
+                          bed_file: str | Path,
                           mod_name: str,
                           window_size: int) -> np.ndarray:
     """
-    Generate trace for the specified modification aggregated across all regions in the given bed file.
+    Generate trace for the specified modification aggregated across all regions in the given bed file. Called by profile plotters, can also be used by a user directly.
 
     TODO: How to name this method?
     TODO: I feel like stuff like this should be shared functionality
@@ -99,8 +99,9 @@ def vector_from_bedmethyl(bedmethyl_file: Path,
     Returns:
         vector of fraction modifiied bases (e.g. mA/A) calculated for each position; float values between 0 and 1
     """
-    if window_size > 0:
-        # TODO: I think this should not need to be explicitly done here; the specification for this method is that it's already a Path object. If this is intended to be user facing, we can do this, but I think it's overkill.
+    if window_size is None:
+        bed_filepath_processed = Path(bed_file)
+    elif window_size > 0:
         bed_filepath = Path(bed_file)
         print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
         bed_filepath_processed = bedmethyl_file.parent / (bed_filepath.stem + f'.windowed{window_size}-for-readout' + bed_filepath.suffix)
@@ -111,29 +112,51 @@ def vector_from_bedmethyl(bedmethyl_file: Path,
         return -1
     
     source_tabix = pysam.TabixFile(str(bedmethyl_file))
-    valid_base_counts = np.zeros(window_size*2, dtype=int)
-    modified_base_counts = np.zeros(window_size*2, dtype=int)
     
     mod_motif = mod_name.split(',')[0]
     mod_coord_in_motif = mod_name.split(',')[1]
     
-    with open(bed_file) as regions_file:
+    with open(bed_filepath_processed) as regions_file:
+        # Allocate the pileup arrays
         for line in regions_file:
             fields = line.split('\t')
-            center_coord = (int(fields[2])+int(fields[1]))//2
+            if window_size is None:
+                region_len = abs(int(fields[2])-int(fields[1])) 
+                valid_base_counts = np.zeros(region_len, dtype=int)
+                modified_base_counts = np.zeros(region_len, dtype=int)    
+            else:
+                valid_base_counts = np.zeros(window_size*2, dtype=int)
+                modified_base_counts = np.zeros(window_size*2, dtype=int)   
+            break
+        regions_file.seek(0)
+        for line_index,line in enumerate(regions_file):
+            fields = line.split('\t')
+            start_coord = min(int(fields[1]),int(fields[2]))
+            end_coord = max(int(fields[1]),int(fields[2]))
+            center_coord = (start_coord+end_coord)//2
             chromosome = fields[0]
             if chromosome in source_tabix.contigs:
                 # TODO: Does this mean that we throw out any windows that are too short on specifically the left side?
-                if center_coord-window_size>0:
-                    for row in source_tabix.fetch(chromosome,center_coord-window_size,center_coord+window_size):
+                if window_size is None or center_coord-window_size>0:
+                    if window_size is None:
+                        search_start = start_coord
+                        search_end = end_coord
+                    else:
+                        search_start = center_coord-window_size
+                        search_end = center_coord+window_size
+                    for row in source_tabix.fetch(chromosome,search_start,search_end):
                         tabix_fields = row.split('\t')
 #                         print(tabix_fields)
                         pileup_basemod = tabix_fields[3]
                         if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
                             pileup_info = tabix_fields[9].split(' ')
-                            pileup_coord_relative = int(tabix_fields[1])-center_coord+window_size
-                            valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
-                            modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
+                            pileup_coord_relative = int(tabix_fields[1])-search_start
+                            if window_size is None and pileup_coord_relative>region_len:
+                                print(f'WARNING: {bed_filepath_processed} line {line_index+1} (1-based) specifies a region that is longer than the first region; the end of the region will be skipped. To make a profile plot with differently-sized region, consider using the window_size parameter to make a profile across centered windows.')
+                                break
+                            else:
+                                valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
+                                modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
                         
     modified_fractions = np.divide(modified_base_counts,valid_base_counts, out=np.zeros_like(modified_base_counts, dtype=float), where=valid_base_counts!=0)
     return modified_fractions
