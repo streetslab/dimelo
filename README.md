@@ -85,8 +85,26 @@ import dimelo
 
 # Basic Use
 
+See the [tutorial](tutorial.ipynb) as a starting point. Interface design is not finalized at this time (Jan 23, 2024).
+
 ## Parsing and processing
+
+`parse_bam.pileup` for profiles and enrichment between regions/modifications
+
+`parse_bam.extract` for single read plots
 
 ## Plotting
 
+`plot_enrichment_profile` module for pileup line plot profiles across one or more region
+
+`plot_enrichment` module for enrichment (e.g. mA/A) bar plot comparisons
+
+`plot_reads` module for single read plots
+
 ## Load values from processed files
+
+`load_processed.counts_from_bedmethyl` for valid/modified counts from a specified region or set of regions
+
+`load_processed.vector_from_bedmethyl` for valid over modified fraction from a specified region or set of regions
+
+`load_processed.reads_from_hdf5` for read-by-basemod lists of valid and modified positions
