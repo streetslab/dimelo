@@ -381,7 +381,7 @@ def extract(
     if cleanup:
         if bed_filepath_processed is not None:
             bed_filepath_processed.unlink()
-        if bed_filepath_merge is not None:
+        if bed_filepath_merged is not None:
             bed_filepath_merged.unlink()
             
     return output_h5
