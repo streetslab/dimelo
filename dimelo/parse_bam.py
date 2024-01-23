@@ -482,14 +482,14 @@ def create_region_specifier(
             region_specifier = ['--include-bed',bed_filepath_processed]
         else:
             raise ValueError(f'Error: invalid window size {window_size}bp')
-    elif bed_file is None and region_str is not None:
+    elif bed_files is None and region_str is not None:
         if window_size is None:
             print(f'Processing from region {region_str}.')
             region_specifier = ['--region',region_str]
         else:
             print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
             region_specifier = ['--region',region_str]
-    elif bed_file is None and region_str is None:
+    elif bed_files is None and region_str is None:
         print('No region(s) specified, processing the entire genome.')
         region_specifier = []
         if window_size is not None:
