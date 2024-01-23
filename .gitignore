@@ -56,5 +56,5 @@ coverage.xml
 docs/_build/
 
 
-# Ignoring config for info-sec
-dimelo/config.py
+# Ignore tutorial output files
+test/output
