@@ -26,6 +26,21 @@ def generate_centered_windows_bed(
                 windowed_line = '\t'.join(windowed_fields)
                 windowed_bed.write(windowed_line)
 
+def merge_bed_files(
+    bed_files: list[str | Path],
+    output_bed: str | Path,
+):
+    """
+    Merge bed files together, simply concatenating. This does not currently do a proper union, although it totally could.
+    """
+    with open(output_bed,'w') as outfile:
+        for index,bed_file in enumerate(bed_files):
+            if index>0:
+                outfile.write('\n')
+            with open(bed_file,'r') as infile:
+                for line in infile:
+                    outfile.write(line)
+            
 def bedmethyl_to_bigwig(
     input_bedmethyl: str | Path,
     output_bigwig: str | Path
