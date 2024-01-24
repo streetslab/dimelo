@@ -69,7 +69,7 @@ pip install .
 
 ## Google Colab
 
-Run the following code to grab modkit from conda and install the dimelo modkit_parsing branch
+Run the following code in the first cell of your notebook to grab `modkit v0.2.4` from conda and install the `dimelo modkit_parsing_main` branch.
 
 ```
 from google.colab import drive
@@ -86,6 +86,8 @@ import dimelo
 # Basic Use
 
 See the [tutorial](tutorial.ipynb) as a starting point. Interface design is not finalized at this time (Jan 23, 2024).
+
+If you want to run the tutorial on Google colab, you can download [tutorial.ipynb](tutorial.ipynb), upload it to your drive, and follow the instructions in the cells.
 
 ## Parsing and processing
 
