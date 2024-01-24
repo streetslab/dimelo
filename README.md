@@ -99,9 +99,73 @@ jupyter notebook
 
 ## Parsing and processing
 
+Both pileup and extract are typically run with a .bed file of regions, which can then be also passed to the plotting functions. However, for parsing, a list of many .bed files can be passed and all will be processed.
+
+.bed format needs to have chromosome, start coordinate, end coordinate, strand, and two more values. However, the last three can simply be `.`
+
+```
+chr14	44123158	44123308	.  .  .
+```
+
 `parse_bam.pileup` for profiles and enrichment between regions/modifications
 
+```
+def pileup(
+    input_file: str | Path,
+    output_name: str,
+    ref_genome: str | Path,
+    output_directory: str | Path = None,
+    region_str: str = None,
+    bed_files: list[str | Path] = None,
+    basemods: list = ['A,0','CG,0','GCH,1'],
+    thresh: float = None,
+    window_size: int = None,
+    cores: int = None,
+    log: bool = False,
+    cleanup: bool = True,) -> Path:
+
+    """
+    Takes a file containing long read sequencing data aligned 
+    to a reference genome with modification calls for one or more base/context 
+    and creates a pileup. A pileup is a genome-position-wise sum of both reads with
+    bases that could have the modification in question and of reads that are in
+    fact modified.
+
+    The current implementation of this method uses modkit, a tool built by 
+    Nanopore Technologies, along with htslib tools compress and index the output
+    bedmethyl file.
+```
+
 `parse_bam.extract` for single read plots
+
+```
+def extract(
+    input_file: str | Path,
+    output_name: str,
+    ref_genome: str | Path,
+    output_directory: str | Path = None,
+    region_str: str = None,
+    bed_files: list[str | Path] = None,
+    basemods: list = ['A,0','CG,0','GCH,1'],
+    thresh: float = 0,
+    window_size: int = 0,
+    cores: int = None,
+    log: bool = False,
+    cleanup: bool = True,) -> Path:
+
+    """
+    Takes a file containing long read sequencing data aligned 
+    to a reference genome with modification calls for one or more base/context 
+    and pulls out data from each individual read. The intermediate outputs contain
+    a plain-text list of all base modifications, split out by type. The compressed
+    and indexed output contains vectors of valid and modified positions within each
+    read.
+
+    The current implementation of this method uses modkit, a tool built by 
+    Nanopore Technologies, along with h5py to build the final output file.
+
+    https://github.com/nanoporetech/modkit/
+```
 
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
 
