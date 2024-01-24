@@ -103,6 +103,8 @@ jupyter notebook
 
 `parse_bam.extract` for single read plots
 
+For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
+
 ## Plotting
 
 `plot_enrichment_profile` module for pileup line plot profiles across one or more region
