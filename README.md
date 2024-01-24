@@ -13,7 +13,7 @@ Conda installation: https://www.anaconda.com/download
 
 ### Load source code from the modkit_parsing_main branch
 
-Clone the repo
+Open your terminal or command line and navigate to wherever you want to keep the `dimelo` source code (e.g. your Documents folder, `cd Documents`) and clone the repo
 
 ```
 git clone -b modkit_parsing_main https://github.com/streetslab/dimelo
@@ -69,7 +69,7 @@ pip install .
 
 ## Google Colab
 
-Run the following code to grab modkit from conda and install the dimelo modkit_parsing branch
+Run the following code in the first cell of your notebook to grab `modkit v0.2.4` from conda and install the `dimelo modkit_parsing_main` branch. This will have to be run whenever you make a new Colab instance, unless you have a better way of managing this, in which case please reach out.
 
 ```
 from google.colab import drive
@@ -85,8 +85,36 @@ import dimelo
 
 # Basic Use
 
+See the [tutorial](tutorial.ipynb) as a starting point. Interface design is not finalized at this time (Jan 23, 2024).
+
+If you want to run the tutorial on Google colab, you can download [tutorial.ipynb](tutorial.ipynb), upload it to your drive, and follow the instructions in the cells.
+
+For local operation on Mac or Linux, you will already have cloned the repo to disk in the installation step. Activate your conda environment, make sure you have jupyter installed, and then launch a jupyter notebook server and navigate to `tutorial.ipynb`. You can also use other tools to open the jupyter notebook or you can simply reference it as an example.
+
+```
+conda activate dimelo_modkit_parsing
+pip install jupyter
+jupyter notebook
+```
+
 ## Parsing and processing
+
+`parse_bam.pileup` for profiles and enrichment between regions/modifications
+
+`parse_bam.extract` for single read plots
 
 ## Plotting
 
+`plot_enrichment_profile` module for pileup line plot profiles across one or more region
+
+`plot_enrichment` module for enrichment (e.g. mA/A) bar plot comparisons
+
+`plot_reads` module for single read plots
+
 ## Load values from processed files
+
+`load_processed.counts_from_bedmethyl` for valid/modified counts from a specified region or set of regions
+
+`load_processed.vector_from_bedmethyl` for valid over modified fraction from a specified region or set of regions
+
+`load_processed.reads_from_hdf5` for read-by-basemod lists of valid and modified positions
