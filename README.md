@@ -13,7 +13,7 @@ Conda installation: https://www.anaconda.com/download
 
 ### Load source code from the modkit_parsing_main branch
 
-Clone the repo
+Open your terminal or command line and navigate to wherever you want to keep the `dimelo` source code (e.g. your Documents folder, `cd Documents`) and clone the repo
 
 ```
 git clone -b modkit_parsing_main https://github.com/streetslab/dimelo
@@ -69,7 +69,7 @@ pip install .
 
 ## Google Colab
 
-Run the following code in the first cell of your notebook to grab `modkit v0.2.4` from conda and install the `dimelo modkit_parsing_main` branch.
+Run the following code in the first cell of your notebook to grab `modkit v0.2.4` from conda and install the `dimelo modkit_parsing_main` branch. This will have to be run whenever you make a new Colab instance, unless you have a better way of managing this, in which case please reach out.
 
 ```
 from google.colab import drive
@@ -88,6 +88,14 @@ import dimelo
 See the [tutorial](tutorial.ipynb) as a starting point. Interface design is not finalized at this time (Jan 23, 2024).
 
 If you want to run the tutorial on Google colab, you can download [tutorial.ipynb](tutorial.ipynb), upload it to your drive, and follow the instructions in the cells.
+
+For local operation on Mac or Linux, you will already have cloned the repo to disk in the installation step. Activate your conda environment, make sure you have jupyter installed, and then launch a jupyter notebook server and navigate to `tutorial.ipynb`. You can also use other tools to open the jupyter notebook or you can simply reference it as an example.
+
+```
+conda activate dimelo_modkit_parsing
+pip install jupyter
+jupyter notebook
+```
 
 ## Parsing and processing
 
