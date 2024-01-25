@@ -430,10 +430,10 @@ def check_bam_format(
                 if tag=='Mm' or tag=='Ml':
                     raise ValueError(f'Base modification tags are out of spec (Mm and Ml instead of MM and ML). \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam" in the command line with your conda environment active and then trying with the new file. For megalodon basecalling/modcalling, you may also need to pass "--mode ambiguous.\nBe sure to index the resulting .bam file."')
                 elif tag=='MM':
-                    if tag_value[-1]!='?' and tag_value[-1]!='.':
+                    if len(tag_value)>0 and tag_value[-1]!='?' and tag_value[-1]!='.':
                         raise ValueError(f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered to be implicit. \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.')
                     else:
-                        if tag_value[0] in basemods_found_dict.keys():
+                        if len(tag_value)>0 and tag_value[0] in basemods_found_dict.keys():
                             if tag_value[2] in BASEMOD_NAMES_DICT[tag_value[0]]:
                                 basemods_found_dict[tag_value[0]] = True
                             else:
