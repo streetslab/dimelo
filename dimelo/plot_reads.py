@@ -22,7 +22,9 @@ from . import load_processed
 def plot_reads(mod_file_name: str | Path,
                bed_file_name: str | Path,
                mod_names: list[str],
-               window_size: int = 0) -> Axes:
+               window_size: int = 0,
+               s: float = 0.5
+              ) -> Axes:
     """
     Plots centered single reads as a scatterplot, cut off at the boundaries of the requested regions?
 
@@ -62,7 +64,7 @@ def plot_reads(mod_file_name: str | Path,
         y="read_name",
         hue="mod",
         # palette=colors,
-        s=0.5,
+        s=s,
         marker="s",
         linewidth=0,
     )

@@ -397,14 +397,14 @@ read_by_base_txt_to_hdf5: convert modkit extract txt into an .h5 file for rapid 
 """
 
 def check_bam_format(
-    input_file: str | Path,
+    bam_file: str | Path,
     basemods: list = ['A,0','CG,0'],
 ) -> bool:
     """
     Check whether a .bam file is formatted appropriately for modkit
 
     Args:
-        input_file: a formatted .bam file with a .bai index
+        bam_file: a formatted .bam file with a .bai index
         basemods: a list of base modification motifs
     
     Returns:
@@ -417,7 +417,7 @@ def check_bam_format(
         base = motif[int(pos)]
         basemods_found_dict[base] = False
     
-    input_bam = pysam.AlignmentFile(input_file)
+    input_bam = pysam.AlignmentFile(bam_file)
     
     try:
         for counter,read in enumerate(input_bam.fetch()):
@@ -428,16 +428,16 @@ def check_bam_format(
                 # tag_type = tag_fields[1]
                 tag_value = tag_fields[2]
                 if tag=='Mm' or tag=='Ml':
-                    raise ValueError(f'Base modification tags are out of spec (Mm and Ml instead of MM and ML). \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam" in the command line with your conda environment active and then trying with the new file. For megalodon basecalling/modcalling, you may also need to pass "--mode ambiguous.\nBe sure to index the resulting .bam file."')
+                    raise ValueError(f'Base modification tags are out of spec (Mm and Ml instead of MM and ML). \n\nConsider using "modkit update-tags {str(bam_file)} new_file.bam" in the command line with your conda environment active and then trying with the new file. For megalodon basecalling/modcalling, you may also need to pass "--mode ambiguous.\nBe sure to index the resulting .bam file."')
                 elif tag=='MM':
                     if len(tag_value)>0 and tag_value[-1]!='?' and tag_value[-1]!='.':
-                        raise ValueError(f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered to be implicit. \n\nConsider using "modkit update-tags {str(input_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.')
+                        raise ValueError(f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered to be implicit. \n\nConsider using "modkit update-tags {str(bam_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.')
                     else:
                         if len(tag_value)>0 and tag_value[0] in basemods_found_dict.keys():
                             if tag_value[2] in BASEMOD_NAMES_DICT[tag_value[0]]:
                                 basemods_found_dict[tag_value[0]] = True
                             else:
-                                raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {BASEMOD_NAMES_DICT[tag_value[0]]}. \n\nIf you know what your mod names correspond to in terms of the latest .bam standard, consider using "modkit adjust-mods {str(input_file)} new_file.bam --convert 5mC_name m --convert N6mA_name a --convert other_basemod_name correct_label" and then trying with the new file. Note: currently supported mod names are {BASEMOD_NAMES_DICT}')
+                                raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {BASEMOD_NAMES_DICT[tag_value[0]]}. \n\nIf you know what your mod names correspond to in terms of the latest .bam standard, consider using "modkit adjust-mods {str(bam_file)} new_file.bam --convert 5mC_name m --convert N6mA_name a --convert other_basemod_name correct_label" and then trying with the new file. Note: currently supported mod names are {BASEMOD_NAMES_DICT}')
             if all(basemods_found_dict.values()):
                 return
             if counter>=NUM_READS_TO_CHECK:
@@ -449,11 +449,21 @@ def check_bam_format(
                 return
     except ValueError as e:
         if 'fetch called on bamfile without index' in str(e):
-            raise ValueError(f'{e}. Consider using "samtools index {str(input_file)}" to create an index if your .bam is already sorted.')
+            raise ValueError(f'{e}. Consider using "samtools index {str(bam_file)}" to create an index if your .bam is already sorted.')
         else:
             raise
     except:
         raise
+        
+def get_alignment_quality(
+    bam_file,
+    ref_genome,
+) -> float:
+    input_bam = pysam.AlignmentFile(bam_file,'rb')
+    for read in enumerate(input_bam.fetch()):
+        read_sequence = read.get_forward_sequence()
+        read_alignment = read.get_forward_positions()
+        print(read_alignment)
         
 def create_region_specifier(
     output_path,
