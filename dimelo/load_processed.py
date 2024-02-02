@@ -9,8 +9,10 @@ from . import test_data
 from . import utils
 
 def counts_from_bedmethyl(bedmethyl_file: Path,
-                          bed_file: Path,
-                          mod_name: str) -> tuple[int, int]:
+                          mod_name: str,
+                          bed_file: Path = None,
+                          region_str: str = None,
+                          ) -> tuple[int, int]:
     """
     Extract number of modified bases and total number of bases from the given bedmethyl file
 
@@ -36,33 +38,53 @@ def counts_from_bedmethyl(bedmethyl_file: Path,
     mod_motif = mod_name.split(',')[0]
     mod_coord_in_motif = mod_name.split(',')[1]
 
-    with open(bed_file) as regions_file:
-        for line in regions_file:
-            # pythonic condensed operation for extracting important fields
-            # fields = line.split('\t')
-            chromosome, start_pos, end_pos, *_ = line.split('\t')
-            start_pos = int(start_pos)
-            end_pos = int(end_pos)
-            # Removing centering
-            # center_coord = (int(fields[2])+int(fields[1]))//2
-            # chromosome = fields[0]
-            if chromosome in source_tabix.contigs:
+    if bed_file is not None and region_str is None:
+        with open(bed_file) as regions_file:
+            for line in regions_file:
+                # pythonic condensed operation for extracting important fields
+                # fields = line.split('\t')
+                chromosome, start_pos, end_pos, *_ = line.split('\t')
+                start_pos = int(start_pos)
+                end_pos = int(end_pos)
                 # Removing centering
-                # if center_coord-window_size>0:
-                # for row in source_tabix.fetch(chromosome,center_coord-window_size,center_coord+window_size):
-                for row in source_tabix.fetch(chromosome, start_pos, end_pos):
-                    tabix_fields = row.split('\t')
-                    pileup_basemod = tabix_fields[3]
-                    if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
-                        pileup_info = tabix_fields[9].split(' ')
-                        # Removing centering
-                        # pileup_coord_relative = int(tabix_fields[1])-center_coord+window_size
-                        # But actually don't need this because don't care about positions
-                        # pileup_coord_relative = int(tabix_fields[1]) - end_pos
-                        # valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
-                        # modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
-                        valid_base_count += int(pileup_info[0])
-                        modified_base_count += int(pileup_info[2])
+                # center_coord = (int(fields[2])+int(fields[1]))//2
+                # chromosome = fields[0]
+                if chromosome in source_tabix.contigs:
+                    # Removing centering
+                    # if center_coord-window_size>0:
+                    # for row in source_tabix.fetch(chromosome,center_coord-window_size,center_coord+window_size):
+                    for row in source_tabix.fetch(chromosome, start_pos, end_pos):
+                        tabix_fields = row.split('\t')
+                        pileup_basemod = tabix_fields[3]
+                        if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
+                            pileup_info = tabix_fields[9].split(' ')
+                            # Removing centering
+                            # pileup_coord_relative = int(tabix_fields[1])-center_coord+window_size
+                            # But actually don't need this because don't care about positions
+                            # pileup_coord_relative = int(tabix_fields[1]) - end_pos
+                            # valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
+                            # modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
+                            valid_base_count += int(pileup_info[0])
+                            modified_base_count += int(pileup_info[2])
+    elif region_str is not None and bed_file is None:
+        chromosome, coords = region_str.split(':')
+        start_coord, end_coord = map(int, coords.split('-'))
+        if chromosome in source_tabix.contigs:
+            for row in source_tabix.fetch(chromosome,start_coord,end_coord):
+                tabix_fields = row.split('\t')
+                pileup_basemod = tabix_fields[3]
+                if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
+                    pileup_info = tabix_fields[9].split(' ')
+                    # Removing centering
+                    # pileup_coord_relative = int(tabix_fields[1])-center_coord+window_size
+                    # But actually don't need this because don't care about positions
+                    # pileup_coord_relative = int(tabix_fields[1]) - end_pos
+                    # valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
+                    # modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
+                    valid_base_count += int(pileup_info[0])
+                    modified_base_count += int(pileup_info[2])  
+    else:
+        raise ValueError("Cannot process both a region string and a regions bed file.")
 
     return (modified_base_count, valid_base_count)
 
