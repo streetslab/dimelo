@@ -72,6 +72,8 @@ def pileup(
     cleanup: bool = True,) -> Path:
 
     """
+    TODO: Merge bed_file / region_str / window_size handling into a unified function somewhere
+
     Takes a file containing long read sequencing data aligned 
     to a reference genome with modification calls for one or more base/context 
     and creates a pileup. A pileup is a genome-position-wise sum of both reads with
@@ -237,6 +239,8 @@ def extract(
     cleanup: bool = True,) -> Path:
 
     """
+    TODO: Merge bed_file / region_str / window_size handling into a unified function somewhere
+    
     Takes a file containing long read sequencing data aligned 
     to a reference genome with modification calls for one or more base/context 
     and pulls out data from each individual read. The intermediate outputs contain

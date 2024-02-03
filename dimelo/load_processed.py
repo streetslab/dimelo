@@ -16,6 +16,7 @@ def counts_from_bedmethyl(bedmethyl_file: Path,
     """
     Extract number of modified bases and total number of bases from the given bedmethyl file
 
+    TODO: Merge bed_file / region_str handling into a unified function somewhere
     TODO: How to name this method?
     
     Args:
@@ -99,13 +100,15 @@ def counts_from_fake(*args,
     window_halfsize = 500
     return test_data.fake_peak_enrichment(halfsize=window_halfsize, peak_height=0.15)
 
-def vector_from_bedmethyl(bedmethyl_file: str | Path,
-                          bed_file: str | Path,
+def vectors_from_bedmethyl(bedmethyl_file: str | Path,
                           mod_name: str,
-                          window_size: int) -> np.ndarray:
+                          bed_file: str | Path = None,
+                          region_str: str = None,
+                          window_size: int = None) -> np.ndarray:
     """
     Generate trace for the specified modification aggregated across all regions in the given bed file. Called by profile plotters, can also be used by a user directly.
 
+    TODO: Merge bed_file / region_str / window_size handling into a unified function somewhere
     TODO: How to name this method?
     TODO: I feel like stuff like this should be shared functionality
     TODO: I _THINK_ this should return a value for every position, with non-modified positions as zeros
@@ -121,67 +124,84 @@ def vector_from_bedmethyl(bedmethyl_file: str | Path,
     Returns:
         vector of fraction modifiied bases (e.g. mA/A) calculated for each position; float values between 0 and 1
     """
-    if window_size is None:
-        bed_filepath_processed = Path(bed_file)
-    elif window_size > 0:
-        bed_filepath = Path(bed_file)
-        print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-        bed_filepath_processed = bedmethyl_file.parent / (bed_filepath.stem + f'.windowed{window_size}-for-readout' + bed_filepath.suffix)
-        print(f'Writing new bed file {bed_filepath_processed.name}')
-        utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
-    else:
-        print(f'Invalid window size {window_size}.')
-        return -1
     
     source_tabix = pysam.TabixFile(str(bedmethyl_file))
     
     mod_motif = mod_name.split(',')[0]
     mod_coord_in_motif = mod_name.split(',')[1]
     
-    with open(bed_filepath_processed) as regions_file:
-        # Allocate the pileup arrays
-        for line in regions_file:
-            fields = line.split('\t')
-            if window_size is None:
-                region_len = abs(int(fields[2])-int(fields[1])) 
-                valid_base_counts = np.zeros(region_len, dtype=int)
-                modified_base_counts = np.zeros(region_len, dtype=int)    
-            else:
-                valid_base_counts = np.zeros(window_size*2, dtype=int)
-                modified_base_counts = np.zeros(window_size*2, dtype=int)   
-            break
-        regions_file.seek(0)
-        for line_index,line in enumerate(regions_file):
-            fields = line.split('\t')
-            start_coord = min(int(fields[1]),int(fields[2]))
-            end_coord = max(int(fields[1]),int(fields[2]))
-            center_coord = (start_coord+end_coord)//2
-            chromosome = fields[0]
-            if chromosome in source_tabix.contigs:
-                # TODO: Does this mean that we throw out any windows that are too short on specifically the left side?
-                if window_size is None or center_coord-window_size>0:
-                    if window_size is None:
-                        search_start = start_coord
-                        search_end = end_coord
-                    else:
-                        search_start = center_coord-window_size
-                        search_end = center_coord+window_size
-                    for row in source_tabix.fetch(chromosome,search_start,search_end):
-                        tabix_fields = row.split('\t')
-#                         print(tabix_fields)
-                        pileup_basemod = tabix_fields[3]
-                        if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
-                            pileup_info = tabix_fields[9].split(' ')
-                            pileup_coord_relative = int(tabix_fields[1])-search_start
-                            if window_size is None and pileup_coord_relative>region_len:
-                                print(f'WARNING: {bed_filepath_processed} line {line_index+1} (1-based) specifies a region that is longer than the first region; the end of the region will be skipped. To make a profile plot with differently-sized region, consider using the window_size parameter to make a profile across centered windows.')
-                                break
-                            else:
-                                valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
-                                modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
-                        
-    modified_fractions = np.divide(modified_base_counts,valid_base_counts, out=np.zeros_like(modified_base_counts, dtype=float), where=valid_base_counts!=0)
-    return modified_fractions
+    if bed_file is not None and region_str is None:
+        if window_size is None:
+            bed_filepath_processed = Path(bed_file)
+        elif window_size > 0:
+            bed_filepath = Path(bed_file)
+            print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
+            bed_filepath_processed = bedmethyl_file.parent / (bed_filepath.stem + f'.windowed{window_size}-for-readout' + bed_filepath.suffix)
+            print(f'Writing new bed file {bed_filepath_processed.name}')
+            utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
+        else:
+            raise ValueError(f'Invalid window size {window_size}.')
+        with open(bed_filepath_processed) as regions_file:
+            # Allocate the pileup arrays
+            for line in regions_file:
+                fields = line.split('\t')
+                if window_size is None:
+                    region_len = abs(int(fields[2])-int(fields[1])) 
+                    valid_base_counts = np.zeros(region_len, dtype=int)
+                    modified_base_counts = np.zeros(region_len, dtype=int)    
+                else:
+                    valid_base_counts = np.zeros(window_size*2, dtype=int)
+                    modified_base_counts = np.zeros(window_size*2, dtype=int)   
+                break
+            regions_file.seek(0)
+            for line_index,line in enumerate(regions_file):
+                fields = line.split('\t')
+                start_coord = min(int(fields[1]),int(fields[2]))
+                end_coord = max(int(fields[1]),int(fields[2]))
+                center_coord = (start_coord+end_coord)//2
+                chromosome = fields[0]
+                if chromosome in source_tabix.contigs:
+                    # TODO: Does this mean that we throw out any windows that are too short on specifically the left side?
+                    if window_size is None or center_coord-window_size>0:
+                        if window_size is None:
+                            search_start = start_coord
+                            search_end = end_coord
+                        else:
+                            search_start = center_coord-window_size
+                            search_end = center_coord+window_size
+                        for row in source_tabix.fetch(chromosome,search_start,search_end):
+                            tabix_fields = row.split('\t')
+    #                         print(tabix_fields)
+                            pileup_basemod = tabix_fields[3]
+                            if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
+                                pileup_info = tabix_fields[9].split(' ')
+                                pileup_coord_relative = int(tabix_fields[1])-search_start
+                                if window_size is None and pileup_coord_relative>region_len:
+                                    print(f'WARNING: {bed_filepath_processed} line {line_index+1} (1-based) specifies a region that is longer than the first region; the end of the region will be skipped. To make a profile plot with differently-sized region, consider using the window_size parameter to make a profile across centered windows.')
+                                    break
+                                else:
+                                    valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
+                                    modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
+    elif region_str is not None and bed_file is None:
+        if window_size is not None:
+            print('Window size is ignored if there is no region_bed')
+        chromosome, coords = region_str.split(':')
+        start_coord, end_coord = map(int, coords.split('-'))
+        valid_base_counts = np.zeros(end_coord-start_coord,dtype=int)
+        modified_base_counts = np.zeros(end_coord-start_coord,dtype=int)
+        if chromosome in source_tabix.contigs:
+            for row in source_tabix.fetch(chromosome,start_coord,end_coord):
+                tabix_fields = row.split('\t')
+                pileup_basemod = tabix_fields[3]
+                if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
+                    pileup_info = tabix_fields[9].split(' ')       
+                    pileup_coord_relative = int(tabix_fields[1])-start_coord
+                    valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
+                    modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
+    else:
+        raise ValueError("Cannot processed both a bed file and a region string")
+    
+    return modified_base_counts,valid_base_counts
 
 def vector_from_fake(window_size: int,
                      *args,
@@ -199,8 +219,9 @@ def vector_from_fake(window_size: int,
 
 def reads_from_hdf5(
     file: Path,
-    bed_file: Path,
     mod_names: list[str],
+    bed_file: str | Path = None,
+    region_str: str = None,
     window_size: int = None,
 ) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
     """
@@ -226,27 +247,34 @@ def reads_from_hdf5(
         * modification represented by the positions
         For example, if called on a dataset with a single read and two modification types, each array would have two entries. The unique IDs would be the same, as both entries would represent the same single read. The mods and positions would be different, as they would extact different mods.
     """
-    if window_size is None:
-        bed_filepath = Path(bed_file)
-        print(f'Using window size defined by bed file {bed_filepath.name}.')
-        bed_filepath_processed = bed_filepath
-    elif window_size>0:
-        bed_filepath = Path(bed_file)
-        print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-        bed_filepath_processed = file.parent / (bed_filepath.stem + f'.windowed{window_size}-for-readout' + bed_filepath.suffix)
-        print(f'Writing new bed file {bed_filepath_processed.name}')
-        utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
-    else:
-        raise ValueError(f'Invalid window_size of {window_size}')
-    
     regions_dict = defaultdict(list)
-    with open(bed_filepath_processed) as bed_regions:
-        for line in bed_regions:
-            fields = line.split()
-            if len(fields)>2:
-                chrom,start,end = fields[0],int(fields[1]),int(fields[2])
-                regions_dict[chrom].append((start,end))
-            
+    if bed_file is not None and region_str is None:
+        if window_size is None:
+            bed_filepath = Path(bed_file)
+            print(f'Using window size defined by bed file {bed_filepath.name}.')
+            bed_filepath_processed = bed_filepath
+        elif window_size>0:
+            bed_filepath = Path(bed_file)
+            print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
+            bed_filepath_processed = file.parent / (bed_filepath.stem + f'.windowed{window_size}-for-readout' + bed_filepath.suffix)
+            print(f'Writing new bed file {bed_filepath_processed.name}')
+            utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
+        else:
+            raise ValueError(f'Invalid window_size of {window_size}')
+        with open(bed_filepath_processed) as bed_regions:
+            for line in bed_regions:
+                fields = line.split()
+                if len(fields)>2:
+                    chrom,start,end = fields[0],int(fields[1]),int(fields[2])
+                    regions_dict[chrom].append((start,end))
+    elif region_str is not None and bed_file is None:
+        if window_size is not None:
+            print('WARNING: window_size will be ignored, this parameter only works with bed file regions')
+        chromosome, coords = region_str.split(':')
+        start_coord, end_coord = map(int, coords.split('-'))
+        regions_dict[chromosome].append((start_coord,end_coord))
+    else:
+        raise ValueError('Cannot use both a bed file and a region string')        
     for chrom in regions_dict:
         regions_dict[chrom].sort(key=lambda x: x[0])
     
