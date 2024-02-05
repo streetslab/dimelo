@@ -52,6 +52,16 @@ def add_region_to_dict(
     else:
         raise ValueError(f'Invalid regions {type(region)}: {region}. Please use the format chrX:XXX-XXX.')
 
+def bed_from_regions_dict(
+    regions_dict: dict,
+    save_bed_path: Path,
+):
+    with open(save_bed_path,'w') as processed_bed:
+        for chrom,regions_list in regions_dict.items():
+            for start,end in regions_list:
+                bed_line = '\t'.join([chrom,start,end,'.','.','.'])
+                processed_bed.write(bed_line)
+
 def generate_centered_windows_bed(
     input_bed: str | Path,
     output_bed: str | Path,
