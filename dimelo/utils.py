@@ -5,6 +5,20 @@ import seaborn as sns
 from pathlib import Path
 from collections import defaultdict
 
+def adjust_threshold(
+    thresh,
+):
+    if thresh>0:
+        if thresh>1:
+            print(f'Modification threshold of {thresh} assumed to be for range 0-255. {thresh}/255={thresh/255} will be sent to modkit.')
+            thresh_scaled = thresh/255
+        else:
+            print(f'Modification threshold of {thresh} will be treated as coming from range 0-1.')
+            thresh_scaled = thresh
+            
+        return thresh_scaled
+    return thresh
+
 def regions_dict_from_input(
         regions: str | Path | list[str | Path] = None,
         window_size: int = None,

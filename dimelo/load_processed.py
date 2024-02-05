@@ -229,11 +229,11 @@ def convert_tuple_elements(tup):
 
 def read_vectors_from_hdf5(
         file: str | Path,
-        motif: str,
+        motifs: list[str],
         regions: str | Path | list[str | Path] = None,
         window_size: int = None,
-        sort_by: str | list[str] = ['chromosome','read_start'],
-) -> list:
+        sort_by: str | list[str] = ['chromosome','region_start','read_start'],
+) -> (list[tuple],list[str],dict):
     regions_dict = utils.regions_dict_from_input(
         regions=regions,
         window_size=window_size,
@@ -255,24 +255,30 @@ def read_vectors_from_hdf5(
                         relevant_read_indices = np.flatnonzero(
                             (read_ends > region_start) & 
                             (read_starts < region_end) & 
-                            (read_motifs == motif) & 
+                            np.isin(read_motifs, motifs) & 
                             (read_chromosomes == chrom)
                         )               
                         read_data_list += list(zip(
-                            *(h5[dataset][relevant_read_indices] for dataset in datasets)
+                            *(h5[dataset][relevant_read_indices] for dataset in datasets),
+                            [region_start for _ in relevant_read_indices],
+                            [region_end for _ in relevant_read_indices]
                         ))
         else:
             relevant_read_indices = np.flatnonzero(
-                (read_motifs == motif)
+                np.isin(read_motifs, motifs)
             )
             read_data_list = list(zip(
-                *(h5[dataset][relevant_read_indices] for dataset in datasets)
+                *(h5[dataset][relevant_read_indices] for dataset in datasets),
+                [region_start for _ in relevant_read_indices],
+                [region_end for _ in relevant_read_indices]
             ))
  
+    # We add region information (start and end; chromosome is already present!) so that it is possible to sort by these
+    datasets += ['region_start','region_end']
     try:
         sort_by_indices = [datasets.index(sort_item) for sort_item in sort_by]
     except ValueError as e:
-        raise ValueError(f"One of the sort_by items is not in datasets: {e}")
+        raise ValueError(f"Sorting error. {e}. Datasets include {datasets}")
     
     sorted_read_data = sorted(
         read_data_list, 
@@ -281,10 +287,72 @@ def read_vectors_from_hdf5(
 
     sorted_read_data_converted = [convert_tuple_elements(tup) for tup in sorted_read_data]
 
-    return sorted_read_data_converted, datasets
+    return sorted_read_data_converted, datasets, regions_dict
 
 
-            
+def readwise_binary_modification_arrays(
+    file: str | Path,
+    motifs: list[str],
+    regions: str | Path | list[str|Path],
+    window_size: int = None,
+    sort_by: str | list[str] = ['chromosome','read_start'],
+    thresh: float = None,
+    relative: bool = True,
+) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
+    file = Path(file)
+    if file.suffix=='.h5' or file.suffix=='.hdf5':
+        sorted_read_data_converted, datasets, regions_dict = read_vectors_from_hdf5(
+            file = file,
+            motifs = motifs,
+            regions = regions,
+            window_size = window_size,
+            sort_by = sort_by,
+        )
+        read_name_index = datasets.index('read_name')
+        mod_vector_index = datasets.index('mod_vector')
+        motif_index = datasets.index('motif')
+        region_start_index = datasets.index('region_start')
+        region_end_index = datasets.index('region_end')
+        read_start_index = datasets.index('read_start')
+
+        # Check that this .h5 file was created with a threshold, i.e. that the mod calls are binarized
+        if thresh is None:
+            if not (sorted_read_data_converted[0][mod_vector_index].dtype==np.bool_):
+                raise ValueError('No threshold has been applied to this .h5 single read data. You must provide a threshold using the thresh parameter in order to extract binarized modification arrays.')
+        else:
+            thresh = utils.adjust_threshold(thresh)
+
+        read_ints_list = []
+        mod_coords_list = []
+        motifs_list = []
+
+        read_names = np.array(
+            [read_data[read_name_index] 
+            for read_data in sorted_read_data_converted]
+            )
+        # TODO: handle the case where a read shows up in more than one different region
+        unique_read_names, first_indices = np.unique(read_names,return_index=True)
+        string_to_int = {read_name: index for index, read_name in zip(first_indices,unique_read_names)}
+        read_ints = np.array([string_to_int[read_name] for read_name in read_names])
+        for read_int,read_data in zip(read_ints,sorted_read_data_converted):
+            if thresh is None:
+                mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index])
+            else:
+                mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index]>thresh)
+
+            if relative:
+                mod_pos_record = mod_pos_in_read + read_data[read_start_index] - (read_data[region_start_index]+read_data[region_end_index])//2
+            else:
+                mod_pos_record = mod_pos_in_read + read_data[read_start_index]
+
+            mod_coords_list += list(mod_pos_record)
+            read_ints_list += [read_int]*len(mod_pos_record)
+            motifs_list += [read_data[motif_index]]*len(mod_pos_record)
+
+        return (np.array(mod_coords_list),np.array(read_ints_list),np.array(motifs_list),regions_dict)
+
+    else:
+        raise ValueError(f'File {file} does not have a recognized extension for single read data.')
 def reads_from_hdf5(
     file: str | Path,
     mod_names: list[str],

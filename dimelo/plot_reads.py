@@ -20,9 +20,11 @@ from . import load_processed
 
 
 def plot_reads(mod_file_name: str | Path,
-               bed_file_name: str | Path,
-               mod_names: list[str],
-               window_size: int = 0,
+               regions: str | Path | list[str | Path],
+               motifs: list[str],
+               window_size: int = None,
+               thresh: float = None,
+               relative: bool = True,
                s: float = 0.5
               ) -> Axes:
     """
@@ -34,23 +36,31 @@ def plot_reads(mod_file_name: str | Path,
 
     Args:
         mod_file_name: path to file containing modification data for single reads
-        bed_file_name: path to bed file specifying regions to extract
-        mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
+        regions: path to bed file specifying regions to extract
+        motifs: list of modifications to extract; expected to match mods available in the relevant mod_files
 
     Returns:
         Axes object containing the plot
     """ 
     mod_file_name = Path(mod_file_name)
-    bed_file_name = Path(bed_file_name)
+    # bed_file_name = Path(bed_file_name)
 
-    match mod_file_name.suffix:
-        case _:
-            reads, read_names, mods = load_processed.reads_from_hdf5(
-                file=mod_file_name,
-                bed_file=bed_file_name,
-                mod_names=mod_names,
-                window_size=window_size,
-            )
+    reads,read_names,mods,regions_dict = load_processed.readwise_binary_modification_arrays(
+        file = mod_file_name,
+        regions = regions,
+        motifs = motifs,
+        window_size = window_size,
+        thresh = thresh,
+        relative = relative,
+    )
+    # match mod_file_name.suffix:
+    #     case _:
+    #         reads, read_names, mods = load_processed.reads_from_hdf5(
+    #             file=mod_file_name,
+    #             bed_file=bed_file_name,
+    #             mod_names=mod_names,
+    #             window_size=window_size,
+    #         )
 
     # Convert data frame where each row represents a read to a data frame where each row represents a single modified position in a read
     df = pd.DataFrame({
@@ -76,5 +86,10 @@ def plot_reads(mod_file_name: str | Path,
         legend.set_title('Mod')
         for handle in legend.legendHandles:
             handle.set_markersize(10)  # Set a larger marker size for legend
+
+    if relative:
+        region1_start,region1_end = next(iter(regions_dict.values()))[0]
+        effective_window_size = (region1_end-region1_start)//2
+        axes.set_xlim([-effective_window_size,effective_window_size])
     
     return axes

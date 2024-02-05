@@ -42,7 +42,7 @@ def plot_enrichment(mod_file_names: list[str | Path],
     for mod_file, bed_file, mod_name in zip(mod_file_names, bed_file_names, mod_names):
         match mod_file.suffix:
             case '.gz':
-                n_mod, n_total = load_processed.counts_from_bedmethyl(bedmethyl_file=mod_file,
+                n_mod, n_total = load_processed.pileup_counts_from_bedmethyl(bedmethyl_file=mod_file,
                                                                       bed_file=bed_file,
                                                                       mod_name=mod_name)
             case '.fake':
