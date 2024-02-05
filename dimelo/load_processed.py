@@ -234,6 +234,37 @@ def read_vectors_from_hdf5(
         window_size: int = None,
         sort_by: str | list[str] = ['chromosome','region_start','read_start'],
 ) -> (list[tuple],list[str],dict):
+    """
+    Pulls a list of read data out of an .h5 file containing processed read vectors, formatted
+    for read-by-read vector processing downstream use cases.
+
+    Args:
+        file: Path to an hdf5 (.h5) file containing modification data for single reads,
+            stored in datasets read_name, chromosome, read_start,
+            read_end, base modification motif, mod_vector, and val_vector.
+        regions: Single or list of Path objects or strings. Path objects must point to .bed
+            files, strings can be .bed paths or region string in the format chrX:XXX-XXX.
+            All should all be regions for which your original .bam file had reads extracted,
+            although by design this method will not raise an error if any region contains
+            zero reads, as this may simply be a matter of low read depth.
+            If no regions are specified, the entire .h5 file will be returned. This may cause
+            memory issues.
+        motifs: types of modification to extract data for. Motifs are specified as 
+            {DNA_sequence},{position_of_modification}. For example, a methylated adenine is specified 
+            as 'A,0' and CpG methylation is specified as 'CG,0'.
+        window_size: An optional parameter for creating centered windows for the provided regions.
+            If provided, all regions will be adjusted to be the same size and centered. If not provided,
+            all regions should already be the same size, or there should be only one.
+        sort_by: Read properties by which to sort, either one string or a list of strings. Options
+            include chromosome, region_start, region_end, read_start, read_end, and motif. More to
+            be added in future.
+    
+    Returns:
+        a list of tuples, each tuple containing all datasets corresponding to an individual read that
+        was within the specified regions.
+        a list of strings, naming the datasets returned.
+        a regions_dict, containing lists of (region_start,region_end) coordinates by chromosome/contig.
+    """
     regions_dict = utils.regions_dict_from_input(
         regions=regions,
         window_size=window_size,
@@ -295,10 +326,52 @@ def readwise_binary_modification_arrays(
     motifs: list[str],
     regions: str | Path | list[str|Path],
     window_size: int = None,
-    sort_by: str | list[str] = ['chromosome','read_start'],
+    sort_by: str | list[str] = ['chromosome','region_start','read_start'],
     thresh: float = None,
     relative: bool = True,
 ) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
+    """
+    Pulls a list of read data out of a file containing processed read vectors, formatted with
+    seaborn plotting in mind. Currently we only support .h5 files.
+
+    Args:
+        file: Path to an hdf5 (.h5) file containing modification data for single reads,
+            stored in datasets read_name, chromosome, read_start,
+            read_end, base modification motif, mod_vector, and val_vector.
+        regions: Single or list of Path objects or strings. Path objects must point to .bed
+            files, strings can be .bed paths or region string in the format chrX:XXX-XXX.
+            All should all be regions for which your original .bam file had reads extracted,
+            although by design this method will not raise an error if any region contains
+            zero reads, as this may simply be a matter of low read depth.
+        motifs: types of modification to extract data for. Motifs are specified as 
+            {DNA_sequence},{position_of_modification}. For example, a methylated adenine is specified 
+            as 'A,0' and CpG methylation is specified as 'CG,0'.
+        window_size: An optional parameter for creating centered windows for the provided regions.
+            If provided, all regions will be adjusted to be the same size and centered. If not provided,
+            all regions should already be the same size, or there should be only one.
+        sort_by: Read properties by which to sort, either one string or a list of strings. Options
+            include chromosome, region_start, region_end, read_start, read_end, and motif. More to
+            be added in future.
+        thresh: A modification calling threshold. If the .h5 is already modification-called, this does
+            nothing. If the .h5 files is not modification-called, i.e. its modification data is saved
+            as floating point array, thresh must be provided to have valid binary outputs.
+        relative: If True, modification coordinates are specified relative to their respective regions
+            in the genomes, centered at the center of the region. If False, absolute coordinates are provided.
+            There is not currently a check for all reads being on the same chromosome if relative=False, but
+            this could create unexpected behaviour for a the standard visualizations.
+    
+    Returns:
+        Returns a tuple of three arrays, of length (N_READS * len(mod_names)), and a dict of regions.
+        The arrays contain the following:
+        * positions at which the specified modification was found in a read, after a binary call
+        * unique integer ID for the read for each modification position. These integers are ordered
+            based on the specified sorting.
+        * modification represented by the positions, in the motif format
+        The regions_dict contains the following:
+        * keys: chromosomes/contigs
+        * values: lists of tuples in the format (region_start,region_end)
+        For example, if called on a dataset with a single read and two modification types, each array would have two entries. The unique IDs would be the same, as both entries would represent the same single read. The mods and positions would be different, as they would extact different mods.
+    """
     file = Path(file)
     if file.suffix=='.h5' or file.suffix=='.hdf5':
         sorted_read_data_converted, datasets, regions_dict = read_vectors_from_hdf5(
@@ -353,144 +426,3 @@ def readwise_binary_modification_arrays(
 
     else:
         raise ValueError(f'File {file} does not have a recognized extension for single read data.')
-def reads_from_hdf5(
-    file: str | Path,
-    mod_names: list[str],
-    bed_file: str | Path = None,
-    region_str: str = None,
-    window_size: int = None,
-) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
-    """
-    Pulls a list of read data out of an hdf5 file containing processed read vectors.
-
-    Args:
-        file: Path to an hdf5 (.h5) file containing modification data for single reads,
-            stored in datasets read_name, chromosome, read_start,
-            read_end, base modification motif, mod_vector, and val_vector.
-        bed_file: Path to bed file specifying regions from which to draw reads. These
-            should all be regions for which your original .bam file had reads extracted,
-            although by design this method will not raise an error if any region contains
-            zero reads, as this may simply be a matter of low read depth.
-        mod_names: types of modification to extract data for. Basemods are specified as 
-            {sequence_motif},{position_of_modification}. For example, a methylated adenine is specified 
-            as 'A,0' and CpG methylation is specified as 'CG,0'.
-        window_size: 
-    
-    Returns:
-        Returns three parallel arrays, of length (N_READS * len(mod_names)), containing the following for each index:
-        * array of positions at which the specified modification was found in a read
-        * unique integer ID for the read
-        * modification represented by the positions
-        For example, if called on a dataset with a single read and two modification types, each array would have two entries. The unique IDs would be the same, as both entries would represent the same single read. The mods and positions would be different, as they would extact different mods.
-    """
-    regions_dict = defaultdict(list)
-    if bed_file is not None and region_str is None:
-        if window_size is None:
-            bed_filepath = Path(bed_file)
-            print(f'Using window size defined by bed file {bed_filepath.name}.')
-            bed_filepath_processed = bed_filepath
-        elif window_size>0:
-            bed_filepath = Path(bed_file)
-            print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-            bed_filepath_processed = file.parent / (bed_filepath.stem + f'.windowed{window_size}-for-readout' + bed_filepath.suffix)
-            print(f'Writing new bed file {bed_filepath_processed.name}')
-            utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
-        else:
-            raise ValueError(f'Invalid window_size of {window_size}')
-        with open(bed_filepath_processed) as bed_regions:
-            for line in bed_regions:
-                fields = line.split()
-                if len(fields)>2:
-                    chrom,start,end = fields[0],int(fields[1]),int(fields[2])
-                    regions_dict[chrom].append((start,end))
-    elif region_str is not None and bed_file is None:
-        if window_size is not None:
-            print('WARNING: window_size will be ignored, this parameter only works with bed file regions')
-        chromosome, coords = region_str.split(':')
-        start_coord, end_coord = map(int, coords.split('-'))
-        regions_dict[chromosome].append((start_coord,end_coord))
-    else:
-        raise ValueError('Cannot use both a bed file and a region string')        
-    for chrom in regions_dict:
-        regions_dict[chrom].sort(key=lambda x: x[0])
-    
-    mod_coords_list = []
-    read_ints_list = []
-    mod_names_list = []
-    
-    with h5py.File(file,'r') as h5:
-        read_names = np.array(h5['read_name'],dtype=str)
-        unique_read_names, first_indices = np.unique(read_names,return_index=True)
-        string_to_int = {read_name: index for index, read_name in zip(first_indices,unique_read_names)}
-        read_ints = np.array([string_to_int[read_name] for read_name in read_names])
-        read_chromosomes = np.array(h5['chromosome'],dtype=str)
-        read_starts = np.array(h5['read_start'])
-        read_ends = np.array(h5['read_end'])
-        read_motifs = np.array(h5['motif'],dtype=str)   
-
-        # Go through the regions one by one
-        for chrom,region_list in regions_dict.items():
-            for mod_name in mod_names:
-                for region_start,region_end in region_list:
-                    # Finds reads that are within the window you want
-                    center_coord = (region_start+region_end)//2
-                    relevant_read_indices = np.flatnonzero(
-                        (read_ends > region_start) & 
-                        (read_starts < region_end) & 
-                        (read_motifs == mod_name) & 
-                        (read_chromosomes == chrom)
-                    )
-                    # For each read, adds all of its elements to the lists that will be getting returned
-                    for read_index in relevant_read_indices:
-                        mod_vector = np.array(h5['mod_vector'][read_index])
-                        read_start = read_starts[read_index]
-                        read_int = read_ints[read_index]
-                        mod_indices = np.flatnonzero(mod_vector)
-                        for mod_index in mod_indices:
-                            mod_coord_absolute = mod_index+read_start
-                            if region_start < mod_coord_absolute < region_end:
-                                mod_coords_list.append(mod_coord_absolute-center_coord)
-                                read_ints_list.append(read_int)
-                                mod_names_list.append(mod_name)
-                
-    return (np.array(mod_coords_list),np.array(read_ints_list),np.array(mod_names_list))
-
-def reads_from_fake(mod_names: list[str],
-                    *args,
-                    **kwargs) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
-    """
-    Generates a set of reads with modifications, spanning a region of some specified size. Ignores all arguments except for mod_names.
-
-    TODO: Is integer index still correct for this?
-
-    Args:
-        mod_names: types of modification to extract data for; see below for valid choices
-    
-    Returns:
-        Returns three parallel arrays, of length (N_READS * len(mod_names)), containing the following for each index:
-        * array of positions at which the specified modification was found in a read
-        * unique integer ID for the read
-        * modification represented by the positions
-        For example, if called on a dataset with a single read and two modification types, each array would have two entries. The unique IDs would be the same, as both entries would represent the same single read. The mods and positions would be different, as they would extact different mods.
-    """
-    window_halfsize = 500
-    n_reads = 500
-
-    reads = []
-    read_names = []
-    mods = []
-    for mod_name in mod_names:
-        match mod_name:
-            case 'A':
-                mod_reads = [test_data.fake_read_mod_positions(window_halfsize, 'peak', 0.7) for _ in range(n_reads)]
-            case 'C':
-                mod_reads = [test_data.fake_read_mod_positions(window_halfsize, 'inverse_peak', 0.4) for _ in range(n_reads)]
-            case _:
-                raise ValueError(f'No stub settings for requested mod {mod_name}')
-        reads += mod_reads
-        read_names.append(np.arange(len(mod_reads)))
-        mods.append([mod_name] * len(mod_reads))
-    
-    read_names = np.concatenate(read_names)
-    mods = np.concatenate(mods)
-    return reads, read_names, mods
