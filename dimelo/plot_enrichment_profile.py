@@ -50,7 +50,7 @@ def plot_enrichment_profile(mod_file_names: list[str | Path],
     for mod_file, bed_file, mod_name in zip(mod_file_names, bed_file_names, mod_names):
         match mod_file.suffix:
             case '.gz':
-                modified_base_counts,valid_base_counts = load_processed.vectors_from_bedmethyl(bedmethyl_file=mod_file,
+                modified_base_counts,valid_base_counts = load_processed.pileup_vectors_from_bedmethyl(bedmethyl_file=mod_file,
                                                              bed_file=bed_file,
                                                              mod_name=mod_name,
                                                              window_size=window_size)

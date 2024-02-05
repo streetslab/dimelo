@@ -232,7 +232,7 @@ def extract(
     region_str: str = None,
     bed_files: list[str | Path] = None,
     basemods: list = ['A,0','CG,0','GCH,1'],
-    thresh: float = 0,
+    thresh: float = None,
     window_size: int = 0,
     cores: int = None,
     log: bool = False,
@@ -240,7 +240,7 @@ def extract(
 
     """
     TODO: Merge bed_file / region_str / window_size handling into a unified function somewhere
-    
+
     Takes a file containing long read sequencing data aligned 
     to a reference genome with modification calls for one or more base/context 
     and pulls out data from each individual read. The intermediate outputs contain

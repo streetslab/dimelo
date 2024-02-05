@@ -3,6 +3,54 @@ import pandas as pd
 from matplotlib.axes import Axes
 import seaborn as sns
 from pathlib import Path
+from collections import defaultdict
+
+def regions_dict_from_input(
+        regions: str | Path | list[str | Path] = None,
+        window_size: int = None,
+) -> dict:
+    regions_dict = defaultdict(list)
+
+    if isinstance(regions,list):
+        for region in regions:
+            add_region_to_dict(region,window_size,regions_dict)
+    else:
+        add_region_to_dict(regions,window_size,regions_dict)
+    for chrom in regions_dict:
+        regions_dict[chrom].sort(key=lambda x: x[0])    
+
+    return regions_dict
+
+def add_region_to_dict(
+    region: str | Path,
+    window_size: int,
+    regions_dict: dict,
+):
+    if Path(region).suffix=='.bed':
+        with open(region) as bed_regions:
+            for line_index,line in enumerate(bed_regions):
+                fields = line.split()
+                if len(fields)>2:
+                    chrom,start,end = fields[0],int(fields[1]),int(fields[2])      
+                    if window_size is None:
+                        regions_dict[chrom].append((start,end))
+                    else:
+                        center_coord = (start + end)//2
+                        regions_dict[chrom].append((center_coord-window_size,center_coord+window_size))
+                else:
+                    raise ValueError('Invalid bed format line {line_index} of {region.name}')    
+    elif isinstance(region,Path):
+        raise ValueError(f'Path object {region} is not pointing to a .bed file. regions must be provided as paths to .bed files or as strings in the format chrX:XXX-XXX.')
+    elif isinstance(region,str) and len(region.split(':'))==2 and len(region.split(':')[1].split('-'))==2:
+        chrom, coords = region.split(':')
+        start, end = map(int, coords.split('-'))
+        if window_size is None:
+            regions_dict[chrom].append((start,end))      
+        else:
+            center_coord = (start + end)//2
+            regions_dict[chrom].append((center_coord-window_size,center_coord+window_size))  
+    else:
+        raise ValueError(f'Invalid regions {type(region)}: {region}. Please use the format chrX:XXX-XXX.')
 
 def generate_centered_windows_bed(
     input_bed: str | Path,

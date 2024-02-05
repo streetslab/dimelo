@@ -8,7 +8,7 @@ import h5py
 from . import test_data
 from . import utils
 
-def counts_from_bedmethyl(bedmethyl_file: Path,
+def pileup_counts_from_bedmethyl(bedmethyl_file: Path,
                           mod_name: str,
                           bed_file: Path = None,
                           region_str: str = None,
@@ -100,7 +100,7 @@ def counts_from_fake(*args,
     window_halfsize = 500
     return test_data.fake_peak_enrichment(halfsize=window_halfsize, peak_height=0.15)
 
-def vectors_from_bedmethyl(bedmethyl_file: str | Path,
+def pileup_vectors_from_bedmethyl(bedmethyl_file: str | Path,
                           mod_name: str,
                           bed_file: str | Path = None,
                           region_str: str = None,
@@ -213,12 +213,80 @@ def vector_from_fake(window_size: int,
         window_size: halfsize of the window; how far the window stretches on either side of the center point
     
     Returns:
-        vector of fraction modifiied bases calculated for each position; float values between 0 and 1
+        vector of fraction modified bases calculated for each position; float values between 0 and 1
     """
     return test_data.fake_peak_enrichment_profile(halfsize=window_size, peak_height=0.15)
 
+def convert_bytes(item):
+    """Convert bytes to string if item is bytes, otherwise return as is."""
+    if isinstance(item, bytes):
+        return item.decode()
+    return item
+
+def convert_tuple_elements(tup):
+    """Convert all bytes elements in a tuple to strings."""
+    return tuple(convert_bytes(item) for item in tup)
+
+def read_vectors_from_hdf5(
+        file: str | Path,
+        motif: str,
+        regions: str | Path | list[str | Path] = None,
+        window_size: int = None,
+        sort_by: str | list[str] = ['chromosome','read_start'],
+) -> list:
+    regions_dict = utils.regions_dict_from_input(
+        regions=regions,
+        window_size=window_size,
+    )
+
+    with h5py.File(file,'r') as h5:
+        datasets = [name for name, obj in h5.items() if isinstance(obj, h5py.Dataset)]
+        
+        read_chromosomes = np.array(h5['chromosome'],dtype=str)
+        read_starts = np.array(h5['read_start'])
+        read_ends = np.array(h5['read_end'])
+        read_motifs = np.array(h5['motif'],dtype=str)         
+
+        
+        if len(regions_dict)>0:
+            read_data_list = []
+            for chrom,region_list in regions_dict.items():
+                for region_start,region_end in region_list:
+                        relevant_read_indices = np.flatnonzero(
+                            (read_ends > region_start) & 
+                            (read_starts < region_end) & 
+                            (read_motifs == motif) & 
+                            (read_chromosomes == chrom)
+                        )               
+                        read_data_list += list(zip(
+                            *(h5[dataset][relevant_read_indices] for dataset in datasets)
+                        ))
+        else:
+            relevant_read_indices = np.flatnonzero(
+                (read_motifs == motif)
+            )
+            read_data_list = list(zip(
+                *(h5[dataset][relevant_read_indices] for dataset in datasets)
+            ))
+ 
+    try:
+        sort_by_indices = [datasets.index(sort_item) for sort_item in sort_by]
+    except ValueError as e:
+        raise ValueError(f"One of the sort_by items is not in datasets: {e}")
+    
+    sorted_read_data = sorted(
+        read_data_list, 
+        key=lambda x: tuple(x[index] for index in sort_by_indices)
+        )
+
+    sorted_read_data_converted = [convert_tuple_elements(tup) for tup in sorted_read_data]
+
+    return sorted_read_data_converted, datasets
+
+
+            
 def reads_from_hdf5(
-    file: Path,
+    file: str | Path,
     mod_names: list[str],
     bed_file: str | Path = None,
     region_str: str = None,
