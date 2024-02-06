@@ -8,8 +8,8 @@ from . import load_processed
 
 
 def plot_enrichment_profile(mod_file_names: list[str | Path],
-                            bed_file_names: list[str | Path],
-                            mod_names: list[str],
+                            regions_list: list[str | Path | list[str | Path]],
+                            motifs: list[str],
                             sample_names: list[str],
                             window_size: int,
                             smooth_window: int | None = None,
@@ -41,25 +41,24 @@ def plot_enrichment_profile(mod_file_names: list[str | Path],
     Returns:
         Axes object containing the plot
     """
-    if not utils.check_len_equal(mod_file_names, bed_file_names, mod_names, sample_names):
+    if not utils.check_len_equal(mod_file_names, regions_list, motifs, sample_names):
         raise ValueError('Unequal number of inputs')
     mod_file_names = [Path(fn) for fn in mod_file_names]
-    bed_file_names = [Path(fn) for fn in bed_file_names]
 
     trace_vectors = []
-    for mod_file, bed_file, mod_name in zip(mod_file_names, bed_file_names, mod_names):
+    for mod_file, regions, motif in zip(mod_file_names, regions_list, motifs):
         match mod_file.suffix:
             case '.gz':
                 modified_base_counts,valid_base_counts = load_processed.pileup_vectors_from_bedmethyl(bedmethyl_file=mod_file,
-                                                             bed_file=bed_file,
-                                                             mod_name=mod_name,
+                                                             regions=regions,
+                                                             motif=motif,
                                                              window_size=window_size)
                 # This probably wants to get changed to NaNs where valid_base_counts==0 but that means fixing smoothing to work with it also
                 trace = np.divide(modified_base_counts,valid_base_counts, out=np.zeros_like(modified_base_counts, dtype=float), where=valid_base_counts!=0)
             case '.fake':
                 trace = load_processed.vector_from_fake(mod_file=mod_file,
-                                                        bed_file=bed_file,
-                                                        mod_name=mod_name,
+                                                        bed_file=regions,
+                                                        motif=motif,
                                                         window_size=window_size)
             case _:
                 raise ValueError(f'Unsupported file type for {mod_file}')
@@ -76,8 +75,8 @@ def plot_enrichment_profile(mod_file_names: list[str | Path],
     return axes
 
 def by_modification(mod_file_name: str | Path,
-                    bed_file_name: str | Path,
-                    mod_names: list[str],
+                    regions: str | Path,
+                    motifs: list[str],
                     *args,
                     **kwargs) -> Axes:
     """
@@ -85,17 +84,17 @@ def by_modification(mod_file_name: str | Path,
 
     See plot_enrichment_profile for details.
     """
-    n_mods = len(mod_names)
+    n_mods = len(motifs)
     return plot_enrichment_profile(mod_file_names=[mod_file_name] * n_mods,
-                                   bed_file_names=[bed_file_name] * n_mods,
-                                   mod_names=mod_names,
-                                   sample_names=mod_names,
+                                   regions_list=[regions] * n_mods,
+                                   motifs=motifs,
+                                   sample_names=motifs,
                                    *args,
                                    **kwargs)
 
 def by_regions(mod_file_name: str | Path,
-               bed_file_names: list[str | Path],
-               mod_name: str,
+               regions_list: list[str | Path | list[str | Path]],
+               motif: str,
                sample_names: list[str] = None,
                *args,
                **kwargs) -> Axes:
@@ -107,18 +106,18 @@ def by_regions(mod_file_name: str | Path,
     See plot_enrichment_profile for details.
     """
     if sample_names is None:
-        sample_names = bed_file_names
-    n_beds = len(bed_file_names)
+        sample_names = regions_list
+    n_beds = len(regions_list)
     return plot_enrichment_profile(mod_file_names=[mod_file_name] * n_beds,
-                                   bed_file_names=bed_file_names,
-                                   mod_names=[mod_name] * n_beds,
+                                   regions_list=regions_list,
+                                   motifs=[motif] * n_beds,
                                    sample_names=sample_names,
                                    *args,
                                    **kwargs)
 
 def by_dataset(mod_file_names: list[str | Path],
-               bed_file_name: str | Path,
-               mod_name: str,
+               regions: str | Path | list[str | Path],
+               motif: str,
                sample_names: list[str] = None,
                *args,
                **kwargs) -> Axes:
@@ -133,8 +132,8 @@ def by_dataset(mod_file_names: list[str | Path],
         sample_names = mod_file_names
     n_mod_files = len(mod_file_names)
     return plot_enrichment_profile(mod_file_names=mod_file_names,
-                                   bed_file_names=[bed_file_name] * n_mod_files,
-                                   mod_names=[mod_name] * n_mod_files,
+                                   regions_list=[regions] * n_mod_files,
+                                   motifs=[motif] * n_mod_files,
                                    sample_names=sample_names,
                                    *args,
                                    **kwargs)

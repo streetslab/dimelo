@@ -10,83 +10,54 @@ from . import test_data
 from . import utils
 
 def pileup_counts_from_bedmethyl(bedmethyl_file: Path,
-                          mod_name: str,
-                          bed_file: Path = None,
-                          region_str: str = None,
+                          motif: str,
+                          regions: str | Path | list[str | Path] = None,
                           ) -> tuple[int, int]:
     """
     Extract number of modified bases and total number of bases from the given bedmethyl file
 
-    TODO: Merge bed_file / region_str handling into a unified function somewhere
     TODO: How to name this method?
     
     Args:
         bedmethyl_file: Path to bedmethyl file
-        bed_file: Path to bed file specifying regions
-        mod_name: type of modification to extract data for
+        regions: Path to bed file specifying regions
+        motif: type of modification to extract data for
     
     Returns:
         tuple containing counts of (modified_bases, total_bases)
     """
-    # Deleted the windowing stuff from the plot_enrichment_profile
 
     source_tabix = pysam.TabixFile(str(bedmethyl_file))
-    # Don't need vectors, just need counts; also not guaranteed that windows are the same length?
-    # valid_base_counts = np.zeros(window_size*2)
-    # modified_base_counts = np.zeros(window_size*2)
+    # Don't need vectors, just need counts; also not guaranteed that windows are the same length
     valid_base_count = 0
     modified_base_count = 0
     
-    mod_motif = mod_name.split(',')[0]
-    mod_coord_in_motif = mod_name.split(',')[1]
+    mod_motif = motif.split(',')[0]
+    mod_coord_in_motif = motif.split(',')[1]
 
-    if bed_file is not None and region_str is None:
-        with open(bed_file) as regions_file:
-            for line in regions_file:
-                # pythonic condensed operation for extracting important fields
-                # fields = line.split('\t')
-                chromosome, start_pos, end_pos, *_ = line.split('\t')
-                start_pos = int(start_pos)
-                end_pos = int(end_pos)
-                # Removing centering
-                # center_coord = (int(fields[2])+int(fields[1]))//2
-                # chromosome = fields[0]
+    if regions is not None:
+        # Get counts from the specified regions
+        regions_dict = utils.regions_dict_from_input(regions)
+        for chromosome,region_list in regions_dict.items():
+            for start_coord,end_coord,strand in region_list:
                 if chromosome in source_tabix.contigs:
-                    # Removing centering
-                    # if center_coord-window_size>0:
-                    # for row in source_tabix.fetch(chromosome,center_coord-window_size,center_coord+window_size):
-                    for row in source_tabix.fetch(chromosome, start_pos, end_pos):
+                    for row in source_tabix.fetch(chromosome, start_coord, end_coord):
                         tabix_fields = row.split('\t')
                         pileup_basemod = tabix_fields[3]
                         if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
                             pileup_info = tabix_fields[9].split(' ')
-                            # Removing centering
-                            # pileup_coord_relative = int(tabix_fields[1])-center_coord+window_size
-                            # But actually don't need this because don't care about positions
-                            # pileup_coord_relative = int(tabix_fields[1]) - end_pos
-                            # valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
-                            # modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
                             valid_base_count += int(pileup_info[0])
                             modified_base_count += int(pileup_info[2])
-    elif region_str is not None and bed_file is None:
-        chromosome, coords = region_str.split(':')
-        start_coord, end_coord = map(int, coords.split('-'))
-        if chromosome in source_tabix.contigs:
-            for row in source_tabix.fetch(chromosome,start_coord,end_coord):
-                tabix_fields = row.split('\t')
-                pileup_basemod = tabix_fields[3]
-                if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
-                    pileup_info = tabix_fields[9].split(' ')
-                    # Removing centering
-                    # pileup_coord_relative = int(tabix_fields[1])-center_coord+window_size
-                    # But actually don't need this because don't care about positions
-                    # pileup_coord_relative = int(tabix_fields[1]) - end_pos
-                    # valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
-                    # modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
-                    valid_base_count += int(pileup_info[0])
-                    modified_base_count += int(pileup_info[2])  
     else:
-        raise ValueError("Cannot process both a region string and a regions bed file.")
+        # Get counts from the whole input file
+        for row in source_tabix.fetch():
+            tabix_fields = row.split('\t')
+            pileup_basemod = tabix_fields[3]
+            if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
+                pileup_info = tabix_fields[9].split(' ')
+                valid_base_count += int(pileup_info[0])
+                modified_base_count += int(pileup_info[2])            
+
 
     return (modified_base_count, valid_base_count)
 
@@ -102,14 +73,13 @@ def counts_from_fake(*args,
     return test_data.fake_peak_enrichment(halfsize=window_halfsize, peak_height=0.15)
 
 def pileup_vectors_from_bedmethyl(bedmethyl_file: str | Path,
-                          mod_name: str,
-                          bed_file: str | Path = None,
-                          region_str: str = None,
+                          motif: str,
+                          regions: str | Path | list[str | Path],
                           window_size: int = None) -> np.ndarray:
     """
     Generate trace for the specified modification aggregated across all regions in the given bed file. Called by profile plotters, can also be used by a user directly.
 
-    TODO: Merge bed_file / region_str / window_size handling into a unified function somewhere
+    TODO: Merge regions / region_str / window_size handling into a unified function somewhere
     TODO: How to name this method?
     TODO: I feel like stuff like this should be shared functionality
     TODO: I _THINK_ this should return a value for every position, with non-modified positions as zeros
@@ -118,8 +88,8 @@ def pileup_vectors_from_bedmethyl(bedmethyl_file: str | Path,
 
     Args:
         bedmethyl_file: Path to bedmethyl file
-        bed_file: Path to bed file specifying centered equal-length regions
-        mod_name: type of modification to extract data for
+        regions: Path to bed file specifying centered equal-length regions
+        motif: type of modification to extract data for
         window_size: the extent in either direction for windows around the center of regions.
     
     Returns:
@@ -128,80 +98,33 @@ def pileup_vectors_from_bedmethyl(bedmethyl_file: str | Path,
     
     source_tabix = pysam.TabixFile(str(bedmethyl_file))
     
-    mod_motif = mod_name.split(',')[0]
-    mod_coord_in_motif = mod_name.split(',')[1]
+    mod_motif = motif.split(',')[0]
+    mod_coord_in_motif = motif.split(',')[1]
     
-    if bed_file is not None and region_str is None:
-        if window_size is None:
-            bed_filepath_processed = Path(bed_file)
-        elif window_size > 0:
-            bed_filepath = Path(bed_file)
-            print(f'Loading regions from {bed_filepath.name} using even {window_size}bp windows in either direction from bed region centers.')
-            bed_filepath_processed = bedmethyl_file.parent / (bed_filepath.stem + f'.windowed{window_size}-for-readout' + bed_filepath.suffix)
-            print(f'Writing new bed file {bed_filepath_processed.name}')
-            utils.generate_centered_windows_bed(bed_filepath,bed_filepath_processed,window_size)
-        else:
-            raise ValueError(f'Invalid window size {window_size}.')
-        with open(bed_filepath_processed) as regions_file:
-            # Allocate the pileup arrays
-            for line in regions_file:
-                fields = line.split('\t')
-                if window_size is None:
-                    region_len = abs(int(fields[2])-int(fields[1])) 
-                    valid_base_counts = np.zeros(region_len, dtype=int)
-                    modified_base_counts = np.zeros(region_len, dtype=int)    
-                else:
-                    valid_base_counts = np.zeros(window_size*2, dtype=int)
-                    modified_base_counts = np.zeros(window_size*2, dtype=int)   
-                break
-            regions_file.seek(0)
-            for line_index,line in enumerate(regions_file):
-                fields = line.split('\t')
-                start_coord = min(int(fields[1]),int(fields[2]))
-                end_coord = max(int(fields[1]),int(fields[2]))
-                center_coord = (start_coord+end_coord)//2
-                chromosome = fields[0]
-                if chromosome in source_tabix.contigs:
-                    # TODO: Does this mean that we throw out any windows that are too short on specifically the left side?
-                    if window_size is None or center_coord-window_size>0:
-                        if window_size is None:
-                            search_start = start_coord
-                            search_end = end_coord
+    regions_dict = utils.regions_dict_from_input(regions,window_size)
+
+    first_key = next(iter(regions_dict))
+    first_tuple = regions_dict[first_key][0]
+    region_len = first_tuple[1] - first_tuple[0]
+
+    valid_base_counts = np.zeros(region_len, dtype=int)
+    modified_base_counts = np.zeros(region_len, dtype=int)    
+    for chromosome,region_list in regions_dict.items():
+        for start_coord,end_coord,strand in region_list:
+            center_coord = (start_coord+end_coord)//2
+            if chromosome in source_tabix.contigs:
+                for row in source_tabix.fetch(chromosome,start_coord,end_coord):
+                    tabix_fields = row.split('\t')
+                    pileup_basemod = tabix_fields[3]
+                    if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
+                        pileup_info = tabix_fields[9].split(' ')
+                        pileup_coord_relative = int(tabix_fields[1])-start_coord
+                        if pileup_coord_relative>region_len:
+                            print(f'WARNING: You have specified a region {chromosome}:{start_coord}-{end_coord} that is longer than the first region; the end of the region will be skipped. To make a profile plot with differently-sized region, consider using the window_size parameter to make a profile across centered windows.')
+                            break
                         else:
-                            search_start = center_coord-window_size
-                            search_end = center_coord+window_size
-                        for row in source_tabix.fetch(chromosome,search_start,search_end):
-                            tabix_fields = row.split('\t')
-    #                         print(tabix_fields)
-                            pileup_basemod = tabix_fields[3]
-                            if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
-                                pileup_info = tabix_fields[9].split(' ')
-                                pileup_coord_relative = int(tabix_fields[1])-search_start
-                                if window_size is None and pileup_coord_relative>region_len:
-                                    print(f'WARNING: {bed_filepath_processed} line {line_index+1} (1-based) specifies a region that is longer than the first region; the end of the region will be skipped. To make a profile plot with differently-sized region, consider using the window_size parameter to make a profile across centered windows.')
-                                    break
-                                else:
-                                    valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
-                                    modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
-    elif region_str is not None and bed_file is None:
-        if window_size is not None:
-            print('Window size is ignored if there is no region_bed')
-        chromosome, coords = region_str.split(':')
-        start_coord, end_coord = map(int, coords.split('-'))
-        valid_base_counts = np.zeros(end_coord-start_coord,dtype=int)
-        modified_base_counts = np.zeros(end_coord-start_coord,dtype=int)
-        if chromosome in source_tabix.contigs:
-            for row in source_tabix.fetch(chromosome,start_coord,end_coord):
-                tabix_fields = row.split('\t')
-                pileup_basemod = tabix_fields[3]
-                if mod_motif in pileup_basemod and mod_coord_in_motif in pileup_basemod:
-                    pileup_info = tabix_fields[9].split(' ')       
-                    pileup_coord_relative = int(tabix_fields[1])-start_coord
-                    valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
-                    modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
-    else:
-        raise ValueError("Cannot processed both a bed file and a region string")
-    
+                            valid_base_counts[pileup_coord_relative] += int(pileup_info[0])
+                            modified_base_counts[pileup_coord_relative] += int(pileup_info[2])
     return modified_base_counts,valid_base_counts
 
 def vector_from_fake(window_size: int,
