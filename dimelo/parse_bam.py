@@ -219,7 +219,7 @@ def extract(
     regions: str | Path | list[str | Path] = None,
     motifs: list = ['A,0','CG,0','GCH,1'],
     thresh: float = None,
-    window_size: int = 0,
+    window_size: int = None,
     cores: int = None,
     log: bool = False,
     cleanup: bool = True,) -> Path:

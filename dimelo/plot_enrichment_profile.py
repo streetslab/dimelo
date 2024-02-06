@@ -53,8 +53,9 @@ def plot_enrichment_profile(mod_file_names: list[str | Path],
                                                              regions=regions,
                                                              motif=motif,
                                                              window_size=window_size)
-                # This probably wants to get changed to NaNs where valid_base_counts==0 but that means fixing smoothing to work with it also
-                trace = np.divide(modified_base_counts,valid_base_counts, out=np.zeros_like(modified_base_counts, dtype=float), where=valid_base_counts!=0)
+                # Default to nan so we can skip over unfilled values when plotting or doing a rolling average
+                nans_everywhere = np.full_like(modified_base_counts, np.nan, dtype=float)
+                trace = np.divide(modified_base_counts,valid_base_counts, out=nans_everywhere, where=valid_base_counts!=0)
             case '.fake':
                 trace = load_processed.vector_from_fake(mod_file=mod_file,
                                                         bed_file=regions,
