@@ -193,7 +193,7 @@ def pileup(
     elif thresh<=0:
         raise ValueError(f'Threshold {thresh} cannot be used for pileup, please pick a positive nonzero value.')
     else:
-        adjusted_threshold = adjust_threshold(thresh)
+        adjusted_threshold = utils.adjust_threshold(thresh)
         for modnames_set in BASEMOD_NAMES_DICT.values():
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
@@ -342,7 +342,7 @@ def extract(
         print(f'With a thresh of {thresh}, modkit will simply save all tagged modifications.')
         adjusted_threshold = 0
     else:
-        adjusted_threshold = adjust_threshold(thresh)
+        adjusted_threshold = utils.adjust_threshold(thresh)
         for modnames_set in BASEMOD_NAMES_DICT.values():
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
@@ -515,20 +515,6 @@ def create_region_specifier(
     
     return region_specifier, bed_filepath_processed, bed_filepath_merged
 
-def adjust_threshold(
-    thresh,
-):
-    if thresh>0:
-        if thresh>1:
-            print(f'Modification threshold of {thresh} assumed to be for range 0-255. {thresh}/255={thresh/255} will be sent to modkit.')
-            thresh_scaled = thresh/255
-        else:
-            print(f'Modification threshold of {thresh} will be treated as coming from range 0-1.')
-            thresh_scaled = thresh
-            
-        return thresh_scaled
-    return thresh
-
 def read_by_base_txt_to_hdf5(
     input_txt: str | Path,
     output_h5: str | Path,
@@ -635,6 +621,20 @@ def read_by_base_txt_to_hdf5(
                     compression='gzip',
                     compression_opts=9,
                 )
+            if 'strand' in h5:
+                if old_size != h5['strand'].shape[0]:
+                    print('size mismatch','read_name','strand')
+                else:
+                    h5['strand'].resize((old_size+num_reads,))
+            else:
+                h5.create_dataset(
+                    'strand',
+                    (num_reads,),
+                    maxshape=(None,),
+                    dtype=dt_str,
+                    compression='gzip',
+                    compression_opts=9,
+                )
             if 'motif' in h5:
                 if old_size != h5['motif'].shape[0]:
                     print('size mismatch','read_name','motif')
@@ -708,6 +708,7 @@ def read_by_base_txt_to_hdf5(
                         h5['chromosome'][read_counter+old_size]=read_chrom
                         h5['read_start'][read_counter+old_size]=read_start
                         h5['read_end'][read_counter+old_size]=read_end
+                        h5['strand'][read_counter+old_size]=ref_strand
                         h5['motif'][read_counter+old_size]=basemod
                         h5['mod_vector'][read_counter+old_size]=mod_vector
                         h5['val_vector'][read_counter+old_size]=val_vector
@@ -757,6 +758,7 @@ def read_by_base_txt_to_hdf5(
                 h5['chromosome'][read_counter+old_size]=read_chrom
                 h5['read_start'][read_counter+old_size]=read_start
                 h5['read_end'][read_counter+old_size]=read_end
+                h5['strand'][read_counter+old_size]=ref_strand
                 h5['motif'][read_counter+old_size]=basemod
                 h5['mod_vector'][read_counter+old_size]=mod_vector
                 h5['val_vector'][read_counter+old_size]=val_vector

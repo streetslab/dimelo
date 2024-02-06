@@ -44,13 +44,13 @@ def add_region_to_dict(
         with open(region) as bed_regions:
             for line_index,line in enumerate(bed_regions):
                 fields = line.split()
-                if len(fields)>2:
-                    chrom,start,end = fields[0],int(fields[1]),int(fields[2])      
+                if len(fields)>3:
+                    chrom,start,end,strand = fields[0],int(fields[1]),int(fields[2]),fields[3]
                     if window_size is None:
-                        regions_dict[chrom].append((start,end))
+                        regions_dict[chrom].append((start,end,strand))
                     else:
                         center_coord = (start + end)//2
-                        regions_dict[chrom].append((center_coord-window_size,center_coord+window_size))
+                        regions_dict[chrom].append((center_coord-window_size,center_coord+window_size,strand))
                 else:
                     raise ValueError('Invalid bed format line {line_index} of {region.name}')    
     elif isinstance(region,Path):
@@ -59,10 +59,10 @@ def add_region_to_dict(
         chrom, coords = region.split(':')
         start, end = map(int, coords.split('-'))
         if window_size is None:
-            regions_dict[chrom].append((start,end))      
+            regions_dict[chrom].append((start,end,'.'))      
         else:
             center_coord = (start + end)//2
-            regions_dict[chrom].append((center_coord-window_size,center_coord+window_size))  
+            regions_dict[chrom].append((center_coord-window_size,center_coord+window_size,'.'))  
     else:
         raise ValueError(f'Invalid regions {type(region)}: {region}. Please use the format chrX:XXX-XXX.')
 
@@ -72,8 +72,8 @@ def bed_from_regions_dict(
 ):
     with open(save_bed_path,'w') as processed_bed:
         for chrom,regions_list in regions_dict.items():
-            for start,end in regions_list:
-                bed_line = '\t'.join([chrom,start,end,'.','.','.'])
+            for start,end,strand in regions_list:
+                bed_line = '\t'.join([chrom,start,end,strand,'.','.'])
                 processed_bed.write(bed_line)
 
 def generate_centered_windows_bed(

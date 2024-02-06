@@ -1,5 +1,6 @@
 from pathlib import Path
 from collections import defaultdict
+import random
 
 import pysam
 import numpy as np
@@ -233,6 +234,7 @@ def read_vectors_from_hdf5(
         regions: str | Path | list[str | Path] = None,
         window_size: int = None,
         sort_by: str | list[str] = ['chromosome','region_start','read_start'],
+        calculate_mod_fractions: bool = True,
 ) -> (list[tuple],list[str],dict):
     """
     Pulls a list of read data out of an .h5 file containing processed read vectors, formatted
@@ -265,10 +267,6 @@ def read_vectors_from_hdf5(
         a list of strings, naming the datasets returned.
         a regions_dict, containing lists of (region_start,region_end) coordinates by chromosome/contig.
     """
-    regions_dict = utils.regions_dict_from_input(
-        regions=regions,
-        window_size=window_size,
-    )
 
     with h5py.File(file,'r') as h5:
         datasets = [name for name, obj in h5.items() if isinstance(obj, h5py.Dataset)]
@@ -276,49 +274,90 @@ def read_vectors_from_hdf5(
         read_chromosomes = np.array(h5['chromosome'],dtype=str)
         read_starts = np.array(h5['read_start'])
         read_ends = np.array(h5['read_end'])
-        read_motifs = np.array(h5['motif'],dtype=str)         
-
+        read_motifs = np.array(h5['motif'],dtype=str)        
+        ref_strands = np.array(h5['strand'],dtype=str)
         
-        if len(regions_dict)>0:
+        if regions is not None:
+            regions_dict = utils.regions_dict_from_input(
+                regions=regions,
+                window_size=window_size,
+            )
             read_data_list = []
             for chrom,region_list in regions_dict.items():
-                for region_start,region_end in region_list:
+                for region_start,region_end,region_strand in region_list:
                         relevant_read_indices = np.flatnonzero(
                             (read_ends > region_start) & 
                             (read_starts < region_end) & 
                             np.isin(read_motifs, motifs) & 
-                            (read_chromosomes == chrom)
+                            (read_chromosomes == chrom) &
+                            ((region_strand not in ['+', '-']) 
+                                | (ref_strands == region_strand))
                         )               
                         read_data_list += list(zip(
                             *(h5[dataset][relevant_read_indices] for dataset in datasets),
                             [region_start for _ in relevant_read_indices],
-                            [region_end for _ in relevant_read_indices]
+                            [region_end for _ in relevant_read_indices],
                         ))
         else:
+            regions_dict = None
             relevant_read_indices = np.flatnonzero(
                 np.isin(read_motifs, motifs)
             )
             read_data_list = list(zip(
                 *(h5[dataset][relevant_read_indices] for dataset in datasets),
-                [region_start for _ in relevant_read_indices],
-                [region_end for _ in relevant_read_indices]
+                [-1 for _ in relevant_read_indices],
+                [-1 for _ in relevant_read_indices]
             ))
- 
-    # We add region information (start and end; chromosome is already present!) so that it is possible to sort by these
-    datasets += ['region_start','region_end']
-    try:
-        sort_by_indices = [datasets.index(sort_item) for sort_item in sort_by]
-    except ValueError as e:
-        raise ValueError(f"Sorting error. {e}. Datasets include {datasets}")
+    read_data_converted = [convert_tuple_elements(tup) for tup in read_data_list]
     
-    sorted_read_data = sorted(
-        read_data_list, 
-        key=lambda x: tuple(x[index] for index in sort_by_indices)
-        )
+    datasets += ['region_start','region_end']
+    # We add region information (start and end; chromosome is already present!) so that it is possible to sort by these
+    if calculate_mod_fractions:
+        # # Add MOTIF_mod_fraction for each unique motif in the read_data_list
+        # unique_motifs = np.unique(read_motifs) 
+        # Add the MOTIF_mod_fraction entries to the datasets list for future reference in sorting
+        datasets +=[f'{motif}_mod_fraction' for motif in motifs]
+        mod_fractions_by_read_name_by_motif = defaultdict(lambda: defaultdict(lambda: 0.0))
+        for motif in motifs:
+            for read_data in read_data_converted:
+                if read_data[datasets.index('motif')]==motif:
+                    mod_sum = np.sum(read_data[datasets.index('mod_vector')])
+                    val_sum = np.sum(read_data[datasets.index('val_vector')])
+                    mod_fraction = (mod_sum/val_sum if val_sum>0 else 0)
+                    mod_fractions_by_read_name_by_motif[read_data[datasets.index('read_name')]][motif]=mod_fraction
 
-    sorted_read_data_converted = [convert_tuple_elements(tup) for tup in sorted_read_data]
+        read_data_all = []
+        for read_data in read_data_converted:
+            read_data_all.append(
+                tuple(val for val in read_data)
+                +tuple(mod_frac for mod_frac in mod_fractions_by_read_name_by_motif
+                [read_data[datasets.index('read_name')]].values()
+                    )
+                )
+    else:
+        read_data_all = read_data_converted
+    # Enforce that sort_by is a list
+    if not isinstance(sort_by,list):
+        sort_by = [sort_by]
+    
+    # If 'shuffle' appears anywhere in sort_by, we first shuffle the list
+    if 'shuffle' in sort_by:
+        random.shuffle(read_data_all)
 
-    return sorted_read_data_converted, datasets, regions_dict
+    try:
+        sort_by_indices = [datasets.index(sort_item) for sort_item in sort_by if sort_item!='shuffle']
+    except ValueError as e:
+        raise ValueError(f"Sorting error. {e}. Datasets include {datasets}. If you need mod fraction sorting make sure you are not setting calculate_read_fraction to False.")
+    
+    if len(sort_by_indices)>0:
+        sorted_read_data = sorted(
+            read_data_all, 
+            key=lambda x: tuple(x[index] for index in sort_by_indices)
+            )
+    else:
+        sorted_read_data = read_data_all
+
+    return sorted_read_data, datasets, regions_dict
 
 
 def readwise_binary_modification_arrays(
@@ -404,8 +443,10 @@ def readwise_binary_modification_arrays(
             for read_data in sorted_read_data_converted]
             )
         # TODO: handle the case where a read shows up in more than one different region
-        unique_read_names, first_indices = np.unique(read_names,return_index=True)
-        string_to_int = {read_name: index for index, read_name in zip(first_indices,unique_read_names)}
+        _, unique_first_indices = np.unique(read_names,return_index=True)
+        unique_in_order = read_names[np.sort(unique_first_indices)]
+        string_to_int = {read_name: index for index,read_name in enumerate(unique_in_order)}
+        # string_to_int = {read_name: index for index, read_name in zip(first_indices,unique_read_names)}
         read_ints = np.array([string_to_int[read_name] for read_name in read_names])
         for read_int,read_data in zip(read_ints,sorted_read_data_converted):
             if thresh is None:

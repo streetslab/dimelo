@@ -23,6 +23,7 @@ def plot_reads(mod_file_name: str | Path,
                regions: str | Path | list[str | Path],
                motifs: list[str],
                window_size: int = None,
+               sort_by: str | list[str] = 'shuffle',
                thresh: float = None,
                relative: bool = True,
                s: float = 0.5
@@ -52,6 +53,7 @@ def plot_reads(mod_file_name: str | Path,
         window_size = window_size,
         thresh = thresh,
         relative = relative,
+        sort_by = sort_by,
     )
     # match mod_file_name.suffix:
     #     case _:
@@ -88,7 +90,7 @@ def plot_reads(mod_file_name: str | Path,
             handle.set_markersize(10)  # Set a larger marker size for legend
 
     if relative:
-        region1_start,region1_end = next(iter(regions_dict.values()))[0]
+        region1_start,region1_end,_ = next(iter(regions_dict.values()))[0]
         effective_window_size = (region1_end-region1_start)//2
         axes.set_xlim([-effective_window_size,effective_window_size])
     
