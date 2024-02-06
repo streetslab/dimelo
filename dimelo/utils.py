@@ -5,6 +5,12 @@ import seaborn as sns
 from pathlib import Path
 from collections import defaultdict
 
+DEFAULT_COLORS = {
+    'A,0':'blue',
+    'CG,0':'orange',
+    'GCH,1':'purple',
+}
+
 def adjust_threshold(
     thresh,
 ):

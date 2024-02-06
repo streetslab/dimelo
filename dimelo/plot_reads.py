@@ -17,7 +17,7 @@ from matplotlib.axes import Axes
 import matplotlib.pyplot as plt
 
 from . import load_processed
-
+from . import utils
 
 def plot_reads(mod_file_name: str | Path,
                regions: str | Path | list[str | Path],
@@ -26,7 +26,7 @@ def plot_reads(mod_file_name: str | Path,
                sort_by: str | list[str] = 'shuffle',
                thresh: float = None,
                relative: bool = True,
-               s: float = 0.5
+               **kwargs
               ) -> Axes:
     """
     Plots centered single reads as a scatterplot, cut off at the boundaries of the requested regions?
@@ -45,6 +45,13 @@ def plot_reads(mod_file_name: str | Path,
     """ 
     mod_file_name = Path(mod_file_name)
     # bed_file_name = Path(bed_file_name)
+    size = kwargs.pop('s', 0.5)
+
+    palette = kwargs.pop('palette', {})
+
+    merged_palette = {**utils.DEFAULT_COLORS, **palette}
+
+
 
     reads,read_names,mods,regions_dict = load_processed.readwise_binary_modification_arrays(
         file = mod_file_name,
@@ -76,9 +83,11 @@ def plot_reads(mod_file_name: str | Path,
         y="read_name",
         hue="mod",
         # palette=colors,
-        s=s,
+        s=size,
         marker="s",
         linewidth=0,
+        palette = merged_palette,
+        **kwargs
     )
     # Retrieve the existing legend
     legend = axes.legend_
