@@ -59,8 +59,11 @@ def add_region_to_dict(
         with open(region) as bed_regions:
             for line_index,line in enumerate(bed_regions):
                 fields = line.split()
-                if len(fields)>3:
-                    chrom,start,end,strand = fields[0],int(fields[1]),int(fields[2]),fields[3]
+                if len(fields)>2:
+                    if len(fields)>3:
+                        chrom,start,end,strand = fields[0],int(fields[1]),int(fields[2]),fields[3]
+                    else:
+                        chrom,start,end,strand = fields[0],int(fields[1]),int(fields[2]),'.'
                     if window_size is None:
                         regions_dict[chrom].append((start,end,strand))
                     else:
