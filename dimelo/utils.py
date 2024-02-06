@@ -31,6 +31,9 @@ def regions_dict_from_input(
 ) -> dict:
     regions_dict = defaultdict(list)
 
+    if window_size is not None and window_size<=0:
+        raise ValueError('Invalid window_size. To disable windowing, set window_size to None or do not pass a value (the default is None).')
+
     if isinstance(regions,list):
         for region in regions:
             add_region_to_dict(region,window_size,regions_dict)
@@ -78,8 +81,8 @@ def bed_from_regions_dict(
 ):
     with open(save_bed_path,'w') as processed_bed:
         for chrom,regions_list in regions_dict.items():
-            for start,end,strand in regions_list:
-                bed_line = '\t'.join([chrom,start,end,strand,'.','.'])
+            for index,(start,end,strand) in enumerate(regions_list):
+                bed_line = '\t'.join([chrom,str(start),str(end),strand,'.','.'])+'\n'
                 processed_bed.write(bed_line)
 
 def generate_centered_windows_bed(

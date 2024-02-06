@@ -62,9 +62,8 @@ def pileup(
     output_name: str,
     ref_genome: str | Path,
     output_directory: str | Path = None,
-    region_str: str = None,
-    bed_files: list[str | Path] = None,
-    basemods: list = ['A,0','CG,0','GCH,1'],
+    regions: str | Path | list[str | Path] = None,
+    motifs: list = ['A,0','CG,0'],
     thresh: float = None,
     window_size: int = None,
     cores: int = None,
@@ -105,11 +104,8 @@ def pileup(
         output_directory: optional str or Path pointing to an output directory.
             If left as None, outputs will be stored in a new folder within the input
             directory.
-        region_str: optional string in format chr{num}:{start}-{end} specifying a single
-            region to process. Mutually exclusive with bed_file.
-        bed_file: optional string or Path for a .bed file containing one or more regions
-            of the genome to process. Mutually exclusive with region_str.
-        basemods: a list of strings specifying which base modifications to look for.
+        regions: TODO
+        motifs: a list of strings specifying which base modifications to look for.
             The basemods are each specified as {sequence_motif},{position_of_modification}.
             For example, a methylated adenine is specified as 'A,0' and CpG methylation
             is specified as 'CG,0'.
@@ -133,13 +129,12 @@ def pileup(
         for plotting functions.
         
     """
-    if bed_files is not None:
-        bed_files = [Path(bed_file) for bed_file in bed_files]
+
     input_file, ref_genome, output_directory = sanitize_path_args(
         input_file, ref_genome, output_directory
     )
     
-    check_bam_format(input_file, basemods)
+    check_bam_format(input_file, motifs)
     
     # TODO: Add .tbi file? Add windowed bed file too, maybe?
     output_path, (output_bedmethyl, output_bedmethyl_sorted, output_bedgz_sorted) = prep_outputs(
@@ -150,23 +145,22 @@ def pileup(
     )
     
     # TODO: This is mildly confusing. I get what it's doing, but it's hard to follow / names are bad. Also, why is it used in cleanup here, but not in extract?
-    region_specifier, bed_filepath_processed, bed_filepath_merged = create_region_specifier(
+    region_specifier, bed_filepath_processed = create_region_specifier(
         output_path,
-        bed_files,
-        region_str,
+        regions,
         window_size,
     )
     
     motif_command_list = []
-    if len(basemods)>0:
-        for basemod in basemods:
+    if len(motifs)>0:
+        for basemod in motifs:
             # TODO: Can be split out to method; same functionality as in extract
             motif_details = basemod.split(',')
             motif_command_list.append('--motif')
             motif_command_list.append(motif_details[0])
             motif_command_list.append(motif_details[1])
     else:
-        raise('Error: no basemods specified. Nothing to process.')
+        raise('Error: no motifs specified. Nothing to process.')
     
     if log:
         print('Logging to ',Path(output_path)/'pileup-log')
@@ -217,8 +211,6 @@ def pileup(
     if cleanup:
         if bed_filepath_processed is not None:
             bed_filepath_processed.unlink()
-        if bed_filepath_merged is not None:
-            bed_filepath_merged.unlink()
         os.remove(output_bedmethyl)
         os.remove(output_bedmethyl_sorted)
     
@@ -229,9 +221,8 @@ def extract(
     output_name: str,
     ref_genome: str | Path,
     output_directory: str | Path = None,
-    region_str: str = None,
-    bed_files: list[str | Path] = None,
-    basemods: list = ['A,0','CG,0','GCH,1'],
+    regions: str | Path | list[str | Path] = None,
+    motifs: list = ['A,0','CG,0','GCH,1'],
     thresh: float = None,
     window_size: int = 0,
     cores: int = None,
@@ -272,11 +263,8 @@ def extract(
         output_directory: optional str or Path pointing to an output directory.
             If left as None, outputs will be stored in a new folder within the input
             directory.
-        region_str: optional string in format chr{num}:{start}-{end} specifying a single
-            region to process. Mutually exclusive with bed_file.
-        bed_file: optional string or Path for a .bed file containing one or more regions
-            of the genome to process. Mutually exclusive with region_str.
-        basemods: a list of strings specifying which base modifications to look for.
+        regions: TODO
+        motifs: a list of strings specifying which base modifications to look for.
             The basemods are each specified as {sequence_motif},{position_of_modification}.
             For example, a methylated adenine is specified as 'A,0' and CpG methylation
             is specified as 'CG,0'.
@@ -300,13 +288,11 @@ def extract(
         plotting functions.
 
     """
-    if bed_files is not None:
-        bed_files = [Path(bed_file) for bed_file in bed_files]
     input_file, ref_genome, output_directory = sanitize_path_args(
         input_file, ref_genome, output_directory
     )
     
-    check_bam_format(input_file, basemods)
+    check_bam_format(input_file, motifs)
 
     # TODO: Add intermediate mod-specific .txt files?
     output_path, (output_h5,) = prep_outputs(
@@ -316,10 +302,9 @@ def extract(
         output_file_names=['reads.combined_basemods.h5']
     )
     
-    region_specifier, bed_filepath_processed, bed_filepath_merged = create_region_specifier(
+    region_specifier, bed_filepath_processed = create_region_specifier(
         output_path,
-        bed_files,
-        region_str,
+        regions,
         window_size,
     )
     
@@ -346,21 +331,20 @@ def extract(
         for modnames_set in BASEMOD_NAMES_DICT.values():
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
-    
-    for basemod in basemods:    
+
+    if log:
+        print('logging to ',Path(output_path)/'extract-log')
+        log_command=['--log-filepath',Path(output_path)/f'extract-log']
+    else:
+        log_command=[]   
+
+    for basemod in motifs:    
         print(f'Extracting {basemod} sites')
         motif_command_list = []
         motif_details = basemod.split(',')
         motif_command_list.append('--motif')
         motif_command_list.append(motif_details[0])
         motif_command_list.append(motif_details[1])
-
-        # TODO: I think this should be outside the loop; makes it match pileup
-        if log:
-            print('logging to ',Path(output_path)/'extract-log')
-            log_command=['--log-filepath',Path(output_path)/f'extract-log']
-        else:
-            log_command=[]
 
         output_txt = Path(output_path)/(f'reads.{basemod}.txt')
         
@@ -387,8 +371,6 @@ def extract(
     if cleanup:
         if bed_filepath_processed is not None:
             bed_filepath_processed.unlink()
-        if bed_filepath_merged is not None:
-            bed_filepath_merged.unlink()
             
     return output_h5
 
@@ -473,47 +455,28 @@ def get_alignment_quality(
         
 def create_region_specifier(
     output_path,
-    bed_files,
-    region_str,
+    regions,
     window_size,
 ):
     """
     Creates commands to pass to modkit based on bed_file regions.
     """
     
-    bed_filepath_processed = None
-    bed_filepath_merged = None
-    if bed_files is not None and region_str is None and len(bed_files)>0:
+    if regions is not None:
         bed_filepath_processed = output_path / 'regions.processed.bed'
-        if window_size is None:
-            utils.merge_bed_files(bed_files,bed_filepath_processed)
-            print(f'Processing from {[Path(bed_file).name for bed_file in bed_files]} using unmodified bed regions.')
-            region_specifier = ['--include-bed',bed_filepath_processed]
-        elif window_size>0:
-            print(f'Processing from {[Path(bed_file).name for bed_file in bed_files]} using even {window_size}bp windows in either direction from bed region centers.')
-            bed_filepath_merged = output_path / 'regions.merged.bed'
-            utils.merge_bed_files(bed_files, bed_filepath_merged)
-            print(f'Writing new bed file {bed_filepath_processed.name}')
-            utils.generate_centered_windows_bed(bed_filepath_merged,bed_filepath_processed,window_size)
-            region_specifier = ['--include-bed',bed_filepath_processed]
-        else:
-            raise ValueError(f'Error: invalid window size {window_size}bp')
-    elif bed_files is None and region_str is not None:
-        if window_size is None:
-            print(f'Processing from region {region_str}.')
-            region_specifier = ['--region',region_str]
-        else:
-            print(f'Warning: window size {window_size}bp will be ignored. Processing from region {region_str}.')
-            region_specifier = ['--region',region_str]
-    elif bed_files is None and region_str is None:
-        print('No region(s) specified, processing the entire genome.')
-        region_specifier = []
-        if window_size is not None:
-            print('A window_size was specified but will be ignored.')
+        regions_dict = utils.regions_dict_from_input(
+            regions,
+            window_size,
+        )
+        region_specifier = ['--include-bed',str(bed_filepath_processed)]
     else:
-        raise ValueError('Error: cannot process both a region and a bed file.')  
+        bed_filepath_processed = None
+        region_specifier = []
+
+    utils.bed_from_regions_dict(regions_dict,bed_filepath_processed)
     
-    return region_specifier, bed_filepath_processed, bed_filepath_merged
+
+    return region_specifier, bed_filepath_processed
 
 def read_by_base_txt_to_hdf5(
     input_txt: str | Path,
