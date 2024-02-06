@@ -5,6 +5,12 @@ import seaborn as sns
 from pathlib import Path
 from collections import defaultdict
 
+# This provides the mapping of canonical bases to sets of valid mode names
+BASEMOD_NAMES_DICT = {
+    'A':{'A','a','Y'},
+    'C':{'m','Z'},
+}
+
 DEFAULT_COLORS = {
     'A,0':'blue',
     'CG,0':'orange',

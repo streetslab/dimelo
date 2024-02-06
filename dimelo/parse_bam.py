@@ -19,11 +19,6 @@ indexed random-access pileup and read-wise processed outputs.
 """
 Global variables
 """
-# This provides the mapping of canonical bases to sets of valid mode names
-BASEMOD_NAMES_DICT = {
-    'A':{'A','a','Y'},
-    'C':{'m','Z'},
-}
 
 # This should be updated in tandem with the environment.yml nanoporetech::modkit version
 EXPECTED_MODKIT_VERSION = '0.2.4'
@@ -188,7 +183,7 @@ def pileup(
         raise ValueError(f'Threshold {thresh} cannot be used for pileup, please pick a positive nonzero value.')
     else:
         adjusted_threshold = utils.adjust_threshold(thresh)
-        for modnames_set in BASEMOD_NAMES_DICT.values():
+        for modnames_set in utils.BASEMOD_NAMES_DICT.values():
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
     
@@ -328,7 +323,7 @@ def extract(
         adjusted_threshold = 0
     else:
         adjusted_threshold = utils.adjust_threshold(thresh)
-        for modnames_set in BASEMOD_NAMES_DICT.values():
+        for modnames_set in utils.BASEMOD_NAMES_DICT.values():
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
 
@@ -422,10 +417,10 @@ def check_bam_format(
                         raise ValueError(f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered to be implicit. \n\nConsider using "modkit update-tags {str(bam_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.')
                     else:
                         if len(tag_value)>0 and tag_value[0] in basemods_found_dict.keys():
-                            if tag_value[2] in BASEMOD_NAMES_DICT[tag_value[0]]:
+                            if tag_value[2] in utils.BASEMOD_NAMES_DICT[tag_value[0]]:
                                 basemods_found_dict[tag_value[0]] = True
                             else:
-                                raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {BASEMOD_NAMES_DICT[tag_value[0]]}. \n\nIf you know what your mod names correspond to in terms of the latest .bam standard, consider using "modkit adjust-mods {str(bam_file)} new_file.bam --convert 5mC_name m --convert N6mA_name a --convert other_basemod_name correct_label" and then trying with the new file. Note: currently supported mod names are {BASEMOD_NAMES_DICT}')
+                                raise ValueError(f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {utils.BASEMOD_NAMES_DICT[tag_value[0]]}. \n\nIf you know what your mod names correspond to in terms of the latest .bam standard, consider using "modkit adjust-mods {str(bam_file)} new_file.bam --convert 5mC_name m --convert N6mA_name a --convert other_basemod_name correct_label" and then trying with the new file. Note: currently supported mod names are {utils.BASEMOD_NAMES_DICT}')
             if all(basemods_found_dict.values()):
                 return
             if counter>=NUM_READS_TO_CHECK:
