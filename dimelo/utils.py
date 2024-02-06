@@ -90,43 +90,6 @@ def bed_from_regions_dict(
             for index,(start,end,strand) in enumerate(regions_list):
                 bed_line = '\t'.join([chrom,str(start),str(end),strand,'.','.'])+'\n'
                 processed_bed.write(bed_line)
-
-def generate_centered_windows_bed(
-    input_bed: str | Path,
-    output_bed: str | Path,
-    window_size: int,
-):
-    """
-    TODO: Documentation; I think window_size is a half-size?
-    TODO: Do we anticipate always working from bed files, or should the centering functionality work on some internal region representation; would just need a bed file wrapper around it, then.
-    TODO: I think I like the way this works, where you can pass it a bed file with arbitrary regions and it will find the center --> generate windows of the appropriate size. But then again maybe we should discuss.
-    TODO: Right now, this returns even-number-length windows on the half-open interval [center_coord - window_size, center_coord + window_size). I think it should do odd-number-length windows on the closed interval. Thoughts?
-    """
-    with open(output_bed,'w') as windowed_bed:
-        with open(input_bed) as source_bed:
-            for line in source_bed:
-                fields = line.split('\t')
-                windowed_fields = fields
-                center_coord = (int(fields[1])+int(fields[2]))//2
-                windowed_fields[1] = str(center_coord - window_size)
-                windowed_fields[2] = str(center_coord + window_size)
-                windowed_line = '\t'.join(windowed_fields)
-                windowed_bed.write(windowed_line)
-
-def merge_bed_files(
-    bed_files: list[str | Path],
-    output_bed: str | Path,
-):
-    """
-    Merge bed files together, simply concatenating. This does not currently do a proper union, although it totally could.
-    """
-    with open(output_bed,'w') as outfile:
-        for index,bed_file in enumerate(bed_files):
-            if index>0:
-                outfile.write('\n')
-            with open(bed_file,'r') as infile:
-                for line in infile:
-                    outfile.write(line)
             
 def bedmethyl_to_bigwig(
     input_bedmethyl: str | Path,
