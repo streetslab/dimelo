@@ -142,11 +142,70 @@ For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab
 ## Plotting
 
 `plot_enrichment_profile` module for pileup line plot profiles across one or more region
-
+```
+def plot_enrichment_profile(mod_file_names: list[str | Path],
+                            regions_list: list[str | Path | list[str | Path]],
+                            motifs: list[str],
+                            sample_names: list[str],
+                            window_size: int,
+                            smooth_window: int | None = None,
+                            **kwargs) -> Axes:
+def by_modification(mod_file_name: str | Path,
+                    regions: str | Path,
+                    motifs: list[str],
+                    *args,
+                    **kwargs) -> Axes:
+def by_regions(mod_file_name: str | Path,
+               regions_list: list[str | Path | list[str | Path]],
+               motif: str,
+               sample_names: list[str] = None,
+               *args,
+               **kwargs) -> Axes:
+def by_dataset(mod_file_names: list[str | Path],
+               regions: str | Path | list[str | Path],
+               motif: str,
+               sample_names: list[str] = None,
+               *args,
+               **kwargs) -> Axes:
+```
 `plot_enrichment` module for enrichment (e.g. mA/A) bar plot comparisons
+```
 
+def plot_enrichment(mod_file_names: list[str | Path],
+                    regions_list: list[str | Path | list[str | Path]],
+                    motifs: list[str],
+                    sample_names: list[str],
+                    **kwargs) -> Axes:
+def by_modification(mod_file_name: str | Path,
+                    regions: str | Path | list[str | Path],
+                    motifs: list[str],
+                    *args,
+                    **kwargs) -> Axes:
+def by_regions(mod_file_name: str | Path,
+               regions_list: list[str | Path | list[str | Path]],
+               motif: str,
+               sample_names: list[str] = None,
+               *args,
+               **kwargs) -> Axes:
+def by_dataset(mod_file_names: list[str | Path],
+               regions: str | Path | list[str | Path],
+               motif: str,
+               sample_names: list[str] = None,
+               *args,
+               **kwargs) -> Axes:
+```
 `plot_reads` module for single read plots
-
+```
+def plot_reads(mod_file_name: str | Path,
+               regions: str | Path | list[str | Path],
+               motifs: list[str],
+               window_size: int = None,
+               sort_by: str | list[str] = 'shuffle',
+               thresh: float = None,
+               relative: bool = True,
+               **kwargs
+              ) -> Axes:
+```
 ## Load values from processed files
 
 `load_processed.pileup_counts_from_bedmethyl` for valid/modified counts from a specified region or set of regions
