@@ -89,7 +89,7 @@ def counts_from_fake(*args,
 def pileup_vectors_from_bedmethyl(bedmethyl_file: str | Path,
                           motif: str,
                           regions: str | Path | list[str | Path],
-                          window_size: int = None) -> np.ndarray:
+                          window_size: int = None) -> (np.ndarray,np.ndarray):
     """
     Generate trace for the specified modification aggregated across all regions in the given bed file. Called by profile plotters, can also be used by a user directly.
 
