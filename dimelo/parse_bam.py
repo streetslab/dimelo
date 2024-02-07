@@ -166,8 +166,8 @@ def pileup(
     # TODO: This should be a method, like create_region_specifier, or just combined into a prep method for the start...
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
-        print(f'No specified number of cores requested. {cores_avail} available on machine, allocating {cores_avail//2}')
-        cores_command_list = ['--threads',str(cores_avail//2)]
+        print(f'No specified number of cores requested. {cores_avail} available on machine, allocating all.')
+        cores_command_list = ['--threads',str(cores_avail)]
     elif cores>cores_avail:
         print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
         cores_command_list = ['--threads',str(cores_avail)]
@@ -305,8 +305,8 @@ def extract(
     
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
-        print(f'No specified number of cores requested. {cores_avail} available on machine, allocating {cores_avail//2}')
-        cores_command_list = ['--threads',str(cores_avail//2)]
+        print(f'No specified number of cores requested. {cores_avail} available on machine, allocating all.')
+        cores_command_list = ['--threads',str(cores_avail)]
     elif cores>cores_avail:
         print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
         cores_command_list = ['--threads',str(cores_avail)]
