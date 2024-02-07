@@ -16,7 +16,7 @@ Conda installation: https://www.anaconda.com/download
 Open your terminal or command line and navigate to wherever you want to keep the `dimelo` source code (e.g. your Documents folder, `cd Documents`) and clone the repo
 
 ```
-git clone -b modkit_parsing_main https://github.com/streetslab/dimelo
+git clone -b modkit_parsing_beta https://github.com/streetslab/dimelo
 ```
 
 ### Set up virtual environment
