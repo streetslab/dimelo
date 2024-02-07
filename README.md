@@ -99,15 +99,12 @@ jupyter notebook
 
 ## Parsing and processing
 
-Both pileup and extract are typically run with a .bed file of regions, which can then be also passed to the plotting functions. However, for parsing, a list of many .bed files can be passed and all will be processed.
-
-.bed format needs to have chromosome, start coordinate, end coordinate, strand, and two more values. However, the last three can simply be `.`
-
+Both pileup and extract are typically run with a .bed file of regions, which can then be also passed to the plotting functions. One can also pass regions as a string, in the format `chrX:XXX-XXX`, and pass more than one .bed file or string in a list. All regions are processed into a file called `regions.processed.bed` which follows the format required by `modkit`:
 ```
-chr14	44123158	44123308	.  .  .
+chr14	44123158	44123308	+  .  .
 ```
 
-`parse_bam.pileup` for profiles and enrichment between regions/modifications
+`parse_bam.pileup` creates a bedmethyl genome-position-wise pileup for profiles and enrichment plotting between regions/modifications or for pulling out a genomic track at one or more regions.
 
 ```
 def pileup(
@@ -115,56 +112,29 @@ def pileup(
     output_name: str,
     ref_genome: str | Path,
     output_directory: str | Path = None,
-    region_str: str = None,
-    bed_files: list[str | Path] = None,
-    basemods: list = ['A,0','CG,0','GCH,1'],
+    regions: str | Path | list[str | Path] = None,
+    motifs: list = ['A,0','CG,0'],
     thresh: float = None,
     window_size: int = None,
     cores: int = None,
     log: bool = False,
     cleanup: bool = True,) -> Path:
-
-    """
-    Takes a file containing long read sequencing data aligned 
-    to a reference genome with modification calls for one or more base/context 
-    and creates a pileup. A pileup is a genome-position-wise sum of both reads with
-    bases that could have the modification in question and of reads that are in
-    fact modified.
-
-    The current implementation of this method uses modkit, a tool built by 
-    Nanopore Technologies, along with htslib tools compress and index the output
-    bedmethyl file.
 ```
 
-`parse_bam.extract` for single read plots
-
+`parse_bam.extract` creates an hdf5 file with datasets for different aspects of single read data, which can then be passed to plot single reads.
 ```
 def extract(
     input_file: str | Path,
     output_name: str,
     ref_genome: str | Path,
     output_directory: str | Path = None,
-    region_str: str = None,
-    bed_files: list[str | Path] = None,
-    basemods: list = ['A,0','CG,0','GCH,1'],
-    thresh: float = 0,
-    window_size: int = 0,
+    regions: str | Path | list[str | Path] = None,
+    motifs: list = ['A,0','CG,0','GCH,1'],
+    thresh: float = None,
+    window_size: int = None,
     cores: int = None,
     log: bool = False,
     cleanup: bool = True,) -> Path:
-
-    """
-    Takes a file containing long read sequencing data aligned 
-    to a reference genome with modification calls for one or more base/context 
-    and pulls out data from each individual read. The intermediate outputs contain
-    a plain-text list of all base modifications, split out by type. The compressed
-    and indexed output contains vectors of valid and modified positions within each
-    read.
-
-    The current implementation of this method uses modkit, a tool built by 
-    Nanopore Technologies, along with h5py to build the final output file.
-
-    https://github.com/nanoporetech/modkit/
 ```
 
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
@@ -172,15 +142,94 @@ For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab
 ## Plotting
 
 `plot_enrichment_profile` module for pileup line plot profiles across one or more region
-
+```
+def plot_enrichment_profile(mod_file_names: list[str | Path],
+                            regions_list: list[str | Path | list[str | Path]],
+                            motifs: list[str],
+                            sample_names: list[str],
+                            window_size: int,
+                            smooth_window: int | None = None,
+                            **kwargs) -> Axes:
+def by_modification(mod_file_name: str | Path,
+                    regions: str | Path,
+                    motifs: list[str],
+                    *args,
+                    **kwargs) -> Axes:
+def by_regions(mod_file_name: str | Path,
+               regions_list: list[str | Path | list[str | Path]],
+               motif: str,
+               sample_names: list[str] = None,
+               *args,
+               **kwargs) -> Axes:
+def by_dataset(mod_file_names: list[str | Path],
+               regions: str | Path | list[str | Path],
+               motif: str,
+               sample_names: list[str] = None,
+               *args,
+               **kwargs) -> Axes:
+```
 `plot_enrichment` module for enrichment (e.g. mA/A) bar plot comparisons
+```
 
+def plot_enrichment(mod_file_names: list[str | Path],
+                    regions_list: list[str | Path | list[str | Path]],
+                    motifs: list[str],
+                    sample_names: list[str],
+                    **kwargs) -> Axes:
+def by_modification(mod_file_name: str | Path,
+                    regions: str | Path | list[str | Path],
+                    motifs: list[str],
+                    *args,
+                    **kwargs) -> Axes:
+def by_regions(mod_file_name: str | Path,
+               regions_list: list[str | Path | list[str | Path]],
+               motif: str,
+               sample_names: list[str] = None,
+               *args,
+               **kwargs) -> Axes:
+def by_dataset(mod_file_names: list[str | Path],
+               regions: str | Path | list[str | Path],
+               motif: str,
+               sample_names: list[str] = None,
+               *args,
+               **kwargs) -> Axes:
+```
 `plot_reads` module for single read plots
-
+```
+def plot_reads(mod_file_name: str | Path,
+               regions: str | Path | list[str | Path],
+               motifs: list[str],
+               window_size: int = None,
+               sort_by: str | list[str] = 'shuffle',
+               thresh: float = None,
+               relative: bool = True,
+               **kwargs
+              ) -> Axes:
+```
 ## Load values from processed files
 
-`load_processed.counts_from_bedmethyl` for valid/modified counts from a specified region or set of regions
-
-`load_processed.vector_from_bedmethyl` for valid over modified fraction from a specified region or set of regions
-
-`load_processed.reads_from_hdf5` for read-by-basemod lists of valid and modified positions
+`load_processed.pileup_counts_from_bedmethyl` for valid/modified counts from a specified region or set of regions
+```
+def pileup_counts_from_bedmethyl(bedmethyl_file: Path,
+                          motif: str,
+                          regions: str | Path | list[str | Path] = None,
+                          ) -> tuple[int, int]:
+```
+`load_processed.pileup_vectors_from_bedmethyl` for valid over modified fraction from a specified region or set of regions
+```
+def pileup_vectors_from_bedmethyl(bedmethyl_file: str | Path,
+                          motif: str,
+                          regions: str | Path | list[str | Path],
+                          window_size: int = None) -> (np.ndarray,np.ndarray):
+```
+`load_processed.read_vectors_from_hdf5` for read-by-basemod lists of valid and modified positions
+```
+def read_vectors_from_hdf5(
+        file: str | Path,
+        motifs: list[str],
+        regions: str | Path | list[str | Path] = None,
+        window_size: int = None,
+        sort_by: str | list[str] = ['chromosome','region_start','read_start'],
+        calculate_mod_fractions: bool = True,
+) -> (list[tuple],list[str],dict):
+```
