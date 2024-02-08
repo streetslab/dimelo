@@ -4,13 +4,13 @@
 
 [2.0 Basic Use](#Basic-Use)
 
-[2.1 Parameters and what they mean](##Parameters-and-what-they-mean)
+[2.1 Parameters and what they mean](#Parameters-and-what-they-mean)
     
-[2.2 Parsing and processing](##Parsing-and-processing)
+[2.2 Parsing and processing](#Parsing-and-processing)
 
-[2.3 Plotting](##Plotting)
+[2.3 Plotting](#Plotting)
 
-[2.4 Load values from processed files](##Load_values_from_processed_files)
+[2.4 Load values from processed files](#Load_values_from_processed_files)
 
 # Install Instructions
 ## Local Install via Conda
