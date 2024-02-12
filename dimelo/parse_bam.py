@@ -238,12 +238,10 @@ def pileup(
     
     # TODO: Can cleanup be consolidated?
     if cleanup:
-        if bed_filepath_processed is not None:
-            bed_filepath_processed.unlink()
         os.remove(output_bedmethyl)
         os.remove(output_bedmethyl_sorted)
     
-    return output_bedgz_sorted
+    return output_bedgz_sorted, bed_filepath_processed
 
 def extract(
     input_file: str | Path,
@@ -433,11 +431,8 @@ def extract(
         )
         if cleanup:
             os.remove(output_txt)
-    if cleanup:
-        if bed_filepath_processed is not None:
-            bed_filepath_processed.unlink()
             
-    return output_h5
+    return output_h5, bed_filepath_processed
 
 """
 Helper functions to facilitate bam parse operations
