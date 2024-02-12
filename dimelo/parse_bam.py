@@ -501,13 +501,12 @@ def create_region_specifier(
             regions,
             window_size,
         )
+        utils.bed_from_regions_dict(regions_dict,bed_filepath_processed)
         region_specifier = ['--include-bed',str(bed_filepath_processed)]
+        
     else:
         bed_filepath_processed = None
         region_specifier = []
-
-    utils.bed_from_regions_dict(regions_dict,bed_filepath_processed)
-    
 
     return region_specifier, bed_filepath_processed
 
