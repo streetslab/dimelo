@@ -25,7 +25,7 @@ def import_tqdm():
             # Running on Google Colab
             # Use the notebook version of tqdm
             print('importing COLAB tqdm')
-            from tqdm.notebook import tqdm
+            from tqdm import tqdm
             return tqdm
         elif 'ipykernel' in sys.modules:
             print('importing Jupyter tqdm')
