@@ -26,7 +26,7 @@ Global variables
 EXPECTED_MODKIT_VERSION = '0.2.4'
 
 # Specifies how many reads to check for the base modifications of interest.
-NUM_READS_TO_CHECK = 500
+NUM_READS_TO_CHECK = 100
 
 
 """
@@ -67,6 +67,7 @@ def pileup(
     log: bool = False,
     cleanup: bool = True,
     quiet: bool = False,
+    override_checks: bool = False,
     ) -> Path:
 
     """
@@ -119,9 +120,10 @@ def pileup(
         cores: an integer specifying how many parallel cores modkit gets to use. 
             By default modkit will use all of the available cores on the machine.
         log: a boolean specifying whether to output logs into the output folder.
-        clean_intermediate: a boolean specifying whether to clean up to keep intermediate
+        cleanup: a boolean specifying whether to clean up to keep intermediate
             outputs. The final processed files are not human-readable, whereas the intermediate
             outputs are. However, intermediate outputs can also be quite large.
+        override_checks: convert errors from input checking into warnings if True
 
     Returns:
         Path object pointing to the compressed and indexed .bed.gz bedmethyl file, ready 
@@ -133,7 +135,14 @@ def pileup(
         input_file, ref_genome, output_directory
     )
     
-    check_bam_format(input_file, motifs)
+    try:
+        verify_inputs(input_file,motifs,ref_genome)
+    except Exception as e:
+        if override_checks:
+            if not quiet:
+                print(f'WARNING: {e}')
+        else:
+            raise Exception(f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.')
     
     # TODO: Add .tbi file? Add windowed bed file too, maybe?
     output_path, (output_bedmethyl, output_bedmethyl_sorted, output_bedgz_sorted) = prep_outputs(
@@ -249,6 +258,7 @@ def extract(
     log: bool = False,
     cleanup: bool = True,
     quiet: bool = False,
+    override_checks: bool = False,
     ) -> Path:
 
     """
@@ -301,9 +311,10 @@ def extract(
         cores: an integer specifying how many parallel cores modkit gets to use. 
             By default modkit will use all of the available cores on the machine.
         log: a boolean specifying whether to output logs into the output folder.
-        clean_intermediate: a boolean specifying whether to clean up to keep intermediate
+        cleanup: a boolean specifying whether to clean up to keep intermediate
             outputs. The final processed files are not human-readable, whereas the intermediate
             outputs are. However, intermediate outputs can also be quite large.
+        override_checks: convert errors from input checking into warnings if True
 
     Returns:
         Path object pointing to the compressed and indexed output .h5 file, ready for
@@ -314,7 +325,15 @@ def extract(
         input_file, ref_genome, output_directory
     )
     
-    check_bam_format(input_file, motifs)
+    try:
+        verify_inputs(input_file,motifs,ref_genome)
+    except Exception as e:
+        if override_checks:
+            if not quiet:
+                print(f'WARNING: {e}')
+        else:
+            raise Exception(f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.')
+
 
     # TODO: Add intermediate mod-specific .txt files?
     output_path, (output_h5,) = prep_outputs(
@@ -429,6 +448,18 @@ adjust_threshold: backwards-compatible threshold adjustment, i.e. taking 0-255 t
     them into 0-1.
 read_by_base_txt_to_hdf5: convert modkit extract txt into an .h5 file for rapid read access.
 """
+def verify_inputs(
+    input_file,
+    motifs,
+    ref_genome,
+):
+    check_bam_format(input_file, motifs)
+    correct_bases,total_bases = get_alignment_quality(input_file,ref_genome)
+    if total_bases==0:
+        raise ValueError(f'First {NUM_READS_TO_CHECK} reads are empty. Please verify your {input_file.name} contents.')
+    elif correct_bases/total_bases<0.35:
+        raise ValueError(f'First {NUM_READS_TO_CHECK} reads have anomalously low alignment quality: only {100*correct_bases/total_bases}% of bases align.\nPlease verify that {input_file.name} is actually aligned to {ref_genome.name}.')
+
 
 def check_bam_format(
     bam_file: str | Path,
@@ -493,11 +524,36 @@ def get_alignment_quality(
     bam_file,
     ref_genome,
 ) -> float:
+    ref_genome_index = ref_genome.parent / (ref_genome.name + '.fai')
+    if not ref_genome_index.exists():
+        print(f'Indexing {ref_genome.name}. This only needs to be done once.')
+        pysam.faidx(str(ref_genome))
     input_bam = pysam.AlignmentFile(bam_file,'rb')
-    for read in enumerate(input_bam.fetch()):
-        read_sequence = read.get_forward_sequence()
-        read_alignment = read.get_forward_positions()
-        print(read_alignment)
+    genome_fasta = pysam.FastaFile(str(ref_genome))
+    total_bases = 0
+    correct_bases = 0
+    # For NUM_READS_TO_CHECK=100 this is <1s on most machines
+    for index,read in enumerate(input_bam.fetch()):
+        if index>=NUM_READS_TO_CHECK:
+            return correct_bases,total_bases
+        
+        # The query sequence is the entire sequence as stored in the .bam file
+        # So it is reverse complemented if it was a reverse read
+        # Meaning we can compare it directly against the reference genome
+        read_sequence = read.query_sequence
+
+        # print(read.mapping_quality)
+
+        # get_aligned_pairs returns a list of (read_coord,ref_coord) pairs with None values when not aligned
+        # So if we just skip Nones and compare the remainder it'll tell us the accuracy
+
+        for pos_in_read,pos_in_ref in read.get_aligned_pairs():
+            if pos_in_read is not None and pos_in_ref is not None:
+                total_bases+=1
+                if read_sequence[pos_in_read]==str(genome_fasta.fetch(read.reference_name,pos_in_ref,pos_in_ref+1)):
+                    correct_bases+=1
+
+    return correct_bases,total_bases
         
 def create_region_specifier(
     output_path,
