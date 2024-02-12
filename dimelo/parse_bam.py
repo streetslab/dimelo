@@ -128,6 +128,7 @@ def pileup(
     Returns:
         Path object pointing to the compressed and indexed .bed.gz bedmethyl file, ready 
         for plotting functions.
+        Path object pointing to regions.processed.bed
         
     """
 
@@ -319,6 +320,7 @@ def extract(
     Returns:
         Path object pointing to the compressed and indexed output .h5 file, ready for
         plotting functions.
+        Path object pointing to regions.processed.bed
 
     """
     input_file, ref_genome, output_directory = sanitize_path_args(
