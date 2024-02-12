@@ -107,7 +107,7 @@ For local operation on Mac or Linux, you will already have cloned the repo to di
 
 ```
 conda activate dimelo_modkit_parsing
-pip install jupyter
+pip install notebook
 jupyter notebook
 ```
 
