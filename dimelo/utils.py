@@ -21,13 +21,16 @@ DEFAULT_COLORS = {
 
 def adjust_threshold(
     thresh,
+    quiet = True,
 ):
     if thresh>0:
         if thresh>1:
-            print(f'Modification threshold of {thresh} assumed to be for range 0-255. {thresh}/255={thresh/255} will be sent to modkit.')
+            if not quiet:
+                print(f'Modification threshold of {thresh} assumed to be for range 0-255. {thresh}/255={thresh/255} will be sent to modkit.')
             thresh_scaled = thresh/255
         else:
-            print(f'Modification threshold of {thresh} will be treated as coming from range 0-1.')
+            if not quiet:
+                print(f'Modification threshold of {thresh} will be treated as coming from range 0-1.')
             thresh_scaled = thresh
             
         return thresh_scaled

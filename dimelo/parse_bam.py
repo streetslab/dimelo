@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import h5py
 import pysam
+from tqdm.auto import tqdm
 
 from . import utils
 from . import run_modkit
@@ -158,10 +159,11 @@ def pileup(
             motif_command_list.append(motif_details[0])
             motif_command_list.append(motif_details[1])
     else:
-        raise('Error: no motifs specified. Nothing to process.')
+        raise ValueError('Error: no motifs specified. Nothing to process.')
     
     if log:
-        print('Logging to ',Path(output_path)/'pileup-log')
+        if not quiet:
+            print('Logging to ',Path(output_path)/'pileup-log')
         log_command=['--log-filepath',Path(output_path)/'pileup-log']
     else:
         log_command=[]
@@ -169,23 +171,27 @@ def pileup(
     # TODO: This should be a method, like create_region_specifier, or just combined into a prep method for the start...
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
-        print(f'No specified number of cores requested. {cores_avail} available on machine, allocating all.')
+        if not quiet:
+            print(f'No specified number of cores requested. {cores_avail} available on machine, allocating all.')
         cores_command_list = ['--threads',str(cores_avail)]
     elif cores>cores_avail:
-        print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
+        if not quiet:
+            print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
         cores_command_list = ['--threads',str(cores_avail)]
     else:
-        print(f'Allocating requested {cores} cores.')
+        if not quiet:
+            print(f'Allocating requested {cores} cores.')
         cores_command_list = ['--threads',str(cores)]
 
     # TODO: This is SO SO SO similar to extract; just the ValueError vs. printing. I think this can be resolved
     mod_thresh_list = []
     if thresh is None:
-        print('No base modification threshold provided. Using adaptive threshold selection via modkit.')
+        if not quiet:
+            print('No base modification threshold provided. Using adaptive threshold selection via modkit.')
     elif thresh<=0:
         raise ValueError(f'Threshold {thresh} cannot be used for pileup, please pick a positive nonzero value.')
     else:
-        adjusted_threshold = utils.adjust_threshold(thresh)
+        adjusted_threshold = utils.adjust_threshold(thresh,quiet=quiet)
         for modnames_set in utils.BASEMOD_NAMES_DICT.values():
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
@@ -214,7 +220,7 @@ def pileup(
         expect_done = True,
         quiet = quiet,
     )
-    print(done_string)
+    # print(done_string)
 
     with open(output_bedmethyl_sorted,'w') as sorted_file:
         subprocess.run(['sort', '-k1,1', '-k2,2n', output_bedmethyl], stdout=sorted_file)
@@ -326,36 +332,42 @@ def extract(
     
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
-        print(f'No specified number of cores requested. {cores_avail} available on machine, allocating all.')
+        if not quiet:
+            print(f'No specified number of cores requested. {cores_avail} available on machine, allocating all.')
         cores_command_list = ['--threads',str(cores_avail)]
     elif cores>cores_avail:
-        print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
+        if not quiet:
+            print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
         cores_command_list = ['--threads',str(cores_avail)]
     else:
-        print(f'Allocating requested {cores} cores.')
+        if not quiet:
+            print(f'Allocating requested {cores} cores.')
         cores_command_list = ['--threads',str(cores)]
         
     mod_thresh_list = []
     if thresh is None:
-        print('No valid base modification threshold provided. Raw probs will be saved.')
+        if not quiet:
+            print('No valid base modification threshold provided. Raw probs will be saved.')
         adjusted_threshold = None
     elif thresh<=0:
-        print(f'With a thresh of {thresh}, modkit will simply save all tagged modifications.')
+        if not quiet:
+            print(f'With a thresh of {thresh}, modkit will simply save all tagged modifications.')
         adjusted_threshold = 0
     else:
-        adjusted_threshold = utils.adjust_threshold(thresh)
+        adjusted_threshold = utils.adjust_threshold(thresh,quiet=quiet)
         for modnames_set in utils.BASEMOD_NAMES_DICT.values():
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
 
     if log:
-        print('logging to ',Path(output_path)/'extract-log')
+        if not quiet:
+            print('logging to ',Path(output_path)/'extract-log')
         log_command=['--log-filepath',Path(output_path)/f'extract-log']
     else:
         log_command=[]   
 
     for basemod in motifs:    
-        print(f'Extracting {basemod} sites')
+        # print(f'Extracting {basemod} sites')
         motif_command_list = []
         motif_details = basemod.split(',')
         motif_command_list.append('--motif')
@@ -390,14 +402,15 @@ def extract(
             expect_done = False,
             quiet = quiet,
         )
-        print(done_string)
+        # print(done_string)
         
-        print(f'Adding {basemod} to {output_h5}')
+        # print(f'Adding {basemod} to {output_h5}')
         read_by_base_txt_to_hdf5(
             output_txt,
             output_h5,
             basemod,
             adjusted_threshold,
+            quiet = quiet,
         )
         if cleanup:
             os.remove(output_txt)
@@ -515,6 +528,7 @@ def read_by_base_txt_to_hdf5(
     output_h5: str | Path,
     basemod: str,
     thresh: float=None,
+    quiet: bool=False,
 ) -> None:
     """
     Takes in a txt file generated by modkit extract and appends
@@ -550,7 +564,8 @@ def read_by_base_txt_to_hdf5(
             if index>0 and read_name!=fields[0]:
                 read_name = fields[0]
                 num_reads+=1
-        print(f'{num_reads} reads found in {input_txt}')
+        num_lines = index
+        # print(f'{num_reads} reads found in {input_txt}')
         txt.seek(0)
         with h5py.File(output_h5,'a') as h5:
             # Create datasets
@@ -562,7 +577,6 @@ def read_by_base_txt_to_hdf5(
             if 'read_name' in h5:
 
                 old_size = h5['read_name'].shape[0]
-                print(f'extending from {old_size} to {old_size+num_reads}')
                 h5['read_name'].resize((old_size+num_reads,))
             else:
                 old_size = 0
@@ -678,7 +692,16 @@ def read_by_base_txt_to_hdf5(
             read_name = ''
             read_counter = 0
             readlen_sum = 0
-            for index,line in enumerate(txt):
+            if quiet:
+                iterator = enumerate(txt)
+            else:
+                iterator = tqdm(
+                    enumerate(txt),
+                    total=num_lines+1,
+                    desc = f'Transferring {num_reads} from {input_txt.name} into {output_h5.name}, new size {old_size+num_reads}',
+                    bar_format = '{bar}| {desc} {percentage:3.0f}% | {elapsed}<{remaining}'
+                )
+            for index,line in iterator:
                 if index==0:
 #                     print(line)
                     continue
