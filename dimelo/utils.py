@@ -19,28 +19,6 @@ DEFAULT_COLORS = {
     'GCH,1':'purple',
 }
 
-def import_tqdm():
-    for environ_fields in os.environ:
-        if 'COLAB' in environ_fields:
-            # Running on Google Colab
-            # Use the notebook version of tqdm
-            print('importing COLAB tqdm')
-            from tqdm import tqdm
-            return tqdm
-    if 'ipykernel' in sys.modules:
-        print('importing Jupyter tqdm')
-        from tqdm.notebook import tqdm
-        return tqdm               
-    else:
-        # Not running in a jupyter notebook or on Colab
-        # We assume then that this is running in a terminal
-        # Use normal tqdm progress bars
-        print('importing standard tqdm')
-        from tqdm import tqdm
-        return tqdm
-
-        
-
 def adjust_threshold(
     thresh,
 ):
