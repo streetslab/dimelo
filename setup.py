@@ -10,7 +10,7 @@ setup(
         'pysam',
         'h5py',
         'pyBigWig',
-        'ipywidgets',
+        'ipywidgets==7.7.1',
         'tqdm',
     ],
 )
