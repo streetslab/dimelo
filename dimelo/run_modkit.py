@@ -70,9 +70,9 @@ def run_with_progress_bars(
 
     # Set up progress bar variables
     pbar_pre,pbar_contigs,pbar_chr = None,None,None
-    format_pre = '{bar}| {desc}{percentage:3.0f}% | {elapsed}'
-    format_contigs = '{bar}| {desc}{percentage:3.0f}% | {elapsed}<{remaining}'
-    format_chr = '{bar}| {desc}{percentage:3.0f}%'
+    format_pre = '{bar}| {desc} {percentage:3.0f}% | {elapsed}'
+    format_contigs = '{bar}| {desc} {percentage:3.0f}% | {elapsed}<{remaining}'
+    format_chr = '{bar}| {desc} {percentage:3.0f}%'
     finding_progress_dict = {}
     in_contig_progress = (0,1)   
 
@@ -245,6 +245,8 @@ def run_with_progress_bars(
                 except UnicodeDecodeError:
                     # If decoding fails, continue accumulating bytes
                     continue
+                except Exception as e:
+                    print(f'WARNING: unexpected error in progress tracking:\n{e}')
 
             except OSError:
                 break  # Handle errors - or just don't!
@@ -252,17 +254,24 @@ def run_with_progress_bars(
     if err_flag:
         raise ValueError('modkit raised the following error:\n'+tail_buffer)
     elif done_flag or not expect_done:
-        pbar_contigs.n=100
-        pbar_contigs.set_description(f'All regions complete in {input_file.name}')
-        pbar_contigs.refresh()
-        pbar_contigs.close()
-        pbar_chr.n=100
-        pbar_chr.set_description('')
-        pbar_chr.refresh()
-        pbar_chr.close()
+        try:
+            pbar_contigs.n=100
+            pbar_contigs.set_description(f'All regions complete in {input_file.name}')
+            pbar_contigs.refresh()
+            pbar_contigs.close()
+            pbar_chr.n=100
+            ansi_escape_pattern = re.compile(r'(\[2K>)')
+            pbar_chr.set_description(ansi_escape_pattern.sub('',tail_buffer).strip())
+            pbar_chr.refresh()
+            pbar_chr.close()
+        except Exception as e:
+            print(f'WARNING: unexpected error in progress tracking:\n{e}')
         return tail_buffer
     else:
-        pbar_contigs.close()
-        pbar_chr.close()
+        try:
+            pbar_contigs.close()
+            pbar_chr.close()
+        except Exception as e:
+            print(f'WARNING: unexpected error in progress tracking:\n{e}')
         print('WARNING: the modkit command may not have completed normally. Consider re-running with "log=True" if you do not get the expected outputs.')
         return tail_buffer

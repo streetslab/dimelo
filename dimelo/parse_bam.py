@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import h5py
 import pysam
+from tqdm.auto import tqdm
 
 from . import utils
 from . import run_modkit
@@ -25,7 +26,7 @@ Global variables
 EXPECTED_MODKIT_VERSION = '0.2.4'
 
 # Specifies how many reads to check for the base modifications of interest.
-NUM_READS_TO_CHECK = 500
+NUM_READS_TO_CHECK = 100
 
 
 """
@@ -66,6 +67,7 @@ def pileup(
     log: bool = False,
     cleanup: bool = True,
     quiet: bool = False,
+    override_checks: bool = False,
     ) -> Path:
 
     """
@@ -118,13 +120,15 @@ def pileup(
         cores: an integer specifying how many parallel cores modkit gets to use. 
             By default modkit will use all of the available cores on the machine.
         log: a boolean specifying whether to output logs into the output folder.
-        clean_intermediate: a boolean specifying whether to clean up to keep intermediate
+        cleanup: a boolean specifying whether to clean up to keep intermediate
             outputs. The final processed files are not human-readable, whereas the intermediate
             outputs are. However, intermediate outputs can also be quite large.
+        override_checks: convert errors from input checking into warnings if True
 
     Returns:
         Path object pointing to the compressed and indexed .bed.gz bedmethyl file, ready 
         for plotting functions.
+        Path object pointing to regions.processed.bed
         
     """
 
@@ -132,14 +136,21 @@ def pileup(
         input_file, ref_genome, output_directory
     )
     
-    check_bam_format(input_file, motifs)
+    try:
+        verify_inputs(input_file,motifs,ref_genome)
+    except Exception as e:
+        if override_checks:
+            if not quiet:
+                print(f'WARNING: {e}')
+        else:
+            raise Exception(f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.')
     
-    # TODO: Add .tbi file? Add windowed bed file too, maybe?
-    output_path, (output_bedmethyl, output_bedmethyl_sorted, output_bedgz_sorted) = prep_outputs(
+    
+    output_path, (output_bedmethyl, output_bedmethyl_sorted, output_bedgz_sorted, _) = prep_outputs(
         output_directory=output_directory,
         output_name=output_name,
         input_file=input_file,
-        output_file_names=['pileup.bed', 'pileup.sorted.bed', 'pileup.sorted.bed.gz']
+        output_file_names=['pileup.bed', 'pileup.sorted.bed', 'pileup.sorted.bed.gz','pileup.sorted.bed.gz.tbi']
     )
     
     # TODO: This is mildly confusing. I get what it's doing, but it's hard to follow / names are bad. Also, why is it used in cleanup here, but not in extract?
@@ -158,10 +169,11 @@ def pileup(
             motif_command_list.append(motif_details[0])
             motif_command_list.append(motif_details[1])
     else:
-        raise('Error: no motifs specified. Nothing to process.')
+        raise ValueError('Error: no motifs specified. Nothing to process.')
     
     if log:
-        print('Logging to ',Path(output_path)/'pileup-log')
+        if not quiet:
+            print('Logging to ',Path(output_path)/'pileup-log')
         log_command=['--log-filepath',Path(output_path)/'pileup-log']
     else:
         log_command=[]
@@ -169,23 +181,27 @@ def pileup(
     # TODO: This should be a method, like create_region_specifier, or just combined into a prep method for the start...
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
-        print(f'No specified number of cores requested. {cores_avail} available on machine, allocating all.')
+        if not quiet:
+            print(f'No specified number of cores requested. {cores_avail} available on machine, allocating all.')
         cores_command_list = ['--threads',str(cores_avail)]
     elif cores>cores_avail:
-        print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
+        if not quiet:
+            print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
         cores_command_list = ['--threads',str(cores_avail)]
     else:
-        print(f'Allocating requested {cores} cores.')
+        if not quiet:
+            print(f'Allocating requested {cores} cores.')
         cores_command_list = ['--threads',str(cores)]
 
     # TODO: This is SO SO SO similar to extract; just the ValueError vs. printing. I think this can be resolved
     mod_thresh_list = []
     if thresh is None:
-        print('No base modification threshold provided. Using adaptive threshold selection via modkit.')
+        if not quiet:
+            print('No base modification threshold provided. Using adaptive threshold selection via modkit.')
     elif thresh<=0:
         raise ValueError(f'Threshold {thresh} cannot be used for pileup, please pick a positive nonzero value.')
     else:
-        adjusted_threshold = utils.adjust_threshold(thresh)
+        adjusted_threshold = utils.adjust_threshold(thresh,quiet=quiet)
         for modnames_set in utils.BASEMOD_NAMES_DICT.values():
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
@@ -214,7 +230,7 @@ def pileup(
         expect_done = True,
         quiet = quiet,
     )
-    print(done_string)
+    # print(done_string)
 
     with open(output_bedmethyl_sorted,'w') as sorted_file:
         subprocess.run(['sort', '-k1,1', '-k2,2n', output_bedmethyl], stdout=sorted_file)
@@ -223,12 +239,12 @@ def pileup(
     
     # TODO: Can cleanup be consolidated?
     if cleanup:
-        if bed_filepath_processed is not None:
-            bed_filepath_processed.unlink()
-        os.remove(output_bedmethyl)
-        os.remove(output_bedmethyl_sorted)
+        if output_bedmethyl.exists():
+            output_bedmethyl.unlink()
+        if output_bedmethyl_sorted.exists():
+            output_bedmethyl_sorted.unlink()
     
-    return output_bedgz_sorted
+    return output_bedgz_sorted, bed_filepath_processed
 
 def extract(
     input_file: str | Path,
@@ -243,6 +259,7 @@ def extract(
     log: bool = False,
     cleanup: bool = True,
     quiet: bool = False,
+    override_checks: bool = False,
     ) -> Path:
 
     """
@@ -295,20 +312,30 @@ def extract(
         cores: an integer specifying how many parallel cores modkit gets to use. 
             By default modkit will use all of the available cores on the machine.
         log: a boolean specifying whether to output logs into the output folder.
-        clean_intermediate: a boolean specifying whether to clean up to keep intermediate
+        cleanup: a boolean specifying whether to clean up to keep intermediate
             outputs. The final processed files are not human-readable, whereas the intermediate
             outputs are. However, intermediate outputs can also be quite large.
+        override_checks: convert errors from input checking into warnings if True
 
     Returns:
         Path object pointing to the compressed and indexed output .h5 file, ready for
         plotting functions.
+        Path object pointing to regions.processed.bed
 
     """
     input_file, ref_genome, output_directory = sanitize_path_args(
         input_file, ref_genome, output_directory
     )
     
-    check_bam_format(input_file, motifs)
+    try:
+        verify_inputs(input_file,motifs,ref_genome)
+    except Exception as e:
+        if override_checks:
+            if not quiet:
+                print(f'WARNING: {e}')
+        else:
+            raise Exception(f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.')
+
 
     # TODO: Add intermediate mod-specific .txt files?
     output_path, (output_h5,) = prep_outputs(
@@ -326,36 +353,42 @@ def extract(
     
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
-        print(f'No specified number of cores requested. {cores_avail} available on machine, allocating all.')
+        if not quiet:
+            print(f'No specified number of cores requested. {cores_avail} available on machine, allocating all.')
         cores_command_list = ['--threads',str(cores_avail)]
     elif cores>cores_avail:
-        print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
+        if not quiet:
+            print(f'Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}')
         cores_command_list = ['--threads',str(cores_avail)]
     else:
-        print(f'Allocating requested {cores} cores.')
+        if not quiet:
+            print(f'Allocating requested {cores} cores.')
         cores_command_list = ['--threads',str(cores)]
         
     mod_thresh_list = []
     if thresh is None:
-        print('No valid base modification threshold provided. Raw probs will be saved.')
+        if not quiet:
+            print('No valid base modification threshold provided. Raw probs will be saved.')
         adjusted_threshold = None
     elif thresh<=0:
-        print(f'With a thresh of {thresh}, modkit will simply save all tagged modifications.')
+        if not quiet:
+            print(f'With a thresh of {thresh}, modkit will simply save all tagged modifications.')
         adjusted_threshold = 0
     else:
-        adjusted_threshold = utils.adjust_threshold(thresh)
+        adjusted_threshold = utils.adjust_threshold(thresh,quiet=quiet)
         for modnames_set in utils.BASEMOD_NAMES_DICT.values():
             for modname in modnames_set:
                 mod_thresh_list = mod_thresh_list + ['--mod-thresholds',f'{modname}:{adjusted_threshold}']
 
     if log:
-        print('logging to ',Path(output_path)/'extract-log')
+        if not quiet:
+            print('logging to ',Path(output_path)/'extract-log')
         log_command=['--log-filepath',Path(output_path)/f'extract-log']
     else:
         log_command=[]   
 
     for basemod in motifs:    
-        print(f'Extracting {basemod} sites')
+        # print(f'Extracting {basemod} sites')
         motif_command_list = []
         motif_details = basemod.split(',')
         motif_command_list.append('--motif')
@@ -390,22 +423,20 @@ def extract(
             expect_done = False,
             quiet = quiet,
         )
-        print(done_string)
+        # print(done_string)
         
-        print(f'Adding {basemod} to {output_h5}')
+        # print(f'Adding {basemod} to {output_h5}')
         read_by_base_txt_to_hdf5(
             output_txt,
             output_h5,
             basemod,
             adjusted_threshold,
+            quiet = quiet,
         )
         if cleanup:
             os.remove(output_txt)
-    if cleanup:
-        if bed_filepath_processed is not None:
-            bed_filepath_processed.unlink()
             
-    return output_h5
+    return output_h5, bed_filepath_processed
 
 """
 Helper functions to facilitate bam parse operations
@@ -416,6 +447,18 @@ adjust_threshold: backwards-compatible threshold adjustment, i.e. taking 0-255 t
     them into 0-1.
 read_by_base_txt_to_hdf5: convert modkit extract txt into an .h5 file for rapid read access.
 """
+def verify_inputs(
+    input_file,
+    motifs,
+    ref_genome,
+):
+    check_bam_format(input_file, motifs)
+    correct_bases,total_bases = get_alignment_quality(input_file,ref_genome)
+    if total_bases==0:
+        raise ValueError(f'First {NUM_READS_TO_CHECK} reads are empty. Please verify your {input_file.name} contents.')
+    elif correct_bases/total_bases<0.35:
+        raise ValueError(f'First {NUM_READS_TO_CHECK} reads have anomalously low alignment quality: only {100*correct_bases/total_bases}% of bases align.\nPlease verify that {input_file.name} is actually aligned to {ref_genome.name}.')
+
 
 def check_bam_format(
     bam_file: str | Path,
@@ -480,11 +523,36 @@ def get_alignment_quality(
     bam_file,
     ref_genome,
 ) -> float:
+    ref_genome_index = ref_genome.parent / (ref_genome.name + '.fai')
+    if not ref_genome_index.exists():
+        print(f'Indexing {ref_genome.name}. This only needs to be done once.')
+        pysam.faidx(str(ref_genome))
     input_bam = pysam.AlignmentFile(bam_file,'rb')
-    for read in enumerate(input_bam.fetch()):
-        read_sequence = read.get_forward_sequence()
-        read_alignment = read.get_forward_positions()
-        print(read_alignment)
+    genome_fasta = pysam.FastaFile(str(ref_genome))
+    total_bases = 0
+    correct_bases = 0
+    # For NUM_READS_TO_CHECK=100 this is <1s on most machines
+    for index,read in enumerate(input_bam.fetch()):
+        if index>=NUM_READS_TO_CHECK:
+            return correct_bases,total_bases
+        
+        # The query sequence is the entire sequence as stored in the .bam file
+        # So it is reverse complemented if it was a reverse read
+        # Meaning we can compare it directly against the reference genome
+        read_sequence = read.query_sequence
+
+        # print(read.mapping_quality)
+
+        # get_aligned_pairs returns a list of (read_coord,ref_coord) pairs with None values when not aligned
+        # So if we just skip Nones and compare the remainder it'll tell us the accuracy
+
+        for pos_in_read,pos_in_ref in read.get_aligned_pairs():
+            if pos_in_read is not None and pos_in_ref is not None:
+                total_bases+=1
+                if read_sequence[pos_in_read]==str(genome_fasta.fetch(read.reference_name,pos_in_ref,pos_in_ref+1)):
+                    correct_bases+=1
+
+    return correct_bases,total_bases
         
 def create_region_specifier(
     output_path,
@@ -515,6 +583,7 @@ def read_by_base_txt_to_hdf5(
     output_h5: str | Path,
     basemod: str,
     thresh: float=None,
+    quiet: bool=False,
 ) -> None:
     """
     Takes in a txt file generated by modkit extract and appends
@@ -550,7 +619,8 @@ def read_by_base_txt_to_hdf5(
             if index>0 and read_name!=fields[0]:
                 read_name = fields[0]
                 num_reads+=1
-        print(f'{num_reads} reads found in {input_txt}')
+        num_lines = index
+        # print(f'{num_reads} reads found in {input_txt}')
         txt.seek(0)
         with h5py.File(output_h5,'a') as h5:
             # Create datasets
@@ -562,7 +632,6 @@ def read_by_base_txt_to_hdf5(
             if 'read_name' in h5:
 
                 old_size = h5['read_name'].shape[0]
-                print(f'extending from {old_size} to {old_size+num_reads}')
                 h5['read_name'].resize((old_size+num_reads,))
             else:
                 old_size = 0
@@ -678,7 +747,16 @@ def read_by_base_txt_to_hdf5(
             read_name = ''
             read_counter = 0
             readlen_sum = 0
-            for index,line in enumerate(txt):
+            if quiet:
+                iterator = enumerate(txt)
+            else:
+                iterator = tqdm(
+                    enumerate(txt),
+                    total=num_lines+1,
+                    desc = f'Transferring {num_reads} from {input_txt.name} into {output_h5.name}, new size {old_size+num_reads}',
+                    bar_format = '{bar}| {desc} {percentage:3.0f}% | {elapsed}<{remaining}'
+                )
+            for index,line in iterator:
                 if index==0:
 #                     print(line)
                     continue

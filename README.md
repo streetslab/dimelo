@@ -19,9 +19,9 @@
 
 Platforms: Mac and Linux operating systems, ARM (e.g. M1/M2 mac) and x86 (e.g. Intel mac) architectures. 
 
-**For Windows,  we recommend using Google Colab.** 
+**For Windows,  we recommend using [Google Colab](https://colab.research.google.com/) or [Windows Linux Subsystem](https://learn.microsoft.com/en-us/windows/wsl/install).** 
 
-*The only option to install on Windows locally is currently to build modkit yourself from the rust [source code](https://github.com/nanoporetech/modkit), or find a pre-built executable somewhere. Without modkit, you can run the plotting functionality of the package but not the bam_parsing functionality.*
+*Windows support is possible in future, but blocked by [conda availability for modkit executables](https://anaconda.org/nanoporetech/modkit) and the current implementation of live error/progress tracking during modkit execution, which relies on a Unix OS. Please let us know if Windows support is urgent for your use case.*
 
 Conda installation: https://www.anaconda.com/download
 
@@ -92,7 +92,7 @@ drive.mount('/content/drive')
 import condacolab
 condacolab.install()
 !conda install nanoporetech::modkit==0.2.4
-!git clone -b modkit_parsing_main https://github.com/streetslab/dimelo
+!git clone -b modkit_parsing_beta https://github.com/streetslab/dimelo
 !cd dimelo && pip install .
 import dimelo
 ```
@@ -133,7 +133,7 @@ Many of the parsing, loading, and plotting functions share parameters. The commo
 
 `window_size` for parsing and most loading and plotting functions is a *modification to your regions* that will redefine them to be all the same size, i.e. 2 x window_size, centered around the centers of your original regions. This is important for the parsing and plotting applications that show many genomic regions at once, but should be left blank if you don't want your regions modified. The default is `None` for functions where the parameter is optional. 
 
-`cores`, `log`, and `cleanup` can be ignored for most parsing applications. `cores` allows you to specify that `modkit` uses only a fraction of all the compute resources of your machine, rather than all; `log` will save the modkit logs for troubleshooting, and `cleanup` will keep the (often large) human-readable outputs that are inefficient for plotting and vector extraction but may be helpful for other use cases.
+`cores`, `log`, `cleanup`, `quiet`, and `override_checks` can be ignored for most parsing applications. `cores` allows you to specify that `modkit` uses only a fraction of all the compute resources of your machine, rather than all; `log` will save the modkit logs for troubleshooting, and `cleanup` will keep the (often large) human-readable outputs that are inefficient for plotting and vector extraction but may be helpful for other use cases. `quiet` suppressed progress bars and other outputs and `override_checks` lets you run modkit even if the bam format checking and reference alignment checking are anomalous.
 
 `relative` is a boolean input that specifies whether loading and plotting operations adjust coordinates to be relative to some center point or simple plot in absolute genomic coordinates.
 
@@ -162,7 +162,9 @@ def pileup(
     window_size: int = None,
     cores: int = None,
     log: bool = False,
-    cleanup: bool = True,) -> Path:
+    cleanup: bool = True,
+    quiet: bool = False,
+    override_checks: bool = False,) -> Path, Path:
 ```
 
 `parse_bam.extract` creates an hdf5 file with datasets for different aspects of single read data, which can then be passed to plot single reads.
@@ -178,10 +180,30 @@ def extract(
     window_size: int = None,
     cores: int = None,
     log: bool = False,
-    cleanup: bool = True,) -> Path:
+    cleanup: bool = True,
+    quiet: bool = False,
+    override_checks: bool = False,) -> Path, Path:
 ```
 
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
+
+### Parsing outputs
+You should expect to see some text outputs and a series of progress bars. If progress bars are not appearing, it will be hard to know how long the process will take to complete: it can be seconds or hours depending on your task. The most common culprit for progress bar issues in notebooks (Jupyter or Colab) is incorrect `ipywidgets` version: try downgrading. 
+
+There should not be such issues for command line operation. See below an example of command line progress outputs: you should expect relatively fast pre-processing, 10-90 seconds, and then contig processing times depending heavily on the size of your `.bam` file and the extent of your `regions`.
+
+```
+(dimelo_modkit_parsing) oberondixon-luinenburg@Oberons-MacBook-Pro package_test_notebooks % python dimelo_cmd.py
+modkit found with expected version 0.2.4
+No output directory provided, using input directory /Users/oberondixon-luinenburg/Documents/Ioannidis-Streets/dimelo_test_data/20230702_jm_lmnb1_acessibility_redux
+No specified number of cores requested. 8 available on machine, allocating all.
+Modification threshold of 0.9 will be treated as coming from range 0-1.
+████████████████████| Preprocessing complete for motifs ['A,0'] in chm13.draft_v1.1.fasta:  100% | 00:30
+███████████████████| All regions complete in mod_mappings.01.retagged.ma.sorted.bam:  100% | 02:23<00:00
+████████████████| processed 218324 reads, 13323144 rows, skipped ~184465 reads, failed ~0 reads:  100%
+```
+
+You should see no outputs at all if `quiet=True`.
 
 ## Plotting
 
