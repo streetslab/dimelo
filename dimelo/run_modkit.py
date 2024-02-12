@@ -5,9 +5,9 @@ import os
 from pathlib import Path
 import select
 
-from . import utils
+from tqdm.auto import tqdm
 
-tqdm = utils.import_tqdm()
+from . import utils
 
 def run_with_progress_bars(
     command_list: list[str],
@@ -167,6 +167,7 @@ def run_with_progress_bars(
                                 # Create and close pbars
                                 if pbar_chr is None or pbar_contigs is None:
                                     if pbar_pre is not None:
+                                        pbar_pre.n=100
                                         pbar_pre.set_description(f'Preprocessing complete for motifs {motifs} in {ref_genome.name}')
                                         pbar_pre.refresh()
                                         pbar_pre.close()
