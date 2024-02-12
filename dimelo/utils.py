@@ -5,6 +5,7 @@ import seaborn as sns
 from pathlib import Path
 from collections import defaultdict
 import os
+import sys
 
 # This provides the mapping of canonical bases to sets of valid mode names
 BASEMOD_NAMES_DICT = {
@@ -23,19 +24,18 @@ def import_tqdm():
         if 'COLAB' in environ_fields:
             # Running on Google Colab
             # Use the notebook version of tqdm
+            print('importing COLAB tqdm')
             from tqdm.notebook import tqdm
             return tqdm
-        try:
-            from IPython import get_ipython
-            if 'IPKernelApp' in get_ipython().config():
-                # Running in a jupyter notebook
-                # Use the notebook version of tqdm
-                from tqdm.notebook import tqdm
-                return tqdm
-        except:
+        elif 'ipykernel' in sys.modules:
+            print('importing Jupyter tqdm')
+            from tqdm.notebook import tqdm
+            return tqdm               
+        else:
             # Not running in a jupyter notebook or on Colab
             # We assume then that this is running in a terminal
             # Use normal tqdm progress bars
+            print('importing standard tqdm')
             from tqdm import tqdm
             return tqdm
 

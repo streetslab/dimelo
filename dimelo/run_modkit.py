@@ -19,6 +19,7 @@ def run_with_progress_bars(
     contigs_progress_regex: str,
     single_contig_regex: str,
     buffer_size: int=50,
+    progress_granularity: int=10,
     done_str: str='Done',
     err_str: str='Error',
     expect_done: bool=False,
@@ -52,12 +53,16 @@ def run_with_progress_bars(
         buffer_size: the length of the string that the modkit stderr output gets saved into. This size will not
             be respected if you hit Done or Error; in that case the rest of the output will be captured and returned
             or raised.
+        progress_granularity: this tells the function how often to check the output buffer string for the various regex.
+            Less frequent checking is good because it means fewer spurious updates and less overhead. However you
+            need this to be sufficiently less than buffer_size that you can always capture the entirety of your
+            relevant information.
         done_str: a string telling the function what to look for to know that modkit is done processing. Everything
             after this will get returned
         err_str: a string telling the function what to look for to know that modkit has encountered an error. Everything
             after this will be raised as a ValueError
         expect_done: specifies whether the command is expected to show a clear "Done" at the end of the output
-        quiet: bool
+        quiet: sending True will suppress all progress bars and stdout outputs.
 
     Returns:
         The command line stderr output string after the point where we detect modkit is done parsing
@@ -87,6 +92,7 @@ def run_with_progress_bars(
     os.close(slave_fd)
 
     if quiet:
+        # We need to grab the outputs for the process to terminate but that's it, don't have to do anything with them in this case
         while True:
             ready, _, _ = select.select([master_fd], [], [], 0.1)
             if ready:
@@ -94,11 +100,35 @@ def run_with_progress_bars(
                     data = os.read(master_fd,1)
                     if not data:
                         break # No more data
+
+                    # buffer_bytes += data  # Accumulate bytes in the buffer
+                    # 
+                    # try:
+                    #     # Try to decode the accumulated bytes
+                    #     text = buffer_bytes.decode('utf-8')
+                    #     buffer_bytes.clear()  # Clear the buffer after successful decoding
+                        # # If we have hit an error or modkit is done, just accumulate the rest of the output and then deal with it
+                        # if err_flag or done_flag:
+                        #     tail_buffer+=text
+                        # # If we haven't hit an error or a done state, first check for that
+                        # else :
+                        #     tail_buffer = (tail_buffer + text)[-buffer_size:]
+                        #     if err_str in tail_buffer:
+                        #         index = tail_buffer.find(err_str)
+                        #         tail_buffer = tail_buffer[index:]
+                        #         err_flag = True
+                        #     elif done_str in tail_buffer:
+                        #         index = tail_buffer.find(done_str)
+                        #         tail_buffer = tail_buffer[index-2:]
+                        #         done_flag = True
+                    # except:
+                    #     continue
                 except OSError:
                     break  # Handle errors - or just don't!
         process.wait()
         return ''
     # Grab output bytes as they come
+    readout_count = 0
     while True:
         ready, _, _ = select.select([master_fd], [], [], 0.1)
         if ready:
@@ -113,6 +143,7 @@ def run_with_progress_bars(
                 try:
                     # Try to decode the accumulated bytes
                     text = buffer_bytes.decode('utf-8')
+                    readout_count += 1
                     buffer_bytes.clear()  # Clear the buffer after successful decoding
                     # If we have hit an error or modkit is done, just accumulate the rest of the output and then deal with it
                     if err_flag or done_flag:
@@ -129,7 +160,7 @@ def run_with_progress_bars(
                             tail_buffer = tail_buffer[index-2:]
                             done_flag = True
                         # If the process is ongoing, then go through the possible cases and create/adjust pbars accordingly
-                        else:
+                        elif readout_count%progress_granularity==0:
                             # We check these in the reverse order from that in which they occur, which I guess will save a tiny
                             # amount of processing time because we don't check for previous steps when on later steps
                             if contigs_progress_matches := re.search(contigs_progress_regex,tail_buffer):
@@ -162,6 +193,7 @@ def run_with_progress_bars(
                                 # Create and close pbars
                                 if pbar_chr is None or pbar_contigs is None:
                                     if pbar_pre is not None:
+                                        pbar_pre.n=100
                                         pbar_pre.set_description('Preprocessing complete for motifs {motifs} in {ref_genome.name}')
                                         pbar_pre.refresh()
                                         pbar_pre.close()
@@ -185,20 +217,20 @@ def run_with_progress_bars(
                                 pbar_chr.refresh()
 
                             elif find_motifs_matches := re.search(find_motifs_regex,tail_buffer):
-                                if pbar_pre is None:
-                                    pbar_pre = tqdm(
-                                        total=100,
-                                        desc='Preprocessing',
-                                        bar_format=format_pre,
-                                    )
-                                finding_progress_dict[find_motifs_matches.group(3)] = (int(find_motifs_matches.group(1)),int(find_motifs_matches.group(2)))
-                                num_sum,denom_sum = 0,0
-                                for num,denom in finding_progress_dict.values():
-                                    num_sum+=num
-                                    denom_sum+=denom
-                                pbar_pre.n = 100*num_sum/denom_sum
-                                pbar_pre.set_description(f'Preprocessing: finding motif(s) {motifs}')
-                                pbar_pre.refresh()
+                                if pbar_pre is not None:
+                                    # pbar_pre = tqdm(
+                                    #     total=100,
+                                    #     desc='Preprocessing',
+                                    #     bar_format=format_pre,
+                                    # )
+                                    finding_progress_dict[find_motifs_matches.group(3)] = (int(find_motifs_matches.group(1)),int(find_motifs_matches.group(2)))
+                                    num_sum,denom_sum = 0,0
+                                    for num,denom in finding_progress_dict.values():
+                                        num_sum+=num
+                                        denom_sum+=denom
+                                    pbar_pre.n = 100*num_sum/denom_sum
+                                    pbar_pre.set_description(f'Preprocessing: finding motif(s) {motifs}')
+                                    pbar_pre.refresh()
                             elif load_fasta_match := re.search(load_fasta_regex,tail_buffer):
                                 if pbar_pre is None:
                                     pbar_pre = tqdm(
