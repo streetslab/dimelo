@@ -10,6 +10,7 @@ import h5py
 import pysam
 
 from . import utils
+from . import run_modkit
 
 """
 This module contains code to convert .bam files into both human-readable and 
@@ -63,7 +64,9 @@ def pileup(
     window_size: int = None,
     cores: int = None,
     log: bool = False,
-    cleanup: bool = True,) -> Path:
+    cleanup: bool = True,
+    quiet: bool = False,
+    ) -> Path:
 
     """
     TODO: Merge bed_file / region_str / window_size handling into a unified function somewhere
@@ -195,8 +198,23 @@ def pileup(
                            + cores_command_list
                            + log_command)
     
-    subprocess.run(pileup_command_list)
-    
+    done_string = run_modkit.run_with_progress_bars(
+        command_list = pileup_command_list,
+        input_file = input_file,
+        ref_genome = ref_genome,
+        motifs = motifs,
+        load_fasta_regex = r'\s+\[.*?\]\s+(\d+)\s+Reading',
+        find_motifs_regex = r'\s+(\d+)/(\d+)\s+finding\s+([A-Za-z0-9,]+)\s+motifs',
+        contigs_progress_regex = r'\s+(\d+)/(\d+)\s+contigs',
+        single_contig_regex = r'\s+(\d+)/(\d+)\s+processing\s+([\w]+)[^\w]',
+        buffer_size = 50,
+        done_str = 'Done',
+        err_str = 'Error',
+        expect_done = True,
+        quiet = quiet,
+    )
+    print(done_string)
+
     with open(output_bedmethyl_sorted,'w') as sorted_file:
         subprocess.run(['sort', '-k1,1', '-k2,2n', output_bedmethyl], stdout=sorted_file)
     pysam.tabix_compress(output_bedmethyl_sorted,output_bedgz_sorted,force=True)
@@ -222,7 +240,9 @@ def extract(
     window_size: int = None,
     cores: int = None,
     log: bool = False,
-    cleanup: bool = True,) -> Path:
+    cleanup: bool = True,
+    quiet: bool = False,
+    ) -> Path:
 
     """
     TODO: Merge bed_file / region_str / window_size handling into a unified function somewhere
@@ -352,7 +372,23 @@ def extract(
                                 + cores_command_list
                                 + log_command
                                 + ['--ref',ref_genome, '--filter-threshold','0',])
-        subprocess.run(extract_command_list)
+        
+        done_string = run_modkit.run_with_progress_bars(
+            command_list = extract_command_list,
+            input_file = input_file,
+            ref_genome = ref_genome,
+            motifs = [basemod],
+            load_fasta_regex = r'\s+\[.*?\]\s+(\d+)\s+parsing FASTA',
+            find_motifs_regex = r'\s+(\d+)/(\d+)\s+([\w]+)\s+searched',
+            contigs_progress_regex = r'\s+(\d+)/(\d+)\s+contigs\s+[^s]',
+            single_contig_regex = r'\s+(\d+)/(\d+)\s+processing\s+([\w]+)[^\w]',
+            buffer_size = 100,
+            done_str = 'Done',
+            err_str = 'Error',
+            expect_done = False,
+            quiet = quiet,
+        )
+        print(done_string)
         
         print(f'Adding {basemod} to {output_h5}')
         read_by_base_txt_to_hdf5(

@@ -10,5 +10,7 @@ setup(
         'pysam',
         'h5py',
         'pyBigWig',
+        'ipywidgets',
+        'tqdm',
     ],
 )

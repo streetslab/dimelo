@@ -4,6 +4,7 @@ from matplotlib.axes import Axes
 import seaborn as sns
 from pathlib import Path
 from collections import defaultdict
+import os
 
 # This provides the mapping of canonical bases to sets of valid mode names
 BASEMOD_NAMES_DICT = {
@@ -16,6 +17,29 @@ DEFAULT_COLORS = {
     'CG,0':'orange',
     'GCH,1':'purple',
 }
+
+def import_tqdm():
+    for environ_fields in os.environ:
+        if 'COLAB' in environ_fields:
+            # Running on Google Colab
+            # Use the notebook version of tqdm
+            from tqdm.notebook import tqdm
+            return tqdm
+        try:
+            from IPython import get_ipython
+            if 'IPKernelApp' in get_ipython().config():
+                # Running in a jupyter notebook
+                # Use the notebook version of tqdm
+                from tqdm.notebook import tqdm
+                return tqdm
+        except:
+            # Not running in a jupyter notebook or on Colab
+            # We assume then that this is running in a terminal
+            # Use normal tqdm progress bars
+            from tqdm import tqdm
+            return tqdm
+
+        
 
 def adjust_threshold(
     thresh,
