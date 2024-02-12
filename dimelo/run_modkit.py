@@ -260,7 +260,7 @@ def run_with_progress_bars(
             pbar_contigs.refresh()
             pbar_contigs.close()
             pbar_chr.n=100
-            ansi_escape_pattern = re.compile(r'\x1b\[[0-9;]*m')
+            ansi_escape_pattern = re.compile(r'(\[2K>)')
             pbar_chr.set_description(ansi_escape_pattern.sub('',tail_buffer).strip())
             pbar_chr.refresh()
             pbar_chr.close()

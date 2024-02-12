@@ -144,12 +144,12 @@ def pileup(
         else:
             raise Exception(f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.')
     
-    # TODO: Add .tbi file? Add windowed bed file too, maybe?
-    output_path, (output_bedmethyl, output_bedmethyl_sorted, output_bedgz_sorted) = prep_outputs(
+    
+    output_path, (output_bedmethyl, output_bedmethyl_sorted, output_bedgz_sorted, _) = prep_outputs(
         output_directory=output_directory,
         output_name=output_name,
         input_file=input_file,
-        output_file_names=['pileup.bed', 'pileup.sorted.bed', 'pileup.sorted.bed.gz']
+        output_file_names=['pileup.bed', 'pileup.sorted.bed', 'pileup.sorted.bed.gz','pileup.sorted.bed.gz.tbi']
     )
     
     # TODO: This is mildly confusing. I get what it's doing, but it's hard to follow / names are bad. Also, why is it used in cleanup here, but not in extract?
@@ -238,8 +238,10 @@ def pileup(
     
     # TODO: Can cleanup be consolidated?
     if cleanup:
-        os.remove(output_bedmethyl)
-        os.remove(output_bedmethyl_sorted)
+        if output_bedmethyl.exists():
+            output_bedmethyl.unlink()
+        if output_bedmethyl_sorted.exists():
+            output_bedmethyl_sorted.unlink()
     
     return output_bedgz_sorted, bed_filepath_processed
 
