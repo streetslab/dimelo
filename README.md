@@ -21,7 +21,7 @@ Platforms: Mac and Linux operating systems, ARM (e.g. M1/M2 mac) and x86 (e.g. I
 
 **For Windows,  we recommend using [Google Colab](https://colab.research.google.com/) or [Windows Linux Subsystem](https://learn.microsoft.com/en-us/windows/wsl/install).** 
 
-*Windows support is possible in future, but blocked by [conda availability for modkit executables](https://anaconda.org/nanoporetech/modkit) and the current implementation of live error/progress tracking during modkit execution, which relies on a Unix OS. Please let us know if Windows support is urgent for your use case.*
+*Windows support is possible in future, but blocked by [conda availability for modkit executables](https://anaconda.org/nanoporetech/modkit) and the [current implementation](dimelo/run_modkit.py) of live error/progress tracking during modkit execution, which relies on a unix-only library as of Python 3.11. The urgency of a Windows implementation will depend on user need, so please let us know if this is important for you.*
 
 Conda installation: https://www.anaconda.com/download
 
