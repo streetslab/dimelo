@@ -57,16 +57,7 @@ Activate your conda environment, which should now contain python 3.11 and a modk
 conda activate dimelo_modkit_parsing
 ```
 
-Ensure that you are still in the top-level dimelo directory, and navigate back to it if you are not. You can check by running `ls`; you should see the following files and directories:
-
-```
-dimelo
-README.md
-environment.yml
-setup.py
-```
-
-Install the dimelo package and its dependencies from source.
+Ensure that you are still in the top-level dimelo directory. Install the dimelo package and its dependencies from source.
 
 ```
 pip install .
