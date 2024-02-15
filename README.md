@@ -1,3 +1,5 @@
+NOTE: this is a beta version of a rebuilt-from-scratch dimelo package that is still in development. As of February 2024, exact functionality and function interfaces / parameters are not yet finalized.
+
 # Contents
 [1.0 Install Instructions](#Install-Instructions)
 
@@ -96,7 +98,7 @@ sys.path.append('path_to_modkit_executable_directory')
 
 # Basic Use
 
-See the [tutorial](tutorial.ipynb) as a starting point. Interface design is not finalized at this time (Jan 23, 2024).
+See the [tutorial](tutorial.ipynb) as a starting point.
 
 If you want to run the tutorial on Google colab, you can download [tutorial.ipynb](tutorial.ipynb), upload it to your drive, and follow the instructions in the cells.
 
