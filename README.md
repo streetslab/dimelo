@@ -47,7 +47,7 @@ Create a conda environment using environment.yml. This will make a new conda env
 conda env create -f environment.yml
 ```
 
-*If you want to handle environment creation yourself, see [the alternative installation instructions](#alternative-installations).
+*If you want to handle environment creation yourself, see [the alternative installation instructions](#alternative-installations).*
 
 ### Install pip dependencies and core dimelo package
 
