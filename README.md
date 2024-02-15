@@ -10,7 +10,7 @@
 
 [2.3 Plotting](#Plotting)
 
-[2.4 Load values from processed files](#Load_values_from_processed_files)
+[2.4 Load values from processed files](#load-values-from-processed-files)
 
 # Install Instructions
 ## Local Install via Conda
@@ -47,7 +47,7 @@ Create a conda environment using environment.yml. This will make a new conda env
 conda env create -f environment.yml
 ```
 
-*If you want to handle environment creation yourself, see [the alternative installation instructions](#Alternative_Installations).
+*If you want to handle environment creation yourself, see [the alternative installation instructions](#alternative-installations).
 
 ### Install pip dependencies and core dimelo package
 
