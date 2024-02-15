@@ -25,7 +25,7 @@ Platforms: Mac and Linux operating systems, ARM (e.g. M1/M2 mac) and x86 (e.g. I
 
 Conda installation: https://www.anaconda.com/download
 
-### Load source code from the modkit_parsing_main branch
+### Load source code from the modkit_parsing_beta branch
 
 Open your terminal or command line and navigate to wherever you want to keep the `dimelo` source code (e.g. your Documents folder, `cd Documents`) and clone the repo
 
