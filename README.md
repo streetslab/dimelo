@@ -168,7 +168,7 @@ def extract(
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
 
 ### Parsing outputs
-You should expect to see some text outputs and a series of progress bars. If progress bars are not appearing, it will be hard to know how long the process will take to complete: it can be seconds or hours depending on your task. See the [known issues](#Known-Issues) section for detail. 
+You should expect to see some text outputs and a series of progress bars. Progress bars tell you an estimated time remaining (typically an overestimate by 2-3x at the beginning of contig/chromosome). If you do not see progress bars, go to the [known issues: no progress bars](#no-progress-bars) section for possible fixes. 
 
 There should not be such issues for command line operation. See below an example of command line progress outputs: you should expect relatively fast pre-processing, 10-90 seconds, and then contig processing times depending heavily on the size of your `.bam` file and the extent of your `regions`.
 
