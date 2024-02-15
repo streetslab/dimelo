@@ -6,13 +6,17 @@ NOTE: this is a beta version of a rebuilt-from-scratch dimelo package that is st
 
 [2.0 Basic Use](#Basic-Use)
 
-[2.1 Parameters and what they mean](#Parameters-and-what-they-mean)
+-[2.1 Parameters and what they mean](#Parameters-and-what-they-mean)
     
-[2.2 Parsing and processing](#Parsing-and-processing)
+-[2.2 Parsing and processing](#Parsing-and-processing)
 
-[2.3 Plotting](#Plotting)
+-[2.3 Plotting](#Plotting)
 
-[2.4 Load values from processed files](#load-values-from-processed-files)
+-[2.4 Load values from processed files](#load-values-from-processed-files)
+
+[3.0 Known Issues](#known-issues)
+
+-[3.1 No progress bars](#no-progress-bars)
 
 # Install Instructions
 ## Local Install via Conda
@@ -164,7 +168,7 @@ def extract(
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
 
 ### Parsing outputs
-You should expect to see some text outputs and a series of progress bars. If progress bars are not appearing, it will be hard to know how long the process will take to complete: it can be seconds or hours depending on your task. The most common culprit for progress bar issues in notebooks (Jupyter or Colab) is incorrect `ipywidgets` version: try downgrading. 
+You should expect to see some text outputs and a series of progress bars. If progress bars are not appearing, it will be hard to know how long the process will take to complete: it can be seconds or hours depending on your task. See the [known issues](#Known-Issues) section for detail. 
 
 There should not be such issues for command line operation. See below an example of command line progress outputs: you should expect relatively fast pre-processing, 10-90 seconds, and then contig processing times depending heavily on the size of your `.bam` file and the extent of your `regions`.
 
@@ -305,3 +309,13 @@ Many of the parsing, loading, and plotting functions share parameters. The commo
 `sort_by` for plot_reads will sort reads by any of `region_start`, `region_end`, `read_name`, `read_start`, `read_end`, `chromosome`, `strand`, and `MOTIF_mod_fraction` for any extracted motif. New sorting options are planned in the future. The default is `shuffle`, which will put the reads in a random order. `sort_by` can be passed as one string or as a list of strings. If a list is passed, the reads will be sorted hierarchically i.e. first by the first list element, then the second, and so on. The exception is that if any of the list elements are `shuffle`, the reads will *first* be shuffled and then sorted by the rest of the elements in order of priority.
 
 `**kwargs` for all plotting functions get passed down to the underlying matplotlib / seaborn plotting functions. See matplotlib and seaborn documentation for more details.
+
+# Known Issues
+## No progress bars
+The most common culprit for progress bar issues in notebooks (Jupyter or Colab) is an incompatibility between your notebooks interfaces and your `ipywidgets` version. The latest jupyter notebooks or jupyter lab install and the latest ipywidgets should work together, but on Google Colab, VS Code, Open On Demand, and other jupyter interfaces this may not be the case. [setup.py](setup.py) contains details on which versions you can try downgrading to for different platforms. The following code run in your activated conda environment will downgrade `ipywidgets` to your specified version.
+
+```
+pip install ipywidgets==X.XX.X
+```
+
+
