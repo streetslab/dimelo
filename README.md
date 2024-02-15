@@ -41,22 +41,13 @@ Navigate into the dimelo directory
 cd dimelo
 ```
 
-Create a conda environment using environment.yml. This will make a new conda environment with the name `dimelo_modkit_parsing`.
+Create a conda environment using environment.yml. This will make a new conda environment with the name `dimelo_modkit_parsing`. 
 
 ```
 conda env create -f environment.yml
 ```
 
-Alternatively, you can install modkit into any conda environment you like, including the base environment. If you want to, you can install modkit some other way, and then add it to the path of your notebook or script. *NOTE: if you are creating the environment yourself, be sure to use python 3.10 or greater. Some dimelo package features require relatively new python releases.*
-
-```
-conda install nanoporetech::modkit==0.2.4
-OR
-# install modkit some other way
-# add to path in python
-import sys
-sys.path.append('path_to_modkit_executable_directory')
-```
+*If you want to handle environment creation yourself, see [the alternative installation instructions](#Alternative_Installations).
 
 ### Install pip dependencies and core dimelo package
 
@@ -95,6 +86,21 @@ condacolab.install()
 !git clone -b modkit_parsing_beta https://github.com/streetslab/dimelo
 !cd dimelo && pip install .
 import dimelo
+```
+
+## Alternative Installations
+
+Alternatively, you can install modkit into any conda environment you like. If you want to, you can install modkit some other way, and then add it to the path of your notebook or script. *NOTE: if you are creating the environment yourself, be sure to use python 3.10 or greater. Some dimelo package features require relatively new python releases.*
+
+```
+conda install nanoporetech::modkit==0.2.4
+```
+OR
+```
+# install modkit some other way
+# add to path in python before importing dimelo
+import sys
+sys.path.append('path_to_modkit_executable_directory')
 ```
 
 # Basic Use
