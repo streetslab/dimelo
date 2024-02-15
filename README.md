@@ -63,7 +63,7 @@ Ensure that you are still in the top-level dimelo directory. Install the dimelo 
 pip install .
 ```
 
-## Google Colab
+## Google Colab Installation
 
 Run the following code in the first cell of your notebook to grab `modkit v0.2.4` from conda and install the `dimelo modkit_parsing_main` branch. This will have to be run whenever you make a new Colab instance, unless you have a better way of managing this, in which case please reach out.
 
