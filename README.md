@@ -312,7 +312,7 @@ Many of the parsing, loading, and plotting functions share parameters. The commo
 
 # Known Issues
 ## No progress bars
-The most common culprit for progress bar issues in notebooks (Jupyter or Colab) is an incompatibility between your notebooks interfaces and your `ipywidgets` version. The latest jupyter notebooks or jupyter lab install and the latest ipywidgets should work together, but on Google Colab, VS Code, Open On Demand, and other jupyter interfaces this may not be the case. [setup.py](setup.py) contains details on which versions you can try downgrading to for different platforms. The following code run in your activated conda environment will downgrade `ipywidgets` to your specified version.
+The most common culprit for progress bar issues in notebooks (Jupyter or Colab) is an incompatibility between your notebooks interfaces and your `ipywidgets` version. The latest jupyter notebooks or jupyter lab install and the latest ipywidgets should work together, but on Google Colab, VS Code, Open On Demand, and other jupyter interfaces this may not be the case. [setup.py](setup.py) contains details on which versions you can try downgrading to for different platforms. The following code run in your activated conda environment will downgrade `ipywidgets` to your specified version. **Our Colab instructions in the [Colab Installation](#google-colab-installation) section and the [tutorial](tutorial.ipynb) already handle this for you.**
 
 ```
 pip install ipywidgets==X.XX.X
