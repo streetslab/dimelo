@@ -81,7 +81,7 @@ import condacolab
 condacolab.install()
 !conda install nanoporetech::modkit==0.2.4
 !git clone -b modkit_parsing_beta https://github.com/streetslab/dimelo
-!cd dimelo && pip install .
+!cd dimelo && pip install ipywidgets==7.7.1 .
 import dimelo
 ```
 
