@@ -112,6 +112,13 @@ If you want to run the tutorial on Google Colab, you can download [tutorial.ipyn
 
 ## Parsing and processing
 
+The general workflow of this package is as follows:
+```
+Parsing: aligned modbam file (latest .bam spec) --> processed file
+Loading: processed file --> python objects
+Plotting: python objects --> visualizations
+```
+
 Both pileup and extract are typically run with a .bed file of regions, which can then be also passed to the plotting functions. All regions are processed into a file called `regions.processed.bed` which follows the format required by `modkit`:
 ```
 chr14	44123158	44123308	+  .  .
