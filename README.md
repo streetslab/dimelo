@@ -41,7 +41,7 @@ Navigate into the dimelo directory
 cd dimelo
 ```
 
-Create a conda environment using environment.yml. This will make a new conda environment with the name `dimelo_modkit_parsing` and python 3.11 and nanportech::modkit.
+Create a conda environment using environment.yml. This will make a new conda environment with the name `dimelo_modkit_parsing`.
 
 ```
 conda env create -f environment.yml
