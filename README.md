@@ -21,15 +21,15 @@ NOTE: this is a beta version of a rebuilt-from-scratch dimelo package that is st
 # Install Instructions
 ## Local Install via Conda
 
-### Prerequisites
+### System Requirements
 
-Platforms: Mac and Linux operating systems, ARM (e.g. M1/M2 mac) and x86 (e.g. Intel mac) architectures. 
+**System Specs:** You will need at least 10GB of disk space and 10GB of RAM for the tutorial (largely due to the reference genome). More disk space may be required if processing large datasets. Additionally, if you want to run on many cores, you should have at least 4GB of RAM per core. If you have less per-core memory than this, consider specifying a subset of cores when calling parsing methods. See the [parameters](#parameters-and-what-they-mean) section for more information. `cores=1` will use the least memory and thus is the least likely to be terminated by your OS.
 
-**For Windows,  we recommend using [Google Colab](https://colab.research.google.com/) or [Windows Linux Subsystem](https://learn.microsoft.com/en-us/windows/wsl/install).** 
+**Platforms:** Mac and Linux operating systems, ARM (e.g. M1/M2 mac) and x86 (e.g. Intel mac) architectures. The package has been tested on HPC clusters, but there may be additional complexities depending on how these systems are set up.
 
-*Windows support is possible in future, but blocked by [conda availability for modkit executables](https://anaconda.org/nanoporetech/modkit) and the [current implementation](dimelo/run_modkit.py) of live error/progress tracking during modkit execution, which relies on a unix-only library as of Python 3.11. The urgency of a Windows implementation will depend on user need, so please let us know if this is important for you.*
+*For Windows,  we recommend using [Google Colab](https://colab.research.google.com/). We have not tested on [Windows Linux Subsystem](https://learn.microsoft.com/en-us/windows/wsl/install) but in principle that should work too. Windows support is possible in future, but blocked by [conda availability for modkit executables](https://anaconda.org/nanoporetech/modkit) and the [current implementation](dimelo/run_modkit.py) of live error/progress tracking during modkit execution, which relies on a unix-only library as of Python 3.11. The urgency of a Windows implementation will depend on user need, so please let us know if this is important for you.*
 
-Conda installation: https://www.anaconda.com/download
+**Conda and Python:** The default installation requires conda, or alternatives like mamba. See [here](https://www.anaconda.com/download) for conda installation. The installation instructions below will install Python 3.11 for you within a conda virtual environment, but depending on your system configuration you may need to ensure that you are not also loading a different version of Python on your path. If you encounter unexpected errors when importing `dimelo`, e.g. complaining about syntax, consider checking your Python version.
 
 ### Load source code from the modkit_parsing_beta branch
 
@@ -108,7 +108,6 @@ For local operation on Mac or Linux, you will already have cloned the repo to di
 
 ```
 conda activate dimelo_modkit_parsing
-pip install notebook
 jupyter notebook
 ```
 
