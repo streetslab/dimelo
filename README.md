@@ -1,8 +1,11 @@
 NOTE: this is a beta version of a rebuilt-from-scratch dimelo package that is still in development. As of February 2024, exact functionality and function interfaces / parameters are not yet finalized. Final functionality and design will be in part driven by beta user feedback.
 
 # Contents
-[1.0 Install Instructions](#Install-Instructions)
+[1.0 Install Instructions](#Install-instructions)
 
+-[1.1 Local Install via Conda](#Local-Install-via-Conda)
+    
+-[1.2 Google Colab Installation](#Google-Colab-Installation)
 
 [2.0 Basic Use](#Basic-Use)
 
