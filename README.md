@@ -2,6 +2,18 @@
 
 This branch is a beta version of a rebuilt-from-scratch dimelo package that is still in development. As of February 2024, exact functionality and function interfaces / parameters are not yet finalized. Final functionality and design will be in part driven by user feedback.
 
+We support the same core pileup and single read extraction operations as the original `dimelo` package, but have focused on a number of objectives in building this new version, many of which were impossible or cumbersome to implement with the previous design:
+
+<ol>
+    <li>Support multicolor data / any base modification context (GpC, CpC, etc)</li>
+    <li>Vector extraction for all data types</li>
+    <li>Enhanced speed and reliability, enabling e.g. whole genome processing</li>
+    <li>Maintainability -> using a small number of standard dependencies, outsourcing as much as possible to well-maintained third-party packages (e.g. modkit, pysam, h5py, and a few others)</li>
+    <li>Modularity in both architecture and operation</li>
+    <li>Ease of use, especially for multiplatform installation</li>
+    <li>More powerful plotting e.g. bam files from different basecallers, single read sorting, rapid iteration</li>
+</ol>
+
 This README document contains installation instructions and documentation for various use cases. There is a [tutorial](#basic-use) jupyter notebook that will take you through the core functionality of the package step-by-step. For Google Colab, the notebook already contains the necessary code to set up and run `dimelo`, whereas for local operation you will first need to follow the [local install instructions](#local-install-via-conda). Be sure to check that your system meets our [specifications](#system-requirements).
 
 # Contents
