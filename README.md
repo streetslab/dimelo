@@ -1,4 +1,8 @@
-NOTE: this is a beta version of a rebuilt-from-scratch dimelo package that is still in development. As of February 2024, exact functionality and function interfaces / parameters are not yet finalized. Final functionality and design will be in part driven by beta user feedback.
+# Introduction
+
+This branch is a beta version of a rebuilt-from-scratch dimelo package that is still in development. As of February 2024, exact functionality and function interfaces / parameters are not yet finalized. Final functionality and design will be in part driven by user feedback.
+
+This README document contains installation instructions and documentation for various use cases. There is a [tutorial](#basic-use) jupyter notebook that will take you through the core functionality of the package step-by-step. For Google Colab, the notebook already contains the necessary code to set up and run `dimelo`, whereas for local operation you will first need to follow the [local install instructions](#local-install-via-conda). Be sure to check that your system meets our [specifications](#system-requirements).
 
 # Contents
 [1.0 Install Instructions](#Install-instructions)
@@ -74,7 +78,7 @@ pip install .
 
 ## Google Colab Installation
 
-Run the following code in the first cell of your notebook to grab `modkit v0.2.4` from conda and install the `dimelo modkit_parsing_beta` branch. This will have to be run whenever you make a new Colab instance, unless you have a better way of managing this, in which case please reach out.
+Run the following code in the first cell of your notebook to grab `modkit v0.2.4` from conda and install the `dimelo modkit_parsing_beta` branch. This will have to be run whenever you make a new Colab instance, unless you have a better way of managing this, in which case please reach out. The tutorial notebook runs equivalent code blocks to set up your environment, so if you are trying to run the tutorial you can skip to [Basic Use](#basic-use).
 
 ```
 from google.colab import drive
