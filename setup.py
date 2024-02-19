@@ -11,6 +11,7 @@ setup(
         'h5py',
         'pyBigWig',
         'notebook',
+        'ipykernel',
         'ipywidgets', 
         # ipywidgets is finicky on some platforms
         # Local jupyter notebooks: this works best with ipywidgets and jupyter running the latest versions, which is what this file will do.
