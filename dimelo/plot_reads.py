@@ -53,23 +53,24 @@ def plot_reads(mod_file_name: str | Path,
 
 
 
-    reads,read_names,mods,regions_dict = load_processed.readwise_binary_modification_arrays(
-        file = mod_file_name,
-        regions = regions,
-        motifs = motifs,
-        window_size = window_size,
-        thresh = thresh,
-        relative = relative,
-        sort_by = sort_by,
-    )
-    # match mod_file_name.suffix:
-    #     case _:
-    #         reads, read_names, mods = load_processed.reads_from_hdf5(
-    #             file=mod_file_name,
-    #             bed_file=bed_file_name,
-    #             mod_names=mod_names,
-    #             window_size=window_size,
-    #         )
+
+    match mod_file_name.suffix:
+        case '.fake':
+            reads,read_names,mods,regions_dict = load_processed.reads_from_fake(
+                file = mod_file_name,
+                regions = regions,
+                motifs = motifs,
+            )
+        case _:
+            reads,read_names,mods,regions_dict = load_processed.readwise_binary_modification_arrays(
+            file = mod_file_name,
+            regions = regions,
+            motifs = motifs,
+            window_size = window_size,
+            thresh = thresh,
+            relative = relative,
+            sort_by = sort_by,
+            )
 
     # Convert data frame where each row represents a read to a data frame where each row represents a single modified position in a read
     df = pd.DataFrame({
@@ -98,7 +99,7 @@ def plot_reads(mod_file_name: str | Path,
         for handle in legend.legendHandles:
             handle.set_markersize(10)  # Set a larger marker size for legend
 
-    if relative:
+    if relative and len(regions_dict)>0:
         region1_start,region1_end,_ = next(iter(regions_dict.values()))[0]
         effective_window_size = (region1_end-region1_start)//2
         axes.set_xlim([-effective_window_size,effective_window_size])
