@@ -27,6 +27,18 @@ pileup_one_bedgz_target = targets_dir / 'megalodon_one_region' / 'pileup.sorted.
 pileup_one_bedregions_target = targets_dir / 'megalodon_one_region' / 'regions.processed.bed'
 extract_one_h5_target = targets_dir / 'megalodon_one_region' / 'reads.combined_basemods.h5'
 
+mod_correct_str = '38 53 32  6  4 54  2 83 90  0 85 39 15 45 11 18 11 16 38 20'
+val_correct_str = '588 679 297 210  70 534  58 445 839   0 891 431  80 486  51 303 286 514 491 589'
+CORRECT_A0MOD_ARRAY = np.array([int(n) for n in mod_correct_str.split()])
+CORRECT_A0VAL_ARRAY = np.array([int(n) for n in val_correct_str.split()])
+CORRECT_A0MOD_COUNT = 213
+CORRECT_A0VAL_COUNT = 1619
+CORRECT_CG0MOD_COUNT = 66
+CORRECT_CG0VAL_COUNT = 34790
+# modified_base_count == 213 and valid_base_count == 1619
+
+
+
 @pytest.mark.parametrize("output_name,regions,motifs,thresh,window_size,pileup_target,regions_target,extract_target", [
     ('megalodon_merged_regions',
      [peaks_bed,not_peaks_bed],
@@ -148,11 +160,8 @@ class TestLoadProcessed:
             regions = peaks_bed, # Regions from bed file
             window_size = 10, # Trim/extend regions to same size
         )       
-        mod_correct_str = '38 53 32  6  4 54  2 83 90  0 85 39 15 45 11 18 11 16 38 20'
-        val_correct_str = '588 679 297 210  70 534  58 445 839   0 891 431  80 486  51 303 286 514 491 589'
-        mod_array = np.array([int(n) for n in mod_correct_str.split()])
-        val_array = np.array([int(n) for n in val_correct_str.split()])
-        assert np.array_equal(modified_base_counts,mod_array) and np.array_equal(valid_base_counts,val_array)
+
+        assert np.array_equal(modified_base_counts,CORRECT_A0MOD_ARRAY) and np.array_equal(valid_base_counts,CORRECT_A0VAL_ARRAY)
 
 
 class TestPlotEnrichment:
@@ -279,6 +288,7 @@ class TestPlotEnrichmentProfile:
             motif='A,0',
             smooth_window=50           
         )
+        assert isinstance(ax,Axes)
 
 class TestPlotReads:
     """
