@@ -97,7 +97,8 @@ def plot_reads(mod_file_name: str | Path,
     if legend is not None:
         legend.set_title('Mod')
         for handle in legend.legendHandles:
-            handle.set_markersize(10)  # Set a larger marker size for legend
+            if hasattr(handle, 'set_markersize'):
+                handle.set_markersize(10)  # Set a larger marker size for legend
 
     if relative and len(regions_dict)>0:
         region1_start,region1_end,_ = next(iter(regions_dict.values()))[0]
