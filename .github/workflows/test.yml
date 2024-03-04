@@ -2,7 +2,10 @@ name: dimelo
 
 on: 
   workflow_dispatch: # Allows manual trigger of the workflow
-
+  push:
+    branches:
+      - main
+      - modkit_parsing_run_tests
 jobs:
   build-conda:
     runs-on: ubuntu-latest
