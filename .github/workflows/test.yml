@@ -30,6 +30,9 @@ jobs:
           
           # Additional dependencies not covered in environment.yml
           conda install pytest
-
+      - name: List Conda Packages
+        run: |
+          conda list
       - name: Test with pytest
-        run: pytest
+        run: |
+          pytest
