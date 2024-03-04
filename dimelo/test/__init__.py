@@ -24,8 +24,16 @@ paths but execute code using e.g. pytest, which operates in a different director
 paths. Clumsy maybe? Could be a better approach out there? Who knows. Not I.
 """
 class RelativePath:
-    def __init__(self,relative_path):
-        self.relative_path = Path(relative_path)
+    def __init__(self,path):
+        path = Path(path)
+        if path.is_absolute():
+            # Convert the absolute path to a relative path
+            try:
+                self.relative_path = path.relative_to(script_location)
+            except ValueError:
+                raise ValueError("The provided path is not in the dimelo/test directory.")
+        else:
+            self.relative_path = path
         self._update_absolute_path()
     def _update_absolute_path(self):
         # Dynamically determine the absolute path based on relative path and the location of this file
@@ -33,6 +41,9 @@ class RelativePath:
         self.absolute_path = (self.base_path / self.relative_path).resolve()
     def __fspath__(self):
         # Allows the object to be used by pathlib.Path and anything that accepts path-like objects
+        return str(self.absolute_path)
+    def __str__(self):
+        # Allows the object to be used by methods that want strings
         return str(self.absolute_path)
     def __getstate__(self):
         # Returns the state to be pickled; i.e. just the relative path
