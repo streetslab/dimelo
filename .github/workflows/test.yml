@@ -23,7 +23,7 @@ jobs:
           conda env create -f environment.yml
           
           # Activate the environment
-          conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
+          source activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
           
           # If the package is in the repository root
           pip install .
