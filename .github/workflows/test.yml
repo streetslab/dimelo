@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - name: Setup Conda Environment
+      - name: Setup conda and run
         run: |
           # Install Miniconda if not available on the runner
           wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
@@ -30,11 +30,9 @@ jobs:
           
           # Additional dependencies not covered in environment.yml
           conda install pytest
-      - name: List Conda Packages
-        run: |
-          conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
+
+          # Make sure we've got everything installed
           conda list
-      - name: Test with pytest
-        run: |
-          conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
+
+          # Run pytest
           pytest
