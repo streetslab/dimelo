@@ -1,0 +1,32 @@
+name: dimelo
+
+on: 
+  workflow_dispatch: # Allows manual trigger of the workflow
+
+jobs:
+  build-conda:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Conda Environment
+        run: |
+          # Install Miniconda if not available on the runner
+          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+          bash miniconda.sh -b -p $HOME/miniconda
+          source $HOME/miniconda/etc/profile.d/conda.sh
+          
+          # Create conda environment from environment.yml
+          conda env create -f environment.yml
+          
+          # Activate the environment
+          conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
+          
+          # If the package is in the repository root
+          pip install .
+          
+          # Additional dependencies not covered in environment.yml
+          conda install pytest
+
+      - name: Test with pytest
+        run: pytest
