@@ -1,7 +1,4 @@
-import subprocess
-import unittest
 from pathlib import Path
-import urllib.request
 import gzip
 import filecmp
 import pickle
@@ -45,7 +42,13 @@ class TestParseBam(DiMeLoParsingTestCase):
         pileup_target,regions_target = results['pileup']
 
         if pileup_target is not None and regions_target is not None:
-            assert filecmp.cmp(pileup_bed,pileup_target,shallow=False), f"{test_case}: {pileup_bed} does not match {pileup_target}."
+            # This is necessary because the gzipped files are different on mac vs linux, but the contents should be identical (and are, so far)
+            # Not sure why the compression ratio is better on Linux when both are using pysam.tabix_compress with pysam 0.22.0 and zlib 1.2.13 but whatcha gonna do
+            with gzip.open(pileup_bed, 'rt') as f1, gzip.open(pileup_target, 'rt') as f2:
+                # Read and compare file contents
+                file1_contents = f1.read()
+                file2_contents = f2.read()
+                assert file1_contents == file2_contents, f"{test_case}: {pileup_bed} does not match {pileup_target}."
             assert filecmp.cmp(regions_processed,regions_target,shallow=False), f"{test_case}: {regions_processed} does not match {regions_target}."
         else:
             print(f"{test_case} skipped for pileup.")
@@ -66,6 +69,8 @@ class TestParseBam(DiMeLoParsingTestCase):
         extract_target,regions_target = results['extract']
 
         if extract_target is not None and regions_target is not None:
+            # The hdf5 files *should* be identical I think, although if we don't pin the h5py version I guess then probably not actually
+            # So TODO: make this text actually check file contents for the .h5 I guess. But for now, this at least matches on linux vs mac.
             assert filecmp.cmp(extract_h5,extract_target,shallow=False), f"{test_case}: {extract_h5} does not match {extract_target}."
             assert filecmp.cmp(regions_processed,regions_target,shallow=False), f"{test_case}: {regions_processed} does not match {regions_target}."
         else:
