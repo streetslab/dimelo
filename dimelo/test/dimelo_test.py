@@ -521,7 +521,7 @@ class TestParseToPlot(DiMeLoParsingTestCase):
                 assert len(expected_tuple) == len(actual_tuple), f"{test_case}: Unexpected number of arrays returned for {motif}"
 
                 for expected, actual in zip(expected_tuple, actual_tuple):
-                    assert np.array_equal(expected, actual), f"{test_case}: Arrays for motif {motif} are not equal"
+                    assert np.array_equal(expected, actual), f"{test_case}: Arrays for motif {motif} are not equal: expected {value} but got {actual[key]}"
         else:
             print(f"{test_case} loading skipped for pileup_load_plot, continuing to plotting.")
 
@@ -558,6 +558,8 @@ class TestParseToPlot(DiMeLoParsingTestCase):
         kwargs,
         results,
     ):
+        if results['extract'][0] is None:
+            return
         kwargs_extract = filter_kwargs_for_func(dm.parse_bam.extract,kwargs)
         print(kwargs_extract)
         kwargs_extract['output_directory'] = cls.outDir
@@ -581,9 +583,9 @@ class TestParseToPlot(DiMeLoParsingTestCase):
             actual = read_data_dict
             for key,value in expected.items():
                 if isinstance(value,np.ndarray):
-                    assert np.array_equal(actual[key],expected[key]), f"{test_case}: Arrays for {key} are not equal."
+                    assert np.array_equal(actual[key],expected[key]), f"{test_case}: Arrays for {key} are not equal: expected {expected} but got {actual}."
                 else:
-                    assert actual[key] == expected[key], f"{test_case}: Values for {key} are not equal."
+                    assert actual[key] == expected[key], f"{test_case}: Values for {key} are not equal: expected {expected} but got {actual}."
         else:
             print('{test_case} skipped for read_vectors_from_hdf5.')
         kwargs_plot_reads_plot_reads = filter_kwargs_for_func(dm.plot_reads.plot_reads,kwargs)
