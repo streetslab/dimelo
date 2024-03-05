@@ -790,12 +790,15 @@ def read_by_base_txt_to_hdf5(
                             read_len_along_ref = max(val_coordinates_list)+1
                         else:
                             read_len_along_ref = read_len
-                        mod_vector = np.zeros(read_len_along_ref,dtype=np.int8)
+                        mod_vector = np.zeros(read_len_along_ref,dtype=np.uint8)
                         if thresh is None:
-                            mod_vector[val_coordinates_list] = np.rint(np.array(mod_values_list)*256-0.75).astype(np.int8)
+                            # We subtract 0.25 because in modkit they add 0.5, but our elements are zero when the
+                            # base motif isn't present, so to get things to round to the right integers to match the
+                            # original .bam file, subtracting 0.25 is good. Anything from 0.001 to 0.4999 would work I think
+                            mod_vector[val_coordinates_list] = np.rint(np.array(mod_values_list)*256 - 0.25).astype(np.uint8)
                         else:
-                            mod_vector[val_coordinates_list] = np.array(mod_values_list).astype(np.int8)
-                        val_vector = np.zeros(read_len_along_ref,dtype=np.int8)
+                            mod_vector[val_coordinates_list] = np.array(mod_values_list).astype(np.uint8)
+                        val_vector = np.zeros(read_len_along_ref,dtype=np.uint8)
                         val_vector[val_coordinates_list] = 1
                         # Build mod_vector and val_vector from lists
                         h5['read_name'][read_counter+old_size]=read_name
@@ -844,14 +847,17 @@ def read_by_base_txt_to_hdf5(
                     read_len_along_ref = max(val_coordinates_list)+1
                 else:
                     read_len_along_ref = read_len
+                mod_vector = np.zeros(read_len_along_ref,dtype=np.uint8)
                 if thresh is None:
-                    mod_vector_temp = np.zeros(read_len_along_ref,dtype=float)
-                    mod_vector_temp[val_coordinates_list] = np.array(mod_values_list)*256-0.75
-                    mod_vector = np.rint(mod_vector_temp).astype(np.int8)
+                    # We subtract 0.25 because in modkit they add 0.5, but our elements are zero when the
+                    # base motif isn't present, so to get things to round to the right integers to match the
+                    # original .bam file, subtracting 0.25 is good. Anything from 0.001 to 0.4999 would work I think
+                    mod_vector[val_coordinates_list] = np.rint(np.array(mod_values_list)*256 - 0.25).astype(np.uint8)
                 else:
-                    mod_vector = np.zeros(read_len_along_ref,dtype=np.int8)
-                    mod_vector[val_coordinates_list] = np.array(mod_values_list).astype(np.int8)
-                val_vector = np.zeros(read_len_along_ref,dtype=np.int8)
+                    mod_vector[val_coordinates_list] = np.array(mod_values_list).astype(np.uint8)
+                val_vector = np.zeros(read_len_along_ref,dtype=np.uint8)
+                val_vector[val_coordinates_list] = 1
+                val_vector = np.zeros(read_len_along_ref,dtype=np.uint8)
                 val_vector[val_coordinates_list] = 1
                 h5['read_name'][read_counter+old_size]=read_name
                 h5['chromosome'][read_counter+old_size]=read_chrom

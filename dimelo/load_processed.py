@@ -180,24 +180,30 @@ def convert_tuple_elements(tup):
     """Convert all bytes elements in a tuple to strings."""
     return tuple(convert_bytes(item) for item in tup)
 
-def binary_to_np_array(compressed_bytes,dtype,decompressor,binarized,arraydtype,divideby,add):
+def adjust_mod_probs_in_arrays(mod_array,val_array):
+    mod_array[np.flatnonzero(val_array)]+=1/512
+    return mod_array
+
+def adjust_mod_probs_in_tuples(tup,mod_idx,val_idx):
+    return tuple(item if index!=mod_idx else adjust_mod_probs_in_arrays(item,tup[val_idx]) for index,item in enumerate(tup))
+
+def binary_to_np_array(compressed_bytes,dtype,decompressor,binarized,int8tofloat):
     if binarized:
         return np.frombuffer(decompressor(compressed_bytes),dtype=dtype).astype(bool)
+    elif int8tofloat:
+        return ((np.frombuffer(decompressor(compressed_bytes),dtype=dtype).astype(float))/256).astype(np.float16)
     else:
-        return (np.frombuffer(decompressor(compressed_bytes),dtype=dtype).astype(arraydtype)+add)/divideby
+        return np.frombuffer(decompressor(compressed_bytes),dtype=dtype).astype(int)
+
 
 def process_data(h5, dataset, indices, compressed=False, **kwargs):
     if compressed:
         # Apply decompression and additional processing to each element
         if 'mod_vector' in dataset:
-            arraydtype=np.float16
-            divideby=256
-            add=0.5
+            int8tofloat=True
         else:
-            arraydtype=int
-            divideby=1
-            add=0
-        return [binary_to_np_array(h5[dataset][index].tobytes(),arraydtype=arraydtype,divideby=divideby,add=add,**kwargs) for index in indices]
+            int8tofloat=False
+        return [binary_to_np_array(h5[dataset][index].tobytes(),int8tofloat=int8tofloat,**kwargs) for index in indices]
     else:
         # Return the data as-is
         return h5[dataset][list(indices)]
@@ -258,7 +264,7 @@ def read_vectors_from_hdf5(
             # backwards compatible with the old h5 file structure
             readwise_datasets = datasets
             compressed_binary_datasets = []
-            binarized = False
+            binarized = True # in this case all this will do is make it so we don't apply a +1/512 correction to the mod_vector
         
         read_chromosomes = np.array(h5['chromosome'],dtype=str)
         read_starts = np.array(h5['read_start'])
@@ -288,7 +294,7 @@ def read_vectors_from_hdf5(
                                 dataset, 
                                 relevant_read_indices, 
                                 dataset in compressed_binary_datasets,
-                                dtype=np.int8,
+                                dtype=np.uint8,
                                 decompressor=gzip.decompress,
                                 binarized=binarized,) 
                                 for dataset in readwise_datasets),
@@ -306,14 +312,21 @@ def read_vectors_from_hdf5(
                     dataset, 
                     relevant_read_indices, 
                     dataset in compressed_binary_datasets,
-                    dtype=np.int8,
+                    dtype=np.uint8,
                     decompressor=gzip.decompress,
                     binarized=binarized,) 
                     for dataset in readwise_datasets),
                 [-1 for _ in relevant_read_indices],
                 [-1 for _ in relevant_read_indices]
             ))
-    read_data_converted = [convert_tuple_elements(tup) for tup in read_data_list]
+    if binarized:
+        read_data_converted = [convert_tuple_elements(tup) for tup in read_data_list]
+    else:
+        read_data_converted = [adjust_mod_probs_in_tuples(
+            convert_tuple_elements(tup),
+            readwise_datasets.index('mod_vector'),
+            readwise_datasets.index('val_vector')
+            ) for tup in read_data_list]
     
     readwise_datasets += ['region_start','region_end']
     # We add region information (start and end; chromosome is already present!) so that it is possible to sort by these

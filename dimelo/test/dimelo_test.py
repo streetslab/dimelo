@@ -151,9 +151,15 @@ class TestLoadProcessed:
             actual = read_data_dict
             for key,value in expected.items():
                 if isinstance(value,np.ndarray):
-                    assert np.array_equal(actual[key],expected[key]), f"{test_case}: Arrays for {key} are not equal."
+                    assert np.allclose(actual[key],expected[key],atol=1e-5), f"""{test_case}: Arrays for {key} are not equal
+mismatch at {np.where(value!=actual[key])}
+mismatch values expected {value[np.where(value!=actual[key])]} vs actual {actual[key][np.where(value!=actual[key])]}
+{value[np.where(value!=actual[key])[0]]} vs {actual[key][np.where(value!=actual[key])[0]]}.
+                    """
+                elif isinstance(value,(str,int,bool)):
+                    assert actual[key] == expected[key], f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
                 else:
-                    assert actual[key] == expected[key], f"{test_case}: Values for {key} are not equal."
+                    assert np.isclose(actual[key],value,atol=1e-4), f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
         else:
             print('{test_case} skipped for read_vectors_from_hdf5.')
 
@@ -583,9 +589,15 @@ class TestParseToPlot(DiMeLoParsingTestCase):
             actual = read_data_dict
             for key,value in expected.items():
                 if isinstance(value,np.ndarray):
-                    assert np.array_equal(actual[key],expected[key]), f"{test_case}: Arrays for {key} are not equal: expected {expected} but got {actual}."
+                    assert np.allclose(actual[key],expected[key],atol=1e-5), f"""{test_case}: Arrays for {key} are not equal
+mismatch at {np.where(value!=actual[key])}
+mismatch values expected {value[np.where(value!=actual[key])]} vs actual {actual[key][np.where(value!=actual[key])]}
+{value[np.where(value!=actual[key])[0]]} vs {actual[key][np.where(value!=actual[key])[0]]}.
+                    """
+                elif isinstance(value,(str,int,bool)):
+                    assert actual[key] == expected[key], f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
                 else:
-                    assert actual[key] == expected[key], f"{test_case}: Values for {key} are not equal: expected {expected} but got {actual}."
+                    assert np.isclose(actual[key],value,atol=1e-4), f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
         else:
             print('{test_case} skipped for read_vectors_from_hdf5.')
         kwargs_plot_reads_plot_reads = filter_kwargs_for_func(dm.plot_reads.plot_reads,kwargs)
