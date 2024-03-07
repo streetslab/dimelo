@@ -7,6 +7,7 @@ import os
 import numpy as np
 from matplotlib.axes import Axes
 import pytest
+import h5py
 
 import dimelo as dm
 from dimelo.test import DiMeLoParsingTestCase, filter_kwargs_for_func
@@ -76,7 +77,20 @@ class TestParseToPlot(DiMeLoParsingTestCase):
         if extract_target is not None and regions_target is not None:
             # The hdf5 files will have a few bits different due to gzip compression timestamps, but comparing the exact size should pass because
             # the timestamps are not themselves compressed inside the vector gzip objects
-            assert os.path.getsize(extract_h5) == os.path.getsize(extract_target), f"{test_case}: {extract_h5} does not match {extract_target}."
+            h5_test = h5py.File(extract_h5)
+            h5_target = h5py.File(extract_target)
+            datasets = [name for name, obj in h5_target.items() if isinstance(obj, h5py.Dataset)]
+            for dataset in datasets:
+                if dataset in ['threshold']:
+                    assert h5_test[dataset] == h5_target[dataset] or np.isnan(h5_test[dataset]) == np.isnan(h5_target[dataset])
+                else:
+                    test_dataset = list(h5_test[dataset][:])
+                    target_dataset = list(h5_target[dataset][:])
+                    if dataset in ['mod_vector','val_vector']:
+                        assert [gzip.decompress(test_item.tobytes()) for test_item in test_dataset] == [gzip.decompress(target_item.tobytes()) for target_item in target_dataset], f"{test_case}: {dataset} does not match."
+                    else:
+                        assert test_dataset == target_dataset, f"{test_case}: {dataset} does not match."
+            # assert os.path.getsize(extract_h5) == os.path.getsize(extract_target), f"{test_case}: {extract_h5} does not match {extract_target}."
             assert filecmp.cmp(regions_processed,regions_target,shallow=False), f"{test_case}: {regions_processed} does not match {regions_target}."
         else:
             print(f"{test_case} skipped for extract.")
