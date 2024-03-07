@@ -1,6 +1,8 @@
 from pathlib import Path
 from collections import defaultdict
 import random
+import gzip
+from concurrent.futures import ProcessPoolExecutor
 
 import pysam
 import numpy as np
@@ -179,6 +181,32 @@ def convert_tuple_elements(tup):
     """Convert all bytes elements in a tuple to strings."""
     return tuple(convert_bytes(item) for item in tup)
 
+def adjust_mod_probs_in_arrays(mod_array,val_array):
+    mod_array[np.flatnonzero(val_array)]+=1/512
+    return mod_array
+
+def adjust_mod_probs_in_tuples(tup,mod_idx,val_idx):
+    return tuple(item if index!=mod_idx else adjust_mod_probs_in_arrays(item,tup[val_idx]) for index,item in enumerate(tup))
+
+def binary_to_np_array(compressed_bytes,dtype,decompressor,binarized,int8tofloat):
+    if binarized:
+        return np.frombuffer(decompressor(compressed_bytes),dtype=dtype).astype(bool)
+    elif int8tofloat:
+        return ((np.frombuffer(decompressor(compressed_bytes),dtype=dtype).astype(float))/256).astype(np.float16)
+    else:
+        return np.frombuffer(decompressor(compressed_bytes),dtype=dtype).astype(int)
+
+def process_data(h5, dataset, indices, compressed, dtype, decompressor, binarized):
+    if compressed:
+        # Determine if int8tofloat should be applied
+        int8tofloat = 'mod_vector' in dataset
+        # Logic for compressed data
+        loaded_uint8_list = h5[dataset][list(indices)]
+        return [binary_to_np_array(loaded_uint8.tobytes(), dtype, decompressor, binarized, int8tofloat) for loaded_uint8 in loaded_uint8_list]
+    else:
+        # Logic for non-compressed data
+        return h5[dataset][list(indices)]
+
 def read_vectors_from_hdf5(
         file: str | Path,
         motifs: list[str],
@@ -221,6 +249,21 @@ def read_vectors_from_hdf5(
 
     with h5py.File(file,'r') as h5:
         datasets = [name for name, obj in h5.items() if isinstance(obj, h5py.Dataset)]
+        if 'threshold' in h5: 
+            # we are looking at an .h5 file with the new, much better compressed format that does  
+            # not know the data type intrinsically for mod and val vectors, so we must check
+            readwise_datasets = [dataset for dataset in datasets if dataset not in ['threshold']]
+            compressed_binary_datasets = ['mod_vector','val_vector']
+            threshold_applied_to_h5 = h5['threshold'][()]
+            if np.isnan(threshold_applied_to_h5):
+                binarized = False
+            else:
+                binarized = True
+        else:
+            # backwards compatible with the old h5 file structure
+            readwise_datasets = datasets
+            compressed_binary_datasets = []
+            binarized = True # in this case all this will do is make it so we don't apply a +1/512 correction to the mod_vector
         
         read_chromosomes = np.array(h5['chromosome'],dtype=str)
         read_starts = np.array(h5['read_start'])
@@ -245,7 +288,15 @@ def read_vectors_from_hdf5(
                                 | (ref_strands == region_strand))
                         )               
                         read_data_list += list(zip(
-                            *(h5[dataset][relevant_read_indices] for dataset in datasets),
+                            *(process_data(
+                                h5 = h5,
+                                dataset = dataset, 
+                                indices = relevant_read_indices, 
+                                compressed = dataset in compressed_binary_datasets,
+                                dtype = np.uint8,
+                                decompressor = gzip.decompress,
+                                binarized = binarized,) 
+                                for dataset in readwise_datasets),
                             [region_start for _ in relevant_read_indices],
                             [region_end for _ in relevant_read_indices],
                         ))
@@ -255,34 +306,49 @@ def read_vectors_from_hdf5(
                 np.isin(read_motifs, motifs)
             )
             read_data_list = list(zip(
-                *(h5[dataset][relevant_read_indices] for dataset in datasets),
+                *(process_data(
+                    h5 = h5,
+                    dataset = dataset, 
+                    indices = relevant_read_indices, 
+                    compressed = dataset in compressed_binary_datasets,
+                    dtype = np.uint8,
+                    decompressor=gzip.decompress,
+                    binarized=binarized,) 
+                    for dataset in readwise_datasets),
                 [-1 for _ in relevant_read_indices],
                 [-1 for _ in relevant_read_indices]
             ))
-    read_data_converted = [convert_tuple_elements(tup) for tup in read_data_list]
+    if binarized:
+        read_data_converted = [convert_tuple_elements(tup) for tup in read_data_list]
+    else:
+        read_data_converted = [adjust_mod_probs_in_tuples(
+            convert_tuple_elements(tup),
+            readwise_datasets.index('mod_vector'),
+            readwise_datasets.index('val_vector')
+            ) for tup in read_data_list]
     
-    datasets += ['region_start','region_end']
+    readwise_datasets += ['region_start','region_end']
     # We add region information (start and end; chromosome is already present!) so that it is possible to sort by these
     if calculate_mod_fractions:
         # # Add MOTIF_mod_fraction for each unique motif in the read_data_list
         # unique_motifs = np.unique(read_motifs) 
-        # Add the MOTIF_mod_fraction entries to the datasets list for future reference in sorting
-        datasets +=[f'{motif}_mod_fraction' for motif in motifs]
+        # Add the MOTIF_mod_fraction entries to the readwise_datasets list for future reference in sorting
+        readwise_datasets +=[f'{motif}_mod_fraction' for motif in motifs]
         mod_fractions_by_read_name_by_motif = defaultdict(lambda: defaultdict(lambda: 0.0))
         for motif in motifs:
             for read_data in read_data_converted:
-                if read_data[datasets.index('motif')]==motif:
-                    mod_sum = np.sum(read_data[datasets.index('mod_vector')])
-                    val_sum = np.sum(read_data[datasets.index('val_vector')])
+                if read_data[readwise_datasets.index('motif')]==motif:
+                    mod_sum = np.sum(read_data[readwise_datasets.index('mod_vector')])
+                    val_sum = np.sum(read_data[readwise_datasets.index('val_vector')])
                     mod_fraction = (mod_sum/val_sum if val_sum>0 else 0)
-                    mod_fractions_by_read_name_by_motif[read_data[datasets.index('read_name')]][motif]=mod_fraction
+                    mod_fractions_by_read_name_by_motif[read_data[readwise_datasets.index('read_name')]][motif]=mod_fraction
 
         read_data_all = []
         for read_data in read_data_converted:
             read_data_all.append(
                 tuple(val for val in read_data)
                 +tuple(mod_frac for mod_frac in mod_fractions_by_read_name_by_motif
-                [read_data[datasets.index('read_name')]].values()
+                [read_data[readwise_datasets.index('read_name')]].values()
                     )
                 )
     else:
@@ -296,9 +362,9 @@ def read_vectors_from_hdf5(
         random.shuffle(read_data_all)
 
     try:
-        sort_by_indices = [datasets.index(sort_item) for sort_item in sort_by if sort_item!='shuffle']
+        sort_by_indices = [readwise_datasets.index(sort_item) for sort_item in sort_by if sort_item!='shuffle']
     except ValueError as e:
-        raise ValueError(f"Sorting error. {e}. Datasets include {datasets}. If you need mod fraction sorting make sure you are not setting calculate_read_fraction to False.")
+        raise ValueError(f"Sorting error. {e}. Datasets include {readwise_datasets}. If you need mod fraction sorting make sure you are not setting calculate_read_fraction to False.")
     
     if len(sort_by_indices)>0:
         sorted_read_data = sorted(
@@ -308,7 +374,7 @@ def read_vectors_from_hdf5(
     else:
         sorted_read_data = read_data_all
 
-    return sorted_read_data, datasets, regions_dict
+    return sorted_read_data, readwise_datasets, regions_dict
 
 
 def readwise_binary_modification_arrays(
