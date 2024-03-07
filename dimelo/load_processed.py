@@ -2,6 +2,7 @@ from pathlib import Path
 from collections import defaultdict
 import random
 import gzip
+from concurrent.futures import ProcessPoolExecutor
 
 import pysam
 import numpy as np
@@ -195,17 +196,15 @@ def binary_to_np_array(compressed_bytes,dtype,decompressor,binarized,int8tofloat
     else:
         return np.frombuffer(decompressor(compressed_bytes),dtype=dtype).astype(int)
 
-
-def process_data(h5, dataset, indices, compressed=False, **kwargs):
+def process_data(h5, dataset, indices, compressed, dtype, decompressor, binarized):
     if compressed:
-        # Apply decompression and additional processing to each element
-        if 'mod_vector' in dataset:
-            int8tofloat=True
-        else:
-            int8tofloat=False
-        return [binary_to_np_array(h5[dataset][index].tobytes(),int8tofloat=int8tofloat,**kwargs) for index in indices]
+        # Determine if int8tofloat should be applied
+        int8tofloat = 'mod_vector' in dataset
+        # Logic for compressed data
+        loaded_uint8_list = h5[dataset][list(indices)]
+        return [binary_to_np_array(loaded_uint8.tobytes(), dtype, decompressor, binarized, int8tofloat) for loaded_uint8 in loaded_uint8_list]
     else:
-        # Return the data as-is
+        # Logic for non-compressed data
         return h5[dataset][list(indices)]
 
 def read_vectors_from_hdf5(
@@ -290,13 +289,13 @@ def read_vectors_from_hdf5(
                         )               
                         read_data_list += list(zip(
                             *(process_data(
-                                h5,
-                                dataset, 
-                                relevant_read_indices, 
-                                dataset in compressed_binary_datasets,
-                                dtype=np.uint8,
-                                decompressor=gzip.decompress,
-                                binarized=binarized,) 
+                                h5 = h5,
+                                dataset = dataset, 
+                                indices = relevant_read_indices, 
+                                compressed = dataset in compressed_binary_datasets,
+                                dtype = np.uint8,
+                                decompressor = gzip.decompress,
+                                binarized = binarized,) 
                                 for dataset in readwise_datasets),
                             [region_start for _ in relevant_read_indices],
                             [region_end for _ in relevant_read_indices],
@@ -308,11 +307,11 @@ def read_vectors_from_hdf5(
             )
             read_data_list = list(zip(
                 *(process_data(
-                    h5,
-                    dataset, 
-                    relevant_read_indices, 
-                    dataset in compressed_binary_datasets,
-                    dtype=np.uint8,
+                    h5 = h5,
+                    dataset = dataset, 
+                    indices = relevant_read_indices, 
+                    compressed = dataset in compressed_binary_datasets,
+                    dtype = np.uint8,
                     decompressor=gzip.decompress,
                     binarized=binarized,) 
                     for dataset in readwise_datasets),
