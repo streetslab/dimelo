@@ -1,65 +1,67 @@
 name: dimelo
 
-on: [push]
-
+on: 
+  workflow_dispatch: # Allows manual trigger of the workflow
+  push:
+    branches:
+      - main
+      - modkit_parsing_run_tests
 jobs:
-  build-conda:
+  run-tests-ubuntu:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.7"]
 
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v3
-        with:
-          python-version: ${{ matrix.python-version }}
-      # TODO: If we change the name of the dimelo subdirectory, conda install as written here should break.
-      # Installing format dependencies with pip for full compatibility
-      - name: Install dependencies
+      - name: Setup conda and run pytest
         run: |
-          $CONDA/bin/conda env update --file environment_linux.yml --name base
-          pip install flake8 black isort
-          $CONDA/bin/conda install pytest
-      - name: Lint with flake8
-        run: |
-          flake8
-      - name: Check format with black
-        run: |
-          black --config pyproject.toml --diff --check .
-      - name: Clean up and sort imports
-        run: |
-          isort --check-only .
-      - name: Test with pytest
-        run: |
-          $CONDA/bin/pytest
-
-  build-pip:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.7"]
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v3
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install flake8 black isort pytest
+          # Install Miniconda if not available on the runner
+          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+          bash miniconda.sh -b -p $HOME/miniconda
+          source $HOME/miniconda/etc/profile.d/conda.sh
+          
+          # Create conda environment from environment.yml
+          conda env create -f environment.yml
+          
+          # Activate the environment
+          conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
+          
+          # If the package is in the repository root
           pip install .
-      - name: Lint with flake8
+          
+          # Additional dependencies not covered in environment.yml
+          conda install pytest
+
+          # Make sure we've got everything installed
+          conda list
+
+          # Run pytest
+          pytest
+  run-tests-macos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup conda and run pytest
         run: |
-          flake8
-      - name: Check format with black
-        run: |
-          black --diff --check .
-      - name: Clean up and sort imports
-        run: |
-          isort --check-only .
-      - name: Test with pytest
-        run: |
+          # Install Miniconda if not available on the runner
+          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
+          bash miniconda.sh -b -p $HOME/miniconda
+          source $HOME/miniconda/etc/profile.d/conda.sh
+          
+          # Create conda environment from environment.yml
+          conda env create -f environment.yml
+          
+          # Activate the environment
+          conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
+          
+          # If the package is in the repository root
+          pip install .
+          
+          # Additional dependencies not covered in environment.yml
+          conda install pytest
+
+          # Make sure we've got everything installed
+          conda list
+
+          # Run pytest
           pytest
