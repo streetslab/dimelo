@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Setup conda and run pytest
         run: |
-        echo https://repo.anaconda.com/miniconda/${{ matrix.platform.miniconda }}
+          echo https://repo.anaconda.com/miniconda/${{ matrix.platform.miniconda }}
 #           # Install Miniconda if not available on the runner
 #           wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
 #           bash miniconda.sh -b -p $HOME/miniconda
