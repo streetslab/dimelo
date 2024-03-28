@@ -5,10 +5,10 @@ on:
   pull_request:  # Trigger by default on PR opened, reopened, or synchronized (commits pushed to PR)
 
 jobs:
-  example_matrix:
+  platform_matrix:  # Run the tests on each supported platform
     strategy:
       matrix:
-        platform:
+        platform:  # Define the platform tag and the file name of the appropriate miniconda install script
           - os: ubuntu-latest
             miniconda: Miniconda3-latest-Linux-x86_64.sh
           - os: macos-latest
@@ -18,29 +18,28 @@ jobs:
       - uses: actions/checkout@v4
       - name: Setup conda and run pytest
         run: |
-          echo https://repo.anaconda.com/miniconda/${{ matrix.platform.miniconda }}
-#           # Install Miniconda if not available on the runner
-#           wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-#           bash miniconda.sh -b -p $HOME/miniconda
-#           source $HOME/miniconda/etc/profile.d/conda.sh
+          # Install Miniconda if not available on the runner
+          wget https://repo.anaconda.com/miniconda/${{ matrix.platform.miniconda }} -O miniconda.sh
+          bash miniconda.sh -b -p $HOME/miniconda
+          source $HOME/miniconda/etc/profile.d/conda.sh
           
-#           # Create conda environment from environment.yml
-#           conda env create -f environment.yml
+          # Create conda environment from environment.yml
+          conda env create -f environment.yml
           
-#           # Activate the environment
-#           conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
+          # Activate the environment
+          conda activate $(head -n 1 environment.yml | cut -d' ' -f2)
           
-#           # If the package is in the repository root
-#           pip install .
+          # Install pip dependencies and the package itself
+          pip install .
           
-#           # Additional dependencies not covered in environment.yml
-#           conda install pytest
+          # Additional testing dependencies not covered in environment.yml
+          conda install pytest
 
-#           # Make sure we've got everything installed
-#           conda list
+          # Make sure everything is installed correctly
+          conda list
 
-#           # Run pytest
-#           pytest
+          # Run pytest
+          pytest
 
 
 # jobs:
