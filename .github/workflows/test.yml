@@ -1,67 +1,103 @@
 name: dimelo
 
 on: 
-  workflow_dispatch: # Allows manual trigger of the workflow
-  push:
-    branches:
-      - main
-      - modkit_parsing_run_tests
+  workflow_dispatch:  # Allows manual trigger of the workflow
+  pull_request:  # Trigger by default on PR opened, reopened, or synchronized (commits pushed to PR)
+
 jobs:
-  run-tests-ubuntu:
-    runs-on: ubuntu-latest
-
+  example_matrix:
+    strategy:
+      matrix:
+        platform:
+          - os: ubuntu-latest
+            miniconda: Miniconda3-latest-Linux-x86_64.sh
+          - os: macos-latest
+            miniconda: Miniconda3-latest-MacOSX-x86_64.sh
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup conda and run pytest
         run: |
-          # Install Miniconda if not available on the runner
-          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-          bash miniconda.sh -b -p $HOME/miniconda
-          source $HOME/miniconda/etc/profile.d/conda.sh
+        echo https://repo.anaconda.com/miniconda/${{ matrix.platform.miniconda }}
+#           # Install Miniconda if not available on the runner
+#           wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+#           bash miniconda.sh -b -p $HOME/miniconda
+#           source $HOME/miniconda/etc/profile.d/conda.sh
           
-          # Create conda environment from environment.yml
-          conda env create -f environment.yml
+#           # Create conda environment from environment.yml
+#           conda env create -f environment.yml
           
-          # Activate the environment
-          conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
+#           # Activate the environment
+#           conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
           
-          # If the package is in the repository root
-          pip install .
+#           # If the package is in the repository root
+#           pip install .
           
-          # Additional dependencies not covered in environment.yml
-          conda install pytest
+#           # Additional dependencies not covered in environment.yml
+#           conda install pytest
 
-          # Make sure we've got everything installed
-          conda list
+#           # Make sure we've got everything installed
+#           conda list
 
-          # Run pytest
-          pytest
-  run-tests-macos:
-    runs-on: macos-latest
+#           # Run pytest
+#           pytest
 
-    steps:
-      - uses: actions/checkout@v3
-      - name: Setup conda and run pytest
-        run: |
-          # Install Miniconda if not available on the runner
-          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
-          bash miniconda.sh -b -p $HOME/miniconda
-          source $HOME/miniconda/etc/profile.d/conda.sh
-          
-          # Create conda environment from environment.yml
-          conda env create -f environment.yml
-          
-          # Activate the environment
-          conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
-          
-          # If the package is in the repository root
-          pip install .
-          
-          # Additional dependencies not covered in environment.yml
-          conda install pytest
 
-          # Make sure we've got everything installed
-          conda list
+# jobs:
+#   run-tests-ubuntu:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - name: Setup conda and run pytest
+#         run: |
+#           # Install Miniconda if not available on the runner
+#           wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+#           bash miniconda.sh -b -p $HOME/miniconda
+#           source $HOME/miniconda/etc/profile.d/conda.sh
+          
+#           # Create conda environment from environment.yml
+#           conda env create -f environment.yml
+          
+#           # Activate the environment
+#           conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
+          
+#           # If the package is in the repository root
+#           pip install .
+          
+#           # Additional dependencies not covered in environment.yml
+#           conda install pytest
 
-          # Run pytest
-          pytest
+#           # Make sure we've got everything installed
+#           conda list
+
+#           # Run pytest
+#           pytest
+  
+#   run-tests-macos:
+#     runs-on: macos-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - name: Setup conda and run pytest
+#         run: |
+#           # Install Miniconda if not available on the runner
+#           wget https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
+#           bash miniconda.sh -b -p $HOME/miniconda
+#           source $HOME/miniconda/etc/profile.d/conda.sh
+          
+#           # Create conda environment from environment.yml
+#           conda env create -f environment.yml
+          
+#           # Activate the environment
+#           conda activate $(head -n 1 environment.yml | cut -d' ' -f2) # Activates the conda environment
+          
+#           # If the package is in the repository root
+#           pip install .
+          
+#           # Additional dependencies not covered in environment.yml
+#           conda install pytest
+
+#           # Make sure we've got everything installed
+#           conda list
+
+#           # Run pytest
+#           pytest
