@@ -10,7 +10,6 @@ import select
 
 from tqdm.auto import tqdm
 
-from . import utils
 
 def run_with_progress_bars(
     command_list: list[str],

@@ -14,7 +14,6 @@ from pathlib import Path
 import pandas as pd
 import seaborn as sns
 from matplotlib.axes import Axes
-import matplotlib.pyplot as plt
 
 from . import load_processed
 from . import utils

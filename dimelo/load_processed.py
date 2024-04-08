@@ -2,7 +2,6 @@ from pathlib import Path
 from collections import defaultdict
 import random
 import gzip
-from concurrent.futures import ProcessPoolExecutor
 
 import pysam
 import numpy as np
@@ -91,7 +90,7 @@ def counts_from_fake(*args,
 def pileup_vectors_from_bedmethyl(bedmethyl_file: str | Path,
                           motif: str,
                           regions: str | Path | list[str | Path],
-                          window_size: int = None) -> (np.ndarray,np.ndarray):
+                          window_size: int = None) -> tuple[np.ndarray,np.ndarray]:
     """
     Generate trace for the specified modification aggregated across all regions in the given bed file. Called by profile plotters, can also be used by a user directly.
 
@@ -124,10 +123,11 @@ def pileup_vectors_from_bedmethyl(bedmethyl_file: str | Path,
     region_len = first_tuple[1] - first_tuple[0]
 
     valid_base_counts = np.zeros(region_len, dtype=int)
-    modified_base_counts = np.zeros(region_len, dtype=int)    
+    modified_base_counts = np.zeros(region_len, dtype=int)
     for chromosome,region_list in regions_dict.items():
         for start_coord,end_coord,strand in region_list:
-            center_coord = (start_coord+end_coord)//2
+            # TODO: This is not used anywhere; disabling for now
+            # center_coord = (start_coord+end_coord)//2
             if chromosome in source_tabix.contigs:
                 for row in source_tabix.fetch(chromosome,start_coord,end_coord):
                     tabix_fields = row.split('\t')

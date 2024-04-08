@@ -2,7 +2,6 @@ from pathlib import Path
 import gzip
 import filecmp
 import pickle
-import os
 
 import numpy as np
 from matplotlib.axes import Axes
@@ -136,7 +135,9 @@ class TestParseToPlot(DiMeLoParsingTestCase):
                 assert len(expected_tuple) == len(actual_tuple), f"{test_case}: Unexpected number of arrays returned for {motif}"
 
                 for expected, actual in zip(expected_tuple, actual_tuple):
-                    assert np.array_equal(expected, actual), f"{test_case}: Arrays for motif {motif} are not equal: expected {value} but got {actual[key]}"
+                    # TODO: The following was the original assertion error message, but it was not written in a functional way. Find a way to make it work as intended.
+                    # assert np.array_equal(expected, actual), f"{test_case}: Arrays for motif {motif} are not equal: expected {value} but got {actual[key]}"
+                    assert np.array_equal(expected, actual), f"{test_case}: Arrays for motif {motif} are not equal."
         else:
             print(f"{test_case} loading skipped for pileup_load_plot, continuing to plotting.")
 

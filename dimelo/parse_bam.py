@@ -1,6 +1,5 @@
 import sys
 import os
-import shutil
 import subprocess
 import multiprocessing
 from pathlib import Path
@@ -50,7 +49,7 @@ try:
         print(f'modkit found with expected version {EXPECTED_MODKIT_VERSION}')
     else:
         print(f'modkit found with unexpected version {modkit_version.split()[1]}. Versions other than {EXPECTED_MODKIT_VERSION} may exhibit unexpected behavior. It is recommended that you use v{EXPECTED_MODKIT_VERSION}')
-except:
+except subprocess.CalledProcessError:
     print('Executable not found for modkit. Install dimelo using "conda env create -f environment.yml" or install modkit manually to your conda environment using "conda install nanoporetech::modkit==0.2.4". Without modkit you cannot run parse_bam functions.')
 
 """
@@ -216,7 +215,8 @@ def pileup(
                            + cores_command_list
                            + log_command)
     
-    done_string = run_modkit.run_with_progress_bars(
+    # TODO: Do we need to store and use the output from this method? Previously was being printed immediately afterward.
+    _ = run_modkit.run_with_progress_bars(
         command_list = pileup_command_list,
         input_file = input_file,
         ref_genome = ref_genome,
@@ -385,7 +385,7 @@ def extract(
     if log:
         if not quiet:
             print('logging to ',Path(output_path)/'extract-log')
-        log_command=['--log-filepath',Path(output_path)/f'extract-log']
+        log_command=['--log-filepath',Path(output_path)/'extract-log']
     else:
         log_command=[]   
 
@@ -409,7 +409,8 @@ def extract(
                                 + log_command
                                 + ['--ref',ref_genome, '--filter-threshold','0',])
         
-        done_string = run_modkit.run_with_progress_bars(
+        # TODO: Do we need to store and use the output from this method? Previously was being printed immediately afterward.
+        _ = run_modkit.run_with_progress_bars(
             command_list = extract_command_list,
             input_file = input_file,
             ref_genome = ref_genome,
@@ -636,7 +637,7 @@ def read_by_base_txt_to_hdf5(
             # mod and val vectors -> uint8 allows us to just write whatever bytes we want
             # h5py does not appear to otherwise support vlen binary
             dt_vlen = h5py.vlen_dtype(np.dtype('uint8'))
-            if thresh==None:
+            if thresh is None:
                 threshold_to_store = np.nan
             else:
                 threshold_to_store = thresh
@@ -764,10 +765,20 @@ def read_by_base_txt_to_hdf5(
 
 
     #         next(txt)
+            # Initialize loop vars
             read_name = ''
+            read_chrom = ''
+            read_len = 0                   
+            ref_strand = ''
+            read_start = 0
+            read_end = 0
+            val_coordinates_list = []
+            mod_values_list = []
+            
             read_counter = 0
             read_dict_of_lists = defaultdict(list)
             reads_in_chunk = 0
+
             if quiet:
                 iterator = enumerate(txt)
             else:

@@ -4,8 +4,6 @@ from matplotlib.axes import Axes
 import seaborn as sns
 from pathlib import Path
 from collections import defaultdict
-import os
-import sys
 
 # This provides the mapping of canonical bases to sets of valid mode names
 BASEMOD_NAMES_DICT = {
