@@ -267,7 +267,7 @@ def read_vectors_from_hdf5(
     window_size: int = None,
     sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
     calculate_mod_fractions: bool = True,
-) -> (list[tuple], list[str], dict):
+) -> tuple[list[tuple], list[str], dict]:
     """
     Pulls a list of read data out of an .h5 file containing processed read vectors, formatted
     for read-by-read vector processing downstream use cases.
