@@ -213,7 +213,7 @@ def pileup(
         cores_command_list = ["--threads", str(cores)]
 
     # TODO: This is SO SO SO similar to extract; just the ValueError vs. printing. I think this can be resolved
-    mod_thresh_list = []
+    mod_thresh_list: list[str] = []
     if thresh is None:
         if not quiet:
             print(
@@ -401,7 +401,7 @@ def extract(
             print(f"Allocating requested {cores} cores.")
         cores_command_list = ["--threads", str(cores)]
 
-    mod_thresh_list = []
+    mod_thresh_list: list[str] = []
     if thresh is None:
         if not quiet:
             print(
@@ -846,8 +846,8 @@ def read_by_base_txt_to_hdf5(
             ref_strand = ""
             read_start = 0
             read_end = 0
-            val_coordinates_list = []
-            mod_values_list = []
+            val_coordinates_list: list[int] = []
+            mod_values_list: list[float] = []
 
             read_counter = 0
             read_dict_of_lists = defaultdict(list)

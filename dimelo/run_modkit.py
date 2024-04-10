@@ -91,7 +91,8 @@ def run_with_progress_bars(
     format_pre = "{bar}| {desc} {percentage:3.0f}% | {elapsed}"
     format_contigs = "{bar}| {desc} {percentage:3.0f}% | {elapsed}<{remaining}"
     format_chr = "{bar}| {desc} {percentage:3.0f}%"
-    finding_progress_dict = {}
+    # TODO: Is this the correct type annotation? I think it is, based on approx. line 280
+    finding_progress_dict: dict[str, tuple[int, int]] = {}
     in_contig_progress = (0, 1)
 
     # Set up output buffer variables

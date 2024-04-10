@@ -398,9 +398,10 @@ def read_vectors_from_hdf5(
         # unique_motifs = np.unique(read_motifs)
         # Add the MOTIF_mod_fraction entries to the readwise_datasets list for future reference in sorting
         readwise_datasets += [f"{motif}_mod_fraction" for motif in motifs]
-        mod_fractions_by_read_name_by_motif = defaultdict(
-            lambda: defaultdict(lambda: 0.0)
-        )
+        # TODO: Is this the correct type annotation? I'm pretty sure it is.
+        mod_fractions_by_read_name_by_motif: defaultdict[
+            str, defaultdict[str, float]
+        ] = defaultdict(lambda: defaultdict(lambda: 0.0))
         for motif in motifs:
             for read_data in read_data_converted:
                 if read_data[readwise_datasets.index("motif")] == motif:

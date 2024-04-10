@@ -45,7 +45,8 @@ def regions_dict_from_input(
     regions: str | Path | list[str | Path] | None = None,
     window_size: int | None = None,
 ) -> dict:
-    regions_dict = defaultdict(list)
+    # TODO: Why is this declared out here, and not within add_region_to_dict? To my eye, that method should just return the fully-loaded dict.
+    regions_dict: defaultdict[str, list] = defaultdict(list)
 
     if window_size is not None and window_size <= 0:
         raise ValueError(
