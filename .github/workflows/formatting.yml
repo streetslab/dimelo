@@ -1,11 +1,16 @@
 name: dimelo-formatting
 on: [ pull_request ]
 jobs:
-  ruff:
+  ruff-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chartboost/ruff-action@v1
+  # TODO: Is it really necessary for these to be separate jobs? This seems redundant.
+  ruff-format-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: chartboost/ruff-action@v1
         with:
-            args: 'check'
-            args: 'format --check'
+          args: 'format --check'
