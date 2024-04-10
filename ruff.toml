@@ -1,11 +1,4 @@
 [lint]
-# Defaults:
-# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
-# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
-# McCabe complexity (`C901`) by default.
-
 # Extending defaults to:
 # * include isort (`I`)
-
-select = ["E4", "E7", "E9", "F", "I"]
-ignore = []
+extend-select = ["I"]
