@@ -132,7 +132,7 @@ def bed_from_regions_dict(
 ):
     with open(save_bed_path, "w") as processed_bed:
         for chrom, regions_list in regions_dict.items():
-            for (start, end, strand) in regions_list:
+            for start, end, strand in regions_list:
                 bed_line = (
                     "\t".join([chrom, str(start), str(end), strand, ".", "."]) + "\n"
                 )

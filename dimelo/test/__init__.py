@@ -82,7 +82,9 @@ def download_reference(force_redownload=False):
     else:
         urllib.request.urlretrieve(ref_genome_url, ref_genome_gz)
 
-        with gzip.open(ref_genome_gz, "rb") as gzip_file, open(ref_genome_fasta, "wb") as output_file:
+        with gzip.open(ref_genome_gz, "rb") as gzip_file, open(
+            ref_genome_fasta, "wb"
+        ) as output_file:
             for chunk in gzip_file:
                 output_file.write(chunk)
 
