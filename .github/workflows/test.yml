@@ -1,4 +1,4 @@
-name: dimelo
+name: dimelo-test
 
 on: 
   workflow_dispatch:  # Allows manual trigger of the workflow
