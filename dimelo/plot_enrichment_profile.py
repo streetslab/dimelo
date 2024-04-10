@@ -105,11 +105,11 @@ def by_modification(
     """
     n_mods = len(motifs)
     return plot_enrichment_profile(
+        *args,
         mod_file_names=[mod_file_name] * n_mods,
         regions_list=[regions] * n_mods,
         motifs=motifs,
         sample_names=motifs,
-        *args,
         **kwargs,
     )
 
@@ -133,11 +133,11 @@ def by_regions(
         sample_names = regions_list
     n_beds = len(regions_list)
     return plot_enrichment_profile(
+        *args,
         mod_file_names=[mod_file_name] * n_beds,
         regions_list=regions_list,
         motifs=[motif] * n_beds,
         sample_names=sample_names,
-        *args,
         **kwargs,
     )
 
@@ -161,10 +161,10 @@ def by_dataset(
         sample_names = mod_file_names
     n_mod_files = len(mod_file_names)
     return plot_enrichment_profile(
+        *args,
         mod_file_names=mod_file_names,
         regions_list=[regions] * n_mod_files,
         motifs=[motif] * n_mod_files,
         sample_names=sample_names,
-        *args,
         **kwargs,
     )

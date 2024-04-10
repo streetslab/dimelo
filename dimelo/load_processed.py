@@ -41,7 +41,7 @@ def pileup_counts_from_bedmethyl(
         # Get counts from the specified regions
         regions_dict = utils.regions_dict_from_input(regions)
         for chromosome, region_list in regions_dict.items():
-            for start_coord, end_coord, strand in region_list:
+            for start_coord, end_coord, _ in region_list:
                 if chromosome in source_tabix.contigs:
                     for row in source_tabix.fetch(chromosome, start_coord, end_coord):
                         tabix_fields = row.split("\t")
@@ -140,7 +140,7 @@ def pileup_vectors_from_bedmethyl(
     valid_base_counts = np.zeros(region_len, dtype=int)
     modified_base_counts = np.zeros(region_len, dtype=int)
     for chromosome, region_list in regions_dict.items():
-        for start_coord, end_coord, strand in region_list:
+        for start_coord, end_coord, _ in region_list:
             # TODO: This is not used anywhere; disabling for now
             # center_coord = (start_coord+end_coord)//2
             if chromosome in source_tabix.contigs:
@@ -309,10 +309,7 @@ def read_vectors_from_hdf5(
             ]
             compressed_binary_datasets = ["mod_vector", "val_vector"]
             threshold_applied_to_h5 = h5["threshold"][()]
-            if np.isnan(threshold_applied_to_h5):
-                binarized = False
-            else:
-                binarized = True
+            binarized = not np.isnan(threshold_applied_to_h5)
         else:
             # backwards compatible with the old h5 file structure
             readwise_datasets = datasets
@@ -444,7 +441,7 @@ def read_vectors_from_hdf5(
     except ValueError as e:
         raise ValueError(
             f"Sorting error. {e}. Datasets include {readwise_datasets}. If you need mod fraction sorting make sure you are not setting calculate_read_fraction to False."
-        )
+        ) from e
 
     if len(sort_by_indices) > 0:
         sorted_read_data = sorted(

@@ -100,7 +100,7 @@ def add_region_to_dict(
                         )
                 else:
                     raise ValueError(
-                        "Invalid bed format line {line_index} of {region.name}"
+                        f"Invalid bed format line {line_index} of {region.name}"
                     )
     elif isinstance(region, Path):
         raise ValueError(
@@ -132,7 +132,7 @@ def bed_from_regions_dict(
 ):
     with open(save_bed_path, "w") as processed_bed:
         for chrom, regions_list in regions_dict.items():
-            for index, (start, end, strand) in enumerate(regions_list):
+            for (start, end, strand) in regions_list:
                 bed_line = (
                     "\t".join([chrom, str(start), str(end), strand, ".", "."]) + "\n"
                 )
@@ -205,10 +205,10 @@ def line_plot(
         data_table = pd.DataFrame(data_dict).melt(
             id_vars=indep_name, value_name=y_label
         )
-    except ValueError:
+    except ValueError as e:
         raise ValueError(
             "All dependent and independent vectors must be the same length"
-        )
+        ) from e
     # plot lines
     return sns.lineplot(
         data=data_table, x=indep_name, y=y_label, hue="variable", **kwargs

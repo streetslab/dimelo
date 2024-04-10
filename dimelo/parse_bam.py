@@ -152,7 +152,7 @@ def pileup(
         else:
             raise Exception(
                 f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.'
-            )
+            ) from e
 
     output_path, (output_bedmethyl, output_bedmethyl_sorted, output_bedgz_sorted, _) = (
         prep_outputs(
@@ -367,7 +367,7 @@ def extract(
         else:
             raise Exception(
                 f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.'
-            )
+            ) from e
 
     # TODO: Add intermediate mod-specific .txt files?
     output_path, (output_h5,) = prep_outputs(
@@ -563,10 +563,7 @@ def check_bam_format(
                             f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered to be implicit. \n\nConsider using "modkit update-tags {str(bam_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.'
                         )
                     else:
-                        if (
-                            len(tag_value) > 0
-                            and tag_value[0] in basemods_found_dict.keys()
-                        ):
+                        if len(tag_value) > 0 and tag_value[0] in basemods_found_dict:
                             if tag_value[2] in utils.BASEMOD_NAMES_DICT[tag_value[0]]:
                                 basemods_found_dict[tag_value[0]] = True
                             else:
@@ -588,7 +585,7 @@ def check_bam_format(
         if "fetch called on bamfile without index" in str(e):
             raise ValueError(
                 f'{e}. Consider using "samtools index {str(bam_file)}" to create an index if your .bam is already sorted.'
-            )
+            ) from e
         else:
             raise
     except:
@@ -714,10 +711,7 @@ def read_by_base_txt_to_hdf5(
             # mod and val vectors -> uint8 allows us to just write whatever bytes we want
             # h5py does not appear to otherwise support vlen binary
             dt_vlen = h5py.vlen_dtype(np.dtype("uint8"))
-            if thresh is None:
-                threshold_to_store = np.nan
-            else:
-                threshold_to_store = thresh
+            threshold_to_store = np.nan if thresh is None else thresh
             # Create a threshold dataset to store whether this data is thresholded (binary) or raw (float16)
             if "threshold" in h5:
                 threshold_from_existing = h5["threshold"][()]

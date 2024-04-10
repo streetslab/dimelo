@@ -32,10 +32,10 @@ class RelativePath:
             # Convert the absolute path to a relative path
             try:
                 self.relative_path = path.relative_to(script_location)
-            except ValueError:
+            except ValueError as e:
                 raise ValueError(
                     "The provided path is not in the dimelo/test directory."
-                )
+                ) from e
         else:
             self.relative_path = path
         self._update_absolute_path()
@@ -82,10 +82,9 @@ def download_reference(force_redownload=False):
     else:
         urllib.request.urlretrieve(ref_genome_url, ref_genome_gz)
 
-        with gzip.open(ref_genome_gz, "rb") as gzip_file:
-            with open(ref_genome_fasta, "wb") as output_file:
-                for chunk in gzip_file:
-                    output_file.write(chunk)
+        with gzip.open(ref_genome_gz, "rb") as gzip_file, open(ref_genome_fasta, "wb") as output_file:
+            for chunk in gzip_file:
+                output_file.write(chunk)
 
         ref_genome_gz.unlink()
         print("Reference genome downloaded and decompressed.")
