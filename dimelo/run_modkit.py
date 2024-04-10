@@ -1,13 +1,13 @@
-import subprocess
+import os
 
 # I believe that pty does not currently work on Windows, although this may change in future releases: https://bugs.python.org/issue41663
 # However, it may be that pywinpty, which is installable from pip, would work fine. That just needs to be tested with a Windows machine
 # My current thinking is to wait on this until Nanopore puts Windows executables on Anaconda: https://anaconda.org/nanoporetech/modkit
 import pty
 import re
-import os
-from pathlib import Path
 import select
+import subprocess
+from pathlib import Path
 
 from tqdm.auto import tqdm
 

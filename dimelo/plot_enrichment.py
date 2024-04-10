@@ -2,8 +2,7 @@ from pathlib import Path
 
 from matplotlib.axes import Axes
 
-from . import utils
-from . import load_processed
+from . import load_processed, utils
 
 
 def plot_enrichment(

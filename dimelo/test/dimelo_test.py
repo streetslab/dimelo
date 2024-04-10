@@ -1,12 +1,12 @@
-from pathlib import Path
-import gzip
 import filecmp
+import gzip
 import pickle
+from pathlib import Path
 
-import numpy as np
-from matplotlib.axes import Axes
-import pytest
 import h5py
+import numpy as np
+import pytest
+from matplotlib.axes import Axes
 
 import dimelo as dm
 from dimelo.test import DiMeLoParsingTestCase, filter_kwargs_for_func

@@ -1,9 +1,10 @@
+from collections import defaultdict
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from matplotlib.axes import Axes
 import seaborn as sns
-from pathlib import Path
-from collections import defaultdict
+from matplotlib.axes import Axes
 
 # This provides the mapping of canonical bases to sets of valid mode names
 BASEMOD_NAMES_DICT = {

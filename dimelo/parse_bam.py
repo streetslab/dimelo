@@ -1,18 +1,17 @@
-import sys
+import gzip
+import multiprocessing
 import os
 import subprocess
-import multiprocessing
-from pathlib import Path
-import gzip
+import sys
 from collections import defaultdict
+from pathlib import Path
 
-import numpy as np
 import h5py
+import numpy as np
 import pysam
 from tqdm.auto import tqdm
 
-from . import utils
-from . import run_modkit
+from . import run_modkit, utils
 
 """
 This module contains code to convert .bam files into both human-readable and 

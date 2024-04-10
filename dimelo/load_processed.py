@@ -1,14 +1,13 @@
-from pathlib import Path
-from collections import defaultdict
-import random
 import gzip
+import random
+from collections import defaultdict
+from pathlib import Path
 
-import pysam
-import numpy as np
 import h5py
+import numpy as np
+import pysam
 
-from . import test_data
-from . import utils
+from . import test_data, utils
 
 
 def pileup_counts_from_bedmethyl(

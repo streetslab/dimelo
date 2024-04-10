@@ -1,9 +1,9 @@
-import tempfile
-from pathlib import Path
-import subprocess
 import gzip
+import subprocess
+import tempfile
 import urllib
 from inspect import signature
+from pathlib import Path
 
 import pysam
 

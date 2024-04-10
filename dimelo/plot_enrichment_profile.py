@@ -3,8 +3,7 @@ from pathlib import Path
 import numpy as np
 from matplotlib.axes import Axes
 
-from . import utils
-from . import load_processed
+from . import load_processed, utils
 
 
 def plot_enrichment_profile(
