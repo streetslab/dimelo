@@ -1,4 +1,4 @@
-name: formatting
+name: dimelo-formatting
 on: [ pull_request ]
 jobs:
   ruff:
@@ -6,3 +6,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: chartboost/ruff-action@v1
+        with:
+            args: 'check'
+            args: 'format --check'
