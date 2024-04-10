@@ -137,6 +137,7 @@ class DiMeLoParsingTestCase:
 
     @classmethod
     def setup_class(cls):
+        # TODO: The existence of two variables with basically the same name is very confusing. Please clarify?
         cls._outDir = tempfile.TemporaryDirectory()
         cls.outDir = Path(cls._outDir.name)
         cls.reference_genome = download_reference()
@@ -148,5 +149,10 @@ class DiMeLoParsingTestCase:
 
     def assertOutputFileExists(self, file_name: Path):
         """Fails test if the given file name is not found in the output directory"""
+        """
+        TODO: There are a couple of things wrong here:
+        * This is never called anywhere; was this a holdover from my old infrastructure? Can it be deleted?
+        * mypy error: dimelo/test/__init__.py:151: error: "DiMeLoParsingTestCase" has no attribute "outDir"  [attr-defined]
+        """
         file_path = self.outDir / file_name
         assert file_path.exists(), f"{file_path} does not exist"

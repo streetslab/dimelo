@@ -66,17 +66,17 @@ def pileup(
     input_file: str | Path,
     output_name: str,
     ref_genome: str | Path,
-    output_directory: str | Path = None,
-    regions: str | Path | list[str | Path] = None,
+    output_directory: str | Path | None = None,
+    regions: str | Path | list[str | Path] | None = None,
     motifs: list = ["A,0", "CG,0"],
-    thresh: float = None,
-    window_size: int = None,
-    cores: int = None,
+    thresh: float | None = None,
+    window_size: int | None = None,
+    cores: int | None = None,
     log: bool = False,
     cleanup: bool = True,
     quiet: bool = False,
     override_checks: bool = False,
-) -> Path:
+) -> tuple[Path, Path]:
     """
     TODO: Merge bed_file / region_str / window_size handling into a unified function somewhere
 
@@ -282,17 +282,17 @@ def extract(
     input_file: str | Path,
     output_name: str,
     ref_genome: str | Path,
-    output_directory: str | Path = None,
-    regions: str | Path | list[str | Path] = None,
+    output_directory: str | Path | None = None,
+    regions: str | Path | list[str | Path] | None = None,
     motifs: list = ["A,0", "CG,0", "GCH,1"],
-    thresh: float = None,
-    window_size: int = None,
-    cores: int = None,
+    thresh: float | None = None,
+    window_size: int | None = None,
+    cores: int | None = None,
     log: bool = False,
     cleanup: bool = True,
     quiet: bool = False,
     override_checks: bool = False,
-) -> Path:
+) -> tuple[Path, Path]:
     """
     TODO: Merge bed_file / region_str / window_size handling into a unified function somewhere
 
@@ -516,12 +516,13 @@ def verify_inputs(
         raise ValueError(
             f"First {NUM_READS_TO_CHECK} reads have anomalously low alignment quality: only {100*correct_bases/total_bases}% of bases align.\nPlease verify that {input_file.name} is actually aligned to {ref_genome.name}."
         )
+    return
 
 
 def check_bam_format(
     bam_file: str | Path,
     basemods: list = ["A,0", "CG,0"],
-) -> bool:
+):
     """
     Check whether a .bam file is formatted appropriately for modkit
 
@@ -595,7 +596,7 @@ def check_bam_format(
 def get_alignment_quality(
     bam_file,
     ref_genome,
-) -> float:
+) -> tuple[int, int]:
     ref_genome_index = ref_genome.parent / (ref_genome.name + ".fai")
     if not ref_genome_index.exists():
         print(f"Indexing {ref_genome.name}. This only needs to be done once.")
@@ -659,7 +660,7 @@ def read_by_base_txt_to_hdf5(
     input_txt: str | Path,
     output_h5: str | Path,
     basemod: str,
-    thresh: float = None,
+    thresh: float | None = None,
     quiet: bool = False,
     compress_level: int = 1,
     write_chunks: int = 1000,

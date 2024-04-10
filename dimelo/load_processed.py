@@ -13,7 +13,7 @@ from . import test_data, utils
 def pileup_counts_from_bedmethyl(
     bedmethyl_file: Path,
     motif: str,
-    regions: str | Path | list[str | Path] = None,
+    regions: str | Path | list[str | Path] | None = None,
 ) -> tuple[int, int]:
     """
     Extract number of modified bases and total number of bases from the given bedmethyl file
@@ -104,7 +104,7 @@ def pileup_vectors_from_bedmethyl(
     bedmethyl_file: str | Path,
     motif: str,
     regions: str | Path | list[str | Path],
-    window_size: int = None,
+    window_size: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Generate trace for the specified modification aggregated across all regions in the given bed file. Called by profile plotters, can also be used by a user directly.
@@ -262,8 +262,8 @@ def process_data(h5, dataset, indices, compressed, dtype, decompressor, binarize
 def read_vectors_from_hdf5(
     file: str | Path,
     motifs: list[str],
-    regions: str | Path | list[str | Path] = None,
-    window_size: int = None,
+    regions: str | Path | list[str | Path] | None = None,
+    window_size: int | None = None,
     sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
     calculate_mod_fractions: bool = True,
 ) -> tuple[list[tuple], list[str], dict]:
@@ -457,11 +457,11 @@ def readwise_binary_modification_arrays(
     file: str | Path,
     motifs: list[str],
     regions: str | Path | list[str | Path],
-    window_size: int = None,
+    window_size: int | None = None,
     sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
-    thresh: float = None,
+    thresh: float | None = None,
     relative: bool = True,
-) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
+) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str], dict]:
     """
     Pulls a list of read data out of a file containing processed read vectors, formatted with
     seaborn plotting in mind. Currently we only support .h5 files.
@@ -583,7 +583,7 @@ STUB_N_READS = 500
 
 def reads_from_fake(
     file: Path, regions: Path, motifs: list[str]
-) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str]]:
+) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str], dict]:
     """
     TODO: What does the bed file represent in this method? This one is breaking my brain a bit.
     TODO: Variable names in this method stink.

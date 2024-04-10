@@ -92,7 +92,7 @@ def by_regions(
     mod_file_name: str | Path,
     regions_list: list[str | Path | list[str | Path]],
     motif: str,
-    sample_names: list[str] = None,
+    sample_names: list[str] | None = None,
     *args,
     **kwargs,
 ) -> Axes:
@@ -120,7 +120,7 @@ def by_dataset(
     mod_file_names: list[str | Path],
     regions: str | Path | list[str | Path],
     motif: str,
-    sample_names: list[str] = None,
+    sample_names: list[str] | None = None,
     *args,
     **kwargs,
 ) -> Axes:

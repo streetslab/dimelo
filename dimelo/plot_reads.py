@@ -23,9 +23,9 @@ def plot_reads(
     mod_file_name: str | Path,
     regions: str | Path | list[str | Path],
     motifs: list[str],
-    window_size: int = None,
+    window_size: int | None = None,
     sort_by: str | list[str] = "shuffle",
-    thresh: float = None,
+    thresh: float | None = None,
     relative: bool = True,
     **kwargs,
 ) -> Axes:

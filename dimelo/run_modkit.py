@@ -28,7 +28,7 @@ def run_with_progress_bars(
     expect_done: bool = False,
     quiet: bool = False,
 ) -> str:
-    """
+    r"""
     This function runs modkit with subprocess / pseudoterminal and grabs the progress outputs to populate progress bars
 
     Args:
@@ -72,6 +72,21 @@ def run_with_progress_bars(
     """
 
     # Set up progress bar variables
+    """
+    TODO: There are a lot of mypy errors related to these progress bars:
+    dimelo/run_modkit.py:305: error: Item "None" of "Any | None" has no attribute "n"  [union-attr]
+    dimelo/run_modkit.py:306: error: Item "None" of "Any | None" has no attribute "set_description"  [union-attr]
+    dimelo/run_modkit.py:307: error: Item "None" of "Any | None" has no attribute "refresh"  [union-attr]
+    dimelo/run_modkit.py:308: error: Item "None" of "Any | None" has no attribute "close"  [union-attr]
+    dimelo/run_modkit.py:309: error: Item "None" of "Any | None" has no attribute "n"  [union-attr]
+    dimelo/run_modkit.py:311: error: Item "None" of "Any | None" has no attribute "set_description"  [union-attr]
+    dimelo/run_modkit.py:312: error: Item "None" of "Any | None" has no attribute "refresh"  [union-attr]
+    dimelo/run_modkit.py:313: error: Item "None" of "Any | None" has no attribute "close"  [union-attr]
+    dimelo/run_modkit.py:319: error: Item "None" of "Any | None" has no attribute "close"  [union-attr]
+    dimelo/run_modkit.py:320: error: Item "None" of "Any | None" has no attribute "close"  [union-attr]
+
+    Basically, in whatever way these are set up, the variables can theoretically be uninitialized before they are referenced, which can create bugs.
+    """
     pbar_pre, pbar_contigs, pbar_chr = None, None, None
     format_pre = "{bar}| {desc} {percentage:3.0f}% | {elapsed}"
     format_contigs = "{bar}| {desc} {percentage:3.0f}% | {elapsed}<{remaining}"

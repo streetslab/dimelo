@@ -42,8 +42,8 @@ def adjust_threshold(
 
 
 def regions_dict_from_input(
-    regions: str | Path | list[str | Path] = None,
-    window_size: int = None,
+    regions: str | Path | list[str | Path] | None = None,
+    window_size: int | None = None,
 ) -> dict:
     regions_dict = defaultdict(list)
 
@@ -54,8 +54,10 @@ def regions_dict_from_input(
 
     if isinstance(regions, list):
         for region in regions:
+            # TODO: According to the default arg settings for this method, window_size can be None. However, add_region_to_dict does not accept None. This will cause errors.
             add_region_to_dict(region, window_size, regions_dict)
     else:
+        # TODO: According to the default arg settings for this method, regions and window_size can be None. However, add_region_to_dict does not accept None. This will cause errors.
         add_region_to_dict(regions, window_size, regions_dict)
     for chrom in regions_dict:
         regions_dict[chrom].sort(key=lambda x: x[0])
@@ -68,6 +70,10 @@ def add_region_to_dict(
     window_size: int,
     regions_dict: dict,
 ):
+    # TODO: The flow of this is very confusing, creating mypy errors, and possibly creates actual errors.
+    # mypy error: dimelo/utils.py:103: error: Item "str" of "str | Path" has no attribute "name"  [union-attr]
+    # Basically, this method is confusing because the string can be a pathlike or a region string.
+    # Find a different way to check whether the string is pathlike or a region string, coerce paths to Path objects, then clean up everything else.
     if Path(region).suffix == ".bed":
         with open(region) as bed_regions:
             for line_index, line in enumerate(bed_regions):
