@@ -266,7 +266,7 @@ def read_vectors_from_hdf5(
     window_size: int | None = None,
     sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
     calculate_mod_fractions: bool = True,
-) -> tuple[list[tuple], list[str], dict]:
+) -> tuple[list[tuple], list[str], dict | None]:
     """
     Pulls a list of read data out of an .h5 file containing processed read vectors, formatted
     for read-by-read vector processing downstream use cases.
@@ -300,7 +300,10 @@ def read_vectors_from_hdf5(
     """
 
     with h5py.File(file, "r") as h5:
-        datasets = [name for name, obj in h5.items() if isinstance(obj, h5py.Dataset)]
+        # TODO: Had to manually annotate the expected type of this list as containing strings. Is it truly safe to assume the keys can only be strings?
+        datasets: list[str] = [
+            name for name, obj in h5.items() if isinstance(obj, h5py.Dataset)
+        ]
         if "threshold" in h5:
             # we are looking at an .h5 file with the new, much better compressed format that does
             # not know the data type intrinsically for mod and val vectors, so we must check
@@ -462,7 +465,7 @@ def readwise_binary_modification_arrays(
     sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
     thresh: float | None = None,
     relative: bool = True,
-) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str], dict]:
+) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str], dict | None]:
     """
     Pulls a list of read data out of a file containing processed read vectors, formatted with
     seaborn plotting in mind. Currently we only support .h5 files.

@@ -152,7 +152,7 @@ class DiMeLoParsingTestCase:
         """
         TODO: There are a couple of things wrong here:
         * This is never called anywhere; was this a holdover from my old infrastructure? Can it be deleted?
-        * mypy error: dimelo/test/__init__.py:151: error: "DiMeLoParsingTestCase" has no attribute "outDir"  [attr-defined]
+        * mypy error: dimelo/test/__init__.py:157: error: "DiMeLoParsingTestCase" has no attribute "outDir"  [attr-defined]
         """
         file_path = self.outDir / file_name
         assert file_path.exists(), f"{file_path} does not exist"

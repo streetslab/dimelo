@@ -138,7 +138,15 @@ def pileup(
         Path object pointing to regions.processed.bed
 
     """
-
+    """
+    TODO: There are a lot of issues that are all related here:
+    dimelo/parse_bam.py:150: error: Incompatible types in assignment (expression has type "Path | None", variable has type "str | Path")  [assignment]
+    dimelo/parse_bam.py:169: error: Argument "input_file" to "prep_outputs" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    dimelo/parse_bam.py:256: error: Argument "input_file" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    dimelo/parse_bam.py:257: error: Argument "ref_genome" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    
+    I'm not sure of the most elegant way to fix it. Come back and address.
+    """
     input_file, ref_genome, output_directory = sanitize_path_args(
         input_file, ref_genome, output_directory
     )
@@ -353,6 +361,15 @@ def extract(
         plotting functions.
         Path object pointing to regions.processed.bed
 
+    """
+    """
+    TODO: There are a lot of issues that are all related here:
+    dimelo/parse_bam.py:374: error: Incompatible types in assignment (expression has type "Path | None", variable has type "str | Path")  [assignment]
+    dimelo/parse_bam.py:393: error: Argument "input_file" to "prep_outputs" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    dimelo/parse_bam.py:480: error: Argument "input_file" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    dimelo/parse_bam.py:481: error: Argument "ref_genome" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    
+    I'm not sure of the most elegant way to fix it. Come back and address.
     """
     input_file, ref_genome, output_directory = sanitize_path_args(
         input_file, ref_genome, output_directory
@@ -690,12 +707,22 @@ def read_by_base_txt_to_hdf5(
         None
 
     """
+    """
+    TODO: There are some issues that are all related here:
+    dimelo/parse_bam.py:718: error: Incompatible types in assignment (expression has type "Path | None", variable has type "str | Path")  [assignment]
+    dimelo/parse_bam.py:725: error: Item "str" of "str | Path" has no attribute "open"  [union-attr]
+    dimelo/parse_bam.py:890: error: Item "str" of "str | Path" has no attribute "name"  [union-attr]
+    
+    I'm not sure of the most elegant way to fix it. Come back and address.
+    """
+    input_txt, output_h5 = sanitize_path_args(input_txt, output_h5)
+
     motif, modco = tuple(basemod.split(","))
     motif_modified_base = motif[int(modco)]
     read_name = ""
     num_reads = 0
     # TODO: I think the function calls can be consolidated; lots of repetition
-    with open(input_txt) as txt:
+    with input_txt.open() as txt:
         for index, line in enumerate(txt):
             fields = line.split("\t")
             if index > 0 and read_name != fields[0]:
@@ -850,7 +877,8 @@ def read_by_base_txt_to_hdf5(
             mod_values_list: list[float] = []
 
             read_counter = 0
-            read_dict_of_lists = defaultdict(list)
+            # TODO: This typing is correct, but maybe confusing? Is a defaultdict the best way to handle this, or should it be a more bespoke structure?
+            read_dict_of_lists: defaultdict[str, list[str | int]] = defaultdict(list)
             reads_in_chunk = 0
 
             if quiet:

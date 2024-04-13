@@ -10,3 +10,7 @@ repos:
 #   rev: v1.9.0
 #   hooks:
 #     - id: mypy
+      # These are things I'm considering including in the ignore list, but should think about...
+      # Ignore missing import errors caused by pre-commit being run in an isolated environment
+      # Allow conflicting assignment to existing variables in reasonable circumstances; mainly for coersion of path strings
+      # args: [--ignore-missing-imports, --allow-redefinition]
