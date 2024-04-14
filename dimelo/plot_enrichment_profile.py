@@ -3,17 +3,18 @@ from pathlib import Path
 import numpy as np
 from matplotlib.axes import Axes
 
-from . import utils
-from . import load_processed
+from . import load_processed, utils
 
 
-def plot_enrichment_profile(mod_file_names: list[str | Path],
-                            regions_list: list[str | Path | list[str | Path]],
-                            motifs: list[str],
-                            sample_names: list[str],
-                            window_size: int,
-                            smooth_window: int | None = None,
-                            **kwargs) -> Axes:
+def plot_enrichment_profile(
+    mod_file_names: list[str | Path],
+    regions_list: list[str | Path | list[str | Path]],
+    motifs: list[str],
+    sample_names: list[str],
+    window_size: int,
+    smooth_window: int | None = None,
+    **kwargs,
+) -> Axes:
     """
     Plot enrichment profiles, overlaying the resulting traces on top of each other.
 
@@ -37,68 +38,99 @@ def plot_enrichment_profile(mod_file_names: list[str | Path],
         window_size: half-size of the desired window to plot; how far the window stretches on either side of the center point
         smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
         kwargs: other keyword parameters passed through to utils.line_plot
-    
+
     Returns:
         Axes object containing the plot
     """
     if not utils.check_len_equal(mod_file_names, regions_list, motifs, sample_names):
-        raise ValueError('Unequal number of inputs')
+        raise ValueError("Unequal number of inputs")
+    # TODO: redefinition error; still need to figure out how to do this elegantly in a way mypy likes
+    # dimelo/plot_enrichment_profile.py:53: error: Item "str" of "str | Path" has no attribute "suffix"  [union-attr]
     mod_file_names = [Path(fn) for fn in mod_file_names]
 
     trace_vectors = []
     for mod_file, regions, motif in zip(mod_file_names, regions_list, motifs):
         match mod_file.suffix:
-            case '.gz':
-                modified_base_counts,valid_base_counts = load_processed.pileup_vectors_from_bedmethyl(bedmethyl_file=mod_file,
-                                                             regions=regions,
-                                                             motif=motif,
-                                                             window_size=window_size)
+            case ".gz":
+                modified_base_counts, valid_base_counts = (
+                    load_processed.pileup_vectors_from_bedmethyl(
+                        bedmethyl_file=mod_file,
+                        regions=regions,
+                        motif=motif,
+                        window_size=window_size,
+                    )
+                )
                 # Default to nan so we can skip over unfilled values when plotting or doing a rolling average
-                nans_everywhere = np.full_like(modified_base_counts, np.nan, dtype=float)
-                trace = np.divide(modified_base_counts,valid_base_counts, out=nans_everywhere, where=valid_base_counts!=0)
-            case '.fake':
-                trace = load_processed.vector_from_fake(mod_file=mod_file,
-                                                        bed_file=regions,
-                                                        motif=motif,
-                                                        window_size=window_size)
+                nans_everywhere = np.full_like(
+                    modified_base_counts, np.nan, dtype=float
+                )
+                trace = np.divide(
+                    modified_base_counts,
+                    valid_base_counts,
+                    out=nans_everywhere,
+                    where=valid_base_counts != 0,
+                )
+            case ".fake":
+                trace = load_processed.vector_from_fake(
+                    mod_file=mod_file,
+                    bed_file=regions,
+                    motif=motif,
+                    window_size=window_size,
+                )
             case _:
-                raise ValueError(f'Unsupported file type for {mod_file}')
+                raise ValueError(f"Unsupported file type for {mod_file}")
         if smooth_window is not None:
             trace = utils.smooth_rolling_mean(trace, window=smooth_window)
         trace_vectors.append(trace)
 
-    axes = utils.line_plot(indep_vector=np.arange(-len(trace_vectors[0])//2,len(trace_vectors[0])//2+len(trace_vectors[0])%2),
-                           indep_name='pos',
-                           dep_vectors=trace_vectors,
-                           dep_names=sample_names,
-                           y_label='fraction modified bases',
-                           **kwargs)
+    axes = utils.line_plot(
+        indep_vector=np.arange(
+            -len(trace_vectors[0]) // 2,
+            len(trace_vectors[0]) // 2 + len(trace_vectors[0]) % 2,
+        ),
+        indep_name="pos",
+        dep_vectors=trace_vectors,
+        dep_names=sample_names,
+        y_label="fraction modified bases",
+        **kwargs,
+    )
     return axes
 
-def by_modification(mod_file_name: str | Path,
-                    regions: str | Path,
-                    motifs: list[str],
-                    *args,
-                    **kwargs) -> Axes:
+
+def by_modification(
+    mod_file_name: str | Path, regions: str | Path, motifs: list[str], **kwargs
+) -> Axes:
     """
     Plot enrichment profile, holding modification file and regions constant, varying modification types
 
     See plot_enrichment_profile for details.
     """
     n_mods = len(motifs)
-    return plot_enrichment_profile(mod_file_names=[mod_file_name] * n_mods,
-                                   regions_list=[regions] * n_mods,
-                                   motifs=motifs,
-                                   sample_names=motifs,
-                                   *args,
-                                   **kwargs)
+    return plot_enrichment_profile(
+        mod_file_names=[mod_file_name] * n_mods,
+        regions_list=[regions] * n_mods,
+        motifs=motifs,
+        sample_names=motifs,
+        **kwargs,
+    )
 
-def by_regions(mod_file_name: str | Path,
-               regions_list: list[str | Path | list[str | Path]],
-               motif: str,
-               sample_names: list[str] = None,
-               *args,
-               **kwargs) -> Axes:
+
+"""
+TODO: Re-assignment issue:
+dimelo/plot_enrichment_profile.py:142: error: Incompatible types in assignment (expression has type "list[str | Path | list[str | Path]]", variable has type "list[str] | None")  [assignment]
+dimelo/plot_enrichment_profile.py:148: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
+dimelo/plot_enrichment_profile.py:168: error: Incompatible types in assignment (expression has type "list[str | Path]", variable has type "list[str] | None")  [assignment]
+dimelo/plot_enrichment_profile.py:174: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
+"""
+
+
+def by_regions(
+    mod_file_name: str | Path,
+    regions_list: list[str | Path | list[str | Path]],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
     """
     Plot enrichment profile, holding modification file and modification types constant, varying regions
 
@@ -109,19 +141,22 @@ def by_regions(mod_file_name: str | Path,
     if sample_names is None:
         sample_names = regions_list
     n_beds = len(regions_list)
-    return plot_enrichment_profile(mod_file_names=[mod_file_name] * n_beds,
-                                   regions_list=regions_list,
-                                   motifs=[motif] * n_beds,
-                                   sample_names=sample_names,
-                                   *args,
-                                   **kwargs)
+    return plot_enrichment_profile(
+        mod_file_names=[mod_file_name] * n_beds,
+        regions_list=regions_list,
+        motifs=[motif] * n_beds,
+        sample_names=sample_names,
+        **kwargs,
+    )
 
-def by_dataset(mod_file_names: list[str | Path],
-               regions: str | Path | list[str | Path],
-               motif: str,
-               sample_names: list[str] = None,
-               *args,
-               **kwargs) -> Axes:
+
+def by_dataset(
+    mod_file_names: list[str | Path],
+    regions: str | Path | list[str | Path],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
     """
     Plot enrichment profile, holding modification types and regions constant, varying modification files
 
@@ -132,9 +167,10 @@ def by_dataset(mod_file_names: list[str | Path],
     if sample_names is None:
         sample_names = mod_file_names
     n_mod_files = len(mod_file_names)
-    return plot_enrichment_profile(mod_file_names=mod_file_names,
-                                   regions_list=[regions] * n_mod_files,
-                                   motifs=[motif] * n_mod_files,
-                                   sample_names=sample_names,
-                                   *args,
-                                   **kwargs)
+    return plot_enrichment_profile(
+        mod_file_names=mod_file_names,
+        regions_list=[regions] * n_mod_files,
+        motifs=[motif] * n_mod_files,
+        sample_names=sample_names,
+        **kwargs,
+    )

@@ -23,6 +23,10 @@ This README document contains installation instructions and documentation for va
     
 -[1.2 Google Colab Installation](#Google-Colab-Installation)
 
+-[1.3 Alternative Installations](#Alternative-Installations)
+
+-[1.4 Developer Installation](#Developer-Installation)
+
 [2.0 Basic Use](#Basic-Use)
 
 -[2.1 Parameters and what they mean](#Parameters-and-what-they-mean)
@@ -117,6 +121,34 @@ OR
 # add to path in python before importing dimelo
 import sys
 sys.path.append('path_to_modkit_executable_directory')
+```
+
+## Developer Installation
+If you are planning on developing for the `dimelo` package, change the `pip install` command to install the package in "editable" mode, so that your code changes are reflected in your environment:
+```
+pip install . -e
+```
+
+Additionally, be aware that this package uses [ruff](https://docs.astral.sh/ruff/) to enforce code standards. To make it easy to check that your changes meet standards, we provide [pre-commit](https://pre-commit.com/) hooks that run the checks automatically when you commit.
+
+After installing [pre-commit](https://pre-commit.com/) on your system, run the following from the top level of the repository to set up the hooks:
+```
+pre-commit install
+```
+
+If you need to manually trigger a formatting check, the following command will forcibly run all checks on the entire repository:
+```
+pre-commit run --all-files
+```
+
+To run functionality tests on your machine, ensure that `pytest` is installed in your conda environment:
+```
+conda install pytest
+```
+
+The tests can be run from the top level of the repository using the following command:
+```
+pytest
 ```
 
 # Basic Use

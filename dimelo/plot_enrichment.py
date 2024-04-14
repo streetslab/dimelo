@@ -2,15 +2,16 @@ from pathlib import Path
 
 from matplotlib.axes import Axes
 
-from . import utils
-from . import load_processed
+from . import load_processed, utils
 
 
-def plot_enrichment(mod_file_names: list[str | Path],
-                    regions_list: list[str | Path | list[str | Path]],
-                    motifs: list[str],
-                    sample_names: list[str],
-                    **kwargs) -> Axes:
+def plot_enrichment(
+    mod_file_names: list[str | Path],
+    regions_list: list[str | Path | list[str | Path]],
+    motifs: list[str],
+    sample_names: list[str],
+    **kwargs,
+) -> Axes:
     """
     Plot enrichment comparison barplots using the given list of pre-processed input files.
 
@@ -22,7 +23,7 @@ def plot_enrichment(mod_file_names: list[str | Path],
 
     TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
     TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
-    
+
     Args:
         mod_file_names: list of paths to modified base pileup data files
         bed_file_names: list of paths to bed files specifying regions to extract
@@ -34,58 +35,78 @@ def plot_enrichment(mod_file_names: list[str | Path],
         Axes object containing the plot
     """
     if not utils.check_len_equal(mod_file_names, regions_list, motifs, sample_names):
-        raise ValueError('Unequal number of inputs')
+        raise ValueError("Unequal number of inputs")
+    # TODO: redefinition error; still need to figure out how to do this elegantly in a way mypy likes
+    # dimelo/plot_enrichment.py:45: error: Item "str" of "str | Path" has no attribute "suffix"  [union-attr]
     mod_file_names = [Path(fn) for fn in mod_file_names]
 
     mod_fractions = []
     for mod_file, regions, motif in zip(mod_file_names, regions_list, motifs):
         match mod_file.suffix:
-            case '.gz':
-                n_mod, n_total = load_processed.pileup_counts_from_bedmethyl(bedmethyl_file=mod_file,
-                                                                      regions=regions,
-                                                                      motif=motif)
-            case '.fake':
-                n_mod, n_total = load_processed.counts_from_fake(mod_file=mod_file,
-                                                                 regions=regions,
-                                                                 motif=motif)
+            case ".gz":
+                n_mod, n_total = load_processed.pileup_counts_from_bedmethyl(
+                    bedmethyl_file=mod_file, regions=regions, motif=motif
+                )
+            case ".fake":
+                n_mod, n_total = load_processed.counts_from_fake(
+                    mod_file=mod_file, regions=regions, motif=motif
+                )
             case _:
-                raise ValueError(f'Unsupported file type for {mod_file}')
+                raise ValueError(f"Unsupported file type for {mod_file}")
         try:
             mod_fractions.append(n_mod / n_total)
         except ZeroDivisionError:
             mod_fractions.append(0)
-    
-    axes = utils.bar_plot(categories=sample_names, values=mod_fractions, y_label='fraction modified bases', **kwargs)
+
+    axes = utils.bar_plot(
+        categories=sample_names,
+        values=mod_fractions,
+        y_label="fraction modified bases",
+        **kwargs,
+    )
     return axes
 
 
-def by_modification(mod_file_name: str | Path,
-                    regions: str | Path | list[str | Path],
-                    motifs: list[str],
-                    *args,
-                    **kwargs) -> Axes:
+def by_modification(
+    mod_file_name: str | Path,
+    regions: str | Path | list[str | Path],
+    motifs: list[str],
+    **kwargs,
+) -> Axes:
     """
     Plot enrichment bar plots, holding modification file and regions constant, varying modification types
 
     See plot_enrichment for details.
     """
     n_mods = len(motifs)
-    return plot_enrichment(mod_file_names=[mod_file_name] * n_mods,
-                           regions_list=[regions] * n_mods,
-                           motifs=motifs,
-                           sample_names=motifs,
-                           *args,
-                           **kwargs)
+    return plot_enrichment(
+        mod_file_names=[mod_file_name] * n_mods,
+        regions_list=[regions] * n_mods,
+        motifs=motifs,
+        sample_names=motifs,
+        **kwargs,
+    )
 
-def by_regions(mod_file_name: str | Path,
-               regions_list: list[str | Path | list[str | Path]],
-               motif: str,
-               sample_names: list[str] = None,
-               *args,
-               **kwargs) -> Axes:
+
+"""
+TODO: Re-assignment issue:
+dimelo/plot_enrichment.py:115: error: Incompatible types in assignment (expression has type "list[str | Path | list[str | Path]]", variable has type "list[str] | None")  [assignment]
+dimelo/plot_enrichment.py:121: error: Argument "sample_names" to "plot_enrichment" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
+dimelo/plot_enrichment.py:141: error: Incompatible types in assignment (expression has type "list[str | Path]", variable has type "list[str] | None")  [assignment]
+dimelo/plot_enrichment.py:147: error: Argument "sample_names" to "plot_enrichment" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
+"""
+
+
+def by_regions(
+    mod_file_name: str | Path,
+    regions_list: list[str | Path | list[str | Path]],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
     """
     Plot enrichment bar plots, holding modification file and modification types constant, varying regions
-    
+
     Note: Sample names default to the names of the bed files.
 
     See plot_enrichment for details.
@@ -93,19 +114,22 @@ def by_regions(mod_file_name: str | Path,
     if sample_names is None:
         sample_names = regions_list
     n_beds = len(regions_list)
-    return plot_enrichment(mod_file_names=[mod_file_name] * n_beds,
-                           regions_list=regions_list,
-                           motifs=[motif] * n_beds,
-                           sample_names=sample_names,
-                           *args,
-                           **kwargs)
+    return plot_enrichment(
+        mod_file_names=[mod_file_name] * n_beds,
+        regions_list=regions_list,
+        motifs=[motif] * n_beds,
+        sample_names=sample_names,
+        **kwargs,
+    )
 
-def by_dataset(mod_file_names: list[str | Path],
-               regions: str | Path | list[str | Path],
-               motif: str,
-               sample_names: list[str] = None,
-               *args,
-               **kwargs) -> Axes:
+
+def by_dataset(
+    mod_file_names: list[str | Path],
+    regions: str | Path | list[str | Path],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
     """
     Plot enrichment bar plots, holding modification types and regions constant, varying modification files
 
@@ -116,9 +140,10 @@ def by_dataset(mod_file_names: list[str | Path],
     if sample_names is None:
         sample_names = mod_file_names
     n_mod_files = len(mod_file_names)
-    return plot_enrichment(mod_file_names=mod_file_names,
-                           regions_list=[regions] * n_mod_files,
-                           motifs=[motif] * n_mod_files,
-                           sample_names=sample_names,
-                           *args,
-                           **kwargs)
+    return plot_enrichment(
+        mod_file_names=mod_file_names,
+        regions_list=[regions] * n_mod_files,
+        motifs=[motif] * n_mod_files,
+        sample_names=sample_names,
+        **kwargs,
+    )

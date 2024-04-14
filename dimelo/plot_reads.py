@@ -9,25 +9,26 @@ Probably need separate methods for all of this? Is there shared functionality? D
 I'm beginning to lose the thread of where we check for regions making sense.
 Maybe this is an argument for an internal region class that makes checking easy? I don't know.
 """
+
 from pathlib import Path
 
 import pandas as pd
 import seaborn as sns
 from matplotlib.axes import Axes
-import matplotlib.pyplot as plt
 
-from . import load_processed
-from . import utils
+from . import load_processed, utils
 
-def plot_reads(mod_file_name: str | Path,
-               regions: str | Path | list[str | Path],
-               motifs: list[str],
-               window_size: int = None,
-               sort_by: str | list[str] = 'shuffle',
-               thresh: float = None,
-               relative: bool = True,
-               **kwargs
-              ) -> Axes:
+
+def plot_reads(
+    mod_file_name: str | Path,
+    regions: str | Path | list[str | Path],
+    motifs: list[str],
+    window_size: int | None = None,
+    sort_by: str | list[str] = "shuffle",
+    thresh: float | None = None,
+    relative: bool = True,
+    **kwargs,
+) -> Axes:
     """
     Plots centered single reads as a scatterplot, cut off at the boundaries of the requested regions?
 
@@ -42,42 +43,43 @@ def plot_reads(mod_file_name: str | Path,
 
     Returns:
         Axes object containing the plot
-    """ 
+    """
     mod_file_name = Path(mod_file_name)
     # bed_file_name = Path(bed_file_name)
-    size = kwargs.pop('s', 0.5)
+    size = kwargs.pop("s", 0.5)
 
-    palette = kwargs.pop('palette', {})
+    palette = kwargs.pop("palette", {})
 
     merged_palette = {**utils.DEFAULT_COLORS, **palette}
 
-
-
-
     match mod_file_name.suffix:
-        case '.fake':
-            reads,read_names,mods,regions_dict = load_processed.reads_from_fake(
-                file = mod_file_name,
-                regions = regions,
-                motifs = motifs,
+        # TODO: Fix how the fake reads options work, and make sure they have the same interface as the real ones.
+        # dimelo/plot_reads.py:63: error: Argument "regions" to "reads_from_fake" has incompatible type "str | Path | list[str | Path]"; expected "Path"  [arg-type]
+        # Will also fix the following error:
+        # dimelo/plot_reads.py:68: error: Incompatible types in assignment (expression has type "dict[Any, Any] | None", variable has type "dict[Any, Any]")  [assignment]
+        case ".fake":
+            reads, read_names, mods, regions_dict = load_processed.reads_from_fake(
+                file=mod_file_name,
+                regions=regions,
+                motifs=motifs,
             )
         case _:
-            reads,read_names,mods,regions_dict = load_processed.readwise_binary_modification_arrays(
-            file = mod_file_name,
-            regions = regions,
-            motifs = motifs,
-            window_size = window_size,
-            thresh = thresh,
-            relative = relative,
-            sort_by = sort_by,
+            reads, read_names, mods, regions_dict = (
+                load_processed.readwise_binary_modification_arrays(
+                    file=mod_file_name,
+                    regions=regions,
+                    motifs=motifs,
+                    window_size=window_size,
+                    thresh=thresh,
+                    relative=relative,
+                    sort_by=sort_by,
+                )
             )
 
     # Convert data frame where each row represents a read to a data frame where each row represents a single modified position in a read
-    df = pd.DataFrame({
-        'read_name': read_names,
-        'mod': mods,
-        'pos': reads
-    }).explode('pos')
+    df = pd.DataFrame({"read_name": read_names, "mod": mods, "pos": reads}).explode(
+        "pos"
+    )
     axes = sns.scatterplot(
         data=df,
         x="pos",
@@ -87,22 +89,25 @@ def plot_reads(mod_file_name: str | Path,
         s=size,
         marker="s",
         linewidth=0,
-        palette = merged_palette,
-        **kwargs
+        palette=merged_palette,
+        **kwargs,
     )
     # Retrieve the existing legend
     legend = axes.legend_
 
     # Update legend properties
     if legend is not None:
-        legend.set_title('Mod')
+        legend.set_title("Mod")
         for handle in legend.legendHandles:
-            if hasattr(handle, 'set_markersize'):
+            if hasattr(handle, "set_markersize"):
                 handle.set_markersize(10)  # Set a larger marker size for legend
 
-    if relative and len(regions_dict)>0:
-        region1_start,region1_end,_ = next(iter(regions_dict.values()))[0]
-        effective_window_size = (region1_end-region1_start)//2
-        axes.set_xlim([-effective_window_size,effective_window_size])
-    
+    # TODO: Technically, regions_dict can be None by this point. In that scenario, it will error out when checking the length.
+    # Identified with mypy through the following error:
+    # dimelo/plot_reads.py:101: error: Argument 1 to "len" has incompatible type "dict[Any, Any] | None"; expected "Sized"  [arg-type]
+    if relative and len(regions_dict) > 0:
+        region1_start, region1_end, _ = next(iter(regions_dict.values()))[0]
+        effective_window_size = (region1_end - region1_start) // 2
+        axes.set_xlim([-effective_window_size, effective_window_size])
+
     return axes

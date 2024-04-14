@@ -1,0 +1,21 @@
+[lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = [
+    # ignore line-too-long errors; code already handled by linter, comments should not matter as much
+    "E501",
+    # temporarily ignore "mutable data structures for argument defaults" errors; this needs to be fixed but is a larger issue
+    "B006"
+]
