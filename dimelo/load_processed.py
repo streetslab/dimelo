@@ -11,7 +11,7 @@ from . import test_data, utils
 
 
 def pileup_counts_from_bedmethyl(
-    bedmethyl_file: Path,
+    bedmethyl_file: str | Path,
     motif: str,
     regions: str | Path | list[str | Path] | None = None,
 ) -> tuple[int, int]:

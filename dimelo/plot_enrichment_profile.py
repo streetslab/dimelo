@@ -44,6 +44,8 @@ def plot_enrichment_profile(
     """
     if not utils.check_len_equal(mod_file_names, regions_list, motifs, sample_names):
         raise ValueError("Unequal number of inputs")
+    # TODO: redefinition error; still need to figure out how to do this elegantly in a way mypy likes
+    # dimelo/plot_enrichment_profile.py:53: error: Item "str" of "str | Path" has no attribute "suffix"  [union-attr]
     mod_file_names = [Path(fn) for fn in mod_file_names]
 
     trace_vectors = []
@@ -96,7 +98,7 @@ def plot_enrichment_profile(
 
 
 def by_modification(
-    mod_file_name: str | Path, regions: str | Path, motifs: list[str], *args, **kwargs
+    mod_file_name: str | Path, regions: str | Path, motifs: list[str], **kwargs
 ) -> Axes:
     """
     Plot enrichment profile, holding modification file and regions constant, varying modification types
@@ -105,7 +107,6 @@ def by_modification(
     """
     n_mods = len(motifs)
     return plot_enrichment_profile(
-        *args,
         mod_file_names=[mod_file_name] * n_mods,
         regions_list=[regions] * n_mods,
         motifs=motifs,
@@ -114,12 +115,20 @@ def by_modification(
     )
 
 
+"""
+TODO: Re-assignment issue:
+dimelo/plot_enrichment_profile.py:142: error: Incompatible types in assignment (expression has type "list[str | Path | list[str | Path]]", variable has type "list[str] | None")  [assignment]
+dimelo/plot_enrichment_profile.py:148: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
+dimelo/plot_enrichment_profile.py:168: error: Incompatible types in assignment (expression has type "list[str | Path]", variable has type "list[str] | None")  [assignment]
+dimelo/plot_enrichment_profile.py:174: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
+"""
+
+
 def by_regions(
     mod_file_name: str | Path,
     regions_list: list[str | Path | list[str | Path]],
     motif: str,
     sample_names: list[str] | None = None,
-    *args,
     **kwargs,
 ) -> Axes:
     """
@@ -133,7 +142,6 @@ def by_regions(
         sample_names = regions_list
     n_beds = len(regions_list)
     return plot_enrichment_profile(
-        *args,
         mod_file_names=[mod_file_name] * n_beds,
         regions_list=regions_list,
         motifs=[motif] * n_beds,
@@ -147,7 +155,6 @@ def by_dataset(
     regions: str | Path | list[str | Path],
     motif: str,
     sample_names: list[str] | None = None,
-    *args,
     **kwargs,
 ) -> Axes:
     """
@@ -161,7 +168,6 @@ def by_dataset(
         sample_names = mod_file_names
     n_mod_files = len(mod_file_names)
     return plot_enrichment_profile(
-        *args,
         mod_file_names=mod_file_names,
         regions_list=[regions] * n_mod_files,
         motifs=[motif] * n_mod_files,

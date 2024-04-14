@@ -53,6 +53,10 @@ def plot_reads(
     merged_palette = {**utils.DEFAULT_COLORS, **palette}
 
     match mod_file_name.suffix:
+        # TODO: Fix how the fake reads options work, and make sure they have the same interface as the real ones.
+        # dimelo/plot_reads.py:63: error: Argument "regions" to "reads_from_fake" has incompatible type "str | Path | list[str | Path]"; expected "Path"  [arg-type]
+        # Will also fix the following error:
+        # dimelo/plot_reads.py:68: error: Incompatible types in assignment (expression has type "dict[Any, Any] | None", variable has type "dict[Any, Any]")  [assignment]
         case ".fake":
             reads, read_names, mods, regions_dict = load_processed.reads_from_fake(
                 file=mod_file_name,
@@ -98,6 +102,9 @@ def plot_reads(
             if hasattr(handle, "set_markersize"):
                 handle.set_markersize(10)  # Set a larger marker size for legend
 
+    # TODO: Technically, regions_dict can be None by this point. In that scenario, it will error out when checking the length.
+    # Identified with mypy through the following error:
+    # dimelo/plot_reads.py:101: error: Argument 1 to "len" has incompatible type "dict[Any, Any] | None"; expected "Sized"  [arg-type]
     if relative and len(regions_dict) > 0:
         region1_start, region1_end, _ = next(iter(regions_dict.values()))[0]
         effective_window_size = (region1_end - region1_start) // 2
