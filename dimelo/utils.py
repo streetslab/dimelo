@@ -35,6 +35,11 @@ DEFAULT_COLORSCALES = defaultdict(lambda: ["white", "grey"])
 DEFAULT_COLORSCALES.update([(k, ["white", v]) for k, v in DEFAULT_COLORS.items()])
 
 
+# Define the source of randomness for a variety of purposes throughout the package
+# TODO: how best to initialize seed for random state, to allow for reproducibility?
+rng = np.random.default_rng()
+
+
 def cores_to_run(cores):
     cores_avail = multiprocessing.cpu_count()
     if cores is None or cores > cores_avail:
@@ -414,4 +419,46 @@ def smooth_rolling_mean(
         .rolling(window=window, min_periods=min_periods, center=True)
         .mean()
         .values
+    )
+
+
+def random_sample(
+    array: np.ndarray,
+    n: int | None = None,
+    frac: float | None = None,
+    replace: bool = False,
+    # shuffle: bool = True,
+):
+    """
+    Utility method for generating a random sample of the elements in an array. Always defaults to sampling along the first axis.
+    This means that for 2d arrays this method will return a subsample of the rows.
+
+    Handles n/frac specification like pandas.DataFrame.sample(): https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.sample.html.
+
+    Args:
+        array: Array to sample from
+        n: Number of elements to return; mutually exclusive with frac
+        frac: Fraction of elements to return; mutually exclusive with n
+        replace: When True, sample with replacement
+
+    Return: the requested random subset of the given array
+
+    NOTE: Outputs are not guaranteed to be in the same order as the original array. If ordering is required to be preserved, re-sort after.
+
+    TODO: enable non-uniform weights? Seems like too much to me...
+    TODO: shuffled outputs originally broke h5 loading, so it was turned off. However, because of the instability of the sampling order,
+        this doesn't actually matter. However, it is being left off to prevent confusion for the end user.
+    """
+    size = pd.core.sample.process_sampling_size(n, frac, replace)
+    if size is None:
+        assert frac is not None
+        size = round(frac * len(array))
+    return rng.choice(
+        a=array,
+        size=size,
+        replace=replace,
+        p=None,
+        axis=0,
+        # shuffle=shuffle
+        shuffle=False,
     )
