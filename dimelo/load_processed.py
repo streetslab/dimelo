@@ -2,6 +2,7 @@ import concurrent.futures
 import gzip
 import multiprocessing
 import random
+
 from collections import defaultdict
 from functools import partial
 from multiprocessing import shared_memory
@@ -613,6 +614,7 @@ def read_vectors_from_hdf5(
     calculate_mod_fractions: bool = True,
     quiet: bool = True,  # currently unused; change to default False when pbars are implemented
     cores: int | None = None,  # currently unused
+    subset_parameters: dict | None = None,
 ) -> tuple[list[tuple], list[str], dict | None]:
     """
     User-facing function.
@@ -660,12 +662,18 @@ def read_vectors_from_hdf5(
             be added in future.
         quiet: silences progress bars (currently unused)
         cores: cores across which to parallelize processes (currently unused)
+        subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
+            reads to be returned. If not None, at least one of n or frac must be provided. The array
+            parameter should not be provided here.
 
     Returns:
         a list of tuples, each tuple containing all datasets corresponding to an individual read that
         was within the specified regions.
         a list of strings, naming the datasets returned.
         a regions_dict, containing lists of (region_start,region_end) coordinates by chromosome/contig.
+
+    TODO: The way the subsetting is implemented is confusing, in that you need to pass all but one of
+        the available parameters.
     """
     with h5py.File(file, "r") as h5:
         datasets: list[str] = [
@@ -717,6 +725,12 @@ def read_vectors_from_hdf5(
                             | (ref_strands == region_strand)
                         )
                     )
+                    if subset_parameters is not None:
+                        relevant_read_indices = np.sort(
+                            utils.random_sample(
+                                relevant_read_indices, **subset_parameters
+                            )
+                        )
                     read_tuples_raw += list(
                         zip(
                             *(
@@ -739,6 +753,10 @@ def read_vectors_from_hdf5(
         else:
             regions_dict = None
             relevant_read_indices = np.flatnonzero(np.isin(read_motifs, motifs))
+            if subset_parameters is not None:
+                relevant_read_indices = np.sort(
+                    utils.random_sample(relevant_read_indices, **subset_parameters)
+                )
             read_tuples_raw = list(
                 zip(
                     *(
@@ -816,7 +834,7 @@ def read_vectors_from_hdf5(
 
     # If 'shuffle' appears anywhere in sort_by, we first shuffle the list
     if "shuffle" in sort_by:
-        random.shuffle(read_tuples_all)
+        utils.rng.shuffle(read_tuples_all)
 
     try:
         sort_by_indices = [
@@ -851,6 +869,7 @@ def readwise_binary_modification_arrays(
     relative: bool = True,
     quiet: bool = True,  # currently unused; change to default False when pbars are implemented
     cores: int | None = None,  # currently unused
+    subset_parameters: dict | None = None,
 ) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str], dict | None]:
     """
     Primarily designed as a helper function for single-read plotting, but can be used by a user.
@@ -898,6 +917,9 @@ def readwise_binary_modification_arrays(
             this could create unexpected behaviour for a the standard visualizations.
         quiet: silences progress bars (currently unused)
         cores: cores across which to parallelize processes (currently unused)
+        subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
+            reads to be returned. If not None, at least one of n or frac must be provided. The array
+            parameter should not be provided here.
 
     Returns:
         Returns a tuple of three arrays, of length (N_READS * len(mod_names)), and a dict of regions.
