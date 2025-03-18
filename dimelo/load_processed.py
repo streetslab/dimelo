@@ -427,29 +427,34 @@ def pileup_vectors_process_chunk(
     valid_base_subregion = np.zeros(subregion_end - subregion_start, dtype=int)
     modified_base_subregion = np.zeros(subregion_end - subregion_start, dtype=int)
 
-    for row in source_tabix.fetch(chromosome, max(subregion_start, 0), subregion_end):
-        (
-            keep_basemod,
-            genomic_coord,
-            modified_in_row,
-            valid_in_row,
-        ) = process_pileup_row(
-            row=row,
-            parsed_motif=parsed_motif,
-            region_strand=strand,
-            single_strand=single_strand,
-        )
-        if keep_basemod:
-            if flip_coords:
-                # We want to flip the coordinates for this region so that it is recorded along the 5 prime to 3 prime direction
-                # This will enable analyses where the orientation of protein binding / transcriptional dynamics / etc is relevant for our pileup signal
-                pileup_coord_in_subregion = subregion_end - genomic_coord - 1
-            else:
-                # Normal coordinates are the default. This will be used both for the '+' case and the '.' (no strand specified) case
-                pileup_coord_in_subregion = genomic_coord - subregion_start
-            if pileup_coord_in_subregion < (subregion_end - subregion_start):
-                valid_base_subregion[pileup_coord_in_subregion] += valid_in_row
-                modified_base_subregion[pileup_coord_in_subregion] += modified_in_row
+    if chromosome in source_tabix.contigs:
+        for row in source_tabix.fetch(
+            chromosome, max(subregion_start, 0), subregion_end
+        ):
+            (
+                keep_basemod,
+                genomic_coord,
+                modified_in_row,
+                valid_in_row,
+            ) = process_pileup_row(
+                row=row,
+                parsed_motif=parsed_motif,
+                region_strand=strand,
+                single_strand=single_strand,
+            )
+            if keep_basemod:
+                if flip_coords:
+                    # We want to flip the coordinates for this region so that it is recorded along the 5 prime to 3 prime direction
+                    # This will enable analyses where the orientation of protein binding / transcriptional dynamics / etc is relevant for our pileup signal
+                    pileup_coord_in_subregion = subregion_end - genomic_coord - 1
+                else:
+                    # Normal coordinates are the default. This will be used both for the '+' case and the '.' (no strand specified) case
+                    pileup_coord_in_subregion = genomic_coord - subregion_start
+                if pileup_coord_in_subregion < (subregion_end - subregion_start):
+                    valid_base_subregion[pileup_coord_in_subregion] += valid_in_row
+                    modified_base_subregion[pileup_coord_in_subregion] += (
+                        modified_in_row
+                    )
 
     with lock:
         valid_base_counts[
@@ -505,21 +510,24 @@ def pileup_counts_process_chunk(
     valid_base_subregion_counts = 0
     modified_base_subregion_counts = 0
 
-    for row in source_tabix.fetch(chromosome, max(subregion_start, 0), subregion_end):
-        (
-            keep_basemod,
-            _,
-            modified_in_row,
-            valid_in_row,
-        ) = process_pileup_row(
-            row=row,
-            parsed_motif=parsed_motif,
-            region_strand=strand,
-            single_strand=single_strand,
-        )
-        if keep_basemod:
-            valid_base_subregion_counts += valid_in_row
-            modified_base_subregion_counts += modified_in_row
+    if chromosome in source_tabix.contigs:
+        for row in source_tabix.fetch(
+            chromosome, max(subregion_start, 0), subregion_end
+        ):
+            (
+                keep_basemod,
+                _,
+                modified_in_row,
+                valid_in_row,
+            ) = process_pileup_row(
+                row=row,
+                parsed_motif=parsed_motif,
+                region_strand=strand,
+                single_strand=single_strand,
+            )
+            if keep_basemod:
+                valid_base_subregion_counts += valid_in_row
+                modified_base_subregion_counts += modified_in_row
 
     with lock:
         valid_base_counts[0] += valid_base_subregion_counts
