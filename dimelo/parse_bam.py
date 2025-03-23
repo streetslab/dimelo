@@ -119,7 +119,7 @@ def pileup(
 
     ## Verify and prepare inputs and outputs
 
-    input_file, ref_genome, output_directory = sanitize_path_args(
+    input_file, ref_genome, output_directory = utils.sanitize_path_args(
         input_file, ref_genome, output_directory
     )
 
@@ -364,7 +364,7 @@ def extract(
 
     ## Verify and prepare inputs and outputs
 
-    input_file, ref_genome, output_directory = sanitize_path_args(
+    input_file, ref_genome, output_directory = utils.sanitize_path_args(
         input_file, ref_genome, output_directory
     )
 
@@ -769,7 +769,7 @@ def read_by_base_txt_to_hdf5(
     
     I'm not sure of the most elegant way to fix it. Come back and address.
     """
-    input_txt, output_h5 = sanitize_path_args(input_txt, output_h5)
+    input_txt, output_h5 = utils.sanitize_path_args(input_txt, output_h5)
 
     parsed_motif = utils.ParsedMotif(motif)
 
@@ -1119,13 +1119,6 @@ def read_by_base_txt_to_hdf5(
                     h5[dataset][start_index:end_index] = entry
                 read_counter += 1
     return
-
-
-def sanitize_path_args(*args) -> tuple:
-    """
-    Coerce all given arguments to Path objects, leaving Nones as Nones.
-    """
-    return tuple(Path(f) if f is not None else f for f in args)
 
 
 def prep_output_directory(

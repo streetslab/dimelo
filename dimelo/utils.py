@@ -35,6 +35,11 @@ DEFAULT_COLORSCALES = defaultdict(lambda: ["white", "grey"])
 DEFAULT_COLORSCALES.update([(k, ["white", v]) for k, v in DEFAULT_COLORS.items()])
 
 
+# Define the source of randomness for a variety of purposes throughout the package
+# TODO: how best to initialize seed for random state, to allow for reproducibility?
+rng = np.random.default_rng()
+
+
 def cores_to_run(cores):
     cores_avail = multiprocessing.cpu_count()
     if cores is None or cores > cores_avail:
@@ -280,6 +285,13 @@ def bedmethyl_to_bigwig(input_bedmethyl: str | Path, output_bigwig: str | Path):
     return 0
 
 
+def sanitize_path_args(*args) -> tuple:
+    """
+    Coerce all given arguments to Path objects, leaving Nones as Nones.
+    """
+    return tuple(Path(f) if f is not None else f for f in args)
+
+
 def check_len_equal(*args: list) -> bool:
     """
     Checks whether all provided lists are the same length.
@@ -322,7 +334,7 @@ def line_plot(
     TODO: Right now, this always generates a legend with the title "variable". I could add a parameter to specify this (by passing the var_name argument to pd.DataFrame.melt), but then that percolates upwards to other methods. How to do this cleanly?
 
     Args:
-        indep_vector: parallel with each entry in vectors; independent variable values shared across each overlayed line
+        indep_vector: parallel with each entry in dep_vectors; independent variable values shared across each overlayed line
         indep_name: name of independent variable; set as x axis label
         dep_vectors: outer list parallel with dep_names; each inner vector parallel with indep_vector; dependent variable values for each overlayed line
         dep_names: parallel with dep_vectors; names of each overlayed line; set as legend entries
@@ -366,10 +378,11 @@ def hist_plot(
     Takes arbitrarily many counts vectors and plots on same histogram.
 
     Args:
-        value_vectors: parallel with each entry in vectors
-        value_names: parallel with value_vectors; names of each overlayed line; set as legend entries
+        value_vectors: parallel with value_names; vectors of values to plot histograms of; each vector will be a separate overlayed histogram
+        value_names: parallel with value_vectors; names of each overlayed histogram; set as legend entries
         x_label: name of distributed values; set as x axis label
         y_label: y-axis label
+        integer_values: True if hist bins are only at integer values, meaning bins shouldn't be auto-determined
         kwargs: other keyword parameters passed through to seaborn.histplot
 
     Returns:
@@ -386,19 +399,21 @@ def hist_plot(
 
     # Create DataFrame
     data_table = pd.DataFrame(data_dict)
-    # Set integer bins if values will be only integers
-    bins = (
-        np.arange(data_table[x_label].min() - 0.5, data_table[x_label].max() + 1.5, 1)
-        if integer_values
-        else None
-    )
+    if integer_values:
+        # Warn user that passed bins are being overwritten
+        if "bins" in kwargs:
+            print("Warning: bin settings overwritten by defaults")
+        kwargs["bins"] = np.arange(
+            data_table[x_label].min() - 0.5, data_table[x_label].max() + 1.5, 1
+        )
+
     # plot histogram
     ax = sns.histplot(
         data=data_table,
         x=x_label,
         hue=y_label,
         multiple="dodge",
-        **{**kwargs, **({"bins": bins} if bins is not None else {})},
+        **kwargs,
     )
 
     ax.set_ylabel(y_label)
@@ -431,4 +446,46 @@ def smooth_rolling_mean(
         .rolling(window=window, min_periods=min_periods, center=True)
         .mean()
         .values
+    )
+
+
+def random_sample(
+    array: np.ndarray,
+    n: int | None = None,
+    frac: float | None = None,
+    replace: bool = False,
+    # shuffle: bool = True,
+):
+    """
+    Utility method for generating a random sample of the elements in an array. Always defaults to sampling along the first axis.
+    This means that for 2d arrays this method will return a subsample of the rows.
+
+    Handles n/frac specification like pandas.DataFrame.sample(): https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.sample.html.
+
+    Args:
+        array: Array to sample from
+        n: Number of elements to return; mutually exclusive with frac
+        frac: Fraction of elements to return; mutually exclusive with n
+        replace: When True, sample with replacement
+
+    Return: the requested random subset of the given array
+
+    NOTE: Outputs are not guaranteed to be in the same order as the original array. If ordering is required to be preserved, re-sort after.
+
+    TODO: enable non-uniform weights? Seems like too much to me...
+    TODO: shuffled outputs originally broke h5 loading, so it was turned off. However, because of the instability of the sampling order,
+        this doesn't actually matter. However, it is being left off to prevent confusion for the end user.
+    """
+    size = pd.core.sample.process_sampling_size(n, frac, replace)
+    if size is None:
+        assert frac is not None
+        size = round(frac * len(array))
+    return rng.choice(
+        a=array,
+        size=size,
+        replace=replace,
+        p=None,
+        axis=0,
+        # shuffle=shuffle
+        shuffle=False,
     )

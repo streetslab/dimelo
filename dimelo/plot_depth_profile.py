@@ -28,11 +28,6 @@ def plot_depth_profile(
     This is the most flexible method for depth profile plotting. For most use cases, consider
     using one of the plot_depth_profile.by_* methods.
 
-    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
-    TODO: Should the more restrictive meta versions allow *args, or only **kwargs?
-    No, we want to be able to pass kwargs down to the line plotter, I think. Especially if we swap it out for one that takes more different standard args.
-    TODO: It's mildly confusing that there are required args that are only seen as *args or **kwargs in the more restrictive meta versions... But this is so much cleaner...
-
     Args:
         mod_file_names: list of paths to modified base data files
         bed_file_names: list of paths to bed files specifying centered equal-length regions
@@ -90,17 +85,6 @@ def by_modification(
         sample_names=[f"{motif} depth" for motif in motifs],
         **kwargs,
     )
-
-
-"""
-TODO: Re-assignment issue:
-dimelo/plot_enrichment_profile.py:142: error: Incompatible types in assignment (expression has type "list[str | Path | list[str | Path]]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment_profile.py:148: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-dimelo/plot_enrichment_profile.py:168: error: Incompatible types in assignment (expression has type "list[str | Path]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment_profile.py:174: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-
-If sample names is None we assign it non-None values, so it's not clear what the problem is to me. We could make an intermediate dummy variable I guess? If that is the complaint?
-"""
 
 
 def by_regions(
@@ -171,10 +155,6 @@ def get_depth_profiles(
 
     This helper function can be useful during plot prototyping, when repeatedly building plots from the same data.
     Its outputs can be passed as the first argument to make_depth_profile_plot().
-
-    TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
-    TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
-    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
 
     Args:
         mod_file_names: list of paths to modified base data files

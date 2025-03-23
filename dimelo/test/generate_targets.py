@@ -114,6 +114,13 @@ def generate_read_vectors_from_hdf5(test_matrix, case_subset):
 
 
 def main(test_matrix):
+    """
+    The main function runs applicable generators based on the test_matrix defined in cases.py and kwargs.
+
+    Args:
+        test_matrix: the dict containing test cases. This will be modified in-place to contain existing targets
+            if generators won't be getting re-run, based on the command line parsed arguments described below.
+    """
     # Set up input files, including ref genome download
     DiMeLoParsingTestCase.setup_class()
 

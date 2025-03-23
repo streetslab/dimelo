@@ -1,6 +1,6 @@
 import numpy as np
 
-rng = np.random.default_rng()
+from . import utils
 
 
 def expspace_prob(num: int, a: float, b: float = 1) -> np.ndarray:
@@ -52,8 +52,8 @@ def fake_read_mod_calls(halfsize: int, read_type: str, max_prob: float) -> np.nd
             p_vec = np.flip(expspace_prob(num=halfsize, a=15, b=max_prob))
         case _:
             ValueError(f"Unknown read type {read_type}")
-    first_half = [np.random.binomial(n=1, p=x) for x in p_vec]
-    second_half = np.flip([np.random.binomial(n=1, p=x) for x in p_vec])
+    first_half = [utils.rng.binomial(n=1, p=x) for x in p_vec]
+    second_half = np.flip([utils.rng.binomial(n=1, p=x) for x in p_vec])
     return np.concatenate([first_half, second_half])
 
 

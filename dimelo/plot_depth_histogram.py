@@ -11,27 +11,22 @@ def plot_depth_histogram(
     regions_list: list[str | Path | list[str | Path]],
     motifs: list[str],
     sample_names: list[str],
-    window_size: int,
+    window_size: int | None = None,
     single_strand: bool = False,
-    average_within_region: bool = False,
+    one_depth_per_region: bool = False,
     quiet: bool = False,
     cores: int | None = None,
     parallelize_within_regions: bool = False,
     **kwargs,
 ) -> Axes:
     """
-    Plot depth histograms, overlaying the resulting traces on top of each other.
+    Plot depth histograms, overlaying the results on top of each other.
 
     Each input list is expected to be parallel and the same length. Each index represents one analysis condition across the lists.
     Using the same file for multiple conditions requires adding the same file multiple times, in the appropriate indices.
 
     This is the most flexible method for depth histogram plotting. For most use cases, consider
     using one of the plot_depth_histogram.by_* methods.
-
-    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
-    TODO: Should the more restrictive meta versions allow *args, or only **kwargs?
-    No, we want to be able to pass kwargs down to the line plotter, I think. Especially if we swap it out for one that takes more different standard args.
-    TODO: It's mildly confusing that there are required args that are only seen as *args or **kwargs in the more restrictive meta versions... But this is so much cleaner...
 
     Args:
         mod_file_names: list of paths to modified base data files
@@ -41,7 +36,8 @@ def plot_depth_histogram(
         window_size: half-size of the desired window to plot; how far the window stretches on either side of the center point
         single_strand: True means we only grab counts from reads from the same strand as
             the region of interest, False means we always grab both strands within the regions
-        average_within_region: if True, each region will only report a single depth value, averaging across all non-zero depths
+        one_depth_per_region: if True, each region will only report a single depth value, averaging across all non-zero depths. If False
+            depths will be reported separately for all nonzero count positions in each region for a more granular view of depth distribution.
         quiet: disables progress bars
         cores: CPU cores across which to parallelize processing. Default to None, which means all available.
         parallelize_within_regions: if True, regions will be run sequentially in parallelized chunks. If False,
@@ -62,7 +58,7 @@ def plot_depth_histogram(
         motifs=motifs,
         window_size=window_size,
         single_strand=single_strand,
-        average_within_region=average_within_region,
+        one_depth_per_region=one_depth_per_region,
         quiet=quiet,
         cores=cores,
     )
@@ -70,8 +66,8 @@ def plot_depth_histogram(
     axes = make_depth_histogram_plot(
         depth_vectors=depth_vectors,
         sample_names=sample_names,
-        average_within_region=average_within_region,
-        y_label="regions count" if average_within_region else "positions count",
+        one_depth_per_region=one_depth_per_region,
+        y_label="regions count" if one_depth_per_region else "positions count",
         **kwargs,
     )
     return axes
@@ -96,17 +92,6 @@ def by_modification(
         sample_names=[f"{motif} depth" for motif in motifs],
         **kwargs,
     )
-
-
-"""
-TODO: Re-assignment issue:
-dimelo/plot_enrichment_histogram.py:142: error: Incompatible types in assignment (expression has type "list[str | Path | list[str | Path]]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment_histogram.py:148: error: Argument "sample_names" to "plot_enrichment_histogram" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-dimelo/plot_enrichment_histogram.py:168: error: Incompatible types in assignment (expression has type "list[str | Path]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment_histogram.py:174: error: Argument "sample_names" to "plot_enrichment_histogram" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-
-If sample names is None we assign it non-None values, so it's not clear what the problem is to me. We could make an intermediate dummy variable I guess? If that is the complaint?
-"""
 
 
 def by_regions(
@@ -165,21 +150,17 @@ def get_depth_counts(
     mod_file_names: list[str | Path],
     regions_list: list[str | Path | list[str | Path]],
     motifs: list[str],
-    window_size: int,
+    window_size: int | None,
     single_strand: bool = False,
-    average_within_region: bool = False,
+    one_depth_per_region: bool = False,
     quiet: bool = False,
-    cores: int | None = None,
+    cores: int | None = 1,
 ) -> list[np.ndarray]:
     """
     Get the depth counts, ready for plotting.
 
     This helper function can be useful during plot prototyping, when repeatedly building plots from the same data.
     Its outputs can be passed as the first argument to make_depth_histogram_plot().
-
-    TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
-    TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
-    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
 
     Args:
         mod_file_names: list of paths to modified base data files
@@ -188,13 +169,15 @@ def get_depth_counts(
         window_size: half-size of the desired window to plot; how far the window stretches on either side of the center point
         single_strand: True means we only grab counts from reads from the same strand as
             the region of interest, False means we always grab both strands within the regions
+        one_depth_per_region: if True, each region will only report a single depth value, averaging across all non-zero depths. If False
+            depths will be reported separately for all nonzero count positions in each region for a more granular view of depth distribution.
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping
         smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
         quiet: disables progress bars
         cores: CPU cores across which to parallelize processing
 
     Returns:
-        List of depth histogram traces
+        List of depth vectors for histogram
     """
     if not utils.check_len_equal(mod_file_names, regions_list, motifs):
         raise ValueError("Unequal number of inputs")
@@ -222,7 +205,7 @@ def get_depth_counts(
                     valid_base_counts[valid_base_counts > 0]
                     for _, valid_base_counts in pileup_vectors_list
                 ]
-                if average_within_region:
+                if one_depth_per_region:
                     # each region's read depth vector gets collapsed to a single mean value
                     read_depths = np.array(
                         [
@@ -251,7 +234,7 @@ def make_depth_histogram_plot(
     depth_vectors: list[np.ndarray],
     sample_names: list[str],
     y_label: str = "count",
-    average_within_region: bool = False,
+    one_depth_per_region: bool = False,
     **kwargs,
 ) -> Axes:
     """
@@ -263,6 +246,8 @@ def make_depth_histogram_plot(
     Args:
         depth_vectors: list of depth histogram counts
         sample_names: list of names to use for labeling traces in the output; legend entries
+        one_depth_per_region: if True, each region will only report a single depth value, averaging across all non-zero depths. If False
+            depths will be reported separately for all nonzero count positions in each region for a more granular view of depth distribution.
         kwargs: other keyword parameters passed through to utils.line_plot
 
     Returns:
@@ -270,14 +255,17 @@ def make_depth_histogram_plot(
     """
     if not utils.check_len_equal(depth_vectors, sample_names):
         raise ValueError("Unequal number of inputs")
+    x_label = (
+        "per strand read\ndepth in region"
+        if one_depth_per_region
+        else "per strand read\ndepth per position"
+    )
     axes = utils.hist_plot(
         value_vectors=depth_vectors,
         value_names=sample_names,
-        x_label="per strand read\ndepth in region"
-        if average_within_region
-        else "per strand read\ndepth per position",
+        x_label=x_label,
         y_label=y_label,
-        integer_values=not average_within_region,
+        integer_values=not one_depth_per_region,
         **kwargs,
     )
     return axes

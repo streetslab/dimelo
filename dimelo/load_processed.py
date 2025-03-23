@@ -1,7 +1,6 @@
 import concurrent.futures
 import gzip
 import multiprocessing
-import random
 from collections import defaultdict
 from functools import partial
 from multiprocessing import shared_memory
@@ -57,7 +56,7 @@ def regions_to_list(
         **kwargs: all necessary keyword arguments to pass down to the loader
 
     Returns:
-        list([function_handle returns for region in regions])
+        List(function_handle return objects per region)
     """
     regions_dict = utils.regions_dict_from_input(
         regions,
@@ -65,8 +64,8 @@ def regions_to_list(
     )
 
     # Flatten regions into a list of (chromosome, start, end, strand)
-    region_tuples = [
-        (chromosome, start, end, strand)
+    region_strings = [
+        f"{chromosome}:{start}-{end},{strand}"
         for chromosome, region_list in regions_dict.items()
         for start, end, strand in region_list
     ]
@@ -91,11 +90,10 @@ def regions_to_list(
             else 1,  # if parallelization is within region
             **kwargs,
         )
-
         results = list(
             tqdm(
-                executor.map(process_partial, region_tuples),
-                total=len(region_tuples),
+                executor.map(process_partial, region_strings),
+                total=len(region_strings),
                 desc="Loading data",
                 disable=quiet or parallelize_within_regions,
                 leave=False,
@@ -105,21 +103,19 @@ def regions_to_list(
     return results
 
 
-def apply_loader_function_to_region(region_tuple, function_handle, **kwargs):
+def apply_loader_function_to_region(region_string, function_handle, **kwargs):
     """
-    Helper function for regions_to_list. Takes in the region tuple, creates a string, and runs the loader function.
+    apply_loader_function_to_region simply exists to convert position arguments into keyword arguments to make executor.map work
 
     Args:
-        region_tuple: chromosome, start, end, strand
-        function_handle: a function that takes a regions specifier and loads processed data
-        **kwargs: the remaining kwargs necessary to run the function in question
-
+        region_string: passed down with regions keyword
+        function_handle: function to call with regions and other kwargs
+        **kwargs: all keyword arguments passed to regions_to_list. These must be sufficient for whichever load_processed function
+            if being referenced by function_handle
     Returns:
-        Whatever function_handle returns
+        function_handle return value
     """
-    chromosome, start_coord, end_coord, strand = region_tuple
-    single_region_str = f"{chromosome}:{start_coord}-{end_coord},{strand}"
-    return function_handle(regions=single_region_str, **kwargs)
+    return function_handle(regions=region_string, **kwargs)
 
 
 ################################################################################################################
@@ -632,6 +628,7 @@ def read_vectors_from_hdf5(
     calculate_mod_fractions: bool = True,
     quiet: bool = True,  # currently unused; change to default False when pbars are implemented
     cores: int | None = None,  # currently unused
+    subset_parameters: dict | None = None,
 ) -> tuple[list[tuple], list[str], dict | None]:
     """
     User-facing function.
@@ -679,12 +676,18 @@ def read_vectors_from_hdf5(
             be added in future.
         quiet: silences progress bars (currently unused)
         cores: cores across which to parallelize processes (currently unused)
+        subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
+            reads to be returned. If not None, at least one of n or frac must be provided. The array
+            parameter should not be provided here.
 
     Returns:
         a list of tuples, each tuple containing all datasets corresponding to an individual read that
         was within the specified regions.
         a list of strings, naming the datasets returned.
         a regions_dict, containing lists of (region_start,region_end) coordinates by chromosome/contig.
+
+    TODO: The way the subsetting is implemented is confusing, in that you need to pass all but one of
+        the available parameters.
     """
     with h5py.File(file, "r") as h5:
         datasets: list[str] = [
@@ -736,6 +739,12 @@ def read_vectors_from_hdf5(
                             | (ref_strands == region_strand)
                         )
                     )
+                    if subset_parameters is not None:
+                        relevant_read_indices = np.sort(
+                            utils.random_sample(
+                                relevant_read_indices, **subset_parameters
+                            )
+                        )
                     read_tuples_raw += list(
                         zip(
                             *(
@@ -758,6 +767,10 @@ def read_vectors_from_hdf5(
         else:
             regions_dict = None
             relevant_read_indices = np.flatnonzero(np.isin(read_motifs, motifs))
+            if subset_parameters is not None:
+                relevant_read_indices = np.sort(
+                    utils.random_sample(relevant_read_indices, **subset_parameters)
+                )
             read_tuples_raw = list(
                 zip(
                     *(
@@ -835,7 +848,7 @@ def read_vectors_from_hdf5(
 
     # If 'shuffle' appears anywhere in sort_by, we first shuffle the list
     if "shuffle" in sort_by:
-        random.shuffle(read_tuples_all)
+        utils.rng.shuffle(read_tuples_all)
 
     try:
         sort_by_indices = [
@@ -870,6 +883,7 @@ def readwise_binary_modification_arrays(
     relative: bool = True,
     quiet: bool = True,  # currently unused; change to default False when pbars are implemented
     cores: int | None = None,  # currently unused
+    subset_parameters: dict | None = None,
 ) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str], dict | None]:
     """
     Primarily designed as a helper function for single-read plotting, but can be used by a user.
@@ -917,6 +931,9 @@ def readwise_binary_modification_arrays(
             this could create unexpected behaviour for a the standard visualizations.
         quiet: silences progress bars (currently unused)
         cores: cores across which to parallelize processes (currently unused)
+        subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
+            reads to be returned. If not None, at least one of n or frac must be provided. The array
+            parameter should not be provided here.
 
     Returns:
         Returns a tuple of three arrays, of length (N_READS * len(mod_names)), and a dict of regions.

@@ -2,15 +2,22 @@ from pathlib import Path
 
 from dimelo.test import RelativePath
 
+"""
+This module contains the test cases that will be run through most dimelo_test submodules. To add new test cases, simple create new dict entries
+in test_matrix with descriptive names. Each dict entry must contain a tuple of two dicts, the first containing kwargs and the second containing
+test result targets. dimelo_test module run the applicable kwargs through different dimelo modules to test functionality, comparing results against
+those stored in the results entry. The output targets can be populated by running generate_targets.py.
+"""
+
 # Base input and output directories
 test_data_dir = Path("./data")
 output_dir = test_data_dir / "test_targets"
 
-region = "chr1:114357437-114359753"  # 'chr1:9167177-9169177'
+region = "chr1:114357437-114359753"  # this region is just one of the ones from the peaks bed file
+# 'chr1:9167177-9169177' # nothing is really different about this one; I swapped at one point while debugging
 
 # Paths to input files
 ctcf_bam_file = test_data_dir / "ctcf_demo.sorted.bam"
-# ctcf_guppy_bam_file = test_data_dir / 'winnowmap_guppy_merge_subset.updated.bam'
 ctcf_target_regions = RelativePath(test_data_dir / "ctcf_demo_peak.bed")
 ctcf_off_target_regions = RelativePath(test_data_dir / "ctcf_demo_not_peak.bed")
 
@@ -37,7 +44,7 @@ test_matrix = {
             "cores": 1,
         },
         # outputs dict function:values
-        {},  # populated in subsequent cells
+        {},  # populated by generate_targets.py
     ),
     "megalodon_single_190": (
         # input kwargs
@@ -58,7 +65,7 @@ test_matrix = {
             "cores": 2,
         },
         # outputs dict function:values
-        {},  # populated in subsequent cells
+        {},  # populated by generate_targets.py
     ),
     "megalodon_single_and_peaks_190": (
         # input kwargs
@@ -79,7 +86,7 @@ test_matrix = {
             "cores": 3,
         },
         # outputs dict function:values
-        {},  # populated in subsequent cells
+        {},  # populated by generate_targets.py
     ),
     "megalodon_peaks_nothresh": (
         # input kwargs
@@ -100,7 +107,7 @@ test_matrix = {
             "cores": 4,
         },
         # outputs dict function:values
-        {},  # populated in subsequent cells
+        {},  # populated by generate_targets.py
     ),
     "megalodon_single_nothresh": (
         # input kwargs
@@ -121,6 +128,6 @@ test_matrix = {
             "cores": None,
         },
         # outputs dict function:values
-        {},  # populated in subsequent cells
+        {},  # populated by generate_targets.py
     ),
 }
