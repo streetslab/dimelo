@@ -44,7 +44,7 @@ def plot_enrichment_profile(
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping
         smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
         quiet: disables progress bars
-        cores: CPU cores across which to parallelize processing
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
         kwargs: other keyword parameters passed through to utils.line_plot
 
     Returns:
@@ -61,6 +61,8 @@ def plot_enrichment_profile(
         single_strand=single_strand,
         regions_5to3prime=regions_5to3prime,
         smooth_window=smooth_window,
+        quiet=quiet,
+        cores=cores,
     )
 
     axes = make_enrichment_profile_plot(

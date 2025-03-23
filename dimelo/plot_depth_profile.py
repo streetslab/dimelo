@@ -44,7 +44,7 @@ def plot_depth_profile(
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping
         smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
         quiet: disables progress bars
-        cores: CPU cores across which to parallelize processing
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
         kwargs: other keyword parameters passed through to utils.line_plot
 
     Returns:

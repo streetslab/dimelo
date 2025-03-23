@@ -36,7 +36,8 @@ try:
     result = subprocess.run(["modkit", "--version"], stdout=subprocess.PIPE, text=True)
     modkit_version = result.stdout
     if modkit_version.split()[1] == EXPECTED_MODKIT_VERSION:
-        print(f"modkit found with expected version {EXPECTED_MODKIT_VERSION}")
+        pass
+        # print(f"modkit found with expected version {EXPECTED_MODKIT_VERSION}")
     else:
         print(
             f"modkit found with unexpected version {modkit_version.split()[1]}. Versions other than {EXPECTED_MODKIT_VERSION} may exhibit unexpected behavior. It is recommended that you use v{EXPECTED_MODKIT_VERSION}"

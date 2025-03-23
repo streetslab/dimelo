@@ -16,6 +16,7 @@ def plot_depth_histogram(
     average_within_region: bool = False,
     quiet: bool = False,
     cores: int | None = None,
+    parallelize_within_regions: bool = False,
     **kwargs,
 ) -> Axes:
     """
@@ -42,7 +43,11 @@ def plot_depth_histogram(
             the region of interest, False means we always grab both strands within the regions
         average_within_region: if True, each region will only report a single depth value, averaging across all non-zero depths
         quiet: disables progress bars
-        cores: CPU cores across which to parallelize processing
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
+        parallelize_within_regions: if True, regions will be run sequentially in parallelized chunks. If False,
+            each individual region's chunks will be run sequentially but there will be parallelization across
+            regions, i.e. each core will be assigned one region at a time by the executor. Set to True if you
+            are running a small number of very large regions (e.g. one or two chromosomes), otherwise to to False (default).
         kwargs: other keyword parameters passed through to utils.line_plot
 
     Returns:

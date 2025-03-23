@@ -14,6 +14,14 @@ from tqdm.auto import tqdm
 
 from . import test_data, utils
 
+# the default chunk size is the number of bp to include per processing chunk in parallelization for loaders.
+# 1e6 was empirically determined to be a good default: smaller than 1e5 we see slowdowns due to increased
+# parallelization overhead, larger than 1e7 we see slowdowns due to worker utilization decreasing because even
+# for whole chromosome processing there aren't always enough chunks to go around. In the 1e5-1e7 range, speed
+# on 32 cores is fairly similar, but sitting in the middle of the range should support 10x more cores (beyond
+# the reasonable upper bound) and 10x fewer cores (which is about the reasonable lower bound).
+DEFAULT_CHUNK_SIZE = 1_000_000
+
 ################################################################################################################
 ####                                           Loader wrappers                                              ####
 ################################################################################################################
@@ -36,13 +44,16 @@ def regions_to_list(
 
     Args:
         function_handle: the loader function you want to run.
-        regions: the region specifier
+        regions: the region specifier. Typically we expect to get many regions for this function, in the form of a list
+            of strings or bed file paths. regions_to_list will run across all of these one-by-one returning a separate
+            function return for each independent region.
         window_size: window around centers of regions, defaults to None
         quiet: disables progress bars
-        cores: CPU cores across which to parallelize processing
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
         parallelize_within_regions: if True, regions will be run sequentially in parallelized chunks. If False,
             each individual region's chunks will be run sequentially but there will be parallelization across
-            regions, i.e. each core will be assigned one region at a time by the executor
+            regions, i.e. each core will be assigned one region at a time by the executor. Set to True if you
+            are running a small number of very large regions (e.g. one or two chromosomes), otherwise to to False (default).
         **kwargs: all necessary keyword arguments to pass down to the loader
 
     Returns:
@@ -72,9 +83,9 @@ def regions_to_list(
     ) as executor:
         # Use functools.partial to pre-fill arguments
         process_partial = partial(
-            process_region,
+            apply_loader_function_to_region,
             function_handle=function_handle,
-            quiet=quiet or not parallelize_within_regions,  #
+            quiet=quiet or not parallelize_within_regions,
             cores=cores_to_run
             if parallelize_within_regions
             else 1,  # if parallelization is within region
@@ -85,15 +96,16 @@ def regions_to_list(
             tqdm(
                 executor.map(process_partial, region_tuples),
                 total=len(region_tuples),
-                desc=f"Processing regions in parallel across {cores_to_run}",
+                desc="Loading data",
                 disable=quiet or parallelize_within_regions,
+                leave=False,
             )
         )
 
     return results
 
 
-def process_region(region_tuple, function_handle, **kwargs):
+def apply_loader_function_to_region(region_tuple, function_handle, **kwargs):
     """
     Helper function for regions_to_list. Takes in the region tuple, creates a string, and runs the loader function.
 
@@ -123,7 +135,7 @@ def pileup_counts_from_bedmethyl(
     single_strand: bool = False,
     quiet: bool = False,
     cores: int | None = None,
-    chunk_size: int = 1_000_000,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
 ) -> tuple[int, int]:
     """
     User-facing function.
@@ -149,7 +161,7 @@ def pileup_counts_from_bedmethyl(
         single_strand: True means we only grab counts from reads from the same strand as
             the region of interest, False means we always grab both strands within the regions
         quiet: disables progress bars
-        cores: CPU cores across which to parallelize processing
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
         chunk_size: size of genomic subregions to assign out to each process
 
     Returns:
@@ -165,6 +177,7 @@ def pileup_counts_from_bedmethyl(
 
     cores_to_run = utils.cores_to_run(cores)
 
+    # Initialize shared memory as length-one numpy arrays to make it easy to map to buffer in subprocesses
     shm_valid = shared_memory.SharedMemory(
         create=True, size=np.dtype(np.int32).itemsize
     )
@@ -193,7 +206,8 @@ def pileup_counts_from_bedmethyl(
             concurrent.futures.as_completed(futures),
             total=len(futures),
             disable=quiet,
-            desc=f"Loading genomic chunks, up to {chunk_size/1000}kb per chunk",
+            desc="Loading data",
+            leave=False,
         ):
             try:
                 future.result()
@@ -225,7 +239,7 @@ def pileup_vectors_from_bedmethyl(
     regions_5to3prime: bool = False,
     quiet: bool = False,
     cores: int | None = None,
-    chunk_size: int = 1_000_000,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     User-facing function.
@@ -260,7 +274,7 @@ def pileup_vectors_from_bedmethyl(
             the region of interest, False means we always grab both strands within the regions
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping
         quiet: disables progress bars
-        cores: CPU cores across which to parallelize processing
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
         chunk_size: size of genomic subregions to assign out to each process
 
     Returns:
@@ -281,6 +295,7 @@ def pileup_vectors_from_bedmethyl(
     first_tuple = regions_dict[first_key][0]
     region_len = first_tuple[1] - first_tuple[0]
 
+    # Initialize shared memory as numpy arrays to make it easy to map to buffer in subprocesses
     shm_valid = shared_memory.SharedMemory(
         create=True, size=(region_len) * np.dtype(np.int32).itemsize
     )
@@ -311,7 +326,8 @@ def pileup_vectors_from_bedmethyl(
             concurrent.futures.as_completed(futures),
             total=len(futures),
             disable=quiet,
-            desc=f"Loading genomic chunks, up to {chunk_size/1000}kb per chunk",
+            desc="Loading data",
+            leave=False,
         ):
             try:
                 future.result()
@@ -351,7 +367,7 @@ def counts_from_fake(*args, **kwargs) -> tuple[int, int]:
 
 def vector_from_fake(window_size: int, *args, **kwargs) -> np.ndarray:
     """
-    Tes helper function.
+    Test helper function.
 
     Generates a fake peak trace. Ignores all arguments except window_size.
 
@@ -427,6 +443,8 @@ def pileup_vectors_process_chunk(
     valid_base_subregion = np.zeros(subregion_end - subregion_start, dtype=int)
     modified_base_subregion = np.zeros(subregion_end - subregion_start, dtype=int)
 
+    # tabix throws and error if the contig is not present
+    # by the current design, this should be silent
     if chromosome in source_tabix.contigs:
         for row in source_tabix.fetch(
             chromosome, max(subregion_start, 0), subregion_end
@@ -510,6 +528,8 @@ def pileup_counts_process_chunk(
     valid_base_subregion_counts = 0
     modified_base_subregion_counts = 0
 
+    # tabix throws and error if the contig is not present
+    # by the current design, this should be silent
     if chromosome in source_tabix.contigs:
         for row in source_tabix.fetch(
             chromosome, max(subregion_start, 0), subregion_end

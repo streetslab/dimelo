@@ -34,7 +34,7 @@ def plot_enrichment(
         single_strand: True means we only grab counts from reads from the same strand as
             the region of interest, False means we always grab both strands within the regions
         quiet: disables progress bars
-        cores: CPU cores across which to parallelize processing
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
         kwargs: other keyword parameters passed through to utils.bar_plot
 
     Returns:
@@ -49,6 +49,8 @@ def plot_enrichment(
         motifs=motifs,
         window_size=window_size,
         single_strand=single_strand,
+        quiet=quiet,
+        cores=cores,
     )
 
     axes = make_enrichment_plot(

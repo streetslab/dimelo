@@ -100,8 +100,13 @@ def adjust_threshold(
 
 def process_chunks_from_regions_dict(
     regions_dict: dict,
-    chunk_size: int = 10_000,
+    chunk_size: int,
 ):
+    """
+    returns: a list of chunk specifier dictionaries, which contain region and subregion information. The subregion start and end
+    are always within the region. This information is sufficient for a downstream process to operate on the subregion chunk while
+    knowing where it lies within the larger region.
+    """
     chunk_list = []
     for chromosome, region_list in regions_dict.items():
         for start_coord, end_coord, strand in region_list:
