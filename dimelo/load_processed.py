@@ -32,7 +32,7 @@ def regions_to_list(
     window_size: int | None = None,
     quiet: bool = True,
     cores: int | None = None,
-    parallelize_within_regions: bool = False,
+    split_large_regions: bool = False,
     **kwargs,
 ):
     """
@@ -49,7 +49,7 @@ def regions_to_list(
         window_size: window around centers of regions, defaults to None
         quiet: disables progress bars
         cores: CPU cores across which to parallelize processing. Default to None, which means all available.
-        parallelize_within_regions: if True, regions will be run sequentially in parallelized chunks. If False,
+        split_large_regions: if True, regions will be run sequentially in parallelized chunks. If False,
             each individual region's chunks will be run sequentially but there will be parallelization across
             regions, i.e. each core will be assigned one region at a time by the executor. Set to True if you
             are running a small number of very large regions (e.g. one or two chromosomes), otherwise to to False (default).
@@ -78,15 +78,15 @@ def regions_to_list(
     #    (2) the cores_to_run will be allocated to within-region parallelization, and the top-level
     #        jobs sequence is run sequentially
     with concurrent.futures.ProcessPoolExecutor(
-        max_workers=1 if parallelize_within_regions else cores_to_run
+        max_workers=1 if split_large_regions else cores_to_run
     ) as executor:
         # Use functools.partial to pre-fill arguments
         process_partial = partial(
             apply_loader_function_to_region,
             function_handle=function_handle,
-            quiet=quiet or not parallelize_within_regions,
+            quiet=quiet or not split_large_regions,
             cores=cores_to_run
-            if parallelize_within_regions
+            if split_large_regions
             else 1,  # if parallelization is within region
             **kwargs,
         )
@@ -95,7 +95,7 @@ def regions_to_list(
                 executor.map(process_partial, region_strings),
                 total=len(region_strings),
                 desc="Loading data",
-                disable=quiet or parallelize_within_regions,
+                disable=quiet or split_large_regions,
                 leave=False,
             )
         )

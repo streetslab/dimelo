@@ -16,7 +16,7 @@ def plot_depth_histogram(
     one_depth_per_region: bool = False,
     quiet: bool = False,
     cores: int | None = None,
-    parallelize_within_regions: bool = False,
+    split_large_regions: bool = False,
     **kwargs,
 ) -> Axes:
     """
@@ -40,7 +40,7 @@ def plot_depth_histogram(
             depths will be reported separately for all nonzero count positions in each region for a more granular view of depth distribution.
         quiet: disables progress bars
         cores: CPU cores across which to parallelize processing. Default to None, which means all available.
-        parallelize_within_regions: if True, regions will be run sequentially in parallelized chunks. If False,
+        split_large_regions: if True, regions will be run sequentially in parallelized chunks. If False,
             each individual region's chunks will be run sequentially but there will be parallelization across
             regions, i.e. each core will be assigned one region at a time by the executor. Set to True if you
             are running a small number of very large regions (e.g. one or two chromosomes), otherwise to to False (default).
