@@ -14,7 +14,9 @@ def plot_depth_histogram(
     window_size: int | None = None,
     single_strand: bool = False,
     one_depth_per_region: bool = False,
-    cores=None,
+    quiet: bool = False,
+    cores: int | None = None,
+    split_large_regions: bool = False,
     **kwargs,
 ) -> Axes:
     """
@@ -36,6 +38,12 @@ def plot_depth_histogram(
             the region of interest, False means we always grab both strands within the regions
         one_depth_per_region: if True, each region will only report a single depth value, averaging across all non-zero depths. If False
             depths will be reported separately for all nonzero count positions in each region for a more granular view of depth distribution.
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
+        split_large_regions: if True, regions will be run sequentially in parallelized chunks. If False,
+            each individual region's chunks will be run sequentially but there will be parallelization across
+            regions, i.e. each core will be assigned one region at a time by the executor. Set to True if you
+            are running a small number of very large regions (e.g. one or two chromosomes), otherwise to to False (default).
         kwargs: other keyword parameters passed through to utils.line_plot
 
     Returns:
@@ -51,6 +59,7 @@ def plot_depth_histogram(
         window_size=window_size,
         single_strand=single_strand,
         one_depth_per_region=one_depth_per_region,
+        quiet=quiet,
         cores=cores,
     )
 
@@ -144,7 +153,8 @@ def get_depth_counts(
     window_size: int | None,
     single_strand: bool = False,
     one_depth_per_region: bool = False,
-    cores=1,
+    quiet: bool = False,
+    cores: int | None = 1,
 ) -> list[np.ndarray]:
     """
     Get the depth counts, ready for plotting.
@@ -161,6 +171,10 @@ def get_depth_counts(
             the region of interest, False means we always grab both strands within the regions
         one_depth_per_region: if True, each region will only report a single depth value, averaging across all non-zero depths. If False
             depths will be reported separately for all nonzero count positions in each region for a more granular view of depth distribution.
+        regions_5to3prime: True means negative strand regions get flipped, False means no flipping
+        smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing
 
     Returns:
         List of depth vectors for histogram
@@ -182,6 +196,7 @@ def get_depth_counts(
                     motif=motif,
                     window_size=window_size,
                     single_strand=single_strand,
+                    quiet=quiet,
                     cores=cores,
                 )
                 # places where read depth is zero are assumed to not have the motif present - this may not always be true,

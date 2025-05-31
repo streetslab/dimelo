@@ -15,6 +15,8 @@ def plot_enrichment_profile(
     single_strand: bool = False,
     regions_5to3prime: bool = False,
     smooth_window: int | None = None,
+    quiet: bool = False,
+    cores: int | None = None,
     **kwargs,
 ) -> Axes:
     """
@@ -41,6 +43,8 @@ def plot_enrichment_profile(
             the region of interest, False means we always grab both strands within the regions
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping
         smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
         kwargs: other keyword parameters passed through to utils.line_plot
 
     Returns:
@@ -57,6 +61,8 @@ def plot_enrichment_profile(
         single_strand=single_strand,
         regions_5to3prime=regions_5to3prime,
         smooth_window=smooth_window,
+        quiet=quiet,
+        cores=cores,
     )
 
     axes = make_enrichment_profile_plot(
@@ -157,6 +163,8 @@ def get_enrichment_profiles(
     single_strand: bool = False,
     regions_5to3prime: bool = False,
     smooth_window: int | None = None,
+    quiet: bool = False,
+    cores: int | None = None,
 ) -> list[np.ndarray]:
     """
     Get the enrichment profile traces, ready for plotting.
@@ -176,6 +184,8 @@ def get_enrichment_profiles(
         single_strand: True means we only grab counts from reads from the same strand as
             the region of interest, False means we always grab both strands within the regions
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing
         smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
 
     Returns:
@@ -199,6 +209,8 @@ def get_enrichment_profiles(
                         window_size=window_size,
                         single_strand=single_strand,
                         regions_5to3prime=regions_5to3prime,
+                        quiet=quiet,
+                        cores=cores,
                     )
                 )
                 # Default to nan so we can skip over unfilled values when plotting or doing a rolling average

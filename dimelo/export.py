@@ -6,7 +6,7 @@ import pyBigWig
 import pysam
 from tqdm.auto import tqdm
 
-from . import utils
+from . import load_processed, utils
 
 """
 This module contains code to export indexed and compressed parse output files to other formats that may be helpful for downstream analysis.
@@ -134,54 +134,31 @@ def pileup_to_bigwig(
                 total=lines_by_contig[contig],
                 leave=False,
             ):
-                # TODO: This code is copied from load_processed.pileup_counts_from_bedmethyl and should probably be consolidated at some point
-                tabix_fields = row.split("\t")
-                pileup_basemod = tabix_fields[3]
-                pileup_strand = tabix_fields[5]
-                keep_basemod = False
-                if (strand != ".") and (pileup_strand != strand):
-                    # This entry is on the wrong strand - skip it
-                    continue
-                elif len(pileup_basemod.split(",")) == 3:
-                    pileup_modname, pileup_motif, pileup_mod_coord = (
-                        pileup_basemod.split(",")
+                keep_basemod, genomic_coord, modified_in_row, valid_in_row = (
+                    load_processed.process_pileup_row(
+                        row=row,
+                        parsed_motif=parsed_motif,
+                        region_strand=strand,
+                        single_strand=(strand != "."),
                     )
-                    if (
-                        pileup_motif == parsed_motif.motif_seq
-                        and int(pileup_mod_coord) == parsed_motif.modified_pos
-                        and pileup_modname in parsed_motif.mod_codes
-                    ):
-                        keep_basemod = True
-                elif len(pileup_basemod.split(",")) == 1:
-                    if pileup_basemod in parsed_motif.mod_codes:
-                        keep_basemod = True
-                else:
-                    raise ValueError(
-                        f"Unexpected format in bedmethyl file: {row} contains {pileup_basemod} which cannot be parsed."
-                    )
-                # TODO: consolidate the above into a function; just do adding outside
-                if keep_basemod:
-                    pileup_info = tabix_fields[9].split(" ")
-                    valid_base_counts = int(pileup_info[0])
-                    modified_base_counts = int(pileup_info[2])
-                    if valid_base_counts > 0:
-                        genomic_coord = int(tabix_fields[1])
-                        contig_list.append(contig)
-                        start_list.append(genomic_coord)
-                        end_list.append(genomic_coord + 1)
-                        values_list.append(modified_base_counts / valid_base_counts)
+                )
+                if keep_basemod and valid_in_row > 0:
+                    contig_list.append(contig)
+                    start_list.append(genomic_coord)
+                    end_list.append(genomic_coord + 1)
+                    values_list.append(modified_in_row / valid_in_row)
 
-                        if len(values_list) > chunk_size:
-                            bw.addEntries(
-                                contig_list,  # Contig names
-                                start_list,  # Start positions
-                                ends=end_list,  # End positions
-                                values=values_list,  # Corresponding values
-                            )
-                            contig_list = []
-                            start_list = []
-                            end_list = []
-                            values_list = []
+                    if len(values_list) > chunk_size:
+                        bw.addEntries(
+                            contig_list,  # Contig names
+                            start_list,  # Start positions
+                            ends=end_list,  # End positions
+                            values=values_list,  # Corresponding values
+                        )
+                        contig_list = []
+                        start_list = []
+                        end_list = []
+                        values_list = []
             bw.addEntries(
                 contig_list,  # Contig names
                 start_list,  # Start positions

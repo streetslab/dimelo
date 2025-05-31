@@ -15,6 +15,8 @@ def plot_depth_profile(
     single_strand: bool = False,
     regions_5to3prime: bool = False,
     smooth_window: int | None = None,
+    quiet: bool = False,
+    cores: int | None = None,
     **kwargs,
 ) -> Axes:
     """
@@ -36,6 +38,8 @@ def plot_depth_profile(
             the region of interest, False means we always grab both strands within the regions
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping
         smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
         kwargs: other keyword parameters passed through to utils.line_plot
 
     Returns:
@@ -52,6 +56,8 @@ def plot_depth_profile(
         single_strand=single_strand,
         regions_5to3prime=regions_5to3prime,
         smooth_window=smooth_window,
+        quiet=quiet,
+        cores=cores,
     )
 
     axes = make_depth_profile_plot(
@@ -141,6 +147,8 @@ def get_depth_profiles(
     single_strand: bool = False,
     regions_5to3prime: bool = False,
     smooth_window: int | None = None,
+    quiet: bool = False,
+    cores: int | None = None,
 ) -> list[np.ndarray]:
     """
     Get the depth profile traces, ready for plotting.
@@ -157,6 +165,8 @@ def get_depth_profiles(
             the region of interest, False means we always grab both strands within the regions
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping
         smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing
 
     Returns:
         List of depth profile traces
@@ -178,6 +188,8 @@ def get_depth_profiles(
                     window_size=window_size,
                     single_strand=single_strand,
                     regions_5to3prime=regions_5to3prime,
+                    quiet=quiet,
+                    cores=cores,
                 )
                 trace = valid_base_counts.astype(float)
                 trace[trace == 0] = np.nan

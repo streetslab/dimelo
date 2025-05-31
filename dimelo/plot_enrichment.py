@@ -12,6 +12,8 @@ def plot_enrichment(
     sample_names: list[str],
     window_size: int | None = None,
     single_strand: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
     **kwargs,
 ) -> Axes:
     """
@@ -31,6 +33,8 @@ def plot_enrichment(
         window_size: (currently disabled) window around center of region, +-window_size//2
         single_strand: True means we only grab counts from reads from the same strand as
             the region of interest, False means we always grab both strands within the regions
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
         kwargs: other keyword parameters passed through to utils.bar_plot
 
     Returns:
@@ -45,6 +49,8 @@ def plot_enrichment(
         motifs=motifs,
         window_size=window_size,
         single_strand=single_strand,
+        quiet=quiet,
+        cores=cores,
     )
 
     axes = make_enrichment_plot(
@@ -143,6 +149,8 @@ def get_enrichments(
     motifs: list[str],
     window_size: int | None = None,
     single_strand: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
 ) -> list[float]:
     """
     Get the enrichment values, ready for plotting.
@@ -160,6 +168,8 @@ def get_enrichments(
         window_size: (currently disabled) window around center of region, +-window_size//2
         single_strand: True means we only grab counts from reads from the same strand as
             the region of interest, False means we always grab both strands within the regions
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing
 
     Returns:
         List of modified fraction values.
@@ -180,6 +190,8 @@ def get_enrichments(
                     motif=motif,
                     window_size=window_size,
                     single_strand=single_strand,
+                    quiet=quiet,
+                    cores=cores,
                 )
             case ".fake":
                 n_mod, n_total = load_processed.counts_from_fake(

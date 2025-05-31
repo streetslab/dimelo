@@ -36,7 +36,8 @@ def generate_extract(test_matrix, case_subset):
     for case in case_subset if case_subset is not None else test_matrix.keys():
         kwargs, results = test_matrix[case]
         kwargs_extract = filter_kwargs_for_func(parse_bam.extract, kwargs)
-        # if kwargs['regions']==region: # for now, we only want to extract with the single region due to output file size
+        if "cores" in kwargs_extract:
+            del kwargs_extract["cores"]
         extract_file, extract_regions = parse_bam.extract(
             **kwargs_extract,
             ref_genome=ref_genome_file,
@@ -167,9 +168,18 @@ def main(test_matrix):
         if Path(args.initial_target_pickle).exists():
             with open(RelativePath(args.initial_target_pickle), "rb") as file:
                 old_test_matrix = pickle.load(file)
-                for key, value in old_test_matrix.items():
+                # loop through the old test matrix
+                for key, (old_kwargs, old_results) in old_test_matrix.items():
+                    # if the old test case is in the new test matrix, bring over the results
+                    # either the test targets will be regenerated, and the results replaced, or they won't be regenerated, and we'll need the old results
                     if key in test_matrix:
-                        test_matrix[key] = value
+                        new_kwargs = test_matrix[key][0]
+                        # if case will be covered, bring in new kwargs
+                        if args.case_subset is None or key in args.case_subset:
+                            test_matrix[key] = (new_kwargs, old_results)
+                        # if case will not be covered, keep old kwargs
+                        else:
+                            test_matrix[key] = (old_kwargs, old_results)
                 print(
                     f"Running {'all cases' if args.case_subset is None else args.case_subset} through {args.target_subset} to supplement test targets from {args.initial_target_pickle}. Any new tests in cases.py will be added to the test matrix."
                 )
@@ -177,6 +187,11 @@ def main(test_matrix):
             raise ValueError(
                 f"Cannot run subset {args.target_subset} without a pre-existing complete set of generated targets, {args.initial_target_pickle} does not exist. Either specify an --initial-target-pickle that does exist or run without subsetting."
             )
+
+    print("Generating targets for the following test matrix kwargs")
+    for test_name, (kwargs, _) in test_matrix.items():
+        print(test_name)
+        print(kwargs)
 
     for subset in args.target_subset:
         function_name = f"generate_{subset}"

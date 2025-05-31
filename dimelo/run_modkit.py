@@ -28,15 +28,16 @@ if env_bin_path not in os.environ["PATH"]:
     print(
         f"PATH does not include the conda environment /bin folder. Adding {env_bin_path}."
     )
-    os.environ["PATH"] = f'{env_bin_path}:{os.environ["PATH"]}'
-    print(f'PATH is now {os.environ["PATH"]}')
+    os.environ["PATH"] = f"{env_bin_path}:{os.environ['PATH']}"
+    print(f"PATH is now {os.environ['PATH']}")
 
 # Check modkit on first import: does it run; does it have the right version
 try:
     result = subprocess.run(["modkit", "--version"], stdout=subprocess.PIPE, text=True)
     modkit_version = result.stdout
     if modkit_version.split()[1] == EXPECTED_MODKIT_VERSION:
-        print(f"modkit found with expected version {EXPECTED_MODKIT_VERSION}")
+        pass
+        # print(f"modkit found with expected version {EXPECTED_MODKIT_VERSION}")
     else:
         print(
             f"modkit found with unexpected version {modkit_version.split()[1]}. Versions other than {EXPECTED_MODKIT_VERSION} may exhibit unexpected behavior. It is recommended that you use v{EXPECTED_MODKIT_VERSION}"

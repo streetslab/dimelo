@@ -531,7 +531,7 @@ def verify_inputs(
         )
     elif correct_bases / total_bases < 0.35:
         raise ValueError(
-            f"First {NUM_READS_TO_CHECK} reads have anomalously low alignment quality: only {100*correct_bases/total_bases}% of bases align.\nPlease verify that {input_file.name} is actually aligned to {ref_genome.name}."
+            f"First {NUM_READS_TO_CHECK} reads have anomalously low alignment quality: only {100 * correct_bases / total_bases}% of bases align.\nPlease verify that {input_file.name} is actually aligned to {ref_genome.name}."
         )
     return
 
@@ -621,7 +621,7 @@ def check_bam_format(
                 print(
                     f"""
 WARNING: no modified appropriately-coded values found for {missing_bases} in the first {counter} reads. 
-Do you expect this file to contain these modifications? parse_bam is looking for {motifs} but for {missing_bases} found only found {[f'{base}+{mod_codes}' for base, mod_codes in mod_codes_found_dict.items()]}.
+Do you expect this file to contain these modifications? parse_bam is looking for {motifs} but for {missing_bases} found only found {[f"{base}+{mod_codes}" for base, mod_codes in mod_codes_found_dict.items()]}.
 
 Consider passing only the motifs and mod codes (e.g. m,h,a) that you expect to be present in your file. 
 You can use modkit adjust-mods --convert <CONVERT> <CONVERT> [OPTIONS] <IN_BAM> <OUT_BAM> to update or consolidate mod codes.
@@ -956,7 +956,7 @@ def read_by_base_txt_to_hdf5(
                 iterator = tqdm(
                     iterator,
                     total=num_lines,
-                    desc=f"Transferring {num_reads} from {input_txt.name} into {output_h5.name}, new size {old_size+num_reads}",
+                    desc=f"Transferring {num_reads} from {input_txt.name} into {output_h5.name}, new size {old_size + num_reads}",
                     bar_format="{bar}| {desc} {percentage:3.0f}% | {elapsed}<{remaining}",
                 )
 
