@@ -5,12 +5,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: chartboost/ruff-action@v3
+      - uses: chartboost/ruff-action@v1
+        with:
+          version: 0.6.8
   # TODO: Is it really necessary for these to be separate jobs? This seems redundant.
   ruff-format-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: chartboost/ruff-action@v3
+      - uses: chartboost/ruff-action@v1
         with:
+          version: 0.6.8
           args: 'format --check'
