@@ -1,320 +1,239 @@
-r"""
-=======================
-plot_enrichment module
-=======================
-.. currentmodule:: dimelo.plot_enrichment
-.. autosummary::
-    plot_enrichment
+from pathlib import Path
 
-plot_enrichment plots fraction of bases modified within regions of interest defined by bed file
+from matplotlib.axes import Axes
 
-"""
-
-import argparse
-import multiprocessing
-import os
-import sqlite3
-
-import matplotlib.pyplot as plt
-import pandas as pd
-import seaborn as sns
-
-from dimelo.parse_bam import parse_bam
-
-DEFAULT_THRESH_A = 129
-DEFAULT_THRESH_C = 129
-DEFAULT_COLOR_LIST = ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
+from . import load_processed, utils
 
 
 def plot_enrichment(
-    fileNames,
-    sampleNames,
-    bedFiles,
-    basemod,
-    outDir,
-    threshA=DEFAULT_THRESH_A,
-    threshC=DEFAULT_THRESH_C,
-    colors=DEFAULT_COLOR_LIST,
-    cores=None,
-):
+    mod_file_names: list[str | Path],
+    regions_list: list[str | Path | list[str | Path]],
+    motifs: list[str],
+    sample_names: list[str],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+    **kwargs,
+) -> Axes:
     """
-    fileNames
-        name(s) of bam file with Mm and Ml tags
-    sampleNames
-        name(s) of sample for output file name labelling; valid names contain [``a-zA-Z0-9_``].
-    bedFiles
-        specified windows for region(s) of interest
-    basemod
-        One of the following (only valid to look at one type of mod):
+    Plot enrichment comparison barplots using the given list of pre-processed input files.
 
-        * ``'A'`` - extract mA only
-        * ``'CG'`` - extract mCpG only
-    outDir
-        directory to output plot
-    threshA
-        threshold for calling mA; default 129
-    threshC
-        threshold for calling mCG; default 129
-    colors
-        color list in hex for overlay; default is ["#2D1E2F", "#A9E5BB", "#610345", "#559CAD", "#5E747F"]
-    cores
-        number of cores over which to parallelize; default is all available
+    Each input list is expected to be parallel and the same length. Each index represents one analysis condition across the lists.
+    Using the same file for multiple conditions requires adding the same file multiple times, in the appropriate indices.
 
-    **Example**
+    This is the most flexible method for enrichment plotting. For most use cases, consider
+    using one of the plot_enrichment.by_* methods.
 
-    >>> dm.plot_enrichment(["dimelo/test/data/mod_mappings_subset.bam", "dimelo/test/data/mod_mappings_subset.bam"], ["test1", "test2"], "dimelo/test/data/test.bed", "CG", "dimelo/dimelo_test", threshC=129)
-    >>> dm.plot_enrichment("dimelo/test/data/mod_mappings_subset.bam", ["test1", "test2"], ["dimelo/test/data/test.bed", "dimelo/test/data/test.bed"], "CG", "dimelo/dimelo_test", threshC=129)
+    Args:
+        mod_file_names: list of paths to modified base pileup data files
+        bed_file_names: list of paths to bed files specifying regions to extract
+        mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
+        sample_names: list of names to use for labeling bars in the output; x-axis labels
+        window_size: (currently disabled) window around center of region, +-window_size//2
+        single_strand: True means we only grab counts from reads from the same strand as
+            the region of interest, False means we always grab both strands within the regions
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
+        kwargs: other keyword parameters passed through to utils.bar_plot
 
-    **Return**
-
-    Barplot with overall fraction of bases modified within regions of interest specified by bedFile(s)
-
-    **Example Plots**
-
-        * :ref:`sphx_glr_auto_examples_enrichment_multi_bam_example.py`
-        * :ref:`sphx_glr_auto_examples_enrichment_multi_bed_example.py`
-
+    Returns:
+        Axes object containing the plot
     """
-    if not os.path.isdir(outDir):
-        os.makedirs(outDir)
+    if not utils.check_len_equal(mod_file_names, regions_list, motifs, sample_names):
+        raise ValueError("Unequal number of inputs")
 
-    # default number of cores is max available
-    cores_avail = multiprocessing.cpu_count()
-    if cores is None:
-        num_cores = cores_avail
-    else:
-        # if more than available cores is specified, process with available cores
-        if cores > cores_avail:
-            num_cores = cores_avail
-        else:
-            num_cores = cores
-
-    # A+CG is not valid; only valid to look at one type of mod
-    if (basemod != "A") and (basemod != "CG"):
-        raise RuntimeError("valid basemods are A or CG")
-
-    # if  single bam file rather than list is entered, convert to list
-    if type(fileNames) != list:
-        fileNames = [fileNames]
-    # if single sample name rather than list is entered, convert to list
-    if type(sampleNames) != list:
-        sampleNames = [sampleNames]
-    # if single bed file rather than list is entered, convert to list
-    if type(bedFiles) != list:
-        bedFiles = [bedFiles]
-
-    # extract counts and create barplots
-    # get average across all bases for regions defined in the bed file
-    columns = ["fileName", "bedFile", "sampleName", "fractionMethylated"]
-    data = []
-    if len(fileNames) > 1 or len(bedFiles) > 1:
-        if len(fileNames) > 1:
-            if len(bedFiles) > 1:
-                raise RuntimeError(
-                    "only a single region file can be used when analyzing multiple bam files"
-                )
-            for f, n in zip(fileNames, sampleNames):
-                values = get_counts(
-                    f,
-                    n,
-                    bedFiles[0],
-                    basemod,
-                    outDir,
-                    threshA,
-                    threshC,
-                    num_cores,
-                )
-                zipped = zip(columns, values)
-                a_dictionary = dict(zipped)
-                data.append(a_dictionary)
-        if len(bedFiles) > 1:
-            if len(fileNames) > 1:
-                raise RuntimeError(
-                    "only a single bam file can be used when analyzing multiple bed file regions"
-                )
-            for b, n in zip(bedFiles, sampleNames):
-                values = get_counts(
-                    fileNames[0],
-                    n,
-                    b,
-                    basemod,
-                    outDir,
-                    threshA,
-                    threshC,
-                    num_cores,
-                )
-                zipped = zip(columns, values)
-                a_dictionary = dict(zipped)
-                data.append(a_dictionary)
-
-    # allow for barplot for single file and region
-    if (len(fileNames) == 1) and (len(bedFiles) == 1):
-        values = get_counts(
-            fileNames[0],
-            sampleNames[0],
-            bedFiles[0],
-            basemod,
-            outDir,
-            threshA,
-            threshC,
-            num_cores,
-        )
-        zipped = zip(columns, values)
-        a_dictionary = dict(zipped)
-        data.append(a_dictionary)
-
-    df = pd.DataFrame(data)
-    # draw from aggregate to calculate modified/total in region of interest
-    if len(fileNames) == 1:
-        title = "sample_" + fileNames[0].split("/")[-1].replace(".bam", "")
-    if len(bedFiles) == 1:
-        title = "region_" + bedFiles[0].split("/")[-1].replace(".bed", "")
-    if (len(fileNames) == 1) and (len(bedFiles) == 1):
-        title = (
-            "sample_"
-            + fileNames[0].split("/")[-1].replace(".bam", "")
-            + "_region_"
-            + bedFiles[0].split("/")[-1].replace(".bed", "")
-        )
-    plot_barchart(df, basemod, outDir, colors, title)
-
-    db_paths = []
-    for f in fileNames:
-        db = outDir + "/" + f.split("/")[-1].replace(".bam", "") + ".db"
-        db_paths.append(db)
-
-    plot_path = f"{outDir}/{title}_{basemod}_enrichment_barplot.pdf"
-    str_out = f"Outputs\n_______\nDB file: {db_paths}\nenrichment barplot: {plot_path}"
-    print(str_out)
-
-
-def get_counts(
-    fileName,
-    sampleName,
-    bedFile,
-    basemod,
-    outDir,
-    threshA,
-    threshC,
-    num_cores,
-):
-    # parse_bam for files / regions
-    parse_bam(
-        fileName,
-        sampleName,
-        outDir,
-        bedFile,
-        basemod,
-        threshA=threshA,
-        threshC=threshC,
-        cores=num_cores,
+    mod_fractions = get_enrichments(
+        mod_file_names=mod_file_names,
+        regions_list=regions_list,
+        motifs=motifs,
+        window_size=window_size,
+        single_strand=single_strand,
+        quiet=quiet,
+        cores=cores,
     )
 
-    # get aggregate counts
-    aggregate_counts = pd.read_sql(
-        "SELECT * from methylationAggregate_" + sampleName,
-        sqlite3.connect(
-            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
-        ),
+    axes = make_enrichment_plot(
+        mod_fractions=mod_fractions,
+        sample_names=sample_names,
+        **kwargs,
     )
-    methylated_bases = aggregate_counts["methylated_bases"].sum()
-    total_bases = aggregate_counts["total_bases"].sum()
-    if total_bases == 0:
-        fractionMethylated = 0
-    else:
-        fractionMethylated = methylated_bases / total_bases
-
-    return [fileName, bedFile, sampleName, fractionMethylated]
+    return axes
 
 
-def plot_barchart(data, basemod, outDir, colors, title):
+def by_modification(
+    mod_file_name: str | Path,
+    regions: str | Path | list[str | Path],
+    motifs: list[str],
+    **kwargs,
+) -> Axes:
     """
-    x-axis: sample or region
-    y-axis: fraction methylated bases
+    Plot enrichment bar plots, holding modification file and regions constant, varying modification types
+
+    See plot_enrichment for details.
     """
-    fig, ax1 = plt.subplots()
-    plt.bar("sampleName", "fractionMethylated", data=data, color=colors)
-    print("\nData for barplot")
-    print("________________\n")
-    print(f"{data.sampleName}")
-    print(f"{data.fractionMethylated}")
-    print("\n")
-    sns.despine(fig)
-    plt.ylabel("fraction methylated bases")
-    plt.xlabel("")
-    plt.savefig(
-        outDir + "/" + title + "_" + basemod + "_enrichment_barplot.pdf",
-    )
-    plt.close()
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Plot DiMeLo methylation enrichment"
+    n_mods = len(motifs)
+    return plot_enrichment(
+        mod_file_names=[mod_file_name] * n_mods,
+        regions_list=[regions] * n_mods,
+        motifs=motifs,
+        sample_names=motifs,
+        **kwargs,
     )
 
-    # Required arguments
-    required_args = parser.add_argument_group("required arguments")
-    required_args.add_argument(
-        "-f", "--fileNames", required=True, nargs="+", help="bam file name(s)"
-    )
-    required_args.add_argument(
-        "-s",
-        "--sampleNames",
-        required=True,
-        nargs="+",
-        help="sample name(s) for output file labelling",
-    )
-    required_args.add_argument(
-        "-b",
-        "--bedFiles",
-        required=True,
-        nargs="+",
-        help="name of bed file(s) defining region(s) of interest",
-    )
-    required_args.add_argument(
-        "-m",
-        "--basemod",
-        required=True,
-        type=str,
-        choices=["A", "CG"],
-        help="which base modification to extract",
-    )
-    required_args.add_argument(
-        "-o", "--outDir", required=True, help="directory to output plot"
+
+"""
+TODO: Re-assignment issue:
+dimelo/plot_enrichment.py:115: error: Incompatible types in assignment (expression has type "list[str | Path | list[str | Path]]", variable has type "list[str] | None")  [assignment]
+dimelo/plot_enrichment.py:121: error: Argument "sample_names" to "plot_enrichment" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
+dimelo/plot_enrichment.py:141: error: Incompatible types in assignment (expression has type "list[str | Path]", variable has type "list[str] | None")  [assignment]
+dimelo/plot_enrichment.py:147: error: Argument "sample_names" to "plot_enrichment" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
+"""
+
+
+def by_regions(
+    mod_file_name: str | Path,
+    regions_list: list[str | Path | list[str | Path]],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot enrichment bar plots, holding modification file and modification types constant, varying regions
+
+    Note: Sample names default to the names of the bed files.
+
+    See plot_enrichment for details.
+    """
+    if sample_names is None:
+        sample_names = regions_list
+    n_beds = len(regions_list)
+    return plot_enrichment(
+        mod_file_names=[mod_file_name] * n_beds,
+        regions_list=regions_list,
+        motifs=[motif] * n_beds,
+        sample_names=sample_names,
+        **kwargs,
     )
 
-    # Plotting arguments
-    plotting_args = parser.add_argument_group("plotting options")
-    plotting_args.add_argument(
-        "--colors",
-        type=str,
-        nargs="+",
-        default=DEFAULT_COLOR_LIST,
-        help='color list in hex (e.g. "#BB4430") for overlay plots',
+
+def by_dataset(
+    mod_file_names: list[str | Path],
+    regions: str | Path | list[str | Path],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot enrichment bar plots, holding modification types and regions constant, varying modification files
+
+    Note: Sample names default to the names of the modification files.
+
+    See plot_enrichment for details.
+    """
+    if sample_names is None:
+        sample_names = mod_file_names
+    n_mod_files = len(mod_file_names)
+    return plot_enrichment(
+        mod_file_names=mod_file_names,
+        regions_list=[regions] * n_mod_files,
+        motifs=[motif] * n_mod_files,
+        sample_names=sample_names,
+        **kwargs,
     )
 
-    # Optional arguments
-    parser.add_argument(
-        "-A",
-        "--threshA",
-        type=int,
-        default=DEFAULT_THRESH_A,
-        help="threshold above which to call an A base methylated",
-    )
-    parser.add_argument(
-        "-C",
-        "--threshC",
-        type=int,
-        default=DEFAULT_THRESH_C,
-        help="threshold above which to call a C base methylated",
-    )
-    parser.add_argument(
-        "-p",
-        "--cores",
-        type=int,
-        help="number of cores over which to parallelize",
+
+def get_enrichments(
+    mod_file_names: list[str | Path],
+    regions_list: list[str | Path | list[str | Path]],
+    motifs: list[str],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+) -> list[float]:
+    """
+    Get the enrichment values, ready for plotting.
+
+    This helper function can be useful during plot prototyping, when repeatedly building plots from the same data.
+    Its outputs can be passed as the first argument to make_enrichment_plot().
+
+    TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
+    TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
+
+    Args:
+        mod_file_names: list of paths to modified base pileup data files
+        regions_list: list of paths to bed files specifying regions to extract
+        motifs: list of modifications to extract; expected to match mods available in the relevant mod_files
+        window_size: (currently disabled) window around center of region, +-window_size//2
+        single_strand: True means we only grab counts from reads from the same strand as
+            the region of interest, False means we always grab both strands within the regions
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing
+
+    Returns:
+        List of modified fraction values.
+    """
+    if not utils.check_len_equal(mod_file_names, regions_list, motifs):
+        raise ValueError("Unequal number of inputs")
+    # TODO: redefinition error; still need to figure out how to do this elegantly in a way mypy likes
+    # dimelo/plot_enrichment.py:45: error: Item "str" of "str | Path" has no attribute "suffix"  [union-attr]
+    mod_file_names = [Path(fn) for fn in mod_file_names]
+
+    mod_fractions = []
+    for mod_file, regions, motif in zip(mod_file_names, regions_list, motifs):
+        match mod_file.suffix:
+            case ".gz":
+                n_mod, n_total = load_processed.pileup_counts_from_bedmethyl(
+                    bedmethyl_file=mod_file,
+                    regions=regions,
+                    motif=motif,
+                    window_size=window_size,
+                    single_strand=single_strand,
+                    quiet=quiet,
+                    cores=cores,
+                )
+            case ".fake":
+                n_mod, n_total = load_processed.counts_from_fake(
+                    mod_file=mod_file, regions=regions, motif=motif
+                )
+            case _:
+                raise ValueError(f"Unsupported file type for {mod_file}")
+        try:
+            mod_fractions.append(n_mod / n_total)
+        except ZeroDivisionError:
+            mod_fractions.append(0)
+
+    return mod_fractions
+
+
+def make_enrichment_plot(
+    mod_fractions: list[float],
+    sample_names: list[str],
+    **kwargs,
+) -> Axes:
+    """
+    Plot the given enrichment values.
+
+    This helper function can be useful during plot prototyping, when repeatedly building plots from the same data.
+    The first argument should be the output of get_enrichments().
+
+    Args:
+        mod_fractions: list of modified fraction values.
+        sample_names: list of names to use for labeling bars in the output; x-axis labels
+        kwargs: other keyword parameters passed through to utils.bar_plot
+
+    Returns:
+        Axes object containing the plot
+    """
+    if not utils.check_len_equal(mod_fractions, sample_names):
+        raise ValueError("Unequal number of inputs")
+
+    axes = utils.bar_plot(
+        categories=sample_names,
+        values=mod_fractions,
+        y_label="fraction modified bases",
+        **kwargs,
     )
 
-    args = parser.parse_args()
-    plot_enrichment(**vars(args))
+    return axes

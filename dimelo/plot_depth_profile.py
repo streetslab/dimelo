@@ -6,12 +6,12 @@ from matplotlib.axes import Axes
 from . import load_processed, utils
 
 
-def plot_enrichment_profile(
+def plot_depth_profile(
     mod_file_names: list[str | Path],
     regions_list: list[str | Path | list[str | Path]],
     motifs: list[str],
     sample_names: list[str],
-    window_size: int,
+    window_size: int | None = None,
     single_strand: bool = False,
     regions_5to3prime: bool = False,
     smooth_window: int | None = None,
@@ -20,18 +20,13 @@ def plot_enrichment_profile(
     **kwargs,
 ) -> Axes:
     """
-    Plot enrichment profiles, overlaying the resulting traces on top of each other.
+    Plot depth profiles, overlaying the resulting traces on top of each other.
 
     Each input list is expected to be parallel and the same length. Each index represents one analysis condition across the lists.
     Using the same file for multiple conditions requires adding the same file multiple times, in the appropriate indices.
 
-    This is the most flexible method for enrichment profile plotting. For most use cases, consider
-    using one of the plot_enrichment_profile.by_* methods.
-
-    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
-    TODO: Should the more restrictive meta versions allow *args, or only **kwargs?
-    No, we want to be able to pass kwargs down to the line plotter, I think. Especially if we swap it out for one that takes more different standard args.
-    TODO: It's mildly confusing that there are required args that are only seen as *args or **kwargs in the more restrictive meta versions... But this is so much cleaner...
+    This is the most flexible method for depth profile plotting. For most use cases, consider
+    using one of the plot_depth_profile.by_* methods.
 
     Args:
         mod_file_names: list of paths to modified base data files
@@ -53,7 +48,7 @@ def plot_enrichment_profile(
     if not utils.check_len_equal(mod_file_names, regions_list, motifs, sample_names):
         raise ValueError("Unequal number of inputs")
 
-    trace_vectors = get_enrichment_profiles(
+    trace_vectors = get_depth_profiles(
         mod_file_names=mod_file_names,
         regions_list=regions_list,
         motifs=motifs,
@@ -65,7 +60,7 @@ def plot_enrichment_profile(
         cores=cores,
     )
 
-    axes = make_enrichment_profile_plot(
+    axes = make_depth_profile_plot(
         trace_vectors=trace_vectors, sample_names=sample_names, **kwargs
     )
     return axes
@@ -78,29 +73,18 @@ def by_modification(
     **kwargs,
 ) -> Axes:
     """
-    Plot enrichment profile, holding modification file and regions constant, varying modification types
+    Plot depth profile, holding modification file and regions constant, varying modification types
 
-    See plot_enrichment_profile for details.
+    See plot_depth_profile for details.
     """
     n_mods = len(motifs)
-    return plot_enrichment_profile(
+    return plot_depth_profile(
         mod_file_names=[mod_file_name] * n_mods,
         regions_list=[regions] * n_mods,
         motifs=motifs,
-        sample_names=motifs,
+        sample_names=[f"{motif} depth" for motif in motifs],
         **kwargs,
     )
-
-
-"""
-TODO: Re-assignment issue:
-dimelo/plot_enrichment_profile.py:142: error: Incompatible types in assignment (expression has type "list[str | Path | list[str | Path]]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment_profile.py:148: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-dimelo/plot_enrichment_profile.py:168: error: Incompatible types in assignment (expression has type "list[str | Path]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment_profile.py:174: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-
-If sample names is None we assign it non-None values, so it's not clear what the problem is to me. We could make an intermediate dummy variable I guess? If that is the complaint?
-"""
 
 
 def by_regions(
@@ -111,20 +95,20 @@ def by_regions(
     **kwargs,
 ) -> Axes:
     """
-    Plot enrichment profile, holding modification file and modification types constant, varying regions
+    Plot depth profile, holding modification file and modification types constant, varying regions
 
     Note: Sample names default to the names of the bed files.
 
-    See plot_enrichment_profile for details.
+    See plot_depth_profile for details.
     """
     if sample_names is None:
         sample_names = regions_list
     n_beds = len(regions_list)
-    return plot_enrichment_profile(
+    return plot_depth_profile(
         mod_file_names=[mod_file_name] * n_beds,
         regions_list=regions_list,
         motifs=[motif] * n_beds,
-        sample_names=sample_names,
+        sample_names=[f"{sample_name} depth" for sample_name in sample_names],
         **kwargs,
     )
 
@@ -137,25 +121,25 @@ def by_dataset(
     **kwargs,
 ) -> Axes:
     """
-    Plot enrichment profile, holding modification types and regions constant, varying modification files
+    Plot depth profile, holding modification types and regions constant, varying modification files
 
     Note: Sample names default to the names of the modification files.
 
-    See plot_enrichment_profile for details.
+    See plot_depth_profile for details.
     """
     if sample_names is None:
         sample_names = mod_file_names
     n_mod_files = len(mod_file_names)
-    return plot_enrichment_profile(
+    return plot_depth_profile(
         mod_file_names=mod_file_names,
         regions_list=[regions] * n_mod_files,
         motifs=[motif] * n_mod_files,
-        sample_names=sample_names,
+        sample_names=[f"{sample_name} depth" for sample_name in sample_names],
         **kwargs,
     )
 
 
-def get_enrichment_profiles(
+def get_depth_profiles(
     mod_file_names: list[str | Path],
     regions_list: list[str | Path | list[str | Path]],
     motifs: list[str],
@@ -167,14 +151,10 @@ def get_enrichment_profiles(
     cores: int | None = None,
 ) -> list[np.ndarray]:
     """
-    Get the enrichment profile traces, ready for plotting.
+    Get the depth profile traces, ready for plotting.
 
     This helper function can be useful during plot prototyping, when repeatedly building plots from the same data.
-    Its outputs can be passed as the first argument to make_enrichment_profile_plot().
-
-    TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
-    TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
-    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
+    Its outputs can be passed as the first argument to make_depth_profile_plot().
 
     Args:
         mod_file_names: list of paths to modified base data files
@@ -184,45 +164,35 @@ def get_enrichment_profiles(
         single_strand: True means we only grab counts from reads from the same strand as
             the region of interest, False means we always grab both strands within the regions
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping
+        smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
         quiet: disables progress bars
         cores: CPU cores across which to parallelize processing
-        smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
 
     Returns:
-        List of enrichment profile traces
+        List of depth profile traces
     """
     if not utils.check_len_equal(mod_file_names, regions_list, motifs):
         raise ValueError("Unequal number of inputs")
     # TODO: redefinition error; still need to figure out how to do this elegantly in a way mypy likes
-    # dimelo/plot_enrichment_profile.py:53: error: Item "str" of "str | Path" has no attribute "suffix"  [union-attr]
+    # dimelo/plot_depth_profile.py:53: error: Item "str" of "str | Path" has no attribute "suffix"  [union-attr]
     mod_file_names = [Path(fn) for fn in mod_file_names]
 
     trace_vectors = []
     for mod_file, regions, motif in zip(mod_file_names, regions_list, motifs):
         match mod_file.suffix:
             case ".gz":
-                modified_base_counts, valid_base_counts = (
-                    load_processed.pileup_vectors_from_bedmethyl(
-                        bedmethyl_file=mod_file,
-                        regions=regions,
-                        motif=motif,
-                        window_size=window_size,
-                        single_strand=single_strand,
-                        regions_5to3prime=regions_5to3prime,
-                        quiet=quiet,
-                        cores=cores,
-                    )
+                _, valid_base_counts = load_processed.pileup_vectors_from_bedmethyl(
+                    bedmethyl_file=mod_file,
+                    regions=regions,
+                    motif=motif,
+                    window_size=window_size,
+                    single_strand=single_strand,
+                    regions_5to3prime=regions_5to3prime,
+                    quiet=quiet,
+                    cores=cores,
                 )
-                # Default to nan so we can skip over unfilled values when plotting or doing a rolling average
-                nans_everywhere = np.full_like(
-                    modified_base_counts, np.nan, dtype=float
-                )
-                trace = np.divide(
-                    modified_base_counts,
-                    valid_base_counts,
-                    out=nans_everywhere,
-                    where=valid_base_counts != 0,
-                )
+                trace = valid_base_counts.astype(float)
+                trace[trace == 0] = np.nan
             case ".fake":
                 trace = load_processed.vector_from_fake(
                     mod_file=mod_file,
@@ -238,19 +208,19 @@ def get_enrichment_profiles(
     return trace_vectors
 
 
-def make_enrichment_profile_plot(
+def make_depth_profile_plot(
     trace_vectors: list[np.ndarray],
     sample_names: list[str],
     **kwargs,
 ) -> Axes:
     """
-    Plot the given enrichment profile traces.
+    Plot the given depth profile traces.
 
     This helper function can be useful during plot prototyping, when repeatedly building plots from the same data.
-    The first argument should be the output of get_enrichment_profiles().
+    The first argument should be the output of get_depth_profiles().
 
     Args:
-        trace_vectors: list of enrichment profile traces
+        trace_vectors: list of depth profile traces
         sample_names: list of names to use for labeling traces in the output; legend entries
         kwargs: other keyword parameters passed through to utils.line_plot
 
@@ -267,7 +237,7 @@ def make_enrichment_profile_plot(
         indep_name="pos",
         dep_vectors=trace_vectors,
         dep_names=sample_names,
-        y_label="fraction modified bases",
+        y_label="per strand reads\nwith motif and mod info",
         **kwargs,
     )
     return axes

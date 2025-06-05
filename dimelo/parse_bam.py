@@ -1,907 +1,1162 @@
-r"""
-=================
-parse_bam module
-=================
-.. currentmodule:: dimelo.parse_bam
-.. autosummary::
-    parse_bam
+import gzip
+import multiprocessing
+import os
+import subprocess
+from collections import defaultdict
+from pathlib import Path
 
-parse_bam allows you to summarize modification calls in a sql database
+import h5py
+import numpy as np
+import pysam
+from tqdm.auto import tqdm
 
+from . import run_modkit, utils
+
+"""
+This module contains code to convert .bam files into both human-readable and 
+indexed random-access pileup and read-wise processed outputs.
+"""
+
+"""
+Global variables
+"""
+
+# Specifies how many reads to check for the base modifications of interest.
+NUM_READS_TO_CHECK = 100
+
+"""
+User-facing parse operations: pileup and extract
 """
 
 
-import argparse
-import multiprocessing
-import os
-import sqlite3
-from typing import List, Tuple, Union
+def pileup(
+    input_file: str | Path,
+    output_name: str,
+    ref_genome: str | Path,
+    output_directory: str | Path | None = None,
+    regions: str | Path | list[str | Path] | None = None,
+    motifs: list = ["A,0", "CG,0"],
+    thresh: float | None = None,
+    window_size: int | None = None,
+    cores: int | None = None,
+    log: bool = False,
+    cleanup: bool = True,
+    quiet: bool = False,
+    override_checks: bool = False,
+) -> tuple[Path, Path]:
+    """
+    Takes a bam file containing long read sequencing data aligned
+    to a reference genome with modification calls for one or more base/context
+    and creates a pileup. A pileup contains genome-position-wise sums of both reads with
+    bases that could have the modification in question and of reads that are in
+    fact modified.
 
-import numpy as np
-import pandas as pd
-import pysam
-from joblib import Parallel, delayed
-from tqdm import tqdm
+    The current implementation of this method uses modkit, a tool built by
+    Nanopore Technologies, along with htslib tools compress and index the output
+    bedmethyl file. The modkit command for this function is `modkit pileup`.
 
-from dimelo.utils import clear_db, create_sql_table, execute_sql_command
+    https://github.com/nanoporetech/modkit/
 
-DEFAULT_BASEMOD = "A+CG"
-DEFAULT_THRESH_A = 129
-DEFAULT_THRESH_C = 129
-DEFAULT_WINDOW_SIZE = 1000
-
-
-class Region(object):
-    def __init__(self, region: Union[str, pd.Series]):
-        """Represents a region of genetic data.
-        Attributes:
-                - chromosome: string name of the chromosome to which the region applies
-                - begin: integer start position of region
-                - end: integer end position of region
-                - size: length of region
-                - string: string representation of region
-                - strand: string specifying forward or reverse strand; either "+" or "-" (default +)
-        """
-        self.chromosome = None
-        self.begin = None
-        self.end = None
-        self.size = None
-        self.string = None
-        self.strand = "+"
-
-        if isinstance(region, str):  # ":" in region:
-            # String of format "{CHROMOSOME}:{START}-{END}"
-            try:
-                self.chromosome, interval = region.replace(",", "").split(":")
-                try:
-                    # see if just integer chromosomes are used
-                    self.chromosome = int(self.chromosome)
-                except ValueError:
-                    pass
-                self.begin, self.end = [int(i) for i in interval.split("-")]
-            except ValueError:
-                raise TypeError(
-                    "Invalid region string. Example of accepted format: 'chr5:150200605-150423790'"
-                )
-            self.size = self.end - self.begin
-            self.string = f"{self.chromosome}_{self.begin}_{self.end}"
-        elif isinstance(region, pd.Series):
-            # Ordered sequence containing [CHROMOSOME, START, END] and optionally [STRAND], where STRAND can be either "+" or "-"
-            self.chromosome = region[0]
-            self.begin = region[1]
-            self.end = region[2]
-            self.size = self.end - self.begin
-            self.string = f"{self.chromosome}_{self.begin}_{self.end}"
-            # strand of motif to orient single molecules
-            # if not passed just keep as all +
-            if len(region) >= 4:
-                if (region[3] == "+") or (region[3] == "-"):
-                    self.strand = region[3]
-                # handle case of bed file with additional field that isn't strand +/-
-                else:
-                    self.strand = "+"
-            else:
-                self.strand = "+"
-        else:
-            raise TypeError(
-                "Unknown datatype passed for Region initialization"
-            )
-
-
-def make_db(
-    fileName: str,
-    sampleName: str,
-    outDir: str,
-    testMode: bool = False,
-    qc: bool = False,
-) -> Tuple[str, List[str]]:
-    """Sets up the necessary database tables.
+    The intermediate output file is a standard bedmethyl file containing all
+    specified motifs and mod codes. The compressed and indexed output file is
+    a .bed.gz file with an accompanying .bed.gz.tbi index.
 
     Args:
-            :param fileName: name of bam file with Mm and Ml tags
-            :param sampleName: name of sample for output SQL table name labelling
-            :param outDir: directory where SQL database is stored
-            :param testMode: turns on test mode; note that this will clear the database if it exists
-            :param qc: turns on qc mode
+        output_file: a string or Path object pointing to the location of a .bam file.
+            The file should follow at least v1.6 of the .bam file specifications,
+            found here: https://samtools.github.io/hts-specs/
+            https://samtools.github.io/hts-specs/SAMv1.pdf
+
+            The file needs to have modifications stored in the standard format,
+            with MM and ML tags (NOT mm and ml) and mod names m for 5mC and a
+            for 6mA.
+
+            Furthermore, the file must have a .bam.bai index file with the same name.
+            You can create an index if needed using samtools index.
+        output_name: a string that will be used to create an output folder
+            containing the intermediate and final outputs, along with any logs.
+        ref_genome: a string of Path objecting pointing to the .fasta file
+            for the reference genome to which the .bam file is aligned.
+        output_directory: optional str or Path pointing to an output directory.
+            If left as None, outputs will be stored in a new folder within the input
+            directory.
+        regions: TODO
+        motifs: a list of strings specifying which base modifications to look for.
+            The basemods are each specified as {sequence_motif},{position_of_modification}.
+            For example, a methylated adenine is specified as 'A,0' and CpG methylation
+            is specified as 'CG,0'.
+        thresh: float point number specifying the base modification probability threshold
+            used to delineate modificaton calls as True or False. When set to None, modkit
+            will select its own threshold automatically based on the data.
+        window_size: an integer specifying a window around the center of each bed_file
+            region. If set to None, the bed_file is used unmodified. If set to a non-zero
+            positive integer, the bed_file regions are replaced by new regions with that
+            window size in either direction of the center of the original bed_file regions.
+            This is used for e.g. extracting information from around known motifs or peaks.
+        cores: an integer specifying how many parallel cores modkit gets to use.
+            By default modkit will use all of the available cores on the machine.
+        log: a boolean specifying whether to output logs into the output folder.
+        cleanup: a boolean specifying whether to clean up to keep intermediate
+            outputs. The final processed files are not human-readable, whereas the intermediate
+            outputs are. However, intermediate outputs can also be quite large.
+        override_checks: convert errors from input checking into warnings if True
 
     Returns:
-            - path to the new database
-            - list of newly-created table names
-    """
-    if not os.path.exists(outDir):
-        os.mkdir(outDir)
+        Path object pointing to the compressed and indexed .bed.gz bedmethyl file, ready
+        for plotting functions.
+        Path object pointing to 'regions.processed.bed', the `--include-bed` file used for `modkit pileup`
 
-    DATABASE_NAME = (
-        outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
+    """
+    """
+    TODO: There are a lot of issues that are all related here:
+    dimelo/parse_bam.py:150: error: Incompatible types in assignment (expression has type "Path | None", variable has type "str | Path")  [assignment]
+    dimelo/parse_bam.py:169: error: Argument "input_file" to "prep_outputs" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    dimelo/parse_bam.py:256: error: Argument "input_file" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    dimelo/parse_bam.py:257: error: Argument "ref_genome" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    
+    I'm not sure of the most elegant way to fix it. Come back and address.
+    """
+
+    ## Verify and prepare inputs and outputs
+
+    input_file, ref_genome, output_directory = utils.sanitize_path_args(
+        input_file, ref_genome, output_directory
     )
 
-    if testMode:
-        clear_db(DATABASE_NAME)
+    try:
+        verify_inputs(input_file, motifs, ref_genome)
+    except Exception as e:
+        if override_checks:
+            if not quiet:
+                print(f"WARNING: {e}")
+        else:
+            raise Exception(
+                f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.'
+            ) from e
 
-    tables = []
-    # for qc report
-    if qc:
-        table_name = "reads_" + sampleName
-        cols = [
-            "name",
-            "chr",
-            "start",
-            "end",
-            "length",
-            "strand",
-            "mapq",
-            "ave_baseq",
-            "ave_alignq",
-        ]
-        dtypes = [
-            "TEXT",
-            "TEXT",
-            "INT",
-            "INT",
-            "INT",
-            "TEXT",
-            "INT",
-            "INT",
-            "INT",
-        ]
-        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
-        tables.append(table_name)
-    # for browser and enrichment plots
-    else:
-        table_name = "methylationByBase_" + sampleName
-        cols = ["id", "read_name", "chr", "pos", "prob", "mod"]
-        dtypes = ["TEXT", "TEXT", "TEXT", "INT", "INT", "TEXT"]
-        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
-        tables.append(table_name)
-
-        table_name = "methylationAggregate_" + sampleName
-        cols = ["id", "pos", "mod", "methylated_bases", "total_bases"]
-        dtypes = ["TEXT", "INT", "TEXT", "INT", "INT"]
-        create_sql_table(DATABASE_NAME, table_name, cols, dtypes)
-        tables.append(table_name)
-
-    return DATABASE_NAME, tables
-
-
-def parse_bam(
-    fileName: str,
-    sampleName: str,
-    outDir: str,
-    bedFile: str = None,
-    basemod: str = DEFAULT_BASEMOD,
-    center: bool = False,
-    windowSize: int = DEFAULT_WINDOW_SIZE,
-    region: str = None,
-    threshA: int = DEFAULT_THRESH_A,
-    threshC: int = DEFAULT_THRESH_C,
-    extractAllBases: bool = False,
-    cores: int = None,
-) -> None:
-    """
-    fileName
-        name of bam file with Mm and Ml tags
-    sampleName
-        name of sample for output SQL table name labelling. Valid names contain [``a-zA-Z0-9_``].
-    outDir
-        directory where SQL database is stored
-    bedFile
-        name of bed file that defines regions of interest over which to extract mod calls. The bed file either defines regions over which to extract mod calls OR defines regions (likely motifs) over which to center positions for mod calls and then parse_bam extracts mod calls over a window flanking that region defined in by ``windowSize``. Optional 4th column in bed file to specify strand of region of interest as ``+`` or ``-``. Default is to consider regions as all ``+``. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
-    basemod
-        One of the following:
-
-        * ``'A'`` - extract mA only
-        * ``'CG'`` - extract mCpG only
-        * ``'A+CG'`` - extract mA and mCpG
-    center
-        One of the following:
-
-        * ``'True'`` - report positions with respect to center of motif window (+/- windowSize); only valid with bed file input
-        * ``'False'`` - report positions in original reference space
-    windowSize
-        window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only used if center=True; still, only reads that span the regions defined in the bed file will be included; default is 1,000 bp
-    region
-        single region over which to extract base mods, rather than specifying many windows in bedFile; format is chr:start-end. NB. The ``bedFile`` and ``region`` parameters are mutually exclusive; specify one or the other.
-    threshA
-        threshold above which to call an A base methylated; default is 129
-    threshC
-        threshold above which to call a C base methylated; default is 129
-    extractAllBases
-        One of the following:
-
-        * ``'True'`` - Store all base mod calls, regardles of methylation probability threshold. Bases stored are those that can have a modification call (A, CG, or both depending on ``basemod`` parameter) and are sequenced bases, not all bases in the reference.
-        * ``'False'`` - Only modifications above specified threshold are stored
-    cores
-        number of cores over which to parallelize; default is all available
-
-    Valid argument combinations for ``bedFile``, ``center``, and ``windowSize`` are below. Regions of interest generally fall into two categories: small motifs at which to center analysis (use ``center`` = True) or full windows of interest (do not specify ``center`` or ``windowSize``).
-
-        * ``bedFile`` --> extract all modified bases in regions defined in bed file
-        * ``bedfile`` + ``center`` --> extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modificiations within default windowSize of 1kb
-        * ``bedfile`` + ``center`` + ``windowSize`` --> extract all modified bases in regions defined in bed file, report positions relative to region centers and extract base modifications within flanking +/- windowSize
-        * ``region`` --> extract all modified bases in single region
-
-    **Example**
-
-    For regions defined by ``bedFile``:
-
-    >>> dm.parse_bam("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/dimelo_test", bedFile="dimelo/test/data/test.bed", basemod="A+CG", center=True, windowSize=500, threshA=190, threshC=190, extractAllBases=False, cores=8)
-
-    For single region defined with ``region``:
-
-    >>> dm.parse_bam("dimelo/test/data/mod_mappings_subset.bam", "test", "dimelo/dimelo_test", region="chr1:2907273-2909473", basemod="A+CG", threshA=190, threshC=190, cores=8)
-
-    **Return**
-
-    Returns a SQL database in the specified output directory. Database can be converted into pandas dataframe with:
-
-    >>> fileName = "dimelo/test/data/mod_mappings_subset.bam"
-    >>> sampleName = "test"
-    >>> outDir = "dimelo/dimelo_test"
-    >>> all_data = pd.read_sql("SELECT * from methylationByBase_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
-    >>> aggregate_counts = pd.read_sql("SELECT * from methylationAggregate_" + sampleName, sqlite3.connect(outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"))
-
-    Each database contains these two tables with columns listed below:
-
-    1. methylationByBase_sampleName
-        * id(read_name:pos)
-        * read_name
-        * chr
-        * pos
-        * prob
-        * mod
-    2. methylationAggregate_sampleName
-        * id(pos:mod)
-        * pos
-        * mod
-        * methylated_bases
-        * total_bases
-
-    When running parse_bam with a region defined, a summary bed file is also produced to support visualizing aggregate data with any genome browser tool. The columns of this bed file are chr, start, end, methylated_bases, total_bases.
-
-    For example, to take a summary output bed and create a file with fraction of modified bases with a window size of 100 bp for visualization with the WashU browser, you could run the below commands in terminal:
-
-        * ``bedtools makewindows -g ref_genome.chromsizes.txt -w 100 > ref_genome_windows.100.bp.bed``
-        * ``bedtools map -a ref_genome_windows.100.bp.bed -b outDir/fileName_sampleName_chr_start_end_A.bed -c 4,5 -o sum,sum -null 0 | awk -v "OFS=\\t" '{if($5>0){print $1,$2,$3,$4/$5}else{print $1,$2,$3,$5}}' > outDir/fileName_sampleName_chr_start_end_A.100.bed``
-        * ``bgzip outDir/fileName_sampleName_chr_start_end_A.100.bed``
-        * ``tabix -f -p bed outDir/fileName_sampleName_chr_start_end_A.100.bed.gz``
-
-    """
-    # Ensure exactly one of bedFile and region are specified
-    if sum([arg is None for arg in (bedFile, region)]) != 1:
-        raise RuntimeError(
-            "Exactly one of the mutually exclusive arguments 'bedFile' or 'region' must be specified."
+    output_path, (output_bedmethyl, output_bedmethyl_sorted, output_pileup_path, _) = (
+        prep_output_directory(
+            output_directory=output_directory,
+            output_name=output_name,
+            input_file=input_file,
+            output_file_names=[
+                "pileup.bed",
+                "pileup.sorted.bed",
+                "pileup.sorted.bed.gz",
+                "pileup.sorted.bed.gz.tbi",
+            ],
         )
-    # The argument center is incompatible with region
-    if region is not None:
-        if center:
-            raise RuntimeError(
-                "Argument 'center' cannot be given alongside 'region'."
-            )
+    )
 
-    if not os.path.isdir(outDir):
-        os.makedirs(outDir)
+    ## Build up the command list to be sent to modkit, then run modkit
 
-    make_db(fileName, sampleName, outDir)
+    # TODO: This is mildly confusing. I get what it's doing, but it's hard to follow / names are bad. Also, why is it used in cleanup here, but not in extract?
+    region_command_list, processed_regions_path = create_region_command_list(
+        output_path,
+        regions,
+        window_size,
+    )
 
-    if bedFile is not None:
-        # make a region object for each row of bedFile
-        bed = pd.read_csv(bedFile, sep="\t", header=None)
-        windows = []
-        for _, row in bed.iterrows():
-            windows.append(Region(row))
-
-    if region is not None:
-        windows = [Region(region)]
-
-    # Configure progress reporting
-    if len(windows) == 1:
-        show_read_progress = True
+    motif_command_list = []
+    if len(motifs) > 0:
+        for motif in motifs:
+            parsed_motif = utils.ParsedMotif(motif)
+            motif_command_present = False
+            for a, b in zip(motif_command_list, motif_command_list[1:]):
+                if a == parsed_motif.motif_seq and b == str(parsed_motif.modified_pos):
+                    # This motif is already going to be processed; we want to skip adding it a second
+                    # time because modkit does not like duplicate motifs.
+                    # It's actually ok if it's a different mod code in the two cases because the pileup
+                    # operation, under the hood, keeps all mod codes. Filtering is only done when loading.
+                    motif_command_present = True
+                    break
+            if not motif_command_present:
+                motif_command_list.append("--motif")
+                motif_command_list.append(parsed_motif.motif_seq)
+                motif_command_list.append(str(parsed_motif.modified_pos))
     else:
-        show_read_progress = False
-        # Enable top-level progress bar for multi-window processing
-        windows = tqdm(windows, desc="Parsing windows", unit="windows")
+        raise ValueError("Error: no motifs specified. Nothing to process.")
 
-    # default number of cores is max available
+    if log:
+        if not quiet:
+            print("Logging to ", Path(output_path) / "pileup-log")
+        log_command_list = ["--log-filepath", Path(output_path) / "pileup-log"]
+    else:
+        log_command_list = []
+
+    # TODO: This should be a method, like create_region_specifier, or just combined into a prep method for the start...
     cores_avail = multiprocessing.cpu_count()
     if cores is None:
-        num_cores = cores_avail
-    else:
-        # if more than available cores is specified, process with available cores
-        if cores > cores_avail:
-            num_cores = cores_avail
-        else:
-            num_cores = cores
-
-    batchSize = 100
-
-    Parallel(n_jobs=num_cores)(
-        delayed(parse_reads_window)(
-            fileName,
-            sampleName,
-            basemod,
-            windowSize,
-            window,
-            center,
-            threshA,
-            threshC,
-            batchSize,
-            outDir,
-            extractAllBases,
-            showReadProgress=show_read_progress,
-        )
-        for window in windows
-    )
-
-    # create summary bed files
-    if region is not None:
-        if "A" in basemod:
-            make_bed_file_output(fileName, sampleName, outDir, region, "A")
-        if "C" in basemod:
-            make_bed_file_output(fileName, sampleName, outDir, region, "C")
-
-    # output all files created to std out
-    f = fileName.split("/")[-1].replace(".bam", "")
-    out_path = f"{outDir}/{f}.db"
-    if region is None:
-        str_out = f"Outputs\n_______\nDB file: {out_path}"
-    else:
-        bed_paths = []
-        if "A" in basemod:
-            bed_path = (
-                f"{outDir}/{f}_{sampleName}_{Region(region).string}_A.bed"
+        if not quiet:
+            print(
+                f"No specified number of cores requested. {cores_avail} available on machine, allocating all."
             )
-            bed_paths.append(bed_path)
-        if "C" in basemod:
-            bed_path = (
-                f"{outDir}/{f}_{sampleName}_{Region(region).string}_CG.bed"
+        cores_command_list = ["--threads", str(cores_avail)]
+    elif cores > cores_avail:
+        if not quiet:
+            print(
+                f"Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}"
             )
-            bed_paths.append(bed_path)
-        str_out = (
-            f"Outputs\n_______\nDB file: {out_path}\nBED file: {bed_paths}"
+        cores_command_list = ["--threads", str(cores_avail)]
+    else:
+        if not quiet:
+            print(f"Allocating requested {cores} cores.")
+        cores_command_list = ["--threads", str(cores)]
+
+    # TODO: This is SO SO SO similar to extract; just the ValueError vs. printing. I think this can be resolved
+    mod_thresh_command_list: list[str] = []
+    if thresh is None:
+        if not quiet:
+            print(
+                "No base modification threshold provided. Using adaptive threshold selection via modkit."
+            )
+    else:
+        adjusted_threshold = utils.adjust_threshold(thresh, quiet=quiet)
+        if adjusted_threshold < 0.5 and not quiet:
+            print(
+                f"WARNING: thresh {thresh} is very low and may lead to unexpected behavior. Typical thresholds are at least 0.5 or 128."
+            )
+        for motif in motifs:
+            parsed_motif = utils.ParsedMotif(motif)
+            for mod_code in parsed_motif.mod_codes:
+                mod_thresh_command_list = mod_thresh_command_list + [
+                    "--mod-thresholds",
+                    f"{mod_code}:{adjusted_threshold}",
+                ]
+
+    ref_genome_command_list = ["--ref", ref_genome]
+    filter_command_list = ["--filter-threshold", "0"]
+
+    pileup_command_list = (
+        ["modkit", "pileup", input_file, output_bedmethyl]
+        + region_command_list
+        + motif_command_list
+        + ref_genome_command_list
+        + filter_command_list
+        + mod_thresh_command_list
+        + cores_command_list
+        + log_command_list
+    )
+
+    # TODO: Do we need to store and use the output from this method? Previously was being printed immediately afterward.
+    _ = run_modkit.run_with_progress_bars(
+        command_list=pileup_command_list,
+        input_file=input_file,
+        ref_genome=ref_genome,
+        motifs=motifs,
+        load_fasta_regex=r"\s+\[.*?\]\s+(\d+)\s+Reading",
+        find_motifs_regex=r"\s+(\d+)/(\d+)\s+finding\s+([A-Za-z0-9,]+)\s+motifs",
+        contigs_progress_regex=r"\s+(\d+)/(\d+)\s+contigs",
+        single_contig_regex=r"\s+(\d+)/(\d+)\s+processing\s+([\w]+)[^\w]",
+        buffer_size=50,
+        progress_granularity=25,
+        done_str="Done",
+        err_str="Error",
+        expect_done=True,
+        quiet=quiet,
+    )
+    # print(done_string)
+
+    ## Sort, compress, and index the output bedmethyl file
+
+    with open(output_bedmethyl_sorted, "w") as sorted_file:
+        subprocess.run(
+            ["sort", "-k1,1", "-k2,2n", output_bedmethyl], stdout=sorted_file
         )
-    print(str_out)
+    pysam.tabix_compress(output_bedmethyl_sorted, output_pileup_path, force=True)
+    pysam.tabix_index(str(output_pileup_path), preset="bed", force=True)
+
+    # TODO: Can cleanup be consolidated?
+    if cleanup:
+        if output_bedmethyl.exists():
+            output_bedmethyl.unlink()
+        if output_bedmethyl_sorted.exists():
+            output_bedmethyl_sorted.unlink()
+
+    return output_pileup_path, processed_regions_path
 
 
-def make_bed_file_output(fileName, sampleName, outDir, region, mod):
+def extract(
+    input_file: str | Path,
+    output_name: str,
+    ref_genome: str | Path,
+    output_directory: str | Path | None = None,
+    regions: str | Path | list[str | Path] | None = None,
+    motifs: list = ["A,0", "CG,0", "GCH,1"],
+    thresh: float | None = None,
+    window_size: int | None = None,
+    cores: int | None = None,
+    log: bool = False,
+    cleanup: bool = True,
+    quiet: bool = False,
+    override_checks: bool = False,
+) -> tuple[Path, Path]:
     """
-    Make output bed file that can be used to visualize aggregate with other genome browsers
-    """
-    r = Region(region)
-    f = fileName.split("/")[-1].replace(".bam", "")
-    out_path = f"{outDir}/{f}.db"
-    aggregate_counts_all = pd.read_sql(
-        "SELECT * from methylationAggregate_" + sampleName,
-        sqlite3.connect(out_path),
-    )
-    aggregate_counts_mod = aggregate_counts_all[
-        aggregate_counts_all["mod"].str.contains(mod)
-    ].copy()
-    aggregate_counts_mod["chr"] = r.chromosome
-    aggregate_counts_mod["end"] = aggregate_counts_mod["pos"] + 1
-    # columns are: id(pos:mod), pos, mod, methylated_bases, total_bases
-    dictionary_agg = {
-        "chr": aggregate_counts_mod["chr"],
-        "start": aggregate_counts_mod["pos"],
-        "end": aggregate_counts_mod["end"],
-        "methylated": aggregate_counts_mod["methylated_bases"],
-        "total": aggregate_counts_mod["total_bases"],
-    }
-    bed_agg = pd.DataFrame(dictionary_agg)
-    bed_agg.sort_values(by="start", ascending=True, inplace=True)
-    if "A" in mod:
-        mod_name = "A"
-    if "C" in mod:
-        mod_name = "CG"
-    bed_agg.to_csv(
-        f"{outDir}/{f}_{sampleName}_{r.string}_{mod_name}.bed",
-        sep="\t",
-        header=False,
-        index=False,
-    )
+    Takes a bam file containing long read sequencing data aligned
+    to a reference genome with modification calls for one or more bases/contexts
+    and pulls out data from each individual read.
 
+    The current implementation of this method uses modkit, a tool built by
+    Nanopore Technologies, along with h5py to build the final output file. The
+    modkit command in this function is `modkit extract`.
 
-def parse_reads_window(
-    fileName: str,
-    sampleName: str,
-    basemod: str,
-    windowSize: int,
-    window: Region,
-    center: bool,
-    threshA: int,
-    threshC: int,
-    batchSize: int,
-    outDir: str,
-    extractAllBases: bool,
-    showReadProgress: bool = False,
-) -> None:
-    """Parse all reads in window and put data into methylationByBase table.
+    https://github.com/nanoporetech/modkit/
+
+    The intermediate outputs are plain text files containing a list of all base modifications,
+    with a file for each motif. The compressed and indexed output contains vectors of valid
+    and modified positions within each read.
 
     Args:
-            :param bam: read in bam file with Mm and Ml tags
-            :param fileName: name of bam file
-            :param sampleName: name of sample for output file name labelling
-            :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
-            :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only applicable for center=True
-            :param window: single window
-            :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
-            :param threshA: threshold above which to call an A base methylated
-            :param threshC: threshold above which to call a C base methylated
-            :param showReadProgress: when true, display progress for read processing
+        output_file: a string or Path object pointing to the location of a .bam file.
+            The file should follow at least v1.6 of the .bam file specifications,
+            found here: https://samtools.github.io/hts-specs/
+            https://samtools.github.io/hts-specs/SAMv1.pdf
+
+            The file needs to have modifications stored in the standard format,
+            with MM and ML tags (NOT mm and ml) and mod names m for 5mC and a
+            for 6mA.
+
+            Furthermore, the file must have a .bam.bai index file with the same name.
+            You can create an index if needed using samtools index.
+        output_name: a string that will be used to create an output folder
+            containing the intermediate and final outputs, along with any logs.
+        ref_genome: a string of Path objecting pointing to the .fasta file
+            for the reference genome to which the .bam file is aligned.
+        output_directory: optional str or Path pointing to an output directory.
+            If left as None, outputs will be stored in a new folder within the input
+            directory.
+        regions: TODO
+        motifs: a list of strings specifying which base modifications to look for.
+            The basemods are each specified as {sequence_motif},{position_of_modification}.
+            For example, a methylated adenine is specified as 'A,0' and CpG methylation
+            is specified as 'CG,0'.
+        thresh: float point number specifying the base modification probability threshold
+            used to delineate modificaton calls as True or False. When set to None, modkit
+            will select its own threshold automatically based on the data.
+        window_size: an integer specifying a window around the center of each bed_file
+            region. If set to None, the bed_file is used unmodified. If set to a non-zero
+            positive integer, the bed_file regions are replaced by new regions with that
+            window size in either direction of the center of the original bed_file regions.
+            This is used for e.g. extracting information from around known motifs or peaks.
+        cores: an integer specifying how many parallel cores modkit gets to use.
+            By default modkit will use all of the available cores on the machine.
+        log: a boolean specifying whether to output logs into the output folder.
+        cleanup: a boolean specifying whether to clean up to keep intermediate
+            outputs. The final processed files are not human-readable, whereas the intermediate
+            outputs are. However, intermediate outputs can also be quite large.
+        override_checks: convert errors from input checking into warnings if True
+
+    Returns:
+        Path object pointing to the compressed and indexed output .h5 file, ready for
+        plotting functions.
+        Path object pointing to 'regions.processed.bed', the `--include-bed` file used for `modkit extract`
+
     """
-    bam = pysam.AlignmentFile(fileName, "rb")
-    data = []
-    if showReadProgress:
-        total_reads = bam.count(
-            reference=window.chromosome, start=window.begin, end=window.end
-        )
-        bam.reset()
-    reads = bam.fetch(
-        reference=window.chromosome, start=window.begin, end=window.end
+    """
+    TODO: There are a lot of issues that are all related here:
+    dimelo/parse_bam.py:374: error: Incompatible types in assignment (expression has type "Path | None", variable has type "str | Path")  [assignment]
+    dimelo/parse_bam.py:393: error: Argument "input_file" to "prep_outputs" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    dimelo/parse_bam.py:480: error: Argument "input_file" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    dimelo/parse_bam.py:481: error: Argument "ref_genome" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
+    
+    I'm not sure of the most elegant way to fix it. Come back and address.
+    """
+
+    ## Verify and prepare inputs and outputs
+
+    input_file, ref_genome, output_directory = utils.sanitize_path_args(
+        input_file, ref_genome, output_directory
     )
-    if showReadProgress:
-        reads = tqdm(
-            reads, desc="Processing reads", unit="reads", total=total_reads
+
+    try:
+        verify_inputs(input_file, motifs, ref_genome)
+    except Exception as e:
+        if override_checks:
+            if not quiet:
+                print(f"WARNING: {e}")
+        else:
+            raise Exception(
+                f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.'
+            ) from e
+
+    # TODO: Add intermediate mod-specific .txt files?
+    output_path, (output_reads_path,) = prep_output_directory(
+        output_directory=output_directory,
+        output_name=output_name,
+        input_file=input_file,
+        output_file_names=["reads.combined_basemods.h5"],
+    )
+
+    ## Build up the command lists shared across motifs to be sent to modkit
+
+    region_command_list, processed_regions_path = create_region_command_list(
+        output_path,
+        regions,
+        window_size,
+    )
+
+    cores_avail = multiprocessing.cpu_count()
+    if cores is None:
+        if not quiet:
+            print(
+                f"No specified number of cores requested. {cores_avail} available on machine, allocating all."
+            )
+        cores_command_list = ["--threads", str(cores_avail)]
+    elif cores > cores_avail:
+        if not quiet:
+            print(
+                f"Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}"
+            )
+        cores_command_list = ["--threads", str(cores_avail)]
+    else:
+        if not quiet:
+            print(f"Allocating requested {cores} cores.")
+        cores_command_list = ["--threads", str(cores)]
+
+    mod_thresh_command_list: list[str] = []
+    if thresh is None:
+        if not quiet:
+            print(
+                "No valid base modification threshold provided. Raw probs will be saved."
+            )
+        adjusted_threshold = None
+    else:
+        adjusted_threshold = utils.adjust_threshold(thresh, quiet=quiet)
+        if adjusted_threshold < 0.5 and not quiet:
+            print(
+                f"WARNING: thresh {thresh} is very low and may lead to unexpected behavior. Typical thresholds are at least 0.5 or 128."
+            )
+        for motif in motifs:
+            parsed_motif = utils.ParsedMotif(motif)
+            for mod_code in parsed_motif.mod_codes:
+                mod_thresh_command_list = mod_thresh_command_list + [
+                    "--mod-thresholds",
+                    f"{mod_code}:{adjusted_threshold}",
+                ]
+
+    if log:
+        if not quiet:
+            print("logging to ", Path(output_path) / "extract-log")
+        log_command_list = ["--log-filepath", Path(output_path) / "extract-log"]
+    else:
+        log_command_list = []
+
+    ref_genome_command_list = ["--ref", ref_genome]
+    filter_command_list = ["--filter-threshold", "0"]
+
+    # Run modkit once for each motif, because the output .txt can be ambiguous otherwise
+    # There is no column currently to specify the motif (e.g. CG,0 vs GCH,1), only canonical
+    # base (e.g. C) and mod code (e.g. m)
+    # There is a 5mer context so we could technically manually motif check if we want to.
+    # Our current design paradigm is to leave all such operations to modkit, hence the loop below.
+    for motif in motifs:
+        # Here we prepare the motif-specific commands and delete any old .txt file because
+        # modkit will crash otherwise
+        motif_command_list = []
+        parsed_motif = utils.ParsedMotif(motif)
+        motif_command_list.append("--motif")
+        motif_command_list.append(parsed_motif.motif_seq)
+        motif_command_list.append(str(parsed_motif.modified_pos))
+
+        output_txt = Path(output_path) / (f"reads.{motif}.txt")
+
+        if os.path.exists(output_txt):
+            os.remove(output_txt)
+
+        extract_command_list = (
+            ["modkit", "extract", input_file, output_txt]
+            + region_command_list
+            + motif_command_list
+            + cores_command_list
+            + log_command_list
+            + ref_genome_command_list
+            + filter_command_list
         )
-    for read in reads:
-        [
-            (mod, positions, probs),
-            (mod2, positions2, probs2),
-        ] = get_modified_reference_positions(
-            read,
-            basemod,
-            window,
-            center,
-            threshA,
-            threshC,
-            windowSize,
-            fileName,
-            sampleName,
-            outDir,
-            extractAllBases,
+
+        # TODO: Do we need to store and use the output from this method? Previously was being printed immediately afterward.
+        # This is something the user might want to see - it's the end-of-process message for modkit, says e.g. how many reads were processed and stuff
+        _ = run_modkit.run_with_progress_bars(
+            command_list=extract_command_list,
+            input_file=input_file,
+            ref_genome=ref_genome,
+            motifs=[motif],
+            load_fasta_regex=r"\s+\[.*?\]\s+(\d+)\s+parsing FASTA",
+            find_motifs_regex=r"\s+(\d+)/(\d+)\s+([\w]+)\s+searched",
+            contigs_progress_regex=r"\s+(\d+)/(\d+)\s+contigs\s+[^s]",
+            single_contig_regex=r"\s+(\d+)/(\d+)\s+processing\s+([\w]+)[^\w]",
+            buffer_size=100,
+            progress_granularity=50,
+            done_str="Done",
+            err_str="Error",
+            expect_done=False,
+            quiet=quiet,
         )
-        # Generate rows for methylationByBase database update
-        for pos, prob in zip(positions, probs):
-            if pos is not None:
-                if (center is True and abs(pos) <= windowSize) or (
-                    center is False and pos > window.begin and pos < window.end
-                ):  # to decrease memory, only store bases within the window
-                    d = (
-                        read.query_name + ":" + str(pos),
-                        read.query_name,
-                        window.chromosome,
-                        int(pos),
-                        int(prob),
-                        mod,
-                    )
-                    data.append(d)
-        for pos, prob in zip(positions2, probs2):
-            if pos is not None:
-                if (center is True and abs(pos) <= windowSize) or (
-                    center is False and pos > window.begin and pos < window.end
-                ):  # to decrease memory, only store bases within the window
-                    d = (
-                        read.query_name + ":" + str(pos),
-                        read.query_name,
-                        window.chromosome,
-                        int(pos),
-                        int(prob),
-                        mod2,
-                    )
-                    data.append(d)
-    if data:
-        # data is list of tuples associated with given read
-        # or ignore because a read may overlap multiple windows
-        DATABASE_NAME = (
-            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
+        # print(done_string)
+
+        # Create the compressed and indexed output
+        read_by_base_txt_to_hdf5(
+            output_txt,
+            output_reads_path,
+            motif,
+            adjusted_threshold,
+            quiet=quiet,
         )
-        table_name = "methylationByBase_" + sampleName
-        command = (
-            """INSERT OR IGNORE INTO """
-            + table_name
-            + """ VALUES(?,?,?,?,?,?);"""
-        )
-        connection = sqlite3.connect(DATABASE_NAME, timeout=60.0)
-        execute_sql_command(command, DATABASE_NAME, data, connection)
-        connection.close()
+        # Delete intermediate file
+        if cleanup:
+            os.remove(output_txt)
+
+    return output_reads_path, processed_regions_path
 
 
-def get_modified_reference_positions(
-    read: pysam.AlignedSegment,
-    basemod: str,
-    window: Region,
-    center: bool,
-    threshA: int,
-    threshC: int,
-    windowSize: int,
-    fileName: str,
-    sampleName: str,
-    outDir: str,
-    extractAllBases: bool,
+"""
+Helper functions to facilitate bam parse operations
+"""
+
+
+def verify_inputs(
+    input_file,
+    motifs,
+    ref_genome,
 ):
-    """Extract mA and mC pos & prob information for the read
-    Args:
-            :param read: single read from bam file
-            :param basemod: which basemods, currently supported options are 'A', 'CG', 'A+CG'
-            :param window: window from bed file
-            :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
-            :param threshA: threshold above which to call an A base methylated
-            :param threshC: threshold above which to call a C base methylated
-            :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only applicable for center=True
-    Return:
-        For each mod, you get the positions where those mods are and the probabilities for those mods (parallel vectors)
     """
-    if (read.has_tag("Mm")) & (";" in read.get_tag("Mm")):
-        mod1 = read.get_tag("Mm").split(";")[0].split(",", 1)[0]
-        mod2 = read.get_tag("Mm").split(";")[1].split(",", 1)[0]
-        base = basemod[0]  # this will be A, C, or A
-        if basemod == "A+CG":
-            base2 = basemod[2]  # this will be C for A+CG case
-        else:  # in the case of a single mod will just be checking that single base
-            base2 = base
-        if base in mod1 or base2 in mod1:
-            mod1_return = get_mod_reference_positions_by_mod(
-                read,
-                mod1,
-                0,
-                window,
-                center,
-                threshA,
-                threshC,
-                windowSize,
-                fileName,
-                sampleName,
-                outDir,
-                extractAllBases,
-            )
-        else:
-            mod1_return = (None, [None], [None])
-        if base in mod2 or base2 in mod2:
-            mod2_return = get_mod_reference_positions_by_mod(
-                read,
-                mod2,
-                1,
-                window,
-                center,
-                threshA,
-                threshC,
-                windowSize,
-                fileName,
-                sampleName,
-                outDir,
-                extractAllBases,
-            )
-            return (mod1_return, mod2_return)
-        else:
-            return (mod1_return, (None, [None], [None]))
-    else:
-        return ((None, [None], [None]), (None, [None], [None]))
+    Checks .bam format and alignment quality (to verify that you are using the right reference genome)
+
+    The correct-bases-called fraction, if under 35%, means the user almost definitely passed the wrong reference genome.
+    """
+    check_bam_format(input_file, motifs)
+    correct_bases, total_bases = get_alignment_quality(input_file, ref_genome)
+    if total_bases == 0:
+        raise ValueError(
+            f"First {NUM_READS_TO_CHECK} reads are empty. Please verify your {input_file.name} contents."
+        )
+    elif correct_bases / total_bases < 0.35:
+        raise ValueError(
+            f"First {NUM_READS_TO_CHECK} reads have anomalously low alignment quality: only {100 * correct_bases / total_bases}% of bases align.\nPlease verify that {input_file.name} is actually aligned to {ref_genome.name}."
+        )
+    return
 
 
-def get_mod_reference_positions_by_mod(
-    read: pysam.AlignedSegment,
-    basemod: str,
-    index: int,
-    window: Region,
-    center: bool,
-    threshA: int,
-    threshC: int,
-    windowSize: int,
-    fileName: str,
-    sampleName: str,
-    outDir: str,
-    extractAllBases: bool,
+def check_bam_format(
+    bam_file: str | Path,
+    motifs: list = ["A,0", "CG,0"],
 ):
-    """Get positions and probabilities of modified bases for a single read
-    Args:
-            :param read: one read in bam file
-            :param mod: which basemod, reported as base+x/y/m
-            :param window: window from bed file
-            :param center: report positions with respect to reference center (+/- window size) if True or in original reference space if False
-            :param threshA: threshold above which to call an A base methylated
-            :param threshC: threshold above which to call a C base methylated
-            :param windowSize: window size around center point of feature of interest to plot (+/-); only mods within this window are stored; only applicable for center=True
-            :param index: 0 or 1
     """
-    modsPresent = True
-    base, mod = basemod.split("+")
-    num_base = len(read.get_tag("Mm").split(";")[index].split(",")) - 1
-    # get base_index
-    base_index = np.array(
-        [
-            i
-            for i, letter in enumerate(read.get_forward_sequence())
-            if letter == base
-        ]
-    )
-    # get reference positons
-    refpos = np.array(read.get_reference_positions(full_length=True))
-    if read.is_reverse:
-        refpos = np.flipud(refpos)
-    modified_bases = []
-    if num_base == 0:
-        modsPresent = False
-    if modsPresent:
-        deltas = [
-            int(i) for i in read.get_tag("Mm").split(";")[index].split(",")[1:]
-        ]
-        Ml = read.get_tag("Ml")
-        if index == 0:
-            probabilities = np.array(Ml[0:num_base], dtype=int)
-        if index == 1:
-            probabilities = np.array(Ml[0 - num_base :], dtype=int)
-        # determine locations of the modified bases, where index_adj is the adjustment of the base_index
-        # based on the cumulative sum of the deltas
-        locations = np.cumsum(deltas)
-        # loop through locations and increment index_adj by the difference between the next location and current one + 1
-        # if the difference is zero, therefore, the index adjustment just gets incremented by one because no base should be skipped
-        index_adj = []
-        index_adj.append(locations[0])
-        i = 0
-        for i in range(len(locations) - 1):
-            diff = locations[i + 1] - locations[i]
-            index_adj.append(index_adj[i] + diff + 1)
-        # get the indices of the modified bases
-        modified_bases = base_index[index_adj]
+    Check whether a .bam file is formatted appropriately for modkit.
+    * bam file has a .bai index
+    * modification tags named MM/ML (NOT Mm/Ml)
+    * tags contain ambiguity specification (? vs.)
+    * bam file contains the expected modifications (motif, mod code)
 
-    # extract CpG sites only rather than all mC
-    keep = []
-    prob_keep = []
-    all_bases_index = []
-    probs = []
-    i = 0
-    seq = read.get_forward_sequence()
-    # deal with None for refpos from soft clipped / unaligned bases
-    if "C" in basemod:
-        for b in base_index:
-            if (
-                b < len(seq) - 1
-            ):  # if modified C is not the last base in the read
-                if (refpos[b] is not None) & (refpos[b + 1] is not None):
-                    if seq[b + 1] == "G":
+    Args:
+        bam_file: a formatted .bam file with a .bai index
+        motifs: a list of base modification motifs
+
+    Returns:
+        None. If the function returns, you are ok.
+
+    """
+    basemods_found_dict = {}
+    mod_codes_dict = {}
+    mod_codes_found_dict = defaultdict(set)
+    for motif in motifs:
+        parsed_motif = utils.ParsedMotif(motif)
+        mod_codes_dict[parsed_motif.modified_base] = parsed_motif.mod_codes
+        basemods_found_dict[parsed_motif.modified_base] = False
+
+    input_bam = pysam.AlignmentFile(bam_file)
+
+    try:
+        for counter, read in enumerate(input_bam.fetch()):
+            read_dict = read.to_dict()
+            for tag_string in read_dict["tags"]:
+                tag = tag_string.split(",")[0].split(":")[0]
+                if tag == "Mm" or tag == "Ml":
+                    raise ValueError(
+                        f'Base modification tags are out of spec (Mm and Ml instead of MM and ML). \n\nConsider using "modkit update-tags {str(bam_file)} new_file.bam" in the command line with your conda environment active and then trying with the new file. For megalodon basecalling/modcalling, you may also need to pass "--mode ambiguous.\nBe sure to index the resulting .bam file."'
+                    )
+                elif tag == "MM":
+                    for tag_substring in tag_string.split(";"):
+                        tag_fields = tag_substring.split(",")[0].split(":")
+                        if len(tag_fields) >= 3:
+                            tag_value = tag_fields[2]
+                        else:
+                            tag_value = tag_fields[0]
                         if (
-                            abs(refpos[b + 1] - refpos[b]) == 1
-                        ):  # ensure there isn't a gap
-                            all_bases_index.append(
-                                b
-                            )  # add to all_bases_index whether or not modified
-                            if b in modified_bases:
-                                if probabilities[i] >= threshC:
-                                    keep.append(b)
-                                    prob_keep.append(i)
-                            if extractAllBases:
-                                if b in modified_bases:
-                                    probs.append(probabilities[i])
+                            len(tag_value) > 0
+                            and tag_value[-1] != "?"
+                            and tag_value[-1] != "."
+                        ):
+                            raise ValueError(
+                                f'Base modification tags are out of spec. Need ? or . in TAG:TYPE:VALUE for MM tag, else modified probability is considered to be implicit. \n\nConsider using "modkit update-tags {str(bam_file)} new_file.bam --mode ambiguous" in the command line with your conda environment active and then trying with the new file.'
+                            )
+                        else:
+                            if (
+                                len(tag_value) > 0
+                                and tag_value[0] in basemods_found_dict
+                            ):
+                                correct_mod_codes = mod_codes_dict[tag_value[0]]
+                                # valid_mod_codes = mod_codes_dict[tag_value[0]].union(
+                                #     utils.BASEMOD_NAMES_DICT[tag_value[0]]
+                                # )
+                                if tag_value[2] in correct_mod_codes:
+                                    basemods_found_dict[tag_value[0]] = True
                                 else:
-                                    probs.append(0)
-            # increment for each instance of modified base
-            if b in modified_bases:
-                i = i + 1
-    else:  # for m6A no need to look at neighboring base; do need to remove refpos that are None
-        for b in base_index:
-            if refpos[b] is not None:
-                all_bases_index.append(
-                    b
-                )  # add to all_bases_index whether or not modified
-                if b in modified_bases:
-                    if probabilities[i] >= threshA:
-                        keep.append(b)
-                        prob_keep.append(i)
-                if extractAllBases:
-                    if b in modified_bases:
-                        probs.append(probabilities[i])
-                    else:
-                        probs.append(0)
-            # increment for each instance of modified base
-            if b in modified_bases:
-                i = i + 1
-    # adjust position to be centered at 0 at the center of the motif; round in case is at 0.5
-    # add returning base_index for plotting mod/base_abundance
-    if center is True:
-        if window.strand == "+":
-            refpos_mod_adjusted = np.array(refpos[keep]) - round(
-                ((window.end - window.begin) / 2 + window.begin)
-            )
-            refpos_total_adjusted = np.array(refpos[all_bases_index]) - round(
-                ((window.end - window.begin) / 2 + window.begin)
-            )
-        if window.strand == "-":
-            refpos_mod_adjusted = -1 * (
-                np.array(refpos[keep])
-                - round(((window.end - window.begin) / 2 + window.begin))
-            )
-            refpos_total_adjusted = -1 * (
-                np.array(refpos[all_bases_index])
-                - round(((window.end - window.begin) / 2 + window.begin))
-            )
-        update_methylation_aggregate_db(
-            refpos_mod_adjusted,
-            refpos_total_adjusted,
-            basemod,
-            center,
-            windowSize,
-            window,
-            fileName,
-            sampleName,
-            outDir,
-        )
-        if extractAllBases:
-            return (basemod, refpos_total_adjusted, probs)
-        elif not modsPresent:
-            return (None, [None], [None])
+                                    mod_codes_found_dict[tag_value[0]].add(tag_value[2])
+                                # With the mode-code-aware motifs, it no longer makes sense to throw this error
+                                # This is because the warning the user gets if their mod code isn't found, or (if none is specified)
+                                # the default mod codes aren't found, can tell them what mod codes *were* found and they can add them
+                                # to their motif or use adjust_mods according to what makes sense. Thus, unexpected codes are not a
+                                # problem (in part this is because parse_bam will now set thresholds for the motif-specified OR default mod codes)
+                                # elif tag_value[2] not in valid_mod_codes:
+                                #     raise ValueError(
+                                #         f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {valid_mod_codes}. \n\nIf you know what your mod names correspond to in terms of the latest .bam standard, consider using "modkit adjust-mods {str(bam_file)} new_file.bam --convert 5mC_name m --convert N6mA_name a --convert other_basemod_name correct_label" and then trying with the new file. Note: currently supported mod names are {utils.BASEMOD_NAMES_DICT}'
+                                #     )
+            if all(basemods_found_dict.values()):
+                return
+            if counter >= NUM_READS_TO_CHECK:
+                missing_bases = []
+                for base, found in basemods_found_dict.items():
+                    if not found:
+                        missing_bases.append(base)
+                print(
+                    f"""
+WARNING: no modified appropriately-coded values found for {missing_bases} in the first {counter} reads. 
+Do you expect this file to contain these modifications? parse_bam is looking for {motifs} but for {missing_bases} found only found {[f"{base}+{mod_codes}" for base, mod_codes in mod_codes_found_dict.items()]}.
+
+Consider passing only the motifs and mod codes (e.g. m,h,a) that you expect to be present in your file. 
+You can use modkit adjust-mods --convert <CONVERT> <CONVERT> [OPTIONS] <IN_BAM> <OUT_BAM> to update or consolidate mod codes.
+See https://github.com/nanoporetech/modkit/blob/master/book/src/advanced_usage.md
+                    """
+                )
+                return
+    except ValueError as e:
+        if "fetch called on bamfile without index" in str(e):
+            raise ValueError(
+                f'{e}. Consider using "samtools index {str(bam_file)}" to create an index if your .bam is already sorted.'
+            ) from e
         else:
-            return (basemod, refpos_mod_adjusted, probabilities[prob_keep])
-    else:
-        update_methylation_aggregate_db(
-            refpos[keep],
-            refpos[all_bases_index],
-            basemod,
-            center,
-            windowSize,
-            window,
-            fileName,
-            sampleName,
-            outDir,
-        )
-        if extractAllBases:
-            return (basemod, np.array(refpos[all_bases_index]), probs)
-        elif not modsPresent:
-            return (None, [None], [None])
-        else:
-            return (basemod, np.array(refpos[keep]), probabilities[prob_keep])
+            raise
+    except:
+        raise
 
 
-def update_methylation_aggregate_db(
-    refpos_mod: np.ndarray,
-    refpos_total: np.ndarray,
-    basemod: str,
-    center: bool,
-    windowSize: int,
-    window: Region,
-    fileName: str,
-    sampleName: str,
-    outDir: str,
-) -> None:
-    """Updates the aggregate methylation table with all of the methylation information from a single read.
-    Args:
-            :param refpos_mod: list of modified reference positions
-            :param refpos_total: list of all reference positions for the base in question
-    df with columns pos:modification, pos, mod, methylated_bases, total_bases
+def get_alignment_quality(
+    bam_file,
+    ref_genome,
+) -> tuple[int, int]:
     """
-    # store list of entries for a given read
-    data = []
-    for pos in refpos_total:
-        # only store positions within window
-        if (center is True and abs(pos) <= windowSize) or (
-            center is False and pos > window.begin and pos < window.end
-        ):
-            # key is pos:mod
-            id = str(pos) + ":" + basemod
-            if pos in refpos_mod:
-                data.append((id, int(pos), basemod, 1, 1))
+    Determine fraction of read bases that line up with reference genome in first NUM_READS_TO_CHECK reads in bam file
+    """
+    ref_genome_index = ref_genome.parent / (ref_genome.name + ".fai")
+    if not ref_genome_index.exists():
+        print(f"Indexing {ref_genome.name}. This only needs to be done once.")
+        pysam.faidx(str(ref_genome))
+    input_bam = pysam.AlignmentFile(bam_file, "rb")
+    genome_fasta = pysam.FastaFile(str(ref_genome))
+    total_bases = 0
+    correct_bases = 0
+    # For NUM_READS_TO_CHECK=100 this is <1s on most machines
+    for index, read in enumerate(input_bam.fetch()):
+        if index >= NUM_READS_TO_CHECK:
+            return correct_bases, total_bases
+
+        # The query sequence is the entire sequence as stored in the .bam file
+        # So it is reverse complemented if it was a reverse read
+        # Meaning we can compare it directly against the reference genome
+        read_sequence = read.query_sequence
+
+        # print(read.mapping_quality)
+
+        # get_aligned_pairs returns a list of (read_coord,ref_coord) pairs with None values when not aligned
+        # So if we just skip Nones and compare the remainder it'll tell us the accuracy
+        # (in Dorado-basecalled r10 files, as of July 2024, we observe some fraction of reads
+        # with empty read_sequence, despite having intact tags and alignment info. the reason
+        # for this isn't currentyl known, but with this None check we avoid errors in this alignment
+        # checking stage.)
+
+        if read_sequence is not None:
+            for pos_in_read, pos_in_ref in read.get_aligned_pairs():
+                if pos_in_read is not None and pos_in_ref is not None:
+                    total_bases += 1
+                    if read_sequence[pos_in_read] == str(
+                        genome_fasta.fetch(
+                            read.reference_name, pos_in_ref, pos_in_ref + 1
+                        )
+                    ):
+                        correct_bases += 1
+
+    return correct_bases, total_bases
+
+
+def create_region_command_list(
+    output_path,
+    regions,
+    window_size,
+):
+    """
+    Creates commands to pass to modkit for specifying genomic regions.
+
+    TODO: Split into two function? Convert to bed, then construct commands
+    """
+
+    if regions is not None:
+        bed_filepath_processed = output_path / "regions.processed.bed"
+        regions_dict = utils.regions_dict_from_input(
+            regions,
+            window_size,
+        )
+        utils.bed_from_regions_dict(regions_dict, bed_filepath_processed)
+        region_specifier = ["--include-bed", str(bed_filepath_processed)]
+
+    else:
+        bed_filepath_processed = None
+        region_specifier = []
+
+    return region_specifier, bed_filepath_processed
+
+
+def read_by_base_txt_to_hdf5(
+    input_txt: str | Path,
+    output_h5: str | Path,
+    motif: str,
+    thresh: float | None = None,
+    quiet: bool = False,
+    compress_level: int = 1,
+    chunk_size: int = 1000,
+) -> None:
+    """
+    Takes in a txt file generated by modkit extract and appends
+    all the data from a specified motif into an hdf5 file. If a thresh is specified, it
+    also binarizes the mod calls.
+
+    If the h5 file does not exist it will be created and datasets will be added for read_name,
+    chromosome, read_start, read_end, strand, motif, mod_vector, and val_vector.
+
+    All the datasets (exception threshold) are parallel arrays of length num_reads
+
+    Each read's position data is defined in genomic reference coordinates on the positive strand
+    (i.e. the read_start is the leftmost aligned position, read_end is the rightmost, vectors
+    are left to right along genomic coordinates)
+
+    TODO: Make a nice key:value map of the h5 file structure, make sure start and end are documented
+    as reconstructions NOT original cigarstring alignment info. mention pysam
+
+    Args:
+        input_txt: a string or Path pointing to a modkit extracted base-by-base modifications
+            file. This file is assumed to have been created by modkit v0.2.4, other versions may
+            have a different format and may not function normally.
+        output_h5: a string or Path pointing to a valid place to save an .h5 file. If this
+            file already exists, it will not be cleared and will simply be appended to.
+        motif: a string specifying a single base modification. Basemods are specified as
+            {sequence_motif},{position_of_modification},{optional mod_code}. For example,
+            a methylated adenine is specified as 'A,0' or 'A,0,a' and CpG methylation is
+            specified as 'CG,0' or 'CG,0,m'.
+        thresh: a floating point threshold for base modification calling, between zero and one.
+            If specified as None, raw probabilities will be saved in the .h5 output.
+        quiet: if True, this suppresses outputs
+        compress_level: gzip compression level for datasets, specifically for vectors for now
+        chunk_size: size of write chunks in reads
+
+    Returns:
+        None
+
+    """
+    """
+    TODO: There are some issues that are all related here:
+    dimelo/parse_bam.py:718: error: Incompatible types in assignment (expression has type "Path | None", variable has type "str | Path")  [assignment]
+    dimelo/parse_bam.py:725: error: Item "str" of "str | Path" has no attribute "open"  [union-attr]
+    dimelo/parse_bam.py:890: error: Item "str" of "str | Path" has no attribute "name"  [union-attr]
+    
+    I'm not sure of the most elegant way to fix it. Come back and address.
+    """
+    input_txt, output_h5 = utils.sanitize_path_args(input_txt, output_h5)
+
+    parsed_motif = utils.ParsedMotif(motif)
+
+    read_name = ""
+    num_reads = 0
+    # TODO: I think the function calls can be consolidated; lots of repetition
+    # TODO: Consider opening both files at once
+    with input_txt.open() as txt:
+        # Check file length
+        for line_index, line in enumerate(txt):
+            fields = line.split("\t")
+            if line_index > 0 and read_name != fields[0]:
+                read_name = fields[0]
+                num_reads += 1
+        num_lines = line_index
+        txt.seek(0)
+
+        with h5py.File(output_h5, "a") as h5:
+            ## Define hdf5 dataset types for later
+            dt_str = h5py.string_dtype(encoding="utf-8")
+            # mod and val vectors -> uint8 allows us to just write whatever bytes we want
+            # h5py does not appear to otherwise support vlen binary
+            dt_vlen = h5py.vlen_dtype(np.dtype("uint8"))
+
+            ## Format threshold value and create dataset to store whether this data is thresholded (binary) or raw (float16)
+            # TODO: should this method thresholding without binarization
+            # None becomes NaN
+            threshold_to_store = np.nan if thresh is None else thresh
+            if "threshold" in h5:
+                threshold_from_existing = h5["threshold"][()]
+                if threshold_from_existing != threshold_to_store and not (
+                    np.isnan(threshold_from_existing) and np.isnan(threshold_to_store)
+                ):
+                    raise ValueError(
+                        "existing threshold in output_h5 does not match provided threshold for read_by_base_txt_to_hdf5."
+                    )
             else:
-                data.append((id, int(pos), basemod, 0, 1))
+                h5.create_dataset("threshold", data=threshold_to_store)
 
-    if data:  # if data to append is not empty
-        DATABASE_NAME = (
-            outDir + "/" + fileName.split("/")[-1].replace(".bam", "") + ".db"
-        )
-        # set variables for sqlite entry
-        table_name = "methylationAggregate_" + sampleName
+            ## Create read metadata datasets
+            # TODO: loop through dict instead?
+            if "read_name" in h5:
+                old_size = h5["read_name"].shape[0]
+                h5["read_name"].resize((old_size + num_reads,))
+            else:
+                old_size = 0
+                h5.create_dataset(
+                    "read_name",
+                    (num_reads,),
+                    maxshape=(None,),
+                    dtype=dt_str,
+                    compression="gzip",
+                    compression_opts=9,
+                )
+            if "chromosome" in h5:
+                if old_size != h5["chromosome"].shape[0]:
+                    print("size mismatch: read_name:chromosome")
+                else:
+                    h5["chromosome"].resize((old_size + num_reads,))
+            else:
+                h5.create_dataset(
+                    "chromosome",
+                    (num_reads,),
+                    maxshape=(None,),
+                    dtype=dt_str,
+                    compression="gzip",
+                    compression_opts=9,
+                )
+            if "read_start" in h5:
+                if old_size != h5["read_start"].shape[0]:
+                    print("size mismatch", "read_name", "read_start")
+                else:
+                    h5["read_start"].resize((old_size + num_reads,))
+            else:
+                h5.create_dataset(
+                    "read_start",
+                    (num_reads,),
+                    maxshape=(None,),
+                    dtype="i",
+                    compression="gzip",
+                    compression_opts=9,
+                )
+            if "read_end" in h5:
+                if old_size != h5["read_end"].shape[0]:
+                    print("size mismatch", "read_name", "read_end")
+                else:
+                    h5["read_end"].resize((old_size + num_reads,))
+            else:
+                h5.create_dataset(
+                    "read_end",
+                    (num_reads,),
+                    maxshape=(None,),
+                    dtype="i",
+                    compression="gzip",
+                    compression_opts=9,
+                )
+            if "strand" in h5:
+                if old_size != h5["strand"].shape[0]:
+                    print("size mismatch", "read_name", "strand")
+                else:
+                    h5["strand"].resize((old_size + num_reads,))
+            else:
+                h5.create_dataset(
+                    "strand",
+                    (num_reads,),
+                    maxshape=(None,),
+                    dtype=dt_str,
+                    compression="gzip",
+                    compression_opts=9,
+                )
+            if "motif" in h5:
+                if old_size != h5["motif"].shape[0]:
+                    print("size mismatch", "read_name", "motif")
+                else:
+                    h5["motif"].resize((old_size + num_reads,))
+            else:
+                h5.create_dataset(
+                    "motif",
+                    (num_reads,),
+                    maxshape=(None,),
+                    dtype=dt_str,
+                    compression="gzip",
+                    compression_opts=9,
+                )
 
-        # create or ignore if key already exists
-        # need to add 0 filler here so later is not incremented during update command
-        command = (
-            """INSERT OR IGNORE INTO """
-            + table_name
-            + """ VALUES(?,?,?,?,?);"""
-        )
+            ## Create the vector datasets. These will contain raw bytes formatted into a uint8 array
+            # TODO: loop through dict instead
+            if "mod_vector" in h5:
+                if old_size != h5["mod_vector"].shape[0]:
+                    print("size mismatch read_name:mod_vector")
+                else:
+                    h5["mod_vector"].resize((old_size + num_reads,))
+            else:
+                h5.create_dataset(
+                    "mod_vector",
+                    (num_reads,),
+                    maxshape=(None,),
+                    dtype=dt_vlen,
+                    # compression='gzip', # we are handling compression ourselves because hdf5 is bad at it
+                    # compression_opts=9,
+                )
+            if "val_vector" in h5:
+                if old_size != h5["val_vector"].shape[0]:
+                    print("size mismatch read_name:val_vector")
+                else:
+                    h5["val_vector"].resize((old_size + num_reads,))
+            else:
+                h5.create_dataset(
+                    "val_vector",
+                    (num_reads,),
+                    maxshape=(None,),
+                    dtype=dt_vlen,
+                    # compression='gzip', # we are handling compression ourselves because hdf5 is bad at it
+                    # compression_opts=9,
+                )
 
-        data_fill = [(x[0], x[1], x[2], 0, 0) for x in data]
-        connection = sqlite3.connect(DATABASE_NAME, timeout=60.0)
-        execute_sql_command(command, DATABASE_NAME, data_fill, connection)
-        connection.close()
+            ## Add data to datasets from txt file
+            # Initialize loop vars - these will go into datasets
+            # TODO: initialize read name to actual first read so we can get rid of the logic in the loop
+            read_name = ""
+            read_chrom = ""
+            read_len = 0
+            ref_strand = ""
+            read_start = 0
+            read_end = 0
+            valid_coordinates_list: list[int] = []
+            mod_values_list: list[float] = []
 
-        # update table for all entries
-        # values: methylated_bases, total_bases, id
-        # these are entries 3, 4, 0 in list of tuples
-        values_subset = [(x[3], x[4], x[0]) for x in data]
-        command = (
-            """UPDATE """
-            + table_name
-            + """ SET methylated_bases = methylated_bases + ?, total_bases = total_bases + ? WHERE id = ?"""
-        )
-        connection = sqlite3.connect(DATABASE_NAME, timeout=60.0)
-        execute_sql_command(command, DATABASE_NAME, values_subset, connection)
-        connection.close()
+            # Count reads for batched write
+            read_counter = 0
+            # Keys (strings): dataset names, values: lists of dataset values by read; string or ints or arrays
+            # Contents reset at the end of each chunk, after writing to h5
+            chunk_datasets_contents: defaultdict[str, list[str | int | np.ndarray]] = (
+                defaultdict(list)
+            )
+            # TODO: replace in loop with read_counter%chunk_size as appropriate
+            reads_in_chunk = 0
+
+            # Setting up progress bars if not in quiet mode
+            # Skip header
+            iterator = enumerate(txt)
+            next(iterator)
+            if not quiet:
+                iterator = tqdm(
+                    iterator,
+                    total=num_lines,
+                    desc=f"Transferring {num_reads} from {input_txt.name} into {output_h5.name}, new size {old_size + num_reads}",
+                    bar_format="{bar}| {desc} {percentage:3.0f}% | {elapsed}<{remaining}",
+                )
+
+            # Loop through txt file
+            for line_index, line in iterator:
+                # TODO: use csv module
+                fields = line.split("\t")
+                pos_in_genome = int(fields[2])
+                canonical_base = fields[15]
+                prob = float(fields[10])
+                mod_code = fields[11]
+
+                if read_name != fields[0]:
+                    # Record the previous read details unless this is the first line
+                    if line_index > 1:
+                        # TODO: Replace this with read_end-read_start; this will pad vectors and require
+                        # regenerating test reference data
+                        if len(valid_coordinates_list) > 0:
+                            read_len_along_ref = max(valid_coordinates_list) + 1
+                        else:
+                            read_len_along_ref = read_len
+
+                        # Populate mod vector array appropriately based on thresh settings
+                        mod_vector = np.zeros(read_len_along_ref, dtype=np.uint8)
+                        if thresh is None:
+                            # We subtract 0.25 because in modkit they add 0.5, but our elements are zero when the
+                            # base motif isn't present, so to get things to round to the right integers to match the
+                            # original .bam file, subtracting 0.25 is good. Anything from 0.001 to 0.4999 would work I think
+                            mod_vector[valid_coordinates_list] = np.rint(
+                                np.array(mod_values_list) * 256 - 0.25
+                            ).astype(np.uint8)
+                        else:
+                            mod_vector[valid_coordinates_list] = np.array(
+                                mod_values_list
+                            ).astype(np.uint8)
+                        # TODO: consolidate compression into a function shared across
+                        mod_vector_compressed = np.frombuffer(
+                            gzip.compress(
+                                mod_vector.tobytes(), compresslevel=compress_level
+                            ),
+                            dtype=np.uint8,
+                        )
+
+                        # Populate valid vector array
+                        valid_vector = np.zeros(read_len_along_ref, dtype=np.uint8)
+                        valid_vector[valid_coordinates_list] = 1
+                        valid_vector_compressed = np.frombuffer(
+                            gzip.compress(
+                                valid_vector.tobytes(), compresslevel=compress_level
+                            ),
+                            dtype=np.uint8,
+                        )
+
+                        chunk_datasets_contents["read_name"].append(read_name)
+                        chunk_datasets_contents["chromosome"].append(read_chrom)
+                        chunk_datasets_contents["read_start"].append(read_start)
+                        chunk_datasets_contents["read_end"].append(read_end)
+                        chunk_datasets_contents["strand"].append(ref_strand)
+                        chunk_datasets_contents["motif"].append(motif)
+                        chunk_datasets_contents["mod_vector"].append(
+                            mod_vector_compressed
+                        )
+                        chunk_datasets_contents["val_vector"].append(
+                            valid_vector_compressed
+                        )
+
+                        # Write chunk if enough reads have built up
+                        reads_in_chunk += 1
+                        if reads_in_chunk >= chunk_size:
+                            for dataset, entry in chunk_datasets_contents.items():
+                                start_index = (
+                                    old_size + (read_counter // chunk_size) * chunk_size
+                                )
+                                end_index = old_size + read_counter + 1
+                                h5[dataset][start_index:end_index] = entry
+                            chunk_datasets_contents = defaultdict(list)
+                            reads_in_chunk = 0
+                        read_counter += 1
+
+                    ## Set up for next read
+                    read_name = fields[0]
+                    read_chrom = fields[3]
+                    read_len = int(fields[9])
+                    ref_strand = fields[5]
+                    # TODO: verify that read position is in the right (ref) coordinate system
+                    if ref_strand == "+":
+                        pos_in_read_ref = int(fields[1])
+                    elif ref_strand == "-":
+                        pos_in_read_ref = read_len - int(fields[1]) - 1
+                    # Calculate read info
+                    read_start = pos_in_genome - pos_in_read_ref
+                    read_end = read_start + read_len
+                    # Instantiate lists
+                    mod_values_list = []
+                    valid_coordinates_list = []
+
+                # Regardless of whether its a new read or not,
+                # add modification to vector if motif type is correct
+                # for the motif in question
+                if (
+                    canonical_base == parsed_motif.modified_base
+                    and mod_code in parsed_motif.mod_codes
+                ):
+                    valid_coordinates_list.append(pos_in_genome - read_start)
+                    if thresh is None:
+                        mod_values_list.append(prob)
+                    elif prob >= thresh:
+                        mod_values_list.append(1)
+                    else:
+                        mod_values_list.append(0)
+
+            # Save the last read
+            # TODO: try to consolidate
+            if len(read_name) > 0:
+                # Build the vectors
+                if len(valid_coordinates_list) > 0:
+                    read_len_along_ref = max(valid_coordinates_list) + 1
+                else:
+                    read_len_along_ref = read_len
+
+                # Populate mod vector array appropriately based on thresh settings
+                mod_vector = np.zeros(read_len_along_ref, dtype=np.uint8)
+                if thresh is None:
+                    # We subtract 0.25 because in modkit they add 0.5, but our elements are zero when the
+                    # base motif isn't present, so to get things to round to the right integers to match the
+                    # original .bam file, subtracting 0.25 is good. Anything from 0.001 to 0.4999 would work I think
+                    mod_vector[valid_coordinates_list] = np.rint(
+                        np.array(mod_values_list) * 256 - 0.25
+                    ).astype(np.uint8)
+                else:
+                    mod_vector[valid_coordinates_list] = np.array(
+                        mod_values_list
+                    ).astype(np.uint8)
+                # TODO: consolidate compression into a function shared across
+                mod_vector_compressed = np.frombuffer(
+                    gzip.compress(mod_vector.tobytes(), compresslevel=compress_level),
+                    dtype=np.uint8,
+                )
+
+                # Populate valid vector array
+                valid_vector = np.zeros(read_len_along_ref, dtype=np.uint8)
+                valid_vector[valid_coordinates_list] = 1
+                valid_vector_compressed = np.frombuffer(
+                    gzip.compress(valid_vector.tobytes(), compresslevel=compress_level),
+                    dtype=np.uint8,
+                )
+
+                chunk_datasets_contents["read_name"].append(read_name)
+                chunk_datasets_contents["chromosome"].append(read_chrom)
+                chunk_datasets_contents["read_start"].append(read_start)
+                chunk_datasets_contents["read_end"].append(read_end)
+                chunk_datasets_contents["strand"].append(ref_strand)
+                chunk_datasets_contents["motif"].append(motif)
+                chunk_datasets_contents["mod_vector"].append(mod_vector_compressed)
+                chunk_datasets_contents["val_vector"].append(valid_vector_compressed)
+
+                for dataset, entry in chunk_datasets_contents.items():
+                    start_index = old_size + (read_counter // chunk_size) * chunk_size
+                    end_index = old_size + read_counter + 1
+                    h5[dataset][start_index:end_index] = entry
+                read_counter += 1
+    return
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Parse a bam file into DiMeLo database tables"
-    )
+def prep_output_directory(
+    output_directory: Path | None,
+    output_name: str,
+    input_file: Path,
+    output_file_names: list[str],
+) -> tuple[Path, list[Path]]:
+    """
+    As a side effect, if files exist that match the requested outputs, they are deleted.
 
-    # Required arguments
-    required_args = parser.add_argument_group("required arguments")
-    required_args.add_argument(
-        "-f",
-        "--fileName",
-        required=True,
-        help="name of bam file with Mm and Ml tags",
-    )
-    required_args.add_argument(
-        "-s",
-        "--sampleName",
-        required=True,
-        help="name of sample for output SQL table name labelling",
-    )
-    required_args.add_argument(
-        "-o",
-        "--outDir",
-        required=True,
-        help="directory where SQL database is stored",
-    )
+    TODO: Is it kind of silly that this takes in input_file? Maybe should take in some generic default parameter, or this default should be set outside this method?
 
-    # Required, mutually exclusive arguments
-    window_group = parser.add_mutually_exclusive_group(required=True)
-    window_group.add_argument(
-        "-b",
-        "--bedFile",
-        help="name of bed file that defines regions of interest over which to extract mod calls",
-    )
-    window_group.add_argument(
-        "-r",
-        "--region",
-        help='single region over which to extract base mods, e.g. "chr1:1-100000"',
-    )
+    Args:
+        output_directory: Path pointing to an output directory.
+            If left as None, outputs will be stored in a new folder within the input
+            directory.
+        output_name: a string that will be used to create an output folder
+            containing the intermediate and final outputs, along with any logs.
+        input_file: Path to input file; used to define default output directory
+        output_file_names: list of names of desired output files
 
-    # Optional arguments
-    parser.add_argument(
-        "-m",
-        "--basemod",
-        type=str,
-        default=DEFAULT_BASEMOD,
-        choices=["A", "CG", "A+CG"],
-        help="which base modifications to extract",
-    )
-    parser.add_argument(
-        "-A",
-        "--threshA",
-        type=int,
-        default=DEFAULT_THRESH_A,
-        help="threshold above which to call an A base methylated",
-    )
-    parser.add_argument(
-        "-C",
-        "--threshC",
-        type=int,
-        default=DEFAULT_THRESH_C,
-        help="threshold above which to call a C base methylated",
-    )
-    parser.add_argument(
-        "-e",
-        "--extractAllBases",
-        action="store_true",
-        help="store all base mod calls, regardless of methylation probability threshold",
-    )
-    parser.add_argument(
-        "-p",
-        "--cores",
-        type=int,
-        help="number of cores over which to parallelize",
-    )
-    parser.add_argument(
-        "-c",
-        "--center",
-        action="store_true",
-        help="report positions with respect to center of motif window; only valid with bed file input",
-    )
-    parser.add_argument(
-        "-w",
-        "--windowSize",
-        type=int,
-        default=DEFAULT_WINDOW_SIZE,
-        help=f"window size around center point of feature of interest to plot (+/-); only mods within this window are stored (default: {DEFAULT_WINDOW_SIZE} bp)",
-    )
+    Returns:
+        * Path to top-level output directory
+        * List of Paths to requested output files
+    """
+    if output_directory is None:
+        output_directory = input_file.parent
+        print(f"No output directory provided, using input directory {output_directory}")
 
-    args = parser.parse_args()
-    parse_bam(**vars(args))
+    output_path = output_directory / output_name
+
+    output_files = [output_path / file_name for file_name in output_file_names]
+
+    # Ensure output path exists, and that any of the specified output files do not already exist (necessary for some outputs)
+    # Delete the files that do already exist
+    output_path.mkdir(parents=True, exist_ok=True)
+    for output_file in output_files:
+        output_file.unlink(missing_ok=True)
+
+    return output_path, output_files
