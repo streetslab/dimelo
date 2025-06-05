@@ -1,9 +1,9 @@
-# dimelo 0.2.0 beta
+# dimelo
 ## Introduction
 
-This branch is a beta version of a rebuilt-from-scratch dimelo package that is still in development. As of February 2024, exact functionality and function interfaces / parameters are not yet finalized. Final functionality and design will be in part driven by user feedback.
+The `dimelo` package provides an integrated pipeline for the analysis of multimodal single molecule epigenetic measurements. It is designed with long-read sequencing measurements in mind, but is compatible with any sequencing processing pipeline that generates specification-compliant modbam files.
 
-We support the same core pileup and single read extraction operations as the original `dimelo` package, but have focused on a number of objectives in building this new version, many of which were impossible or cumbersome to implement with the previous design:
+v0.2.0 is a major overhaul compared to v0.1.0. It supports the same core pileup and single read extraction operations as the original `dimelo v0.1.0` package, but focuses on a number of new objectives:
 
 <ol>
     <li>Support multicolor data / any base modification context (GpC, CpC, etc)</li>
@@ -15,7 +15,7 @@ We support the same core pileup and single read extraction operations as the ori
     <li>More powerful plotting e.g. bam files from different basecallers, single read sorting, rapid iteration</li>
 </ol>
 
-This README document contains installation instructions and documentation for various use cases. There is a [tutorial](#basic-use) jupyter notebook that will take you through the core functionality of the package step-by-step. For Google Colab, the notebook already contains the necessary code to set up and run `dimelo`, whereas for local operation you will first need to follow the [local install instructions](#local-install-via-conda). Be sure to check that your system meets our [specifications](#system-requirements).
+This README document contains installation instructions and documentation for various use cases. There is a [tutorial](#basic-use) jupyter notebook that will take you through the core functionality of the package step-by-step. For Google Colab, the notebook already contains the necessary code to set up and run `dimelo`, whereas for local operation you will first need to follow the [local install instructions](#local-install-via-conda). Be sure to check that your system meets our [specifications](#system-requirements). The software is still in early release, and as such, user feedback and requests are greatly appreciated.
 
 ## Contents
 [1.0 Install Instructions](#Install-instructions)
@@ -57,21 +57,21 @@ This README document contains installation instructions and documentation for va
 
 ### Load source code from the modkit_parsing_beta branch
 
-Open your terminal or command line and navigate to wherever you want to keep the `dimelo_v2` source code (e.g. your Documents folder, `cd Documents`) and clone the repo
+Open your terminal or command line and navigate to wherever you want to keep the `dimelo` source code (e.g. your Documents folder, `cd Documents`) and clone the repo
 
 ```
-git clone https://github.com/streetslab/dimelo_v2
+git clone https://github.com/streetslab/dimelo
 ```
 
 ### Set up virtual environment
 
-Navigate into the dimelo_v2 directory
+Navigate into the dimelo directory
 
 ```
-cd dimelo_v2
+cd dimelo
 ```
 
-Create a conda environment using environment.yml. This will make a new conda environment with the name `dimelo_modkit_parsing`. 
+Create a conda environment using environment.yml. This will make a new conda environment with the name `dimelo`. 
 
 ```
 conda env create -f environment.yml
@@ -84,10 +84,10 @@ conda env create -f environment.yml
 Activate your conda environment, which should now contain python 3.11 and a modkit executable on the path and executable on your system.
 
 ```
-conda activate dimelo_modkit_parsing
+conda activate dimelo
 ```
 
-Ensure that you are still in the top-level dimelo_v2 directory. Install the dimelo package and its dependencies from source.
+Ensure that you are still in the top-level dimelo directory. Install the dimelo package and its dependencies from source.
 
 ```
 pip install .
@@ -104,8 +104,8 @@ drive.mount('/content/drive')
 import condacolab
 condacolab.install()
 !conda install nanoporetech::modkit==0.2.4
-!git clone https://github.com/streetslab/dimelo_v2
-!cd dimelo_v2 && pip install ipywidgets==7.7.1 .
+!git clone https://github.com/streetslab/dimelo
+!cd dimelo && pip install ipywidgets==7.7.1 .
 import dimelo
 ```
 
@@ -159,7 +159,7 @@ See the [tutorial](tutorial.ipynb) as a starting point.
 For local operation on Mac or Linux, you will already have cloned the repo to disk in the installation step. Activate your conda environment, make sure you have jupyter installed, and then launch a jupyter notebook server and navigate to `tutorial.ipynb`. You can also use other tools to open the jupyter notebook or you can simply reference it as an example.
 
 ```
-conda activate dimelo_modkit_parsing
+conda activate dimelo
 jupyter notebook
 ```
 
@@ -368,5 +368,4 @@ The most common culprit for progress bar issues in notebooks (Jupyter or Colab) 
 ```
 pip install ipywidgets==X.XX.X
 ```
-
 
