@@ -1,4 +1,4 @@
-name: dimelo_modkit_parsing
+name: dimelo
 channels:
   - conda-forge
   - nanoporetech
