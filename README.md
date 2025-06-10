@@ -240,100 +240,610 @@ You should see no outputs at all if `quiet=True`.
 
 `plot_enrichment_profile` module for pileup line plot profiles across one or more region
 ```
-def plot_enrichment_profile(mod_file_names: list[str | Path],
-                            regions_list: list[str | Path | list[str | Path]],
-                            motifs: list[str],
-                            sample_names: list[str],
-                            window_size: int,
-                            smooth_window: int | None = None,
-                            **kwargs) -> Axes:
-def by_modification(mod_file_name: str | Path,
-                    regions: str | Path,
-                    motifs: list[str],
-                    *args,
-                    **kwargs) -> Axes:
-def by_regions(mod_file_name: str | Path,
-               regions_list: list[str | Path | list[str | Path]],
-               motif: str,
-               sample_names: list[str] = None,
-               *args,
-               **kwargs) -> Axes:
-def by_dataset(mod_file_names: list[str | Path],
-               regions: str | Path | list[str | Path],
-               motif: str,
-               sample_names: list[str] = None,
-               *args,
-               **kwargs) -> Axes:
+def plot_enrichment_profile(
+    mod_file_names: list[str | Path],
+    regions_list: list[str | Path | list[str | Path]],
+    motifs: list[str],
+    sample_names: list[str],
+    window_size: int,
+    single_strand: bool = False,
+    regions_5to3prime: bool = False,
+    smooth_window: int | None = None,
+    quiet: bool = False,
+    cores: int | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot enrichment profiles, overlaying the resulting traces on top of each other.
+
+    Each input list is expected to be parallel and the same length. Each index represents one analysis condition across the lists.
+    Using the same file for multiple conditions requires adding the same file multiple times, in the appropriate indices.
+
+    This is the most flexible method for enrichment profile plotting. For most use cases, consider
+    using one of the plot_enrichment_profile.by_* methods.
+
+    Args:
+        mod_file_names: list of paths to modified base data files
+        bed_file_names: list of paths to bed files specifying centered equal-length regions
+        mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
+        sample_names: list of names to use for labeling traces in the output; legend entries
+        window_size: half-size of the desired window to plot; how far the window stretches on either side of the center point
+        single_strand: True means we only grab counts from reads from the same strand as
+            the region of interest, False means we always grab both strands within the regions
+        regions_5to3prime: True means negative strand regions get flipped, False means no flipping
+        smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
+        kwargs: other keyword parameters passed through to utils.line_plot
+
+    Returns:
+        Axes object containing the plot
+    """
+def by_modification(
+    mod_file_name: str | Path,
+    regions: str | Path,
+    motifs: list[str],
+    **kwargs,
+) -> Axes:
+    """
+    Plot enrichment profile, holding modification file and regions constant, varying modification types
+
+    See plot_enrichment_profile for details.
+    """
+def by_regions(
+    mod_file_name: str | Path,
+    regions_list: list[str | Path | list[str | Path]],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot enrichment profile, holding modification file and modification types constant, varying regions
+
+    Note: Sample names default to the names of the bed files.
+
+    See plot_enrichment_profile for details.
+    """
+def by_dataset(
+    mod_file_names: list[str | Path],
+    regions: str | Path | list[str | Path],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot enrichment profile, holding modification types and regions constant, varying modification files
+
+    Note: Sample names default to the names of the modification files.
+
+    See plot_enrichment_profile for details.
+    """
 ```
 `plot_enrichment` module for enrichment (e.g. mA/A) bar plot comparisons
 ```
+def plot_enrichment(
+    mod_file_names: list[str | Path],
+    regions_list: list[str | Path | list[str | Path]],
+    motifs: list[str],
+    sample_names: list[str],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot enrichment comparison barplots using the given list of pre-processed input files.
 
-def plot_enrichment(mod_file_names: list[str | Path],
-                    regions_list: list[str | Path | list[str | Path]],
-                    motifs: list[str],
-                    sample_names: list[str],
-                    **kwargs) -> Axes:
-def by_modification(mod_file_name: str | Path,
-                    regions: str | Path | list[str | Path],
-                    motifs: list[str],
-                    *args,
-                    **kwargs) -> Axes:
-def by_regions(mod_file_name: str | Path,
-               regions_list: list[str | Path | list[str | Path]],
-               motif: str,
-               sample_names: list[str] = None,
-               *args,
-               **kwargs) -> Axes:
-def by_dataset(mod_file_names: list[str | Path],
-               regions: str | Path | list[str | Path],
-               motif: str,
-               sample_names: list[str] = None,
-               *args,
-               **kwargs) -> Axes:
+    Each input list is expected to be parallel and the same length. Each index represents one analysis condition across the lists.
+    Using the same file for multiple conditions requires adding the same file multiple times, in the appropriate indices.
+
+    This is the most flexible method for enrichment plotting. For most use cases, consider
+    using one of the plot_enrichment.by_* methods.
+
+    Args:
+        mod_file_names: list of paths to modified base pileup data files
+        bed_file_names: list of paths to bed files specifying regions to extract
+        mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
+        sample_names: list of names to use for labeling bars in the output; x-axis labels
+        window_size: (currently disabled) window around center of region, +-window_size//2
+        single_strand: True means we only grab counts from reads from the same strand as
+            the region of interest, False means we always grab both strands within the regions
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
+        kwargs: other keyword parameters passed through to utils.bar_plot
+
+    Returns:
+        Axes object containing the plot
+    """
+def by_modification(
+    mod_file_name: str | Path,
+    regions: str | Path | list[str | Path],
+    motifs: list[str],
+    **kwargs,
+) -> Axes:
+    """
+    Plot enrichment bar plots, holding modification file and regions constant, varying modification types
+
+    See plot_enrichment for details.
+    """
+def by_regions(
+    mod_file_name: str | Path,
+    regions_list: list[str | Path | list[str | Path]],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot enrichment bar plots, holding modification file and modification types constant, varying regions
+
+    Note: Sample names default to the names of the bed files.
+
+    See plot_enrichment for details.
+    """
+def by_dataset(
+    mod_file_names: list[str | Path],
+    regions: str | Path | list[str | Path],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot enrichment bar plots, holding modification types and regions constant, varying modification files
+
+    Note: Sample names default to the names of the modification files.
+
+    See plot_enrichment for details.
+    """
 ```
 `plot_reads` module for single read plots
 ```
-def plot_reads(mod_file_name: str | Path,
-               regions: str | Path | list[str | Path],
-               motifs: list[str],
-               window_size: int = None,
-               sort_by: str | list[str] = 'shuffle',
-               thresh: float = None,
-               relative: bool = True,
-               **kwargs
-              ) -> Axes:
+def plot_reads(
+    mod_file_name: str | Path,
+    regions: str | Path | list[str | Path],
+    motifs: list[str],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    regions_5to3prime: bool = False,
+    sort_by: str | list[str] = "shuffle",
+    thresh: float | None = None,
+    relative: bool = True,
+    **kwargs,
+) -> Axes:
+    """
+    Plots centered single reads as a scatterplot, cut off at the boundaries of the requested regions
+
+    Args:
+        mod_file_name: path to file containing modification data for single reads
+        regions: path to bed file specifying regions to extract
+        motifs: list of modifications to extract; expected to match mods available in the relevant mod_files
+        window_size: we plot +-window_size//2 from the center of the region(s)
+        single_strand: True means we only grab counts from reads from the same strand as
+            the region of interest, False means we always grab both strands within the regions
+        regions_5to3prime: True means negative strand regions get flipped, False means no flipping. Only works if relative=True
+        sort_by: ordered list for hierarchical sort. Currently only smallest to biggest.
+        thresh: if no threshold has been applied already, this will threshold the mod calls for plotting (method is only boolean)
+        relative: if True, all regions are centered
+
+    Returns:
+        Axes object containing the plot
+    """
+```
+`plot_read_browser` module for single read browser plots
+```
+def plot_read_browser(
+    mod_file_name: str | Path,
+    region: str,
+    motifs: list[str],
+    thresh: int | float | None = None,
+    single_strand: bool = False,
+    sort_by: str | list[str] = "shuffle",
+    hover: bool = True,
+    subset_parameters: dict | None = None,
+    **kwargs,
+) -> plotly.graph_objs.Figure:
+    """
+    Plot base modifications on single reads in a high-quality, interactive-enabled fashion.
+
+    This method returns a plotly Figure object, which can be used in a number of ways to view and save
+    the figure in different formats. To view the figure interactively (in a notebook or python script),
+    simply call the show() method of the returned Figure object. See the helper methods below for saving
+    figures.
+
+    Additional keyword arguments will be passed down to collapse_rows() if sort_by == "collapse". See that
+    method for details.
+
+    Args:
+        mod_file_name: path to file containing modification data for single reads
+        region: region string specifying the region to plot
+        motifs: list of modifications to extract; expected to match mods available in the relevant mod_files
+        thresh: A modification calling threshold. While the browser always displays float probabilities, setting
+            this to a value will limit display to only modification events over the given threshold. Else, display
+            all modifications regardless of probability.
+        single_strand: True means we only grab counts from reads from the same strand as
+            the region of interest, False means we always grab both strands within the regions
+        sort_by: ordered list for hierarchical sort; see load_processed.read_vectors_from_hdf5() for details.
+            Can also pass the argument "collapse" to allow multiple reads on single rows of the browser, for a
+            more condensed visualization. Note that "collapse" is mutually exclusive with all other sorting options,
+            and is only allowed to be passed as a single string option.
+        hover: if False, disables display of information on mouse hover
+        subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
+            reads to be returned. If not None, at least one of n or frac must be provided.
+
+    Returns:
+        plotly Figure object containing the plot
+    """
+```
+`plot_depth_profile` module for motif modification-tagged read depth profiles
+```
+def plot_depth_profile(
+    mod_file_names: list[str | Path],
+    regions_list: list[str | Path | list[str | Path]],
+    motifs: list[str],
+    sample_names: list[str],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    regions_5to3prime: bool = False,
+    smooth_window: int | None = None,
+    quiet: bool = False,
+    cores: int | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot depth profiles, overlaying the resulting traces on top of each other.
+
+    Each input list is expected to be parallel and the same length. Each index represents one analysis condition across the lists.
+    Using the same file for multiple conditions requires adding the same file multiple times, in the appropriate indices.
+
+    This is the most flexible method for depth profile plotting. For most use cases, consider
+    using one of the plot_depth_profile.by_* methods.
+
+    Args:
+        mod_file_names: list of paths to modified base data files
+        bed_file_names: list of paths to bed files specifying centered equal-length regions
+        mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
+        sample_names: list of names to use for labeling traces in the output; legend entries
+        window_size: half-size of the desired window to plot; how far the window stretches on either side of the center point
+        single_strand: True means we only grab counts from reads from the same strand as
+            the region of interest, False means we always grab both strands within the regions
+        regions_5to3prime: True means negative strand regions get flipped, False means no flipping
+        smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
+        kwargs: other keyword parameters passed through to utils.line_plot
+
+    Returns:
+        Axes object containing the plot
+    """
+def by_modification(
+    mod_file_name: str | Path,
+    regions: str | Path,
+    motifs: list[str],
+    **kwargs,
+) -> Axes:
+    """
+    Plot depth profile, holding modification file and regions constant, varying modification types
+
+    See plot_depth_profile for details.
+    """
+def by_regions(
+    mod_file_name: str | Path,
+    regions_list: list[str | Path | list[str | Path]],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot depth profile, holding modification file and modification types constant, varying regions
+
+    Note: Sample names default to the names of the bed files.
+
+    See plot_depth_profile for details.
+    """
+def by_dataset(
+    mod_file_names: list[str | Path],
+    regions: str | Path | list[str | Path],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot depth profile, holding modification types and regions constant, varying modification files
+
+    Note: Sample names default to the names of the modification files.
+
+    See plot_depth_profile for details.
+    """
+```
+`plot_depth_histogram` module for distribution of motif modification-tagged reads
+```
+def plot_depth_histogram(
+    mod_file_names: list[str | Path],
+    regions_list: list[str | Path | list[str | Path]],
+    motifs: list[str],
+    sample_names: list[str],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    one_depth_per_region: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+    split_large_regions: bool = False,
+    **kwargs,
+) -> Axes:
+    """
+    Plot depth histograms, overlaying the results on top of each other.
+
+    Each input list is expected to be parallel and the same length. Each index represents one analysis condition across the lists.
+    Using the same file for multiple conditions requires adding the same file multiple times, in the appropriate indices.
+
+    This is the most flexible method for depth histogram plotting. For most use cases, consider
+    using one of the plot_depth_histogram.by_* methods.
+
+    Args:
+        mod_file_names: list of paths to modified base data files
+        bed_file_names: list of paths to bed files specifying centered equal-length regions
+        mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
+        sample_names: list of names to use for labeling traces in the output; legend entries
+        window_size: half-size of the desired window to plot; how far the window stretches on either side of the center point
+        single_strand: True means we only grab counts from reads from the same strand as
+            the region of interest, False means we always grab both strands within the regions
+        one_depth_per_region: if True, each region will only report a single depth value, averaging across all non-zero depths. If False
+            depths will be reported separately for all nonzero count positions in each region for a more granular view of depth distribution.
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
+        split_large_regions: if True, regions will be run sequentially in parallelized chunks. If False,
+            each individual region's chunks will be run sequentially but there will be parallelization across
+            regions, i.e. each core will be assigned one region at a time by the executor. Set to True if you
+            are running a small number of very large regions (e.g. one or two chromosomes), otherwise to to False (default).
+        kwargs: other keyword parameters passed through to utils.line_plot
+
+    Returns:
+        Axes object containing the plot
+    """
+def by_modification(
+    mod_file_name: str | Path,
+    regions: str | Path,
+    motifs: list[str],
+    **kwargs,
+) -> Axes:
+    """
+    Plot depth histogram, holding modification file and regions constant, varying modification types
+
+    See plot_depth_histogram for details.
+    """
+def by_regions(
+    mod_file_name: str | Path,
+    regions_list: list[str | Path | list[str | Path]],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot depth histogram, holding modification file and modification types constant, varying regions
+
+    Note: Sample names default to the names of the bed files.
+
+    See plot_depth_histogram for details.
+    """
+def by_dataset(
+    mod_file_names: list[str | Path],
+    regions: str | Path | list[str | Path],
+    motif: str,
+    sample_names: list[str] | None = None,
+    **kwargs,
+) -> Axes:
+    """
+    Plot depth histogram, holding modification types and regions constant, varying modification files
+
+    Note: Sample names default to the names of the modification files.
+
+    See plot_depth_histogram for details.
+    """
 ```
 ## Load values from processed files
 
 `load_processed.pileup_counts_from_bedmethyl` for valid/modified counts from a specified region or set of regions
 ```
-def pileup_counts_from_bedmethyl(bedmethyl_file: Path,
-                          motif: str,
-                          regions: str | Path | list[str | Path] = None,
-                          ) -> tuple[int, int]:
+def pileup_counts_from_bedmethyl(
+    bedmethyl_file: str | Path,
+    motif: str,
+    regions: str | Path | list[str | Path],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+) -> tuple[int, int]:
+    """
+    User-facing function.
+
+    Extract number of modified bases and total number of bases from the given bedmethyl file.
+    Called by plotters or by the user.
+
+    This function loops through all the provided regions and pulls those regions up in the input
+    sorted and indexed bedmethyl file. For rows within those regions, checks that the motif
+    is correct (i.e. sequence context, modified base, mod code, and optionally strand). All
+    correct locations are included in the sum counts that get returned.
+
+    If no regions are specified, returns the sum total for the motif of interest across the
+    entire bedmethyl file.
+
+    Args:
+        bedmethyl_file: Path to bedmethyl file
+        regions: Path to bed file specifying regions
+        motif: type of modification to extract data for
+        window_size: (currently disabled) window around center of region, +-window_size
+        single_strand: True means we only grab counts from reads from the same strand as
+            the region of interest, False means we always grab both strands within the regions
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
+        chunk_size: size of genomic subregions to assign out to each process
+
+    Returns:
+        tuple containing counts of (modified_bases, total_bases)
+    """
 ```
-`load_processed.pileup_vectors_from_bedmethyl` for valid over modified fraction from a specified region or set of regions
+`load_processed.pileup_vectors_from_bedmethyl` for valid and modified counts-by-position from a specified region or set of length-matched regions
 ```
-def pileup_vectors_from_bedmethyl(bedmethyl_file: str | Path,
-                          motif: str,
-                          regions: str | Path | list[str | Path],
-                          window_size: int = None) -> (np.ndarray,np.ndarray):
+def pileup_vectors_from_bedmethyl(
+    bedmethyl_file: str | Path,
+    motif: str,
+    regions: str | Path | list[str | Path],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    regions_5to3prime: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    User-facing function.
+
+    Extract per-position pileup counts at valid motifs across one or more superimposed regions.
+    Called by profile plotters, can also be used by a user directly.
+
+    Returns two vectors:
+    * Total number of times a modified base in the motif was found at each position
+    * Total number of times the motif was found at each position
+
+    This function loops through all the provided regions and fetches those regions from the
+    bedmethyl file. For rows within those regions, it checks that the motif
+    is correct (i.e. sequence context, modified base, mod code, and optionally strand). It then adds
+    to two vectors (mod and valid). By default all regions are assumed to
+    be the same size (the size of the first region).
+
+    If regions_5to3prime is set to True, then negative strand regions are flipped to that all regions
+    are superimposed along the 5 prime to 3 prime direction, which can be helpful if there is
+    directionality to the signal (e.g. upstream v downstream relative to TSSs, TF binding sites, and so on).
+    A region must be provided because otherwise there is no way to know what vector to return.
+    However, a region can be a whole chromosome if desired.
+
+    Args:
+        bedmethyl_file: Path to bedmethyl file
+        regions: Path to bed file specifying centered equal-length regions
+        motif: type of modification to extract data for
+        window_size: the extent in either direction for windows around the center of regions.
+        single_strand: True means we only grab counts from reads from the same strand as
+            the region of interest, False means we always grab both strands within the regions
+        regions_5to3prime: True means negative strand regions get flipped, False means no flipping
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
+        chunk_size: size of genomic subregions to assign out to each process
+
+    Returns:
+        tuple containing (modified_base_counts, valid_base_counts)
+    """
 ```
 `load_processed.read_vectors_from_hdf5` for read-by-basemod lists of valid and modified positions
 ```
 def read_vectors_from_hdf5(
-        file: str | Path,
-        motifs: list[str],
-        regions: str | Path | list[str | Path] = None,
-        window_size: int = None,
-        sort_by: str | list[str] = ['chromosome','region_start','read_start'],
-        calculate_mod_fractions: bool = True,
-) -> (list[tuple],list[str],dict):
+    file: str | Path,
+    motifs: list[str],
+    regions: str | Path | list[str | Path] | None = None,
+    window_size: int | None = None,
+    single_strand: bool = False,
+    sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
+    calculate_mod_fractions: bool = True,
+    quiet: bool = True,  # currently unused; change to default False when pbars are implemented
+    cores: int | None = None,  # currently unused
+    subset_parameters: dict | None = None,
+) -> tuple[list[tuple], list[str], dict | None]:
+    """
+    User-facing function.
+
+    Pulls a list of read data out of an .h5 file containing processed read vectors, formatted
+    for read-by-read vector processing downstream use cases.
+
+    The flow of operation here is we load up the h5 file then loop through our regions and pick
+    out reads corresponding to our criteria. Criteria include chromosome, read starts and ends
+    (compared to region starts and ends), motif, and strand (if single_strand is True). The indices
+    for the desired reads are identified region-by-region, then all the reads for the region (or
+    the whole h5, if no region is passed) are loaded using the process_data function and put into
+    a list. The bytes are then decoded for the array entries, which are manually compressed because
+    h5py wasn't behaving.
+
+    There's some adjustment for the raw probability (no thresh) to match modkit extract outputs.
+    Specifically, the 0-255 8bit int has 0.5 added before dividing by 256, giving mod qualities
+    between 0.001953 and 0.99805 for bases in valid motifs. (Invalid positions have zeros.)
+
+    After this processing, we calculate modification fractions, sort, and return.
+
+    Args:
+        file: Path to an hdf5 (.h5) file containing modification data for single reads,
+            stored in datasets read_name, chromosome, read_start,
+            read_end, base modification motif, mod_vector, and val_vector.
+        regions: Single or list of Path objects or strings. Path objects must point to .bed
+            files, strings can be .bed paths or region string in the format chrX:XXX-XXX.
+            All should all be regions for which your original .bam file had reads extracted,
+            although by design this method will not raise an error if any region contains
+            zero reads, as this may simply be a matter of low read depth.
+            If no regions are specified, the entire .h5 file will be returned. This may cause
+            memory issues.
+        motifs: types of modification to extract data for. Motifs are specified as
+            {DNA_sequence},{position_of_modification}. For example, a methylated adenine is specified
+            as 'A,0' and CpG methylation is specified as 'CG,0'.
+        single_strand: True means we only grab counts from reads from the same strand as
+            the region of interest, False means we always grab both strands within the regions
+        window_size: An optional parameter for creating centered windows for the provided regions.
+            If provided, all regions will be adjusted to be the same size and centered. If not provided,
+            all regions should already be the same size, or there should be only one.
+        sort_by: Read properties by which to sort, either one string or a list of strings. Options
+            include chromosome, region_start, region_end, read_start, read_end, and motif. More to
+            be added in future.
+        quiet: silences progress bars (currently unused)
+        cores: cores across which to parallelize processes (currently unused)
+        subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
+            reads to be returned. If not None, at least one of n or frac must be provided. The array
+            parameter should not be provided here.
+
+    Returns:
+        a list of tuples, each tuple containing all datasets corresponding to an individual read that
+        was within the specified regions.
+        a list of strings, naming the datasets returned.
+        a regions_dict, containing lists of (region_start,region_end) coordinates by chromosome/contig.
+    """
+```
+`load_processed.regions_to_list` for parallel loading of many loci into a list for easy downstream analysis.
+```
+def regions_to_list(
+    function_handle,
+    regions,
+    window_size: int | None = None,
+    quiet: bool = True,
+    cores: int | None = None,
+    split_large_regions: bool = False,
+    **kwargs,
+):
+    """
+    User-facing function.
+
+    Run any standard load_processed pileup or extract loader loading each region from the region
+    specifier into a new element of a list.
+
+    Args:
+        function_handle: the loader function you want to run.
+        regions: the region specifier. Typically we expect to get many regions for this function, in the form of a list
+            of strings or bed file paths. regions_to_list will run across all of these one-by-one returning a separate
+            function return for each independent region.
+        window_size: window around centers of regions, defaults to None
+        quiet: disables progress bars
+        cores: CPU cores across which to parallelize processing. Default to None, which means all available.
+        split_large_regions: if True, regions will be run sequentially in parallelized chunks. If False,
+            each individual region's chunks will be run sequentially but there will be parallelization across
+            regions, i.e. each core will be assigned one region at a time by the executor. Set to True if you
+            are running a small number of very large regions (e.g. one or two chromosomes), otherwise to to False (default).
+        **kwargs: all necessary keyword arguments to pass down to the loader
+
+    Returns:
+        List(function_handle return objects per region)
+    """
 ```
 
 ## Parameters and what they mean
 
-Many of the parsing, loading, and plotting functions share parameters. The common ones and their meanings/defaults are listed below:
+Many of the parsing, loading, and plotting functions share parameters. The common ones and their meanings/defaults are listed below.
+
+### Functional Parameters
 
 `input_file` for parsing functions is a mandatory parameter providing the path to an aligned .bam file with modification calls, a .bam.bai index, and tags following the latest .bam specifications. parse_bam will check whether this .bam file meets the specifications and tell you what to do if it doesn't.
 
@@ -347,19 +857,35 @@ Many of the parsing, loading, and plotting functions share parameters. The commo
 
 `regions` and `regions_list` are used for specifying subsets of the genome to parse, load, or plot. A `region` is defined as a range of genomic coordinates, and `regions` can refer to any number of `region` specifications. Thus for the `regions` parameter one can pass a single region specified as a string, `chrX:XXX-XXX`, many regions defined in a .bed tab-separated-value file with each line containing at miniimum chromosome, start, and end coordinates (plus optionally a strand, + or -), or a list of strings specifiers or bed files. The entire list will be rolled into a single `regions` set to be passed down for subsequent processing. In the case of regions-wise comparisons in plotting functions, `regions_list` is a *list of regions objects*, where each element of the list is a string, Path, or list of strings or Paths.
 
+`regions_5to3prime` is used by loader/plotter functions that align data from many loci. It ensures that all loaded data is oriented in the right way with respect to functional elements by flipping region data to all orient 5' to 3' based on the strand specified in the region str or bed file line.
+
+`single_strand` limits loaded/plotted data to only the strand specified in the region str or bed file line. Any modification on a given nucleotide has a different set of possible locations on the forward vs reverse strand which can be relevant for many biological phenomena.
+
 `motif` and `motifs` are used to specify what base modifications you are interested in and what their sequence context is for parse, load, and plot functions. A single `motif` is a string containing several canonical bases (using the [IUPAC nucleic acid notation](https://en.wikipedia.org/wiki/Nucleic_acid_notation), e.g. **H** refers to "not a G"), followed by a comma, and then an integer specifying which coordinate in the string is your modified base. For example, 6mA is denoted "A,0" and CpG is denoted "CG,0" whereas GpC *excluding CpGs* is denoted "GCH,1". `motifs` is a list of such strings for functions that can work on multiple base modifications at once.
 
 `thresh` for parsing and some loading/plotting functions refers to a base modification probability threshold, used to transform the the output of most basecalling pipelines into a binary call for any given read position. For parsing pileup calls, this defaults to `None` which allows `modkit` to pick its own threshold based on the data. For other calls, the parameter is mandatory. The normal use is specifying between 0 and 1, but 1-255 is also supported to make the inputs more backwards compatible with old `dimelo` package versions and with examination of the raw .bam file contents. A value between and 255 will simply be converted into a 0-1 probability before being handed down to subsequent processing.
 
 `window_size` for parsing and most loading and plotting functions is a *modification to your regions* that will redefine them to be all the same size, i.e. 2 x window_size, centered around the centers of your original regions. This is important for the parsing and plotting applications that show many genomic regions at once, but should be left blank if you don't want your regions modified. The default is `None` for functions where the parameter is optional. 
 
-`cores`, `log`, `cleanup`, `quiet`, and `override_checks` can be ignored for most parsing applications. `cores` allows you to specify that `modkit` uses only a fraction of all the compute resources of your machine, rather than all; `log` will save the modkit logs for troubleshooting, and `cleanup` will keep the (often large) human-readable outputs that are inefficient for plotting and vector extraction but may be helpful for other use cases. `quiet` suppressed progress bars and other outputs and `override_checks` lets you run modkit even if the bam format checking and reference alignment checking are anomalous.
-
-`relative` is a boolean input that specifies whether loading and plotting operations adjust coordinates to be relative to some center point or simple plot in absolute genomic coordinates.
+`relative` is a boolean input that specifies whether loading and plotting operations adjust coordinates to be relative to some center point or simple plot in absolute genomic coordinates. This is not currently implemented for some methods, but exists as an interface to allow future implementation.
 
 `sort_by` for plot_reads will sort reads by any of `region_start`, `region_end`, `read_name`, `read_start`, `read_end`, `chromosome`, `strand`, and `MOTIF_mod_fraction` for any extracted motif. New sorting options are planned in the future. The default is `shuffle`, which will put the reads in a random order. `sort_by` can be passed as one string or as a list of strings. If a list is passed, the reads will be sorted hierarchically i.e. first by the first list element, then the second, and so on. The exception is that if any of the list elements are `shuffle`, the reads will *first* be shuffled and then sorted by the rest of the elements in order of priority.
 
-`**kwargs` for all plotting functions get passed down to the underlying matplotlib / seaborn plotting functions. See matplotlib and seaborn documentation for more details.
+`**kwargs` for all plotting functions except for `plot_read_browser`, which uses `plotly` and doesn't provide as convenient of an interface, `**kwargs` get passed down to the underlying `matplotlib` / `seaborn` plotting functions. See `matplotlib` and `seaborn` documentation for more details.
+
+### Execution Parameters  
+
+`cores` allows you to specify that `modkit` uses only a fraction of all the compute resources of your machine, rather than all.
+
+`log` will save the modkit logs for troubleshooting.
+
+`cleanup` will keep the (often large) human-readable outputs that are inefficient for plotting and vector extraction but may be helpful for other use cases.
+
+`quiet` suppressed progress bars and other outputs.
+
+`override_checks` lets you run modkit even if the bam format checking and reference alignment checking are anomalous.
+
+`CHUNK_SIZE` sets the genomic chunks processed in a single step for parallelized operations.
 
 # Known Issues
 ## No progress bars
