@@ -1,21 +1,21 @@
-# dimelo
+# dimelo-toolkit
 ## Introduction
 
-The `dimelo` package provides an integrated pipeline for the analysis of multimodal single molecule epigenetic measurements. It is designed with long-read sequencing measurements in mind, but is compatible with any sequencing processing pipeline that generates specification-compliant modbam files.
+`dimelo-toolkit` package provides an integrated pipeline for the analysis of multimodal single molecule epigenetic measurements. It is designed with long-read sequencing measurements in mind, but is compatible with any sequencing processing pipeline that generates specification-compliant modbam files.
 
-v0.2.0 is a major overhaul compared to v0.1.0. It supports the same core pileup and single read extraction operations as the original `dimelo v0.1.0` package, but focuses on a number of new objectives:
+`dimelo-toolkit v0.2.0` supersedes the previous tool for processing DiMeLo-seq data, `dimelo v0.1.0`, while supporting numerous new use cases.
 
 <ol>
-    <li>Support multicolor data / any base modification context (GpC, CpC, etc)</li>
+    <li>Support multicolor data / any base modification context (GpC, CpC, etc) for any properly formatted .bam file, including PacBio sequencing</li>
     <li>Vector extraction for all data types</li>
-    <li>Enhanced speed and reliability, enabling e.g. whole genome processing</li>
+    <li>Enhanced speed and reliability, sometimes 100-1000x faster, enabling e.g. whole genome processing</li>
     <li>Maintainability -> using a small number of standard dependencies, outsourcing as much as possible to well-maintained third-party packages (e.g. modkit, pysam, h5py, and a few others)</li>
     <li>Modularity in both architecture and operation</li>
     <li>Ease of use, especially for multiplatform installation</li>
     <li>More powerful plotting e.g. bam files from different basecallers, single read sorting, rapid iteration</li>
 </ol>
 
-This README document contains installation instructions and documentation for various use cases. There is a [tutorial](#basic-use) jupyter notebook that will take you through the core functionality of the package step-by-step. For Google Colab, the notebook already contains the necessary code to set up and run `dimelo`, whereas for local operation you will first need to follow the [local install instructions](#local-install-via-conda). Be sure to check that your system meets our [specifications](#system-requirements). The software is still in early release, and as such, user feedback and requests are greatly appreciated.
+This README document contains installation instructions and documentation for various use cases. There is a [tutorial](#basic-use) jupyter notebook that will take you through the core functionality of the package step-by-step. For Google Colab, the notebook already contains the necessary code to set up and run `dimelo-toolkit`, whereas for local operation you will first need to follow the [local install instructions](#local-install-via-conda). Be sure to check that your system meets our [specifications](#system-requirements). The software is still in early release, and as such, user feedback and requests are greatly appreciated.
 
 ## Contents
 [1.0 Install Instructions](#Install-instructions)
