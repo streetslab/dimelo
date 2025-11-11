@@ -27,7 +27,9 @@ DEFAULT_COLORS.update(
         "CG,0": "orange",
         "CG,0,m": "yellow",
         "CG,0,h": "red",
-        "GCH,1": "purple",
+        "HCG,1":"orange",
+        "WCG,1":"red",
+        "GCH,1": "green",
     }
 )
 # Default colorscales for plotly; based off of DEFAULT_COLORS
