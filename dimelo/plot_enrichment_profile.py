@@ -12,6 +12,7 @@ def plot_enrichment_profile(
     motifs: list[str],
     sample_names: list[str],
     window_size: int,
+    relative: bool = True,
     single_strand: bool = False,
     regions_5to3prime: bool = False,
     smooth_window: int | None = None,
@@ -39,6 +40,7 @@ def plot_enrichment_profile(
         mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
         sample_names: list of names to use for labeling traces in the output; legend entries
         window_size: half-size of the desired window to plot; how far the window stretches on either side of the center point
+        relative: True means x-axis is centered around region centers, False means x-axis is absolute genome positions
         single_strand: True means we only grab counts from reads from the same strand as
             the region of interest, False means we always grab both strands within the regions
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping
@@ -65,8 +67,21 @@ def plot_enrichment_profile(
         cores=cores,
     )
 
+    if relative:
+        offset_center = 0
+    else:
+        regions_dict = utils.regions_dict_from_input(
+            regions_list[0],
+            window_size,
+        )
+        if len(regions_dict)==1 and len(list(regions_dict.values())[0])==1:
+            region_tuple = list(regions_dict.values())[0][0]
+            offset_center = (region_tuple[0] + region_tuple[1]) // 2
+        else:
+            raise ValueError("relative=False must be used when plotting more than one region.")
+
     axes = make_enrichment_profile_plot(
-        trace_vectors=trace_vectors, sample_names=sample_names, **kwargs
+        trace_vectors=trace_vectors, sample_names=sample_names, offset_center=offset_center, **kwargs
     )
     return axes
 
@@ -241,6 +256,7 @@ def get_enrichment_profiles(
 def make_enrichment_profile_plot(
     trace_vectors: list[np.ndarray],
     sample_names: list[str],
+    offset_center: int = 0,
     **kwargs,
 ) -> Axes:
     """
@@ -252,6 +268,7 @@ def make_enrichment_profile_plot(
     Args:
         trace_vectors: list of enrichment profile traces
         sample_names: list of names to use for labeling traces in the output; legend entries
+        offset_center: position offset to apply to x-axis (e.g., when plotting absolute genome positions)
         kwargs: other keyword parameters passed through to utils.line_plot
 
     Returns:
@@ -261,8 +278,8 @@ def make_enrichment_profile_plot(
         raise ValueError("Unequal number of inputs")
     axes = utils.line_plot(
         indep_vector=np.arange(
-            -len(trace_vectors[0]) // 2,
-            len(trace_vectors[0]) // 2 + len(trace_vectors[0]) % 2,
+            offset_center - len(trace_vectors[0]) // 2,
+            offset_center + len(trace_vectors[0]) // 2 + len(trace_vectors[0]) % 2,
         ),
         indep_name="pos",
         dep_vectors=trace_vectors,
