@@ -75,7 +75,7 @@ class ParsedMotif:
             if self.modified_pos >= len(self.motif_seq):
                 raise ValueError(f"Motif {motif_string} has an out-of-range mod index.")
             self.modified_base = self.motif_seq[self.modified_pos]
-            self.mod_codes = set(parts[2])
+            self.mod_codes = set([parts[2]])
         else:
             # Motifs need both a sequence and an index, separated by a comma
             raise ValueError(
