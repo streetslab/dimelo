@@ -67,7 +67,7 @@ def plot_read_browser(
         motifs=motifs,
         single_strand=single_strand,
         sort_by=sort_by,
-        calculate_mod_fractions=False,
+        calculate_mod_fractions=True,
         subset_parameters=subset_parameters,
     )
 
@@ -107,6 +107,7 @@ def plot_read_browser(
         region_start=region_start,
         region_end=region_end,
         hover=hover,
+        thresh=thresh,
         **kwargs,
     )
 
@@ -294,6 +295,10 @@ def make_browser_figure(
     region_start: int,
     region_end: int,
     hover: bool = True,
+    thresh: int | float | None = None,
+    width: int = 1,
+    size: int = 4,
+    colorscales: dict = utils.DEFAULT_COLORSCALES,
     **kwargs,
 ) -> plotly.graph_objs.Figure:
     """
@@ -341,7 +346,7 @@ def make_browser_figure(
                 x=[row.read_start, row.read_end],
                 y=[row.y_index, row.y_index],
                 mode="lines",
-                line=dict(width=1, color="lightgrey"),
+                line=dict(width=width, color="lightgrey"),
                 showlegend=False,
                 hoverinfo="text",
                 hovertext=row.read_name,
@@ -365,9 +370,11 @@ def make_browser_figure(
                     ]
                 ),
                 marker=dict(
-                    size=4,
+                    size=size,
                     color=motif_df["prob"],
-                    colorscale=utils.DEFAULT_COLORSCALES[motif],
+                    colorscale=colorscales[motif],
+                    cmin=thresh,
+                    cmax=1.0,
                     colorbar=dict(
                         title=dict(
                             text=f"{motif} probability",
