@@ -170,9 +170,13 @@ def format_browser_data(
     # differences are caused by the assumptions made in parse_bam.extract h5 conversion
     # and don't matter for much but do cause the full duplicate check to leave duplicates,
     # which then cause non-unique indices for mapping in collapse mode
-    read_extent_df = read_df[
-        ["read_start", "read_end", "y_index", "read_name"]
-    ].drop_duplicates(subset=["read_name"])
+    read_extent_df = (
+        read_df[["read_start", "read_end", "y_index", "read_name"]]
+        .assign(read_length=lambda df: df.read_end - df.read_start)
+        .sort_values("read_length", ascending=False) # TODO: logic can be removed once we reference true read lengths from modkit
+        .drop_duplicates(subset=["read_name"])
+        .drop(columns=["read_length"])
+    )
     # * represents the methylation events
     mod_event_df = (
         read_df[["y_index", "read_name", "motif", "pos_vector", "prob_vector"]]
