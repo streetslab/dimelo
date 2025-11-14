@@ -968,13 +968,6 @@ def read_by_base_txt_to_hdf5(
                 canonical_base = fields[15]
                 prob = float(fields[10])
                 mod_code = fields[11]
-                read_len = int(fields[9])
-                ref_strand = fields[5]   
-                # TODO: verify that read position is in the right (ref) coordinate system 
-                if ref_strand == "+":
-                    pos_in_read_ref = int(fields[1])
-                elif ref_strand == "-":
-                    pos_in_read_ref = read_len - int(fields[1]) - 1
 
                 if read_name != fields[0]:
                     # Record the previous read details unless this is the first line
@@ -1047,6 +1040,13 @@ def read_by_base_txt_to_hdf5(
                     # Metadata
                     read_name = fields[0]
                     read_chrom = fields[3]
+                    read_len = int(fields[9])
+                    ref_strand = fields[5]   
+                    # TODO: verify that read position is in the right (ref) coordinate system 
+                    if ref_strand == "+":
+                        pos_in_read_ref = int(fields[1])
+                    elif ref_strand == "-":
+                        pos_in_read_ref = read_len - int(fields[1]) - 1
                     # Calculate read start (leftmost position on ref genome)
                     # TODO: logic can be replaced when we switch to true read start/end from modkit
                     read_start = pos_in_genome - pos_in_read_ref
@@ -1057,6 +1057,10 @@ def read_by_base_txt_to_hdf5(
                 # Adjust the read_end (rightmost position on ref genome) each time there's a new mod
                 # This will lead to the most accurate end positions for gapped reads
                 # TODO: logic can be replaced when we switch to true read start/end from modkit
+                if ref_strand == "+":
+                    pos_in_read_ref = int(fields[1])
+                elif ref_strand == "-":
+                    pos_in_read_ref = read_len - int(fields[1]) - 1
                 read_end = pos_in_genome + (read_len - pos_in_read_ref)
                 # Regardless of whether its a new read or not,
                 # add modification to vector if motif type is correct
