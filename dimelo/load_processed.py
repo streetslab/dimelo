@@ -629,6 +629,7 @@ def read_vectors_from_hdf5(
     quiet: bool = True,  # currently unused; change to default False when pbars are implemented
     cores: int | None = None,  # currently unused
     subset_parameters: dict | None = None,
+    span_full_window: bool = False,
 ) -> tuple[list[tuple], list[str], dict | None]:
     """
     User-facing function.
@@ -679,6 +680,7 @@ def read_vectors_from_hdf5(
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
+        span_full_window: If True, only load reads that fully span the window defined by region_start-region_end
 
     Returns:
         a list of tuples, each tuple containing all datasets corresponding to an individual read that
@@ -731,6 +733,8 @@ def read_vectors_from_hdf5(
                     relevant_read_indices = np.flatnonzero(
                         (read_ends > region_start)
                         & (read_starts < region_end)
+                        & (read_starts <= region_start if span_full_window else True)
+                        & (read_ends >= region_end if span_full_window else True)
                         & np.isin(read_motifs, motifs)
                         & (read_chromosomes == chrom)
                         & (

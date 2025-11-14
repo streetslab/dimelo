@@ -16,6 +16,7 @@ def plot_read_browser(
     sort_by: str | list[str] = "shuffle",
     hover: bool = True,
     subset_parameters: dict | None = None,
+    span_full_window: bool = False,
     **kwargs,
 ) -> plotly.graph_objs.Figure:
     """
@@ -45,6 +46,7 @@ def plot_read_browser(
         hover: if False, disables display of information on mouse hover
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided.
+        span_full_window: if True, only plot reads that fully span the window defined by region_start-region_end
 
     Returns:
         plotly Figure object containing the plot
@@ -69,6 +71,7 @@ def plot_read_browser(
         sort_by=sort_by,
         calculate_mod_fractions=True,
         subset_parameters=subset_parameters,
+        span_full_window=span_full_window,
     )
 
     mod_vector_index = entry_labels.index("mod_vector")
