@@ -854,29 +854,54 @@ def read_vectors_from_hdf5(
 
     ## Sort the reads
 
+    # Normalize sort_by to a list of tuples (field, order)
+    # Support formats:
+    #   - "field" or ["field1", "field2"] -> [("field1", "asc"), ("field2", "asc")]
+    #   - [("field1", "desc"), "field2"] -> [("field1", "desc"), ("field2", "asc")]
+
     # Enforce that sort_by is a list
     if not isinstance(sort_by, list):
         sort_by = [sort_by]
 
+    # Parse into (field, order) tuples
+    sort_by_normalized = []
+    for item in sort_by:
+        if isinstance(item, tuple):
+            field, order = item
+            if order not in ["asc", "desc"]:
+                raise ValueError(
+                    f"Sort order must be 'asc' or 'desc', got '{order}' for field '{field}'"
+                )
+            sort_by_normalized.append((field, order))
+        else:
+            # Default to ascending order
+            sort_by_normalized.append((item, "asc"))
+
     # If 'shuffle' appears anywhere in sort_by, we first shuffle the list
-    if "shuffle" in sort_by:
+    if any(field == "shuffle" for field, _ in sort_by_normalized):
         utils.rng.shuffle(read_tuples_all)
 
+    # Build sorting configuration
     try:
-        sort_by_indices = [
-            readwise_datasets.index(sort_item)
-            for sort_item in sort_by
-            if sort_item != "shuffle"
+        sort_config = [
+            (readwise_datasets.index(field), order == "desc")
+            for field, order in sort_by_normalized
+            if field != "shuffle"
         ]
     except ValueError as e:
         raise ValueError(
             f"Sorting error. {e}. Datasets include {readwise_datasets}. If you need mod fraction sorting make sure you are not setting calculate_read_fraction to False."
         ) from e
 
-    if len(sort_by_indices) > 0:
-        sorted_read_tuples = sorted(
-            read_tuples_all, key=lambda x: tuple(x[index] for index in sort_by_indices)
-        )
+    if len(sort_config) > 0:
+        # Use stable sort from right to left (reverse order of sort keys)
+        sorted_read_tuples = read_tuples_all
+        for idx, is_reverse in reversed(sort_config):
+            sorted_read_tuples = sorted(
+                sorted_read_tuples,
+                key=lambda x: x[idx],
+                reverse=is_reverse
+            )
     else:
         sorted_read_tuples = read_tuples_all
 
