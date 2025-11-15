@@ -796,7 +796,7 @@ def read_vectors_from_hdf5(
             )
     #  We add region information (start, end, and strand; chromosome is already present!)
     # so that it is possible to sort by and process based on these
-    readwise_datasets += ["region_start", "region_end", "region_strand"]
+    readwise_datasets += ["region_start", "region_end", "region_strand", "read_length"]
 
     # This is sanitizing the dataset entries and adjusting prob values if needed
     if binarized:
@@ -812,6 +812,9 @@ def read_vectors_from_hdf5(
             )
             for tup in read_tuples_raw
         ]
+
+    read_start_idx = readwise_datasets.index("read_start")
+    read_end_idx = readwise_datasets.index("read_end")
 
     if calculate_mod_fractions:
         # Add the MOTIF_mod_fraction entries to the readwise_datasets list for future reference in sorting
@@ -832,8 +835,10 @@ def read_vectors_from_hdf5(
 
         read_tuples_all = []
         for read_tuple in read_tuples_processed:
+            read_length = read_tuple[read_end_idx] - read_tuple[read_start_idx]
             read_tuples_all.append(
                 tuple(val for val in read_tuple)
+                + (read_length,)
                 + tuple(
                     mod_frac
                     for mod_frac in mod_fractions_by_read_name_by_motif[
@@ -842,7 +847,10 @@ def read_vectors_from_hdf5(
                 )
             )
     else:
-        read_tuples_all = read_tuples_processed
+        read_tuples_all = []
+        for read_tuple in read_tuples_processed:
+            read_length = read_tuple[read_end_idx] - read_tuple[read_start_idx]
+            read_tuples_all.append(tuple(val for val in read_tuple) + (read_length,))
 
     ## Sort the reads
 
