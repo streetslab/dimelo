@@ -898,9 +898,7 @@ def read_vectors_from_hdf5(
         sorted_read_tuples = read_tuples_all
         for idx, is_reverse in reversed(sort_config):
             sorted_read_tuples = sorted(
-                sorted_read_tuples,
-                key=lambda x: x[idx],
-                reverse=is_reverse
+                sorted_read_tuples, key=lambda x: x[idx], reverse=is_reverse
             )
     else:
         sorted_read_tuples = read_tuples_all

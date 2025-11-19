@@ -1041,8 +1041,8 @@ def read_by_base_txt_to_hdf5(
                     read_name = fields[0]
                     read_chrom = fields[3]
                     read_len = int(fields[9])
-                    ref_strand = fields[5]   
-                    # TODO: verify that read position is in the right (ref) coordinate system 
+                    ref_strand = fields[5]
+                    # TODO: verify that read position is in the right (ref) coordinate system
                     if ref_strand == "+":
                         pos_in_read_ref = int(fields[1])
                     elif ref_strand == "-":

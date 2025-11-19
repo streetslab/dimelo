@@ -74,14 +74,19 @@ def plot_enrichment_profile(
             regions_list[0],
             window_size,
         )
-        if len(regions_dict)==1 and len(list(regions_dict.values())[0])==1:
+        if len(regions_dict) == 1 and len(list(regions_dict.values())[0]) == 1:
             region_tuple = list(regions_dict.values())[0][0]
             offset_center = (region_tuple[0] + region_tuple[1]) // 2
         else:
-            raise ValueError("relative=False must be used when plotting more than one region.")
+            raise ValueError(
+                "relative=False must be used when plotting more than one region."
+            )
 
     axes = make_enrichment_profile_plot(
-        trace_vectors=trace_vectors, sample_names=sample_names, offset_center=offset_center, **kwargs
+        trace_vectors=trace_vectors,
+        sample_names=sample_names,
+        offset_center=offset_center,
+        **kwargs,
     )
     return axes
 
