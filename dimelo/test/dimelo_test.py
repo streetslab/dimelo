@@ -51,8 +51,10 @@ class TestParseToPlot(DiMeLoParsingTestCase):
         pileup_target, regions_target = results["pileup"]
 
         if pileup_target is not None and regions_target is not None:
-            # This is necessary because the gzipped files are different on mac vs linux, but the contents should be identical (and are, so far)
-            # Not sure why the compression ratio is better on Linux when both are using pysam.tabix_compress with pysam 0.22.0 and zlib 1.2.13 but whatcha gonna do
+            # This is necessary because the gzipped files are different on mac vs linux,
+            # but the contents should be identical (and are, so far)
+            # Not sure why the compression ratio is better on Linux when both are using
+            # pysam.tabix_compress with pysam 0.22.0 and zlib 1.2.13 but whatcha gonna do
             with (
                 gzip.open(pileup_bed, "rt") as f1,
                 gzip.open(pileup_target, "rt") as f2,
