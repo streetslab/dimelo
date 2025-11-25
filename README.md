@@ -1,9 +1,9 @@
 # dimelo-toolkit
 ## Introduction
 
-`dimelo-toolkit` package provides an integrated pipeline for the analysis of multimodal single molecule epigenetic measurements. It is designed with long-read sequencing measurements in mind, but is compatible with any sequencing processing pipeline that generates specification-compliant modbam files.
+`dimelo-toolkit` package provides an integrated pipeline for the analysis of multimodal single molecule epigenetic measurements. It is designed with long-read sequencing measurements in mind, but is compatible with any sequencing processing pipeline that generates specification-compliant modbam files. If you need to cite `dimelo-toolkit`, please reference https://www.biorxiv.org/content/10.1101/2025.11.09.687458v1.full. 
 
-`dimelo-toolkit v0.2.0` supersedes the previous tool for processing DiMeLo-seq data, `dimelo v0.1.0`, while supporting numerous new use cases.
+`dimelo-toolkit v0.2.x` supersedes the previous tool for processing DiMeLo-seq data, `dimelo v0.1.0`, while supporting numerous new use cases.
 
 <ol>
     <li>Support multicolor data / any base modification context (GpC, CpC, etc) for any properly formatted .bam file, including PacBio sequencing</li>
