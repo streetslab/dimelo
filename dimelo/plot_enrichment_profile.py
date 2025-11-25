@@ -40,7 +40,7 @@ def plot_enrichment_profile(
         mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
         sample_names: list of names to use for labeling traces in the output; legend entries
         window_size: half-size of the desired window to plot; how far the window stretches on either side of the center point
-        relative: True means x-axis is centered around region centers, False means x-axis is absolute genome positions
+        relative: True means x-axis is centered around region centers, False means x-axis is absolute genome positions. Must be True when plotting more than one region.
         single_strand: True means we only grab counts from reads from the same strand as
             the region of interest, False means we always grab both strands within the regions
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping

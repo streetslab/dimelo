@@ -17,6 +17,9 @@ def plot_read_browser(
     hover: bool = True,
     subset_parameters: dict | None = None,
     span_full_window: bool = False,
+    width: int = 1,
+    size: int = 4,
+    colorscales: dict = utils.DEFAULT_COLORSCALES,
     **kwargs,
 ) -> plotly.graph_objs.Figure:
     """
@@ -47,6 +50,9 @@ def plot_read_browser(
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided.
         span_full_window: if True, only plot reads that fully span the window defined by region_start-region_end
+        width: width of the read lines in the browser
+        size: size of the modification event markers in the browser
+        colorscales: dictionary mapping motif names to plotly colorscale specifications
 
     Returns:
         plotly Figure object containing the plot
@@ -173,6 +179,8 @@ def format_browser_data(
     # differences are caused by the assumptions made in parse_bam.extract h5 conversion
     # and don't matter for much but do cause the full duplicate check to leave duplicates,
     # which then cause non-unique indices for mapping in collapse mode
+    # The sorting below is just to make sure that when we drop duplicates, we keep
+    # the longest read extent for each read_name. It doesn't effect final figure sort order.
     read_extent_df = (
         read_df[["read_start", "read_end", "y_index", "read_name"]]
         .assign(read_length=lambda df: df.read_end - df.read_start)
@@ -325,6 +333,10 @@ def make_browser_figure(
         region_start: start position of the region being browsed
         region_end: end position of the region being browsed
         hover: if False, disables display of information on mouse hover
+        thresh: pass down threshold for color scaling of modification probabilities
+        width: width of the read lines in the browser
+        size: size of the modification event markers in the browser
+        colorscales: dictionary mapping motif names to plotly colorscale specifications
 
     TODO: Think about how this interfaces with different types of initial sorting...
     TODO: Make it so that this method does NOT modify the input dataframe
