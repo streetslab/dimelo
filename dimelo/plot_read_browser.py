@@ -117,7 +117,9 @@ def plot_read_browser(
         region_end=region_end,
         hover=hover,
         thresh=thresh,
-        **kwargs,
+        width=width,
+        size=size,
+        colorscales=colorscales,
     )
 
     return fig
@@ -316,7 +318,6 @@ def make_browser_figure(
     width: int = 1,
     size: int = 4,
     colorscales: dict = utils.DEFAULT_COLORSCALES,
-    **kwargs,
 ) -> plotly.graph_objs.Figure:
     """
     Make a browser figure, using the provided pre-processed data
