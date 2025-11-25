@@ -1,4 +1,4 @@
-name: dimelo
+name: dimelo-toolkit
 channels:
   - conda-forge
   - nanoporetech

@@ -51,27 +51,27 @@ This README document contains installation instructions and documentation for va
 
 **Platforms:** Mac and Linux operating systems, ARM (e.g. M1/M2 mac) and x86 (e.g. Intel mac) architectures. The package has been tested on HPC clusters, but there may be additional complexities depending on how these systems are set up.
 
-*For Windows,  we recommend using [Google Colab](https://colab.research.google.com/). We have not tested on [Windows Linux Subsystem](https://learn.microsoft.com/en-us/windows/wsl/install) but in principle that should work too. Windows support is possible in future, but blocked by [conda availability for modkit executables](https://anaconda.org/nanoporetech/modkit) and the [current implementation](dimelo/run_modkit.py) of live error/progress tracking during modkit execution, which relies on a unix-only library as of Python 3.11. The urgency of a Windows implementation will depend on user need, so please let us know if this is important for you.*
+*For Windows,  we recommend using [Google Colab](https://colab.research.google.com/). We have not tested on [Windows Linux Subsystem](https://learn.microsoft.com/en-us/windows/wsl/install) but in principle that should work too. Windows support is possible in future, but blocked by [conda availability for modkit executables](https://anaconda.org/nanoporetech/modkit) and the [current implementation](dimelo-toolkit/run_modkit.py) of live error/progress tracking during modkit execution, which relies on a unix-only library as of Python 3.11. The urgency of a Windows implementation will depend on user need, so please let us know if this is important for you.*
 
 **Conda and Python:** The default installation requires conda, or alternatives like mamba. See [here](https://www.anaconda.com/download) for conda installation. The installation instructions below will install Python 3.11 for you within a conda virtual environment, but depending on your system configuration you may need to ensure that you are not also loading a different version of Python on your path. If you encounter unexpected errors when importing `dimelo`, e.g. complaining about syntax, consider checking your Python version.
 
-### Load source code from the modkit_parsing_beta branch
+### Load source code for dimelo-toolkit
 
-Open your terminal or command line and navigate to wherever you want to keep the `dimelo` source code (e.g. your Documents folder, `cd Documents`) and clone the repo
+Open your terminal or command line and navigate to wherever you want to keep the `dimelo-toolkit` source code (e.g. your Documents folder, `cd Documents`) and clone the repo
 
 ```
-git clone https://github.com/streetslab/dimelo
+git clone https://github.com/streetslab/dimelo-toolkit
 ```
 
 ### Set up virtual environment
 
-Navigate into the dimelo directory
+Navigate into the dimelo-toolkit directory
 
 ```
-cd dimelo
+cd dimelo-toolkit
 ```
 
-Create a conda environment using environment.yml. This will make a new conda environment with the name `dimelo`. 
+Create a conda environment using environment.yml. This will make a new conda environment with the name `dimelo-toolkit`. 
 
 ```
 conda env create -f environment.yml
@@ -79,15 +79,15 @@ conda env create -f environment.yml
 
 *If you want to handle environment creation yourself, see [the alternative installation instructions](#alternative-installations).*
 
-### Install pip dependencies and core dimelo package
+### Install pip dependencies and core dimelo-toolkit package
 
 Activate your conda environment, which should now contain python 3.11 and a modkit executable on the path and executable on your system.
 
 ```
-conda activate dimelo
+conda activate dimelo-toolkit
 ```
 
-Ensure that you are still in the top-level dimelo directory. Install the dimelo package and its dependencies from source.
+Ensure that you are still in the top-level dimelo-toolkit directory. Install the dimelo-toolkit package and its dependencies from source.
 
 ```
 pip install .
@@ -95,7 +95,7 @@ pip install .
 
 ## Google Colab Installation
 
-Run the following code in the first cell of your notebook to grab `modkit v0.2.4` from conda and install the `dimelo modkit_parsing_beta` branch. This will have to be run whenever you make a new Colab instance, unless you have a better way of managing this, in which case please reach out. The tutorial notebook runs equivalent code blocks to set up your environment, so if you are trying to run the tutorial you can skip to [Basic Use](#basic-use).
+Run the following code in the first cell of your notebook to grab `modkit v0.2.4` from conda and install the `dimelo-toolkit main` branch. This will have to be run whenever you make a new Colab instance, unless you have a better way of managing this, in which case please reach out. The tutorial notebook runs equivalent code blocks to set up your environment, so if you are trying to run the tutorial you can skip to [Basic Use](#basic-use).
 
 ```
 from google.colab import drive
@@ -104,14 +104,14 @@ drive.mount('/content/drive')
 import condacolab
 condacolab.install()
 !conda install nanoporetech::modkit==0.2.4
-!git clone https://github.com/streetslab/dimelo
-!cd dimelo && pip install ipywidgets==7.7.1 .
+!git clone https://github.com/streetslab/dimelo-toolkit
+!cd dimelo-toolkit && pip install ipywidgets==7.7.1 .
 import dimelo
 ```
 
 ## Alternative Installations
 
-Alternatively, you can install modkit into any conda environment you like. If you want to, you can install modkit some other way, and then add it to the path of your notebook or script. *NOTE: if you are creating the environment yourself, be sure to use python 3.10 or greater. Some dimelo package features require relatively new python releases.*
+Alternatively, you can install modkit into any conda environment you like. If you want to, you can install modkit some other way, and then add it to the path of your notebook or script. *NOTE: if you are creating the environment yourself, be sure to use python 3.10 or greater. Some dimelo-toolkit features require relatively new python releases.*
 
 ```
 conda install nanoporetech::modkit==0.2.4
@@ -125,7 +125,7 @@ sys.path.append('path_to_modkit_executable_directory')
 ```
 
 ## Developer Installation
-If you are planning on developing for the `dimelo` package, change the `pip install` command to install the package in "editable" mode, so that your code changes are reflected in your environment:
+If you are planning on developing for the `dimelo-toolkit` package, change the `pip install` command to install the package in "editable" mode, so that your code changes are reflected in your environment:
 ```
 pip install . -e
 ```
@@ -159,7 +159,7 @@ See the [tutorial](tutorial.ipynb) as a starting point.
 For local operation on Mac or Linux, you will already have cloned the repo to disk in the installation step. Activate your conda environment, make sure you have jupyter installed, and then launch a jupyter notebook server and navigate to `tutorial.ipynb`. You can also use other tools to open the jupyter notebook or you can simply reference it as an example.
 
 ```
-conda activate dimelo
+conda activate dimelo-toolkit
 jupyter notebook
 ```
 
@@ -224,9 +224,8 @@ You should expect to see some text outputs and a series of progress bars. Progre
 There should not be such issues for command line operation. See below an example of command line progress outputs: you should expect relatively fast pre-processing, 10-90 seconds, and then contig processing times depending heavily on the size of your `.bam` file and the extent of your `regions`.
 
 ```
-(dimelo_modkit_parsing) oberondixon-luinenburg@Oberons-MacBook-Pro package_test_notebooks % python dimelo_cmd.py
+(dimelo-toolkit) % python dimelo_cmd.py
 modkit found with expected version 0.2.4
-No output directory provided, using input directory /Users/oberondixon-luinenburg/Documents/Ioannidis-Streets/dimelo_test_data/20230702_jm_lmnb1_acessibility_redux
 No specified number of cores requested. 8 available on machine, allocating all.
 Modification threshold of 0.9 will be treated as coming from range 0-1.
 ████████████████████| Preprocessing complete for motifs ['A,0'] in chm13.draft_v1.1.fasta:  100% | 00:30
@@ -246,6 +245,7 @@ def plot_enrichment_profile(
     motifs: list[str],
     sample_names: list[str],
     window_size: int,
+    relative: bool = True,
     single_strand: bool = False,
     regions_5to3prime: bool = False,
     smooth_window: int | None = None,
@@ -268,6 +268,7 @@ def plot_enrichment_profile(
         mod_names: list of modifications to extract; expected to match mods available in the relevant mod_files
         sample_names: list of names to use for labeling traces in the output; legend entries
         window_size: half-size of the desired window to plot; how far the window stretches on either side of the center point
+        relative: True means x-axis is centered around region centers, False means x-axis is absolute genome positions. Must be True when plotting more than one region.
         single_strand: True means we only grab counts from reads from the same strand as
             the region of interest, False means we always grab both strands within the regions
         regions_5to3prime: True means negative strand regions get flipped, False means no flipping
@@ -440,6 +441,10 @@ def plot_read_browser(
     sort_by: str | list[str] = "shuffle",
     hover: bool = True,
     subset_parameters: dict | None = None,
+    span_full_window: bool = False,
+    width: int = 1,
+    size: int = 4,
+    colorscales: dict = utils.DEFAULT_COLORSCALES,
     **kwargs,
 ) -> plotly.graph_objs.Figure:
     """
@@ -469,6 +474,10 @@ def plot_read_browser(
         hover: if False, disables display of information on mouse hover
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided.
+        span_full_window: if True, only plot reads that fully span the window defined by region_start-region_end
+        width: width of the read lines in the browser
+        size: size of the modification event markers in the browser
+        colorscales: dictionary mapping motif names to plotly colorscale specifications
 
     Returns:
         plotly Figure object containing the plot
@@ -747,6 +756,7 @@ def read_vectors_from_hdf5(
     quiet: bool = True,  # currently unused; change to default False when pbars are implemented
     cores: int | None = None,  # currently unused
     subset_parameters: dict | None = None,
+    span_full_window: bool = False,
 ) -> tuple[list[tuple], list[str], dict | None]:
     """
     User-facing function.
@@ -795,6 +805,7 @@ def read_vectors_from_hdf5(
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
+        span_full_window: If True, only load reads that fully span the window defined by region_start-region_end
 
     Returns:
         a list of tuples, each tuple containing all datasets corresponding to an individual read that

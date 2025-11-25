@@ -629,6 +629,7 @@ def read_vectors_from_hdf5(
     quiet: bool = True,  # currently unused; change to default False when pbars are implemented
     cores: int | None = None,  # currently unused
     subset_parameters: dict | None = None,
+    span_full_window: bool = False,
 ) -> tuple[list[tuple], list[str], dict | None]:
     """
     User-facing function.
@@ -679,6 +680,7 @@ def read_vectors_from_hdf5(
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
+        span_full_window: If True, only load reads that fully span the window defined by region_start-region_end
 
     Returns:
         a list of tuples, each tuple containing all datasets corresponding to an individual read that
@@ -731,6 +733,8 @@ def read_vectors_from_hdf5(
                     relevant_read_indices = np.flatnonzero(
                         (read_ends > region_start)
                         & (read_starts < region_end)
+                        & (read_starts <= region_start if span_full_window else True)
+                        & (read_ends >= region_end if span_full_window else True)
                         & np.isin(read_motifs, motifs)
                         & (read_chromosomes == chrom)
                         & (
@@ -792,7 +796,7 @@ def read_vectors_from_hdf5(
             )
     #  We add region information (start, end, and strand; chromosome is already present!)
     # so that it is possible to sort by and process based on these
-    readwise_datasets += ["region_start", "region_end", "region_strand"]
+    readwise_datasets += ["region_start", "region_end", "region_strand", "read_length"]
 
     # This is sanitizing the dataset entries and adjusting prob values if needed
     if binarized:
@@ -808,6 +812,9 @@ def read_vectors_from_hdf5(
             )
             for tup in read_tuples_raw
         ]
+
+    read_start_idx = readwise_datasets.index("read_start")
+    read_end_idx = readwise_datasets.index("read_end")
 
     if calculate_mod_fractions:
         # Add the MOTIF_mod_fraction entries to the readwise_datasets list for future reference in sorting
@@ -828,8 +835,10 @@ def read_vectors_from_hdf5(
 
         read_tuples_all = []
         for read_tuple in read_tuples_processed:
+            read_length = read_tuple[read_end_idx] - read_tuple[read_start_idx]
             read_tuples_all.append(
                 tuple(val for val in read_tuple)
+                + (read_length,)
                 + tuple(
                     mod_frac
                     for mod_frac in mod_fractions_by_read_name_by_motif[
@@ -838,33 +847,59 @@ def read_vectors_from_hdf5(
                 )
             )
     else:
-        read_tuples_all = read_tuples_processed
+        read_tuples_all = []
+        for read_tuple in read_tuples_processed:
+            read_length = read_tuple[read_end_idx] - read_tuple[read_start_idx]
+            read_tuples_all.append(tuple(val for val in read_tuple) + (read_length,))
 
     ## Sort the reads
+
+    # Normalize sort_by to a list of tuples (field, order)
+    # Support formats:
+    #   - "field" or ["field1", "field2"] -> [("field1", "asc"), ("field2", "asc")]
+    #   - [("field1", "desc"), "field2"] -> [("field1", "desc"), ("field2", "asc")]
 
     # Enforce that sort_by is a list
     if not isinstance(sort_by, list):
         sort_by = [sort_by]
 
+    # Parse into (field, order) tuples
+    sort_by_normalized = []
+    for item in sort_by:
+        if isinstance(item, tuple):
+            field, order = item
+            if order not in ["asc", "desc"]:
+                raise ValueError(
+                    f"Sort order must be 'asc' or 'desc', got '{order}' for field '{field}'"
+                )
+            sort_by_normalized.append((field, order))
+        else:
+            # Default to ascending order
+            sort_by_normalized.append((item, "asc"))
+
     # If 'shuffle' appears anywhere in sort_by, we first shuffle the list
-    if "shuffle" in sort_by:
+    if any(field == "shuffle" for field, _ in sort_by_normalized):
         utils.rng.shuffle(read_tuples_all)
 
+    # Build sorting configuration
     try:
-        sort_by_indices = [
-            readwise_datasets.index(sort_item)
-            for sort_item in sort_by
-            if sort_item != "shuffle"
+        sort_config = [
+            (readwise_datasets.index(field), order == "desc")
+            for field, order in sort_by_normalized
+            if field != "shuffle"
         ]
     except ValueError as e:
         raise ValueError(
             f"Sorting error. {e}. Datasets include {readwise_datasets}. If you need mod fraction sorting make sure you are not setting calculate_read_fraction to False."
         ) from e
 
-    if len(sort_by_indices) > 0:
-        sorted_read_tuples = sorted(
-            read_tuples_all, key=lambda x: tuple(x[index] for index in sort_by_indices)
-        )
+    if len(sort_config) > 0:
+        # Use stable sort from right to left (reverse order of sort keys)
+        sorted_read_tuples = read_tuples_all
+        for idx, is_reverse in reversed(sort_config):
+            sorted_read_tuples = sorted(
+                sorted_read_tuples, key=lambda x: x[idx], reverse=is_reverse
+            )
     else:
         sorted_read_tuples = read_tuples_all
 

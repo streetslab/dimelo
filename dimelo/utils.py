@@ -27,7 +27,9 @@ DEFAULT_COLORS.update(
         "CG,0": "orange",
         "CG,0,m": "yellow",
         "CG,0,h": "red",
-        "GCH,1": "purple",
+        "HCG,1": "orange",
+        "WCG,1": "red",
+        "GCH,1": "green",
     }
 )
 # Default colorscales for plotly; based off of DEFAULT_COLORS
@@ -73,7 +75,7 @@ class ParsedMotif:
             if self.modified_pos >= len(self.motif_seq):
                 raise ValueError(f"Motif {motif_string} has an out-of-range mod index.")
             self.modified_base = self.motif_seq[self.modified_pos]
-            self.mod_codes = set(parts[2])
+            self.mod_codes = set([parts[2]])
         else:
             # Motifs need both a sequence and an index, separated by a comma
             raise ValueError(

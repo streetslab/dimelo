@@ -1037,6 +1037,7 @@ def read_by_base_txt_to_hdf5(
                         read_counter += 1
 
                     ## Set up for next read
+                    # Metadata
                     read_name = fields[0]
                     read_chrom = fields[3]
                     read_len = int(fields[9])
@@ -1046,13 +1047,21 @@ def read_by_base_txt_to_hdf5(
                         pos_in_read_ref = int(fields[1])
                     elif ref_strand == "-":
                         pos_in_read_ref = read_len - int(fields[1]) - 1
-                    # Calculate read info
+                    # Calculate read start (leftmost position on ref genome)
+                    # TODO: logic can be replaced when we switch to true read start/end from modkit
                     read_start = pos_in_genome - pos_in_read_ref
-                    read_end = read_start + read_len
                     # Instantiate lists
                     mod_values_list = []
                     valid_coordinates_list = []
 
+                # Adjust the read_end (rightmost position on ref genome) each time there's a new mod
+                # This will lead to the most accurate end positions for gapped reads
+                # TODO: logic can be replaced when we switch to true read start/end from modkit
+                if ref_strand == "+":
+                    pos_in_read_ref = int(fields[1])
+                elif ref_strand == "-":
+                    pos_in_read_ref = read_len - int(fields[1]) - 1
+                read_end = pos_in_genome + (read_len - pos_in_read_ref)
                 # Regardless of whether its a new read or not,
                 # add modification to vector if motif type is correct
                 # for the motif in question
