@@ -224,9 +224,8 @@ You should expect to see some text outputs and a series of progress bars. Progre
 There should not be such issues for command line operation. See below an example of command line progress outputs: you should expect relatively fast pre-processing, 10-90 seconds, and then contig processing times depending heavily on the size of your `.bam` file and the extent of your `regions`.
 
 ```
-(dimelo-toolkt) oberondixon-luinenburg@Oberons-MacBook-Pro package_test_notebooks % python dimelo_cmd.py
+(dimelo-toolkit) % python dimelo_cmd.py
 modkit found with expected version 0.2.4
-No output directory provided, using input directory /Users/oberondixon-luinenburg/Documents/Ioannidis-Streets/dimelo_test_data/20230702_jm_lmnb1_acessibility_redux
 No specified number of cores requested. 8 available on machine, allocating all.
 Modification threshold of 0.9 will be treated as coming from range 0-1.
 ████████████████████| Preprocessing complete for motifs ['A,0'] in chm13.draft_v1.1.fasta:  100% | 00:30
