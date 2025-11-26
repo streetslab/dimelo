@@ -348,8 +348,12 @@ def make_browser_figure(
         index_map = collapse_rows(read_extent_df, **kwargs)
         read_extent_df.copy()
         # NOTE: `DataFrame.assign` performs a deep copy, preventing the modification of the array that is passed in. For very large datasets, this duplication may cause memory issues.
-        read_extent_df = read_extent_df.assign(y_index=read_extent_df["y_index"].map(index_map))
-        mod_event_df = mod_event_df.assign(y_index=mod_event_df["y_index"].map(index_map))
+        read_extent_df = read_extent_df.assign(
+            y_index=read_extent_df["y_index"].map(index_map)
+        )
+        mod_event_df = mod_event_df.assign(
+            y_index=mod_event_df["y_index"].map(index_map)
+        )
 
     # Build final figure
     # TODO: Enable setting some relevant parameters
