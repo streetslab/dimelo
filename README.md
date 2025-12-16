@@ -38,6 +38,8 @@ This README document contains installation instructions and documentation for va
 
 -[2.4 Load values from processed files](#load-values-from-processed-files)
 
+-[2.5 Clustering scaffolding](#clustering-scaffolding)
+
 [3.0 Known Issues](#known-issues)
 
 -[3.1 No progress bars](#no-progress-bars)
@@ -850,6 +852,72 @@ def regions_to_list(
     """
 ```
 
+## Clustering scaffolding
+
+`dimelo.cluster` wraps the loading utilities above so you can quickly build matrices for downstream clustering or dimensionality reduction.
+
+```
+from dimelo import cluster
+
+# Region-level features: rows are regions, columns are aligned positions.
+pileup_matrix, region_info = cluster.region_feature_matrix_from_pileup(
+    bedmethyl_file="output/pileup.sorted.bed.gz",
+    motif="A,0",
+    regions="regions.bed",
+    window_size=500,
+    regions_5to3prime=True,
+)
+labels, model = cluster.cluster_features(pileup_matrix, n_clusters=4)
+
+# Read-level feature pipeline using extract outputs.
+read_windows = cluster.extract_read_windows(
+    hdf5_file="output/extract.h5",
+    motifs=["A,0", "CG,0"],
+    regions="regions.bed",
+    config=cluster.ReadWindowExtractionConfig(window_size=2000, orientation_aware=True),
+)
+feature_matrix, feature_names = cluster.read_window_feature_matrix(read_windows)
+read_clusters = cluster.cluster_read_windows(feature_matrix, method="kmeans", n_clusters=8)
+
+# Optional visualization/export
+cluster.plot_region_cluster_profiles(pileup_matrix, labels, window_bp=1000)
+cluster.export_region_clusters_to_bed(region_info, labels, "region_clusters.bed")
+cluster.plot_cluster_karyotype("region_clusters.bed", "ref.fasta.fai")
+# If pileup_matrix concatenates multiple motifs, pass motif_index to select which slice to visualize.
+
+# Multi-site read raster (paired windows) for exploratory QC
+# fig, stats = cluster.plot_multisite_read_raster(
+#     read_windows,
+#     n_windows=2,
+#     min_separation_bp=5000,
+#     motif_index=0,
+#     smoothing="gaussian",
+# )
+
+# Binary classification of read features across two samples
+clf_result = cluster.classify_read_features_binary(
+    feature_matrix,
+    sample_labels=my_sample_labels,  # e.g., ["sampleA", "sampleA", "sampleB", ...]
+    classifier="xgboost",           # or logreg/sgd/random_forest/svc/knn
+    random_state=42,
+)
+print(clf_result["metrics"])
+# QC plots
+cluster.plot_confusion_matrices(clf_result["predictions"])
+# If you have per-read windows aligned to predictions for this split:
+# cluster.plot_classification_profiles(read_windows.data_matrix, clf_result["predictions"], split="test")
+
+# Optional: sample rows for faster exploratory runs
+sampled_features, sampled_labels, idx = cluster.sample_rows(feature_matrix, labels, frac=0.2, stratify=True)
+cluster.cluster_read_windows(sampled_features, method="kmeans", n_clusters=4)
+```
+
+`region_feature_matrix_from_pileup` delegates to `load_processed.regions_to_list`, so you inherit the same controls for multi-core execution and windowing. For read-level work you can either keep using `read_mod_fraction_table` (motif-wide fractions) or run the new window-based pipeline above: `extract_read_windows` builds a matrix of per-base modification calls (optionally enforcing strand orientation and dropping reads spanning multiple regions), `read_window_feature_matrix` augments that matrix with PCA, autocorrelation, density, and summary statistics, and `cluster_read_windows` exposes the same clustering options demonstrated in the exploratory notebook (k-means, GMM, spectral, OPTICS/HDBSCAN, etc.).
+
+`cluster_features` currently offers a lightweight k-means wrapper powered by `scikit-learn`, while `cluster_read_windows` can switch between `kmeans`, `minibatch_kmeans`, `gmm`, `agglomerative`, `spectral`, `birch`, `dbscan`, `optics`, `hdbscan`, or `umap_kmeans`. These dependencies (`scikit-learn`, `scipy`, `hdbscan`, `umap-learn`) live in the `clustering` extra (`pip install dimelo[clustering]`), or feed the matrices above into your own estimator.
+
+**Motif semantics:** `extract.h5` stores one row per motif per read. When passing multiple motifs, you will see multiple rows per read; use `build_multimotif_read_windows` to group and concatenate motifs per read (set `require_all_motifs=True` to drop reads missing motifs), or filter by `metadata["motif"]` for per-motif analysis. Visualization helpers take a `motif_index` argument to choose which motif slice to display when windows are concatenated.
+
 ## Parameters and what they mean
 
 Many of the parsing, loading, and plotting functions share parameters. The common ones and their meanings/defaults are listed below.
@@ -905,4 +973,3 @@ The most common culprit for progress bar issues in notebooks (Jupyter or Colab) 
 ```
 pip install ipywidgets==X.XX.X
 ```
-

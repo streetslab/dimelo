@@ -1,4 +1,5 @@
 from . import (
+    cluster,
     export,
     load_processed,
     parse_bam,
@@ -11,6 +12,7 @@ from . import (
 )
 
 __all__ = [
+    "cluster",
     "export",
     "load_processed",
     "parse_bam",

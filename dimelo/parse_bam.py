@@ -119,6 +119,10 @@ def pileup(
 
     ## Verify and prepare inputs and outputs
 
+    run_modkit.ensure_modkit_available(quiet=quiet)
+
+    run_modkit.ensure_modkit_available(quiet=quiet)
+
     input_file, ref_genome, output_directory = utils.sanitize_path_args(
         input_file, ref_genome, output_directory
     )
