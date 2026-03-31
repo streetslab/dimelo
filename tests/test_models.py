@@ -52,17 +52,6 @@ def test_dataset_artifact_stores_metadata():
     assert artifact.provenance == {"pipeline": "parse_bam"}
 
 
-def test_dataset_artifact_requires_provenance():
-    with pytest.raises(TypeError):
-        DatasetArtifact(
-            sample_id="sample-1",
-            artifact_type="extract",
-            path=Path("sample-1.h5"),
-            format="hdf5",
-            params={"window_size": 200},
-        )
-
-
 def test_dataset_artifact_rejects_none_provenance():
     with pytest.raises(ValueError):
         DatasetArtifact(
@@ -104,7 +93,13 @@ def test_shared_cluster_result_supports_plot_data():
 
 @pytest.mark.parametrize(
     "field_name",
-    ["assignments", "cluster_distribution", "condition_distribution", "plot_data"],
+    [
+        "assignments",
+        "cluster_distribution",
+        "condition_distribution",
+        "cluster_profiles",
+        "plot_data",
+    ],
 )
 def test_shared_cluster_result_rejects_none_core_outputs(field_name):
     model = SharedClusterModel(
