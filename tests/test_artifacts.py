@@ -71,6 +71,40 @@ def test_artifact_fingerprint_includes_required_keys():
     assert fingerprint["params_hash"] == expected_params_hash
 
 
+def test_artifact_fingerprint_normalizes_source_file_paths_to_strings():
+    artifact = make_artifact(
+        path="requested.h5",
+        params={"window_size": 200},
+        provenance={
+            "source_files": [Path("reads-b.bam"), "reads-a.bam"],
+            "source_fingerprints": [{"path": "reads-a.bam", "size": 100, "mtime": 10}],
+            "upstream_lineage": [],
+        },
+        metadata={"schema_version": "artifact-v1", "package_version": "1.2.3"},
+    )
+
+    fingerprint = artifact_fingerprint(artifact)
+
+    assert fingerprint["source_files"] == ("reads-a.bam", "reads-b.bam")
+
+
+def test_artifact_fingerprint_treats_single_source_file_string_as_one_path():
+    artifact = make_artifact(
+        path="requested.h5",
+        params={"window_size": 200},
+        provenance={
+            "source_files": "reads-a.bam",
+            "source_fingerprints": [{"path": "reads-a.bam", "size": 100, "mtime": 10}],
+            "upstream_lineage": [],
+        },
+        metadata={"schema_version": "artifact-v1", "package_version": "1.2.3"},
+    )
+
+    fingerprint = artifact_fingerprint(artifact)
+
+    assert fingerprint["source_files"] == ("reads-a.bam",)
+
+
 def test_artifact_is_compatible_rejects_sample_id_mismatch():
     requested = make_artifact(
         path="requested.h5",
@@ -116,6 +150,52 @@ def test_artifact_is_compatible_rejects_artifact_type_mismatch():
             "source_files": ["reads-a.bam"],
             "source_fingerprints": [{"path": "reads-a.bam", "size": 100, "mtime": 10}],
             "upstream_lineage": ["parse_bam"],
+        },
+        metadata={"schema_version": "artifact-v1", "package_version": "1.2.3"},
+    )
+
+    assert not artifact_is_compatible(requested, candidate)
+
+
+def test_artifact_is_compatible_rejects_missing_required_lineage_fields():
+    requested = make_artifact(
+        path="requested.h5",
+        params={"window_size": 200},
+        provenance={
+            "source_files": ["reads-a.bam"],
+            "source_fingerprints": [{"path": "reads-a.bam", "size": 100, "mtime": 10}],
+            "upstream_lineage": [],
+        },
+        metadata={"schema_version": "artifact-v1", "package_version": "1.2.3"},
+    )
+    candidate = make_artifact(
+        path="cached.h5",
+        params={"window_size": 200},
+        provenance={},
+        metadata={"schema_version": "artifact-v1", "package_version": "1.2.3"},
+    )
+
+    assert not artifact_is_compatible(requested, candidate)
+
+
+def test_artifact_is_compatible_rejects_empty_source_metadata():
+    requested = make_artifact(
+        path="requested.h5",
+        params={"window_size": 200},
+        provenance={
+            "source_files": ["reads-a.bam"],
+            "source_fingerprints": [{"path": "reads-a.bam", "size": 100, "mtime": 10}],
+            "upstream_lineage": [],
+        },
+        metadata={"schema_version": "artifact-v1", "package_version": "1.2.3"},
+    )
+    candidate = make_artifact(
+        path="cached.h5",
+        params={"window_size": 200},
+        provenance={
+            "source_files": [],
+            "source_fingerprints": [],
+            "upstream_lineage": [],
         },
         metadata={"schema_version": "artifact-v1", "package_version": "1.2.3"},
     )
@@ -198,12 +278,39 @@ def test_resolve_artifact_raises_on_require_cached_miss():
         metadata={"schema_version": "artifact-v1", "package_version": "1.2.3"},
     )
 
-    with pytest.raises(LookupError, match="require_cached"):
+    with pytest.raises(FileNotFoundError, match="require_cached"):
         resolve_artifact(
             requested,
             [],
             artifact_policy="require_cached",
         )
+
+
+def test_artifact_is_compatible_ignores_non_compatibility_provenance_fields():
+    requested = make_artifact(
+        path="requested.h5",
+        params={"window_size": 200},
+        provenance={
+            "source_files": ["reads-a.bam"],
+            "source_fingerprints": [{"path": "reads-a.bam", "size": 100, "mtime": 10}],
+            "upstream_lineage": ["parse_bam"],
+            "runtime_host": "worker-a",
+            "invocation_id": "run-123",
+        },
+        metadata={"schema_version": "artifact-v1", "package_version": "1.2.3"},
+    )
+    candidate = make_artifact(
+        path="cached.h5",
+        params={"window_size": 200},
+        provenance={
+            "source_files": ["reads-a.bam"],
+            "source_fingerprints": [{"path": "reads-a.bam", "size": 100, "mtime": 10}],
+            "upstream_lineage": ["parse_bam"],
+        },
+        metadata={"schema_version": "artifact-v1", "package_version": "1.2.3"},
+    )
+
+    assert artifact_is_compatible(requested, candidate)
 
 
 def test_resolve_artifact_returns_none_for_rebuild():
