@@ -17,6 +17,8 @@ The workflow should scale from thousands to millions of reads or regions per dat
 - Support matched-region analyses while also allowing read clustering that is independent of region.
 - Return structured tabular results suitable for downstream notebook analysis, plus a small standard plot set for quick interpretation.
 - Use a performant default that remains usable at million-row scale.
+- Introduce a hybrid batch model that supports both independent dataset processing and flexible cohort-level shared workflows.
+- Make downstream workflows consume reusable artifacts when available, while still being able to rebuild from raw inputs when necessary.
 
 ## Non-Goals
 
@@ -148,6 +150,25 @@ Owns orchestration:
 - fit-once / assign-many execution
 - standard plot creation
 - result packaging
+- artifact resolution for workflow inputs
+
+#### `dimelo/artifacts.py`
+
+Owns reusable dataset-level derived outputs and lookup helpers:
+
+- artifact key definitions
+- artifact metadata and provenance
+- cache hit / miss resolution
+- compatibility checks between requested parameters and stored artifacts
+
+#### `dimelo/batch.py`
+
+Owns hybrid batch orchestration:
+
+- independent dataset processing jobs
+- named cohort jobs
+- workflow recipes
+- batch manifests for downstream workflow execution
 
 #### `dimelo/cluster.py`
 
@@ -206,6 +227,144 @@ class SharedClusterResult:
     metadata: dict[str, Any]
 ```
 
+### `DatasetArtifact`
+
+```python
+@dataclass
+class DatasetArtifact:
+    sample_id: str
+    artifact_type: str
+    path: str | Path
+    format: str
+    params: dict[str, Any]
+    provenance: dict[str, Any]
+```
+
+### `CohortSpec`
+
+```python
+@dataclass
+class CohortSpec:
+    cohort_id: str
+    sample_ids: list[str]
+    workflow: str
+    params: dict[str, Any]
+    metadata: dict[str, Any] | None = None
+```
+
+### `BatchJob`
+
+```python
+@dataclass
+class BatchJob:
+    job_id: str
+    workflow: str
+    cohorts: list[CohortSpec]
+    artifact_policy: str = "prefer_cached"
+    metadata: dict[str, Any] | None = None
+```
+
+## Hybrid Batch Model
+
+The package should support two complementary batch concepts rather than forcing one batch unit everywhere.
+
+### Dataset-Centric Processing
+
+Each dataset can be processed independently into a standard artifact bundle. This is the high-throughput, cache-friendly layer.
+
+Examples of dataset-level artifacts:
+
+- QC summaries
+- read-level feature tables
+- region-mapping tables
+- cluster-ready metadata tables
+- cached transformed feature matrices
+
+This layer is best for:
+
+- parallel processing of many unrelated datasets
+- retry and resume at per-dataset granularity
+- feeding many downstream workflows from the same reusable intermediates
+
+### Cohort-Centric Workflows
+
+Named cohorts should define which datasets participate in a shared analysis recipe.
+
+Examples:
+
+- shared-boundary clustering over six matched samples
+- region occupancy analysis over one subset
+- a different recipe over an unrelated subset processed in parallel
+
+This layer is best for:
+
+- pooled fitting
+- consistent cluster boundary definition
+- any workflow where the group of samples matters scientifically
+
+### Recommended Hybrid Structure
+
+The system should use both layers:
+
+1. dataset processing produces reusable standardized artifacts
+2. cohort workflows consume those artifacts to run shared analyses
+
+This preserves flexibility while avoiding repeated raw-input processing.
+
+## Artifact Resolution Policy
+
+Downstream workflows should prefer cached artifacts but fall back to raw inputs automatically when required artifacts are missing or incompatible.
+
+### Default Policy
+
+Use `artifact_policy="prefer_cached"` as the default.
+
+Resolution order:
+
+1. look for a compatible artifact
+2. if found, load it
+3. if missing or incompatible, rebuild from raw inputs
+4. record whether the workflow used cache hits or rebuilt inputs
+
+### Additional Policies
+
+- `prefer_cached`
+  default pragmatic mode
+- `require_cached`
+  fail if required artifacts are unavailable
+- `rebuild`
+  ignore cached artifacts and regenerate needed intermediates
+
+### Provenance Requirements
+
+Every workflow result should record:
+
+- which artifacts were loaded from cache
+- which artifacts were rebuilt
+- the parameters used to determine compatibility
+- the raw input paths used when fallback occurred
+
+This keeps the fallback behavior auditable rather than implicit.
+
+## Shared Workflow Input Contract
+
+Shared comparison workflows should consume artifact manifests or dataset specs, not notebook-era ad hoc dictionaries.
+
+### Accepted Input Forms
+
+1. `SampleSpec` objects with raw input paths
+2. artifact manifests derived from those samples
+3. `CohortSpec` objects that name a workflow and a set of samples
+
+The shared workflow should resolve the required inputs internally through the artifact layer.
+
+### Why This Contract Matters
+
+- the same sample can participate in multiple shared workflows
+- expensive preprocessing is reused
+- workflows remain runnable even when some artifacts are absent
+- batch orchestration stays decoupled from notebook-specific path plumbing
+
 ## Detailed Workflow Behavior
 
 ### Shared Validation
@@ -217,6 +376,7 @@ Before any feature extraction:
 - Require consistent `motifs` and compatible extracted vector lengths across datasets.
 - In `region_anchored`, require resolvable matched-region inputs for every dataset.
 - Record dataset sizes and rows remaining after filtering.
+- Resolve required artifacts using the selected artifact policy before rebuilding from raw inputs.
 
 ### `read_global` Flow
 
@@ -338,6 +498,15 @@ Only when region mapping is possible:
 - `count`
 - `fraction`
 
+### `metadata`
+
+The top-level metadata payload should also include:
+
+- artifact policy used
+- artifact cache hits and misses
+- per-sample rebuild decisions
+- cohort identifier when the workflow is cohort-driven
+
 ## Standard Plots
 
 The initial standardized plot set should be small:
@@ -381,6 +550,8 @@ Add new tests for:
 - region summary generation
 - reference-condition delta calculations
 - chunked assignment equivalence versus unchunked assignment
+- artifact resolution under `prefer_cached`, `require_cached`, and `rebuild`
+- cohort-driven execution that reuses dataset-level artifacts
 
 ### Integration Tests
 
@@ -389,6 +560,7 @@ Add small synthetic multi-sample fixtures that verify:
 - shared centroids are reused across samples
 - `read_global` assignments can be projected back onto region summaries
 - `region_anchored` produces stable per-condition cluster distributions
+- cohort workflows can mix cache hits and raw-input fallbacks without changing result schema
 
 ### Regression Tests
 
@@ -409,12 +581,14 @@ The collaborator notebook should be preserved as exploratory history but should 
 The implementation should be split into small steps:
 
 1. add models
-2. add distribution summaries
-3. add region-aware summarization helpers
-4. add workflow orchestration
-5. add standardized plots
-6. add tests
-7. update docs/examples
+2. add artifact definitions and resolution helpers
+3. add batch and cohort orchestration models
+4. add distribution summaries
+5. add region-aware summarization helpers
+6. add workflow orchestration
+7. add standardized plots
+8. add tests
+9. update docs/examples
 
 ## Implementation Defaults
 
@@ -423,5 +597,6 @@ These defaults are fixed for the first implementation:
 - default clusterer: `MiniBatchKMeans`
 - default cluster-boundary source: balanced pooled subset across all datasets
 - default result mode: return structured tables and figures, not raw matrices
+- default artifact policy: `prefer_cached`
 
 No experiment-specific cluster template system is required for the first version of this workflow.
