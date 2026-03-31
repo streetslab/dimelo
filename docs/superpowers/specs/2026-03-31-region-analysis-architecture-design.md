@@ -140,6 +140,60 @@ The intended flow should be:
 
 This flow should be composable rather than mandatory. A user may enter at `region_contrasts` with an existing BED, or enter at `cluster` using a previously selected set of regions.
 
+## User Progression Through Processing And Analysis
+
+The package should make it obvious how a user proceeds from preprocessing to downstream analysis.
+
+### Common Starting Point
+
+All downstream workflows should begin from preprocessing outputs created by `parse_bam`.
+
+Conceptually:
+
+```python
+from dimelo import parse_bam
+
+pileup_path, processed_regions = parse_bam.pileup(...)
+extract_path, processed_regions = parse_bam.extract(...)
+```
+
+The user should not have to guess which downstream workflow consumes which preprocessing product:
+
+- use pileup-backed outputs for:
+  - global summaries
+  - defined-region abundance contrasts
+  - de novo region discovery scans
+- use extract-backed outputs for:
+  - single-read pattern analysis
+  - read clustering
+  - cluster occupancy summaries
+
+### Typical Processing Paths
+
+#### Path A: Known Regions, Locus-Level Abundance Testing
+
+1. preprocess with pileup or load an existing pileup-backed artifact
+2. run `region_contrasts.score_regions(...)`
+3. review ranked or significant loci
+4. optionally pass top regions into `cluster`
+
+#### Path B: Known Regions, Single-Read Or State-Level Analysis
+
+1. preprocess with extract or load an existing extract-backed artifact
+2. run clustering or other read-level feature workflows
+3. summarize cluster occupancy or read-state metrics by region
+4. optionally score those outputs in `region_contrasts`
+
+#### Path C: Unknown Regions
+
+1. preprocess with pileup-backed outputs
+2. run `region_discovery.scan_genome(...)`
+3. export discovered intervals
+4. score those intervals with `region_contrasts`
+5. optionally perform deep clustering on selected regions
+
+This progression should be reflected in documentation and examples so the user sees the intended branching early.
+
 ## Why `region_discovery` And `region_contrasts` Must Be Separate
 
 These are different scientific tasks:
@@ -299,6 +353,79 @@ Without these fields, a user cannot tell whether a result means:
 - the local pattern shape changed while the mean remained constant
 
 These are biologically different conclusions and should never be hidden behind a generic label like "region contrast".
+
+## Biological Interpretation Of Contrasts
+
+The package must make it clear what biological question a contrast answers.
+
+### Reference-Matched Motif Abundance
+
+This asks:
+
+- at a defined locus, did the abundance of modification across reference-matched motif opportunities change?
+
+Interpretation:
+
+- aggregate motif-level modified and valid counts within a locus
+- compare abundance across conditions or matched datasets
+
+Recommended configuration:
+
+- `analysis_unit="ensemble_region"`
+- `representation="modified_fraction"` or `representation="modified_count"`
+- `signal_source="pileup_counts"`
+- `test="beta_binomial"` when formal significance testing is desired
+
+This is the primary count-based contrast path and should be the first-class default.
+
+### Single-Read Pattern Change
+
+This asks:
+
+- within a known locus, did the pattern of modification across individual reads change?
+
+Interpretation:
+
+- align and orient reads relative to a common reference frame
+- compare per-read fractions, local densities, shapes, or feature vectors
+
+Recommended configuration:
+
+- `analysis_unit="single_read"`
+- `representation="read_mod_fraction"`, `read_density_profile`, `read_window_features`, or `read_shape`
+- extract-backed signal source
+
+This is not the same question as abundance testing, and beta-binomial should not be presented as the default test here.
+
+### Locus-Aggregated Structural Change
+
+This asks:
+
+- at a locus, did the mixture of read states or the aggregated structure change even if the mean abundance did not?
+
+Interpretation:
+
+- summarize read states or read clusters into region-level occupancy features
+- compare mixture structure across conditions
+
+Recommended configuration:
+
+- `analysis_unit="cluster_occupancy"`
+- `representation="cluster_fraction"`, `dominant_cluster`, or `cluster_entropy`
+- clustering-derived signal source
+
+This is the main bridge from clustering into defined-region contrast analysis.
+
+### Required User Clarity
+
+Every result and exported table should make all of the following explicit:
+
+- which datasets or conditions were contrasted
+- whether the contrast is abundance, single-read pattern, or state-mixture oriented
+- what observational unit was used
+- what representation was scored
+
+Users should never need to infer this from filenames or notebook context.
 
 ## Signal Sources
 
@@ -497,6 +624,7 @@ The metadata must include:
 - signal source
 - test
 - normalization mode
+- a short plain-language description of what the contrast means biologically
 
 ### `RegionDiscoveryResult`
 
@@ -511,6 +639,17 @@ class RegionDiscoveryResult:
 ```
 
 The outputs should be easy to export as BEDs and easy to pass into follow-on workflows.
+
+## Documentation Requirements For User Flow
+
+The user-facing docs should include one concise “how to proceed” table:
+
+- if you know regions and care about average motif abundance: use `region_contrasts` with pileup-backed inputs
+- if you know regions and care about single-read structure: use extract-backed workflows and then optionally `region_contrasts`
+- if you do not know regions: use `region_discovery` first
+- if you want to compare state mixtures: run clustering first, then feed occupancy summaries into `region_contrasts`
+
+This guidance should appear in both the API docs and at least one tutorial notebook.
 
 ## Testing Strategy
 
