@@ -27,6 +27,10 @@ class DatasetArtifact:
     provenance: dict[str, Any]
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if self.provenance is None:
+            raise ValueError("DatasetArtifact.provenance cannot be None")
+
 
 @dataclass
 class SharedClusterModel:

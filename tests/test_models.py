@@ -63,6 +63,18 @@ def test_dataset_artifact_requires_provenance():
         )
 
 
+def test_dataset_artifact_rejects_none_provenance():
+    with pytest.raises(ValueError):
+        DatasetArtifact(
+            sample_id="sample-1",
+            artifact_type="extract",
+            path=Path("sample-1.h5"),
+            format="hdf5",
+            params={"window_size": 200},
+            provenance=None,
+        )
+
+
 def test_shared_cluster_result_supports_plot_data():
     model = SharedClusterModel(
         mode="shared",
