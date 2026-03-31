@@ -54,6 +54,19 @@ def test_dataset_artifact_stores_metadata():
     assert artifact.provenance == {"pipeline": "parse_bam"}
 
 
+def test_dataset_artifact_rejects_none_metadata():
+    with pytest.raises(ValueError, match="metadata"):
+        DatasetArtifact(
+            sample_id="sample-1",
+            artifact_type="extract",
+            path=Path("sample-1.h5"),
+            format="hdf5",
+            params={"window_size": 200},
+            provenance={"pipeline": "parse_bam"},
+            metadata=None,
+        )
+
+
 def test_dataset_artifact_rejects_none_provenance():
     with pytest.raises(ValueError):
         DatasetArtifact(
@@ -92,9 +105,48 @@ def test_contrast_spec_accepts_pairwise_mode():
     assert contrast.reference_condition == "NS"
 
 
+def test_contrast_spec_accepts_group_vs_group_mode():
+    contrast = ContrastSpec(
+        mode="group_vs_group",
+        numerator=["15min", "30min"],
+        denominator=["NS", "0min"],
+    )
+
+    assert contrast.mode == "group_vs_group"
+    assert contrast.numerator == ["15min", "30min"]
+    assert contrast.denominator == ["NS", "0min"]
+
+
+def test_contrast_spec_accepts_background_adjusted_mode():
+    contrast = ContrastSpec(
+        mode="background_adjusted",
+        numerator=["15min"],
+        denominator=["NS"],
+        background=["bg"],
+    )
+
+    assert contrast.mode == "background_adjusted"
+    assert contrast.background == ["bg"]
+
+
+def test_contrast_spec_accepts_time_course_mode():
+    contrast = ContrastSpec(
+        mode="time_course",
+        time_order=["NS", "15min", "30min"],
+    )
+
+    assert contrast.mode == "time_course"
+    assert contrast.time_order == ["NS", "15min", "30min"]
+
+
 def test_contrast_spec_rejects_missing_groups_for_pairwise():
     with pytest.raises(ValueError, match="numerator and denominator"):
         ContrastSpec(mode="pairwise")
+
+
+def test_contrast_spec_rejects_missing_groups_for_group_vs_group():
+    with pytest.raises(ValueError, match="numerator and denominator"):
+        ContrastSpec(mode="group_vs_group", numerator=["15min"])
 
 
 def test_contrast_spec_rejects_missing_pairing_key_for_matched_pairwise():
@@ -121,6 +173,19 @@ def test_contrast_spec_rejects_missing_background_for_background_adjusted():
             numerator=["15min"],
             denominator=["NS"],
         )
+
+
+def test_contrast_spec_rejects_missing_groups_for_background_adjusted():
+    with pytest.raises(ValueError, match="numerator and denominator"):
+        ContrastSpec(
+            mode="background_adjusted",
+            background=["bg"],
+        )
+
+
+def test_contrast_spec_rejects_missing_time_order_for_time_course():
+    with pytest.raises(ValueError, match="time_order"):
+        ContrastSpec(mode="time_course")
 
 
 def test_shared_cluster_result_supports_plot_data():

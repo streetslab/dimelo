@@ -32,6 +32,8 @@ class DatasetArtifact:
             raise ValueError("DatasetArtifact.params cannot be None")
         if self.provenance is None:
             raise ValueError("DatasetArtifact.provenance cannot be None")
+        if self.metadata is None:
+            raise ValueError("DatasetArtifact.metadata cannot be None")
 
 
 @dataclass
@@ -69,10 +71,15 @@ class ContrastSpec:
                 "ContrastSpec matched_pairwise mode requires numerator, "
                 "denominator, and pairing_key."
             )
-        if self.mode == "background_adjusted" and not self.background:
-            raise ValueError(
-                "ContrastSpec background_adjusted mode requires background."
-            )
+        if self.mode == "background_adjusted":
+            if not self.numerator or not self.denominator:
+                raise ValueError(
+                    "ContrastSpec background_adjusted mode requires numerator and denominator."
+                )
+            if not self.background:
+                raise ValueError(
+                    "ContrastSpec background_adjusted mode requires background."
+                )
         if self.mode == "time_course" and not self.time_order:
             raise ValueError("ContrastSpec time_course mode requires time_order.")
 
