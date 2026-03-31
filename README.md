@@ -856,6 +856,27 @@ def regions_to_list(
 
 `dimelo.cluster` wraps the loading utilities above so you can quickly build matrices for downstream clustering or dimensionality reduction.
 
+For the higher-level shared-boundary workflows added on top of these loaders, see [docs/shared-clustering.md](docs/shared-clustering.md). The short version is:
+
+- run `parse_bam.extract()` for `mode="read_global"`
+- run `parse_bam.pileup()` for `mode="region_anchored"`
+- run both when you want region-level summaries plus read-level follow-up
+
+```python
+from dimelo import workflows
+from dimelo.models import SampleSpec
+
+result = workflows.shared_cluster_distribution(
+    samples=[
+        SampleSpec(sample_id="s1", condition="NS", extract_h5="output/s1.extract.h5"),
+        SampleSpec(sample_id="s2", condition="15min", extract_h5="output/s2.extract.h5"),
+    ],
+    mode="read_global",
+    motifs=["A,0"],
+    n_clusters=8,
+)
+```
+
 ```
 from dimelo import cluster
 
