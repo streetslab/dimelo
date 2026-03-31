@@ -24,6 +24,7 @@ The goal is to preserve the current region-targeted analysis logic while making 
   what the analysis unit is,
   and what read or region representation is being contrasted.
 - Integrate cleanly with shared clustering workflows and pileup-backed summaries.
+- Keep plotting flexible and modern by making returned tables canonical, while preserving simple Matplotlib-based renderers for continuity.
 - Preserve continuity with prior versions by leaving the current under-the-hood parsing architecture substantially intact and layering new region-analysis modules on top.
 
 ## Non-Goals
@@ -631,6 +632,7 @@ class RegionContrastResult:
     regions: pd.DataFrame
     summary: pd.DataFrame
     contrast: ContrastSpec
+    plot_data: dict[str, pd.DataFrame | dict[str, Any]]
     metadata: dict[str, Any]
     figures: dict[str, Any]
 ```
@@ -644,6 +646,7 @@ The metadata must include:
 - test
 - normalization mode
 - a short plain-language description of what the contrast means biologically
+- renderer used for any built-in figures
 
 ### `RegionDiscoveryResult`
 
@@ -653,11 +656,28 @@ class RegionDiscoveryResult:
     hits: pd.DataFrame
     windows: pd.DataFrame
     contrast: ContrastSpec | None
+    plot_data: dict[str, pd.DataFrame | dict[str, Any]]
     metadata: dict[str, Any]
     figures: dict[str, Any]
 ```
 
 The outputs should be easy to export as BEDs and easy to pass into follow-on workflows.
+
+### Plotting Contract
+
+Plotting should be layered:
+
+1. canonical result tables
+2. plot-ready tables or lightweight plot specs
+3. renderer-specific figure objects
+
+This keeps the analysis outputs stable while making plotting flexible.
+
+Default behavior:
+
+- built-in renderers use Matplotlib for continuity
+- users can skip built-in plotting and work directly from `regions`, `summary`, `hits`, `windows`, or `plot_data`
+- future renderer adapters can be added without changing the analysis APIs
 
 ## Documentation Requirements For User Flow
 
@@ -700,6 +720,7 @@ Add:
 - one doc for de novo region discovery
 - one doc for defined-region contrasts
 - one doc showing how discovered or contrasted regions feed into clustering
+- one doc showing how to build custom plots from returned tables without using package renderers
 
 ## Implementation Plan Shape
 
@@ -724,6 +745,7 @@ These defaults are fixed for the first implementation:
 - default `representation`: `modified_fraction`
 - default `signal_source`: `pileup_counts`
 - default `test`: `beta_binomial` when the combination is valid
+- default plotting contract: canonical tables first, Matplotlib renderer second
 - existing parsing entry points remain the continuity-preserving preprocessing layer
 
 This architecture should make it obvious what is being compared and why, while still supporting clean handoff into clustering and other downstream workflows.

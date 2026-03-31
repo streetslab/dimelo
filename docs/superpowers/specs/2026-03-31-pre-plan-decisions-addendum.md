@@ -152,6 +152,23 @@ The docs and examples should include one explicit recommendation table:
 
 V1 should not introduce a new required preprocessing abstraction; it should instead document the decision clearly and allow later wrappers to remain additive.
 
+### 7. Plotting Flexibility Policy
+
+Plotting should be data-first across workflows.
+
+Required rule:
+
+- workflows return canonical result tables first
+- workflows may also return plot-ready tables or lightweight plot specs
+- built-in figure generation should default to Matplotlib for backward familiarity
+- users must be able to ignore built-in plotting and use returned tables with their own plotting stack
+
+V1 should not attempt a full backend plugin system. Instead it should:
+
+- preserve simple Matplotlib-based renderers
+- expose stable `plot_data` payloads where useful
+- keep renderer-specific logic out of the analysis core
+
 ## Recommended Implementation Consequences
 
 The implementation plan should:
@@ -162,6 +179,7 @@ The implementation plan should:
 4. keep `region_discovery` deterministic and tiled in v1
 5. make normalization artifacts reusable across workflows
 6. include user-facing guidance for when to run `pileup`, `extract`, or both
+7. make plotting data-first with Matplotlib as the default compatibility renderer
 
 ## Summary
 

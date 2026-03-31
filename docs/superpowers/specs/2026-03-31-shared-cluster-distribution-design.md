@@ -16,6 +16,7 @@ The workflow should scale from thousands to millions of reads or regions per dat
 - Preserve compatibility with existing `dimelo` extract outputs and existing feature-engineering code in `dimelo.cluster`.
 - Support matched-region analyses while also allowing read clustering that is independent of region.
 - Return structured tabular results suitable for downstream notebook analysis, plus a small standard plot set for quick interpretation.
+- Keep plotting flexible by making tables the source of truth, shipping simple Matplotlib renderers by default, and not locking users into one plotting stack.
 - Use a performant default that remains usable at million-row scale.
 - Introduce a hybrid batch model that supports both independent dataset processing and flexible cohort-level shared workflows.
 - Make downstream workflows consume reusable artifacts when available, while still being able to rebuild from raw inputs when necessary.
@@ -251,6 +252,7 @@ class SharedClusterResult:
     distribution_change: pd.DataFrame | None
     cluster_profiles: pd.DataFrame
     region_summaries: pd.DataFrame | None
+    plot_data: dict[str, pd.DataFrame | dict[str, Any]]
     figures: dict[str, Any]
     metadata: dict[str, Any]
 ```
@@ -656,7 +658,28 @@ The top-level metadata payload should also include:
 - cluster basis mode
 - any per-sample normalization factors used
 
+### `plot_data`
+
+Plotting should be data-first.
+
+The result object should always expose plot-ready tables or spec-like payloads, even when no figure objects are requested.
+
+Examples:
+
+- `cluster_distribution_bar`
+- `cluster_distribution_heatmap`
+- `cluster_profiles`
+- `top_region_changes` when available
+
 ## Standard Plots
+
+The package should separate:
+
+1. analysis tables
+2. plot-ready data or plot specs
+3. renderer-specific figure generation
+
+Matplotlib should remain the default built-in renderer for continuity, but workflows should not require Matplotlib-specific figure handling in order to be useful.
 
 The initial standardized plot set should be small:
 
@@ -670,6 +693,23 @@ Optional later additions:
 - top-changing region heatmap
 - baseline-vs-induction scatter plots
 - preset study-specific figure suites
+
+### Plotting Architecture
+
+Recommended layers:
+
+- results tables
+  always returned, canonical source of truth
+- plotting helpers
+  convert result tables into plot-ready payloads
+- default renderers
+  Matplotlib-based functions that consume those payloads
+
+Consequences:
+
+- users familiar with older package versions can keep using simple Matplotlib outputs
+- users with their own preferred plotting stack can ignore built-in renderers and plot directly from returned tables
+- future renderer adapters such as Plotly or Altair can be added without changing analysis APIs
 
 ## Error Handling
 
@@ -726,6 +766,7 @@ Add:
 - one API-oriented doc for the workflow
 - one example notebook for `read_global`
 - one example notebook for `region_anchored`
+- one short doc showing how to use returned tables with custom plotting code instead of package renderers
 
 The collaborator notebook should be preserved as exploratory history but should not remain the primary interface for this analysis.
 
@@ -750,6 +791,7 @@ These defaults are fixed for the first implementation:
 - default clusterer: `MiniBatchKMeans`
 - default cluster-boundary source: balanced pooled subset across all datasets
 - default result mode: return structured tables and figures, not raw matrices
+- default plotting contract: return canonical tables plus plot-ready payloads, with Matplotlib as the compatibility renderer
 - default artifact policy: `prefer_cached`
 - default signal normalization: `none`
 - default feature scaling: `robust_zscore`
