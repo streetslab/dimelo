@@ -28,6 +28,8 @@ class DatasetArtifact:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if self.params is None:
+            raise ValueError("DatasetArtifact.params cannot be None")
         if self.provenance is None:
             raise ValueError("DatasetArtifact.provenance cannot be None")
 
@@ -60,9 +62,12 @@ class ContrastSpec:
             raise ValueError(
                 "ContrastSpec pairwise/group_vs_group modes require numerator and denominator."
             )
-        if self.mode == "matched_pairwise" and not self.pairing_key:
+        if self.mode == "matched_pairwise" and (
+            not self.numerator or not self.denominator or not self.pairing_key
+        ):
             raise ValueError(
-                "ContrastSpec matched_pairwise mode requires pairing_key."
+                "ContrastSpec matched_pairwise mode requires numerator, "
+                "denominator, and pairing_key."
             )
         if self.mode == "background_adjusted" and not self.background:
             raise ValueError(
@@ -98,6 +103,7 @@ class SharedClusterResult:
 
     def __post_init__(self) -> None:
         required_fields = {
+            "model": self.model,
             "assignments": self.assignments,
             "cluster_distribution": self.cluster_distribution,
             "condition_distribution": self.condition_distribution,

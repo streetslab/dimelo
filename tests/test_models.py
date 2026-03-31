@@ -66,6 +66,18 @@ def test_dataset_artifact_rejects_none_provenance():
         )
 
 
+def test_dataset_artifact_rejects_none_params():
+    with pytest.raises(ValueError, match="params"):
+        DatasetArtifact(
+            sample_id="sample-1",
+            artifact_type="extract",
+            path=Path("sample-1.h5"),
+            format="hdf5",
+            params=None,
+            provenance={"pipeline": "parse_bam"},
+        )
+
+
 def test_contrast_spec_accepts_pairwise_mode():
     contrast = ContrastSpec(
         mode="pairwise",
@@ -91,6 +103,14 @@ def test_contrast_spec_rejects_missing_pairing_key_for_matched_pairwise():
             mode="matched_pairwise",
             numerator=["15min"],
             denominator=["NS"],
+        )
+
+
+def test_contrast_spec_rejects_missing_groups_for_matched_pairwise():
+    with pytest.raises(ValueError, match="matched_pairwise mode requires"):
+        ContrastSpec(
+            mode="matched_pairwise",
+            pairing_key="pair-1",
         )
 
 
@@ -128,6 +148,22 @@ def test_shared_cluster_result_supports_plot_data():
 
     assert result.plot_data["cluster_distribution_bar"] == {"kind": "bar"}
     assert result.model is model
+
+
+def test_shared_cluster_result_rejects_none_model():
+    with pytest.raises(ValueError, match="model"):
+        SharedClusterResult(
+            model=None,
+            assignments=pd.DataFrame({"cluster": ["cluster-1"]}),
+            cluster_distribution=pd.DataFrame({"cluster": ["cluster-1"]}),
+            condition_distribution=pd.DataFrame({"condition": ["treated"]}),
+            distribution_change=None,
+            cluster_profiles=pd.DataFrame({"profile": [1.0]}),
+            region_summaries=None,
+            plot_data={"cluster_distribution_bar": {"kind": "bar"}},
+            figures={},
+            metadata={"notes": "ok"},
+        )
 
 
 @pytest.mark.parametrize(
