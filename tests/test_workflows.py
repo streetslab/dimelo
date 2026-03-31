@@ -63,10 +63,13 @@ def test_shared_cluster_distribution_read_global(monkeypatch):
 
 
 def test_shared_cluster_distribution_rejects_unsupported_mode():
-    with pytest.raises(NotImplementedError, match="read_global"):
+    with pytest.raises(NotImplementedError, match="region_anchored"):
         workflows.shared_cluster_distribution(
-            samples=[SampleSpec(sample_id="s1", condition="NS", extract_h5="s1.h5")],
-            mode="region_anchored",
+            samples=[
+                SampleSpec(sample_id="s1", condition="NS", extract_h5="s1.h5"),
+                SampleSpec(sample_id="s2", condition="15min", extract_h5="s2.h5"),
+            ],
+            mode="unknown_mode",
             motifs=["A,0"],
         )
 
@@ -78,6 +81,67 @@ def test_shared_cluster_distribution_requires_two_datasets():
             mode="read_global",
             motifs=["A,0"],
         )
+
+
+def test_shared_cluster_distribution_region_anchored(monkeypatch):
+    fake_samples = [
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            regions_bed="r1.bed",
+            metadata={"pileup_path": "s1.bed.gz"},
+        ),
+        SampleSpec(
+            sample_id="s2",
+            condition="15min",
+            extract_h5="s2.h5",
+            regions_bed="r2.bed",
+            metadata={"pileup_path": "s2.bed.gz"},
+        ),
+    ]
+
+    def fake_region_table(*args, **kwargs):
+        return np.array([[0.2, 0.8], [0.7, 0.3]]), [
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "replicate": None,
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 2,
+                "strand": "+",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "15min",
+                "replicate": None,
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 2,
+                "strand": "+",
+            },
+        ]
+
+    monkeypatch.setattr(workflows.region_analysis, "build_region_feature_table", fake_region_table)
+
+    result = workflows.shared_cluster_distribution(
+        samples=fake_samples,
+        mode="region_anchored",
+        motifs=["A,0"],
+        matched_regions="matched.bed",
+        n_clusters=2,
+        make_plots=False,
+    )
+
+    assert not result.assignments.empty
+    assert "region_id" in result.assignments.columns
+    assert result.region_summaries is not None
+    assert {"region_id", "sample_id", "condition", "cluster", "count", "fraction"} <= set(
+        result.region_summaries.columns
+    )
 
 
 def test_shared_cluster_distribution_tracks_condition_replicates(monkeypatch):
@@ -125,6 +189,117 @@ def test_shared_cluster_distribution_tracks_condition_replicates(monkeypatch):
 
     ns_rows = result.condition_distribution[result.condition_distribution["condition"] == "NS"]
     assert set(ns_rows["replicate_n"]) == {2}
+
+
+def test_shared_cluster_distribution_region_anchored_rejects_multi_motif(monkeypatch):
+    fake_samples = [
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            regions_bed="r1.bed",
+            metadata={"pileup_path": "s1.bed.gz"},
+        ),
+        SampleSpec(
+            sample_id="s2",
+            condition="15min",
+            extract_h5="s2.h5",
+            regions_bed="r2.bed",
+            metadata={"pileup_path": "s2.bed.gz"},
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="exactly one motif"):
+        workflows.shared_cluster_distribution(
+            samples=fake_samples,
+            mode="region_anchored",
+            motifs=["A,0", "CG,0"],
+            matched_regions="matched.bed",
+        )
+
+
+def test_shared_cluster_distribution_region_anchored_control_regions(monkeypatch):
+    fake_samples = [
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            regions_bed="control-s1.bed",
+            metadata={"pileup_path": "s1.bed.gz"},
+        ),
+        SampleSpec(
+            sample_id="s2",
+            condition="15min",
+            extract_h5="s2.h5",
+            regions_bed="control-s2.bed",
+            metadata={"pileup_path": "s2.bed.gz"},
+        ),
+    ]
+
+    def fake_region_table(*args, **kwargs):
+        matched_regions = kwargs["matched_regions"]
+        if matched_regions == "matched.bed":
+            return np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32), [
+                {
+                    "region_id": "reg1",
+                    "sample_id": "s1",
+                    "condition": "NS",
+                    "replicate": None,
+                    "chromosome": "chr1",
+                    "start": 0,
+                    "end": 2,
+                    "strand": "+",
+                },
+                {
+                    "region_id": "reg1",
+                    "sample_id": "s2",
+                    "condition": "15min",
+                    "replicate": None,
+                    "chromosome": "chr1",
+                    "start": 0,
+                    "end": 2,
+                    "strand": "+",
+                },
+            ]
+        if matched_regions == "control-s1.bed":
+            return np.array([[0.5, 0.5]], dtype=np.float32), [
+                {
+                    "region_id": "c1",
+                    "sample_id": "s1",
+                    "condition": "NS",
+                    "replicate": None,
+                    "chromosome": "chr1",
+                    "start": 10,
+                    "end": 12,
+                    "strand": "+",
+                }
+            ]
+        return np.array([[0.25, 0.25]], dtype=np.float32), [
+            {
+                "region_id": "c2",
+                "sample_id": "s2",
+                "condition": "15min",
+                "replicate": None,
+                "chromosome": "chr1",
+                "start": 20,
+                "end": 22,
+                "strand": "+",
+            }
+        ]
+
+    monkeypatch.setattr(workflows.region_analysis, "build_region_feature_table", fake_region_table)
+
+    result = workflows.shared_cluster_distribution(
+        samples=fake_samples,
+        mode="region_anchored",
+        motifs=["A,0"],
+        matched_regions="matched.bed",
+        signal_normalization="control_regions",
+        n_clusters=2,
+    )
+
+    assert result.metadata["sample_normalization"]["s1"]["global_offset"] == 0.5
+    assert result.metadata["sample_normalization"]["s2"]["global_offset"] == 0.25
 
 
 def test_shared_cluster_distribution_prefers_cached_extract_artifact(monkeypatch):

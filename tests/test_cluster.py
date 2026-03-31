@@ -236,36 +236,36 @@ def test_extract_read_windows_filter_multi_region(monkeypatch):
     assert result.metadata[0]["read_name"] == "keep"
 
 
-    def test_read_window_feature_matrix():
-        data = np.array(
-            [
-                [0, 0, 1, 1],
-                [1, 1, 0, 0],
-                [0, 1, 0, 1],
-            ],
-            dtype=float,
-        )
-        result = cluster.ReadWindowExtractionResult(
-            data_matrix=data,
-            val_matrix=None,
-            metadata=[],
-            datasets=[],
-            regions_dict=None,
-        )
-        features, names = cluster.read_window_feature_matrix(
-            result,
-            n_pca=1,
-            autocorr_lags=(1,),
-            density_windows=(("center", -2, 2),),
-            require_nonzero_valid=False,
-            min_valid_fraction=0.0,
-        )
-        assert features.shape[0] == 3
-        assert "pca_0" in names
-        assert "autocorr_1" in names
-        assert "center" in names
-        assert "global_mean" in names
-        assert "iqr" in names
+def test_read_window_feature_matrix():
+    data = np.array(
+        [
+            [0, 0, 1, 1],
+            [1, 1, 0, 0],
+            [0, 1, 0, 1],
+        ],
+        dtype=float,
+    )
+    result = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=[],
+        datasets=[],
+        regions_dict=None,
+    )
+    features, names = cluster.read_window_feature_matrix(
+        result,
+        n_pca=1,
+        autocorr_lags=(1,),
+        density_windows=(("center", -2, 2),),
+        require_nonzero_valid=False,
+        min_valid_fraction=0.0,
+    )
+    assert features.shape[0] == 3
+    assert "pca_0" in names
+    assert "autocorr_1" in names
+    assert "center" in names
+    assert "global_mean" in names
+    assert "iqr" in names
 
 
 def test_plot_cluster_profiles_motif_index(monkeypatch):
@@ -370,3 +370,14 @@ def test_cluster_read_windows_kmeans():
     assert result.labels_raw.shape[0] == 20
     assert result.labels_size_ordered.shape == result.labels_raw.shape
     assert "silhouette" in result.metrics
+
+
+def test_cluster_label_mapping_round_trips_labels():
+    labels_raw = np.array([3, 3, 7, 7, 7])
+    labels_size_ordered = np.array([1, 1, 0, 0, 0])
+
+    mapping = cluster.cluster_label_mapping(labels_raw, labels_size_ordered)
+    remapped = cluster.apply_cluster_label_mapping(np.array([7, 3, 9]), mapping)
+
+    assert mapping == {3: 1, 7: 0}
+    np.testing.assert_array_equal(remapped, np.array([0, 1, -1]))

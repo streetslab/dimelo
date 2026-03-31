@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from .artifacts import resolve_artifact
-from . import cluster, distribution, plotting
+from . import cluster, distribution, plotting, region_analysis
 from .models import DatasetArtifact, SampleSpec, SharedClusterModel, SharedClusterResult
 
 _SUPPORTED_SIGNAL_NORMALIZATION = {"none", "per_sample_global", "control_regions"}
@@ -94,6 +94,53 @@ def _requested_extract_artifact(
             "schema_version": "artifact-v1",
             "package_version": _PACKAGE_VERSION,
         },
+    )
+
+
+def _requested_pileup_artifact(
+    sample: SampleSpec,
+    *,
+    motifs: list[str],
+    matched_regions: Any,
+    signal_normalization: str,
+    feature_scaling: str,
+    cluster_basis: str,
+) -> DatasetArtifact:
+    if not sample.metadata or "pileup_path" not in sample.metadata:
+        raise ValueError(
+            f"Sample {sample.sample_id!r} is missing metadata['pileup_path'] for region_anchored mode."
+        )
+    pileup_path = Path(sample.metadata["pileup_path"])
+    return DatasetArtifact(
+        sample_id=sample.sample_id,
+        artifact_type="pileup",
+        path=pileup_path,
+        format=pileup_path.suffix.lstrip(".") or "bed.gz",
+        params={
+            "motifs": motifs,
+            "matched_regions": _serialize_region_spec(matched_regions),
+            "signal_normalization": signal_normalization,
+            "feature_scaling": feature_scaling,
+            "cluster_basis": cluster_basis,
+        },
+        provenance={
+            "pipeline": "parse_bam",
+            "source_files": [str(pileup_path)],
+            "source_fingerprints": [_source_fingerprint(pileup_path)],
+            "upstream_lineage": [],
+        },
+        metadata={
+            "schema_version": "artifact-v1",
+            "package_version": _PACKAGE_VERSION,
+        },
+    )
+
+
+def _require_pileup_path(sample: SampleSpec) -> str | Path:
+    if sample.metadata and "pileup_path" in sample.metadata:
+        return sample.metadata["pileup_path"]
+    raise ValueError(
+        f"Sample {sample.sample_id!r} is missing metadata['pileup_path'] for region_anchored mode."
     )
 
 
@@ -220,6 +267,142 @@ def _predict_in_chunks(model: Any, feature_matrix: np.ndarray) -> np.ndarray:
     return np.concatenate(labels, axis=0)
 
 
+def _build_region_summary(assignments: pd.DataFrame) -> pd.DataFrame:
+    summary = (
+        assignments.groupby(
+            ["region_id", "sample_id", "condition", "cluster"],
+            sort=True,
+        )
+        .size()
+        .reset_index(name="count")
+    )
+    totals = summary.groupby(["region_id", "sample_id", "condition"])["count"].transform("sum")
+    summary["fraction"] = summary["count"] / totals
+    return summary
+
+
+def _build_shared_cluster_result(
+    *,
+    mode: str,
+    motifs: list[str],
+    feature_blocks: list[np.ndarray],
+    training_blocks: list[np.ndarray],
+    metadata_rows: list[dict[str, Any]],
+    feature_names: list[str],
+    signal_normalization: str,
+    feature_scaling: str,
+    cluster_basis: str,
+    clusterer: str,
+    n_clusters: int,
+    training_sample_per_dataset: int,
+    artifact_policy: str,
+    random_state: int,
+    make_plots: bool,
+    matched_regions: Any,
+    sample_training_rows: dict[str, int],
+    sample_dataset_sizes: dict[str, int],
+    sample_normalization: dict[str, dict[str, float | None]],
+    cache_hits: dict[str, str],
+    cache_misses: list[str],
+    sample_rebuild_decisions: dict[str, str],
+    region_summaries: pd.DataFrame | None = None,
+) -> SharedClusterResult:
+    full_matrix = np.vstack(feature_blocks)
+    training_matrix = np.vstack(training_blocks)
+    if training_matrix.shape[0] < n_clusters:
+        raise ValueError(
+            "Pooled training subset has fewer rows than n_clusters. "
+            "Reduce n_clusters or increase training_sample_per_dataset."
+        )
+
+    training_scaled, full_scaled, scaler_meta = _scale_features(
+        training_matrix,
+        full_matrix,
+        feature_scaling=feature_scaling,
+    )
+    clustering_result = cluster.cluster_read_windows(
+        training_scaled,
+        method=clusterer,
+        n_clusters=n_clusters,
+        random_state=random_state,
+    )
+    label_mapping = cluster.cluster_label_mapping(
+        clustering_result.labels_raw,
+        clustering_result.labels_size_ordered,
+    )
+    if not hasattr(clustering_result.model, "predict"):
+        raise TypeError("Fitted clustering model does not support prediction for full assignment.")
+    predicted_raw = _predict_in_chunks(clustering_result.model, full_scaled)
+    predicted_ordered = cluster.apply_cluster_label_mapping(predicted_raw, label_mapping)
+
+    assignments = pd.DataFrame(metadata_rows)
+    assignments["cluster"] = _cluster_label_strings(predicted_ordered)
+
+    feature_frame = pd.DataFrame(full_matrix, columns=feature_names)
+    cluster_distribution = distribution.build_cluster_distribution(assignments)
+    condition_distribution = distribution.build_condition_distribution(cluster_distribution)
+    cluster_profiles = _cluster_profiles(feature_frame, assignments)
+    plot_data = {
+        "cluster_distribution_bar": plotting.prepare_cluster_distribution_bar_data(
+            cluster_distribution
+        ),
+        "cluster_distribution_heatmap": plotting.prepare_cluster_distribution_heatmap_data(
+            condition_distribution
+        ),
+    }
+    if region_summaries is None and mode == "region_anchored":
+        region_summaries = _build_region_summary(assignments)
+
+    model = SharedClusterModel(
+        mode=mode,
+        motifs=motifs,
+        feature_names=list(feature_names),
+        preprocessing={
+            "signal_normalization": signal_normalization,
+            "feature_scaling": feature_scaling,
+            "cluster_basis": cluster_basis,
+            **scaler_meta,
+        },
+        estimator=clustering_result.model,
+        cluster_labels=sorted(assignments["cluster"].unique()),
+        fit_metadata={
+            "clusterer": clusterer,
+            "n_clusters": n_clusters,
+            "artifact_policy": artifact_policy,
+            "training_sample_per_dataset": training_sample_per_dataset,
+            "training_rows": int(training_scaled.shape[0]),
+            "sample_training_rows": sample_training_rows,
+            "metrics": clustering_result.metrics,
+        },
+    )
+    return SharedClusterResult(
+        model=model,
+        assignments=assignments,
+        cluster_distribution=cluster_distribution,
+        condition_distribution=condition_distribution,
+        distribution_change=None,
+        cluster_profiles=cluster_profiles,
+        region_summaries=region_summaries,
+        plot_data=plot_data,
+        figures={},
+        metadata={
+            "mode": mode,
+            "artifact_policy": artifact_policy,
+            "cache_hits": cache_hits,
+            "cache_misses": cache_misses,
+            "sample_rebuild_decisions": sample_rebuild_decisions,
+            "signal_normalization": signal_normalization,
+            "feature_scaling": feature_scaling,
+            "cluster_basis": cluster_basis,
+            "make_plots": make_plots,
+            "matched_regions": matched_regions,
+            "sample_dataset_sizes": sample_dataset_sizes,
+            "rows_after_filtering": sample_dataset_sizes,
+            "sample_normalization": sample_normalization,
+        },
+    )
+
+
 def shared_cluster_distribution(
     *,
     samples: Iterable[SampleSpec],
@@ -247,8 +430,11 @@ def shared_cluster_distribution(
         raise ValueError("samples must contain at least one sample.")
     if not motif_list:
         raise ValueError("motifs must contain at least one motif.")
-    if mode != "read_global":
-        raise NotImplementedError("The first workflow slice implements mode='read_global' only.")
+    if mode not in {"read_global", "region_anchored"}:
+        raise NotImplementedError(
+            "The first workflow slice implements mode='read_global' and "
+            "mode='region_anchored' only."
+        )
     if len(sample_list) < 2:
         raise ValueError("shared_cluster_distribution requires at least two datasets.")
     if clusterer != "minibatch_kmeans":
@@ -261,6 +447,145 @@ def shared_cluster_distribution(
         raise ValueError(f"Unsupported feature_scaling: {feature_scaling}")
     if cluster_basis not in _SUPPORTED_CLUSTER_BASIS:
         raise ValueError(f"Unsupported cluster_basis: {cluster_basis}")
+
+    if mode == "region_anchored":
+        pileup_paths: dict[str, str | Path] = {}
+        cache_hits: dict[str, str] = {}
+        cache_misses: list[str] = []
+        sample_rebuild_decisions: dict[str, str] = {}
+
+        for sample in sample_list:
+            requested_artifact = _requested_pileup_artifact(
+                sample,
+                motifs=motif_list,
+                matched_regions=matched_regions,
+                signal_normalization=signal_normalization,
+                feature_scaling=feature_scaling,
+                cluster_basis=cluster_basis,
+            )
+            resolved_artifact = resolve_artifact(
+                requested_artifact,
+                _coerce_artifacts(sample),
+                artifact_policy=artifact_policy,
+            )
+            if resolved_artifact is not None:
+                pileup_paths[sample.sample_id] = resolved_artifact.path
+                cache_hits[sample.sample_id] = str(resolved_artifact.path)
+                sample_rebuild_decisions[sample.sample_id] = "cache_hit"
+            else:
+                pileup_paths[sample.sample_id] = _require_pileup_path(sample)
+                cache_misses.append(sample.sample_id)
+                sample_rebuild_decisions[sample.sample_id] = "rebuilt_from_raw"
+
+        feature_matrix, metadata_rows = region_analysis.build_region_feature_table(
+            samples=sample_list,
+            motifs=motif_list,
+            matched_regions=matched_regions,
+            pileup_paths=pileup_paths,
+        )
+        sample_ids = [row["sample_id"] for row in metadata_rows]
+        sample_dataset_sizes = {
+            sample_id: int(sum(1 for row_sample in sample_ids if row_sample == sample_id))
+            for sample_id in {sample.sample_id for sample in sample_list}
+        }
+        sample_normalization = {
+            sample.sample_id: {"global_offset": None} for sample in sample_list
+        }
+        region_matrix = np.asarray(feature_matrix, dtype=float)
+        if signal_normalization in {"per_sample_global", "control_regions"}:
+            for sample_id in sample_dataset_sizes:
+                mask = np.array([row["sample_id"] == sample_id for row in metadata_rows], dtype=bool)
+                if signal_normalization == "control_regions":
+                    sample = next(
+                        sample_item for sample_item in sample_list if sample_item.sample_id == sample_id
+                    )
+                    control_regions = sample.regions_bed
+                    if control_regions is None or control_regions == matched_regions:
+                        raise ValueError(
+                            "signal_normalization='control_regions' in region_anchored mode "
+                            "requires sample.regions_bed to provide separate control regions."
+                        )
+                    control_artifact = _requested_pileup_artifact(
+                        sample,
+                        motifs=motif_list,
+                        matched_regions=control_regions,
+                        signal_normalization=signal_normalization,
+                        feature_scaling=feature_scaling,
+                        cluster_basis=cluster_basis,
+                    )
+                    resolved_control_artifact = resolve_artifact(
+                        control_artifact,
+                        _coerce_artifacts(sample),
+                        artifact_policy=artifact_policy,
+                    )
+                    control_path = (
+                        resolved_control_artifact.path
+                        if resolved_control_artifact is not None
+                        else _require_pileup_path(sample)
+                    )
+                    control_matrix, _ = region_analysis.build_region_feature_table(
+                        samples=[sample],
+                        motifs=motif_list,
+                        matched_regions=control_regions,
+                        pileup_paths={sample.sample_id: control_path},
+                    )
+                    offset = float(np.asarray(control_matrix, dtype=float).mean())
+                else:
+                    offset = float(region_matrix[mask].mean())
+                region_matrix[mask] = region_matrix[mask] - offset
+                sample_normalization[sample_id] = {"global_offset": offset}
+
+        if cluster_basis == "shape_only":
+            region_matrix = region_matrix - region_matrix.mean(axis=1, keepdims=True)
+            feature_names = [f"shape_{idx}" for idx in range(region_matrix.shape[1])]
+        elif cluster_basis == "level_only":
+            region_matrix = region_matrix.mean(axis=1, keepdims=True)
+            feature_names = ["region_mean_mod_fraction"]
+        else:
+            feature_names = [f"pos_{idx}" for idx in range(region_matrix.shape[1])]
+
+        feature_blocks: list[np.ndarray] = []
+        training_blocks: list[np.ndarray] = []
+        sample_training_rows: dict[str, int] = {}
+        for sample in sample_list:
+            mask = np.array(
+                [row["sample_id"] == sample.sample_id for row in metadata_rows],
+                dtype=bool,
+            )
+            sample_matrix = region_matrix[mask]
+            feature_blocks.append(sample_matrix)
+            training_matrix, _ = _sample_training_rows(
+                sample_matrix,
+                training_sample_per_dataset=training_sample_per_dataset,
+                random_state=random_state + len(training_blocks),
+            )
+            training_blocks.append(training_matrix)
+            sample_training_rows[sample.sample_id] = int(training_matrix.shape[0])
+
+        return _build_shared_cluster_result(
+            mode=mode,
+            motifs=motif_list,
+            feature_blocks=feature_blocks,
+            training_blocks=training_blocks,
+            metadata_rows=metadata_rows,
+            feature_names=feature_names,
+            signal_normalization=signal_normalization,
+            feature_scaling=feature_scaling,
+            cluster_basis=cluster_basis,
+            clusterer=clusterer,
+            n_clusters=n_clusters,
+            training_sample_per_dataset=training_sample_per_dataset,
+            artifact_policy=artifact_policy,
+            random_state=random_state,
+            make_plots=make_plots,
+            matched_regions=matched_regions,
+            sample_training_rows=sample_training_rows,
+            sample_dataset_sizes=sample_dataset_sizes,
+            sample_normalization=sample_normalization,
+            cache_hits=cache_hits,
+            cache_misses=cache_misses,
+            sample_rebuild_decisions=sample_rebuild_decisions,
+        )
 
     feature_blocks: list[np.ndarray] = []
     metadata_rows: list[dict[str, Any]] = []
@@ -371,96 +696,27 @@ def shared_cluster_distribution(
 
     if selected_feature_names is None:
         raise ValueError("No features were generated for the requested samples.")
-
-    full_matrix = np.vstack(feature_blocks)
-    training_matrix = np.vstack(training_blocks)
-    if training_matrix.shape[0] < n_clusters:
-        raise ValueError(
-            "Pooled training subset has fewer rows than n_clusters. "
-            "Reduce n_clusters or increase training_sample_per_dataset."
-        )
-
-    training_scaled, full_scaled, scaler_meta = _scale_features(
-        training_matrix,
-        full_matrix,
-        feature_scaling=feature_scaling,
-    )
-    clustering_result = cluster.cluster_read_windows(
-        training_scaled,
-        method=clusterer,
-        n_clusters=n_clusters,
-        random_state=random_state,
-    )
-    label_mapping = cluster.cluster_label_mapping(
-        clustering_result.labels_raw,
-        clustering_result.labels_size_ordered,
-    )
-    if not hasattr(clustering_result.model, "predict"):
-        raise TypeError("Fitted clustering model does not support prediction for full assignment.")
-    predicted_raw = _predict_in_chunks(clustering_result.model, full_scaled)
-    predicted_ordered = cluster.apply_cluster_label_mapping(predicted_raw, label_mapping)
-
-    assignments = pd.DataFrame(metadata_rows)
-    assignments["cluster"] = _cluster_label_strings(predicted_ordered)
-
-    feature_frame = pd.DataFrame(full_matrix, columns=selected_feature_names)
-    cluster_distribution = distribution.build_cluster_distribution(assignments)
-    condition_distribution = distribution.build_condition_distribution(cluster_distribution)
-    cluster_profiles = _cluster_profiles(feature_frame, assignments)
-    plot_data = {
-        "cluster_distribution_bar": plotting.prepare_cluster_distribution_bar_data(
-            cluster_distribution
-        ),
-        "cluster_distribution_heatmap": plotting.prepare_cluster_distribution_heatmap_data(
-            condition_distribution
-        ),
-    }
-
-    model = SharedClusterModel(
+    return _build_shared_cluster_result(
         mode=mode,
         motifs=motif_list,
+        feature_blocks=feature_blocks,
+        training_blocks=training_blocks,
+        metadata_rows=metadata_rows,
         feature_names=list(selected_feature_names),
-        preprocessing={
-            "signal_normalization": signal_normalization,
-            "feature_scaling": feature_scaling,
-            "cluster_basis": cluster_basis,
-            **scaler_meta,
-        },
-        estimator=clustering_result.model,
-        cluster_labels=sorted(assignments["cluster"].unique()),
-        fit_metadata={
-            "clusterer": clusterer,
-            "n_clusters": n_clusters,
-            "artifact_policy": artifact_policy,
-            "training_sample_per_dataset": training_sample_per_dataset,
-            "training_rows": int(training_scaled.shape[0]),
-            "sample_training_rows": sample_training_rows,
-            "metrics": clustering_result.metrics,
-        },
-    )
-    return SharedClusterResult(
-        model=model,
-        assignments=assignments,
-        cluster_distribution=cluster_distribution,
-        condition_distribution=condition_distribution,
-        distribution_change=None,
-        cluster_profiles=cluster_profiles,
-        region_summaries=None,
-        plot_data=plot_data,
-        figures={},
-        metadata={
-            "mode": mode,
-            "artifact_policy": artifact_policy,
-            "cache_hits": cache_hits,
-            "cache_misses": cache_misses,
-            "sample_rebuild_decisions": sample_rebuild_decisions,
-            "signal_normalization": signal_normalization,
-            "feature_scaling": feature_scaling,
-            "cluster_basis": cluster_basis,
-            "make_plots": make_plots,
-            "matched_regions": matched_regions,
-            "sample_dataset_sizes": sample_dataset_sizes,
-            "rows_after_filtering": sample_dataset_sizes,
-            "sample_normalization": sample_normalization,
-        },
+        signal_normalization=signal_normalization,
+        feature_scaling=feature_scaling,
+        cluster_basis=cluster_basis,
+        clusterer=clusterer,
+        n_clusters=n_clusters,
+        training_sample_per_dataset=training_sample_per_dataset,
+        artifact_policy=artifact_policy,
+        random_state=random_state,
+        make_plots=make_plots,
+        matched_regions=matched_regions,
+        sample_training_rows=sample_training_rows,
+        sample_dataset_sizes=sample_dataset_sizes,
+        sample_normalization=sample_normalization,
+        cache_hits=cache_hits,
+        cache_misses=cache_misses,
+        sample_rebuild_decisions=sample_rebuild_decisions,
     )

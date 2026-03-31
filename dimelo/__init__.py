@@ -12,6 +12,7 @@ from . import (
     plot_enrichment_profile,
     plot_read_browser,
     plot_reads,
+    region_analysis,
     workflows,
 )
 
@@ -29,5 +30,6 @@ __all__ = [
     "plot_enrichment_profile",
     "plot_read_browser",
     "plot_reads",
+    "region_analysis",
     "workflows",
 ]
