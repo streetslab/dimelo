@@ -60,6 +60,14 @@ class ContrastSpec:
             raise ValueError(
                 "ContrastSpec pairwise/group_vs_group modes require numerator and denominator."
             )
+        if self.mode == "matched_pairwise" and not self.pairing_key:
+            raise ValueError(
+                "ContrastSpec matched_pairwise mode requires pairing_key."
+            )
+        if self.mode == "background_adjusted" and not self.background:
+            raise ValueError(
+                "ContrastSpec background_adjusted mode requires background."
+            )
         if self.mode == "time_course" and not self.time_order:
             raise ValueError("ContrastSpec time_course mode requires time_order.")
 
@@ -117,6 +125,7 @@ class RegionContrastResult:
         required_fields = {
             "regions": self.regions,
             "summary": self.summary,
+            "contrast": self.contrast,
             "plot_data": self.plot_data,
         }
         missing = [name for name, value in required_fields.items() if value is None]

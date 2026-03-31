@@ -85,6 +85,24 @@ def test_contrast_spec_rejects_missing_groups_for_pairwise():
         ContrastSpec(mode="pairwise")
 
 
+def test_contrast_spec_rejects_missing_pairing_key_for_matched_pairwise():
+    with pytest.raises(ValueError, match="pairing_key"):
+        ContrastSpec(
+            mode="matched_pairwise",
+            numerator=["15min"],
+            denominator=["NS"],
+        )
+
+
+def test_contrast_spec_rejects_missing_background_for_background_adjusted():
+    with pytest.raises(ValueError, match="background"):
+        ContrastSpec(
+            mode="background_adjusted",
+            numerator=["15min"],
+            denominator=["NS"],
+        )
+
+
 def test_shared_cluster_result_supports_plot_data():
     model = SharedClusterModel(
         mode="shared",
@@ -164,6 +182,16 @@ def test_region_contrast_result_rejects_none_core_tables():
             summary=None,
             contrast=contrast,
             plot_data=None,
+        )
+
+
+def test_region_contrast_result_rejects_none_contrast():
+    with pytest.raises(ValueError, match="contrast"):
+        RegionContrastResult(
+            regions=pd.DataFrame({"region": ["r1"]}),
+            summary=pd.DataFrame({"metric": [1.0]}),
+            contrast=None,
+            plot_data={"volcano": pd.DataFrame({"x": [1.0]})},
         )
 
 
