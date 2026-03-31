@@ -848,6 +848,40 @@ def _renumber_by_size(labels: np.ndarray, noise_label: int | None = None) -> np.
     return np.array(remapped, dtype=int)
 
 
+def cluster_label_mapping(
+    labels_raw: np.ndarray,
+    labels_size_ordered: np.ndarray,
+) -> dict[int, int]:
+    """
+    Build a stable mapping from raw estimator labels to size-ordered labels.
+    """
+
+    mapping: dict[int, int] = {}
+    for raw_label, ordered_label in zip(labels_raw, labels_size_ordered):
+        raw = int(raw_label)
+        ordered = int(ordered_label)
+        if raw in mapping and mapping[raw] != ordered:
+            raise ValueError("Raw cluster labels map to multiple size-ordered labels.")
+        mapping[raw] = ordered
+    return mapping
+
+
+def apply_cluster_label_mapping(
+    labels: np.ndarray,
+    mapping: dict[int, int],
+    *,
+    unknown_label: int = -1,
+) -> np.ndarray:
+    """
+    Apply a raw-to-size-ordered label mapping to new assignments.
+    """
+
+    return np.array(
+        [mapping.get(int(label), unknown_label) for label in np.asarray(labels)],
+        dtype=int,
+    )
+
+
 def sample_rows(
     data: np.ndarray,
     labels: Sequence[Any] | None = None,
@@ -2128,5 +2162,7 @@ __all__ = [
     "plot_classification_profiles",
     "plot_confusion_matrices",
     "sample_rows",
+    "cluster_label_mapping",
+    "apply_cluster_label_mapping",
     "plot_multisite_read_raster",
 ]
