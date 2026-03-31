@@ -7,8 +7,10 @@ from dimelo import models
 from dimelo.models import (
     BatchJob,
     CohortSpec,
+    ContrastSpec,
     DatasetArtifact,
     SampleSpec,
+    RegionContrastResult,
     SharedClusterModel,
     SharedClusterResult,
 )
@@ -62,6 +64,25 @@ def test_dataset_artifact_rejects_none_provenance():
             params={"window_size": 200},
             provenance=None,
         )
+
+
+def test_contrast_spec_accepts_pairwise_mode():
+    contrast = ContrastSpec(
+        mode="pairwise",
+        numerator=["15min"],
+        denominator=["NS"],
+        reference_condition="NS",
+    )
+
+    assert contrast.mode == "pairwise"
+    assert contrast.numerator == ["15min"]
+    assert contrast.denominator == ["NS"]
+    assert contrast.reference_condition == "NS"
+
+
+def test_contrast_spec_rejects_missing_groups_for_pairwise():
+    with pytest.raises(ValueError, match="numerator and denominator"):
+        ContrastSpec(mode="pairwise")
 
 
 def test_shared_cluster_result_supports_plot_data():
@@ -127,6 +148,23 @@ def test_shared_cluster_result_rejects_none_core_outputs(field_name):
 
     with pytest.raises(ValueError):
         SharedClusterResult(**kwargs)
+
+
+def test_region_contrast_result_rejects_none_core_tables():
+    contrast = ContrastSpec(
+        mode="pairwise",
+        numerator=["15min"],
+        denominator=["NS"],
+        reference_condition="NS",
+    )
+
+    with pytest.raises(ValueError, match="regions, summary, plot_data"):
+        RegionContrastResult(
+            regions=None,
+            summary=None,
+            contrast=contrast,
+            plot_data=None,
+        )
 
 
 def test_cohort_spec_stores_workflow_and_params():

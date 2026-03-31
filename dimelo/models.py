@@ -33,6 +33,38 @@ class DatasetArtifact:
 
 
 @dataclass
+class ContrastSpec:
+    mode: str
+    numerator: list[str] | None = None
+    denominator: list[str] | None = None
+    background: list[str] | None = None
+    time_order: list[str] | None = None
+    pairing_key: str | None = None
+    reference_condition: str | None = None
+    metadata: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        allowed_modes = {
+            "single_dataset",
+            "pairwise",
+            "matched_pairwise",
+            "group_vs_group",
+            "background_adjusted",
+            "time_course",
+        }
+        if self.mode not in allowed_modes:
+            raise ValueError(f"Unsupported contrast mode: {self.mode}")
+        if self.mode in {"pairwise", "group_vs_group"} and (
+            not self.numerator or not self.denominator
+        ):
+            raise ValueError(
+                "ContrastSpec pairwise/group_vs_group modes require numerator and denominator."
+            )
+        if self.mode == "time_course" and not self.time_order:
+            raise ValueError("ContrastSpec time_course mode requires time_order.")
+
+
+@dataclass
 class SharedClusterModel:
     mode: str
     motifs: list[str]
@@ -68,6 +100,29 @@ class SharedClusterResult:
         if missing:
             raise ValueError(
                 "SharedClusterResult requires non-None values for: "
+                f"{', '.join(missing)}"
+            )
+
+
+@dataclass
+class RegionContrastResult:
+    regions: pd.DataFrame
+    summary: pd.DataFrame
+    contrast: ContrastSpec
+    plot_data: dict[str, pd.DataFrame | dict[str, Any]]
+    metadata: dict[str, Any] = field(default_factory=dict)
+    figures: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        required_fields = {
+            "regions": self.regions,
+            "summary": self.summary,
+            "plot_data": self.plot_data,
+        }
+        missing = [name for name, value in required_fields.items() if value is None]
+        if missing:
+            raise ValueError(
+                "RegionContrastResult requires non-None values for: "
                 f"{', '.join(missing)}"
             )
 
