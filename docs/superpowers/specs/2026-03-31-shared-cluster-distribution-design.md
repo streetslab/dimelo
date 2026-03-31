@@ -57,6 +57,9 @@ result = workflows.shared_cluster_distribution(
     mode="read_global",
     motifs=["A,0"],
     matched_regions=None,
+    signal_normalization="none",
+    feature_scaling="robust_zscore",
+    cluster_basis="shape_plus_level",
     clusterer="minibatch_kmeans",
     n_clusters=8,
     training_sample_per_dataset=100_000,
@@ -95,6 +98,11 @@ Use a balanced pooled reference with `MiniBatchKMeans`.
 5. Fit one shared clustering model on the pooled matrix.
 6. Apply the frozen preprocessing and clustering model to the full datasets in chunks.
 7. Summarize cluster distributions globally and by matched region.
+
+The preprocessing pipeline in this algorithm must distinguish between:
+
+- biological signal normalization before feature construction
+- feature scaling after feature construction
 
 ### Why This Default
 
@@ -367,6 +375,109 @@ The shared workflow should resolve the required inputs internally through the ar
 
 ## Detailed Workflow Behavior
 
+## Normalization And Scaling Model
+
+The workflow must treat three concepts independently:
+
+1. biological signal normalization
+2. feature scaling for model fitting
+3. cluster basis selection
+
+These must not be collapsed into one generic "scale" option, because they answer different questions.
+
+### Biological Signal Normalization
+
+This operates on the raw or aggregated assay signal before clustering features are built.
+
+Supported modes:
+
+- `none`
+  Preserve absolute global shifts across datasets.
+  Use when broad changes in accessibility or compaction may be biologically real.
+
+- `per_sample_global`
+  Normalize each dataset by a global per-sample factor.
+  Useful when technical global shifts are suspected, but this can remove true biology.
+
+- `control_regions`
+  Normalize using designated control loci expected to be stable across conditions.
+  This is the preferred correction mode when suitable controls are available.
+
+- `quantile`
+  Force distributions into alignment across datasets.
+  This is a strong technical correction mode and should not be the default.
+
+### Feature Scaling
+
+This operates only on the feature matrix passed to PCA or clustering. It does not redefine the underlying biological signal in reported outputs.
+
+Supported modes:
+
+- `none`
+- `zscore`
+- `robust_zscore`
+
+Default: `robust_zscore`
+
+### Cluster Basis Selection
+
+This determines whether shared cluster boundaries should use absolute level, local pattern shape, or both.
+
+Supported modes:
+
+- `level_only`
+  Shared boundaries are driven primarily by absolute accessibility level.
+  This is sensitive to broad global shifts.
+
+- `shape_only`
+  Shared boundaries are driven by local pattern shape after removing row-level global offset.
+  This is useful when asking whether local patterns change independently of global level.
+
+- `shape_plus_level`
+  Use both shape-derived features and explicit global-level features.
+  This is the recommended default because it helps disentangle global compaction from local pattern reorganization.
+
+### Recommended Default Interpretation
+
+The first implementation should default to:
+
+- `signal_normalization="none"`
+- `feature_scaling="robust_zscore"`
+- `cluster_basis="shape_plus_level"`
+
+This preserves potential biological global shifts while still making the model numerically stable and keeping both local-pattern and global-level information available for clustering.
+
+### Comparison-Oriented Helper Workflow
+
+The package should eventually support a helper that runs the same shared-boundary workflow under multiple normalization or basis settings and compares the outputs.
+
+Example shape:
+
+```python
+result = workflows.compare_shared_cluster_modes(
+    samples=samples,
+    modes=[
+        {
+            "signal_normalization": "none",
+            "feature_scaling": "robust_zscore",
+            "cluster_basis": "shape_plus_level",
+        },
+        {
+            "signal_normalization": "control_regions",
+            "feature_scaling": "robust_zscore",
+            "cluster_basis": "shape_plus_level",
+        },
+        {
+            "signal_normalization": "none",
+            "feature_scaling": "robust_zscore",
+            "cluster_basis": "shape_only",
+        },
+    ],
+)
+```
+
+This comparison-oriented wrapper is not required for the first implementation, but the shared clustering workflow should be designed so that it can support this later without API breakage.
+
 ### Shared Validation
 
 Before any feature extraction:
@@ -377,26 +488,30 @@ Before any feature extraction:
 - In `region_anchored`, require resolvable matched-region inputs for every dataset.
 - Record dataset sizes and rows remaining after filtering.
 - Resolve required artifacts using the selected artifact policy before rebuilding from raw inputs.
+- Validate `signal_normalization`, `feature_scaling`, and `cluster_basis` as independent parameters.
+- If `signal_normalization="control_regions"`, require control-region inputs or a resolvable control-region artifact.
 
 ### `read_global` Flow
 
 1. For each sample, load read windows from extract output using existing cluster helpers.
-2. Generate read-level feature rows.
-3. Build a balanced pooled training subset across samples.
-4. Fit preprocessing on the pooled subset:
+2. Apply biological signal normalization if requested.
+3. Generate read-level feature rows.
+4. Apply cluster-basis transformation and feature scaling.
+5. Build a balanced pooled training subset across samples.
+6. Fit preprocessing on the pooled subset:
    - optional valid-site filtering
-   - optional scaling
+   - feature scaling
    - PCA or other dimensionality reduction
-5. Fit `MiniBatchKMeans` on the pooled subset.
-6. Transform and assign the full dataset for each sample in chunks.
-7. Build a long-form assignments table with:
+7. Fit `MiniBatchKMeans` on the pooled subset.
+8. Transform and assign the full dataset for each sample in chunks.
+9. Build a long-form assignments table with:
    - `sample_id`
    - `condition`
    - `replicate`
    - `cluster`
    - read metadata columns
    - optional region keys if present
-8. Summarize:
+10. Summarize:
    - global cluster occupancy per sample
    - cluster occupancy per condition
    - read-cluster occupancy by region when matched-region keys are available
@@ -404,12 +519,14 @@ Before any feature extraction:
 ### `region_anchored` Flow
 
 1. For each sample, project reads onto matched regions.
-2. Aggregate region-level metrics per matched region.
-3. Build one aligned feature row per region per dataset.
-4. Build a balanced pooled training subset across datasets.
-5. Fit preprocessing and one shared clustering model.
-6. Assign cluster labels to all region rows.
-7. Summarize region-cluster occupancy shifts across conditions.
+2. Apply biological signal normalization if requested.
+3. Aggregate region-level metrics per matched region.
+4. Build one aligned feature row per region per dataset.
+5. Apply cluster-basis transformation and feature scaling.
+6. Build a balanced pooled training subset across datasets.
+7. Fit preprocessing and one shared clustering model.
+8. Assign cluster labels to all region rows.
+9. Summarize region-cluster occupancy shifts across conditions.
 
 ## Performance Strategy
 
@@ -432,6 +549,14 @@ The pooled training set should be balanced across datasets by default:
 Optional future extension:
 
 - stratified sampling by region or prior label if metadata is available
+
+### Scaling And Normalization Performance Notes
+
+- `signal_normalization="none"` should be the cheapest mode because it avoids extra correction passes.
+- `per_sample_global` should remain lightweight because it only requires one global factor per dataset.
+- `control_regions` will require extra region-level resolution work but is still acceptable if control-region inputs are cached as artifacts.
+- `quantile` is likely the most expensive normalization mode and should not be used implicitly.
+- `shape_only` can often be implemented as a per-row centering or offset-removal transform and should remain computationally cheap.
 
 ## Outputs
 
@@ -506,6 +631,10 @@ The top-level metadata payload should also include:
 - artifact cache hits and misses
 - per-sample rebuild decisions
 - cohort identifier when the workflow is cohort-driven
+- signal normalization mode
+- feature scaling mode
+- cluster basis mode
+- any per-sample normalization factors used
 
 ## Standard Plots
 
@@ -552,6 +681,9 @@ Add new tests for:
 - chunked assignment equivalence versus unchunked assignment
 - artifact resolution under `prefer_cached`, `require_cached`, and `rebuild`
 - cohort-driven execution that reuses dataset-level artifacts
+- `shape_only`, `level_only`, and `shape_plus_level` feature-path behavior
+- preservation of global shifts under `signal_normalization="none"`
+- expected correction behavior for `per_sample_global` and `control_regions`
 
 ### Integration Tests
 
@@ -598,5 +730,8 @@ These defaults are fixed for the first implementation:
 - default cluster-boundary source: balanced pooled subset across all datasets
 - default result mode: return structured tables and figures, not raw matrices
 - default artifact policy: `prefer_cached`
+- default signal normalization: `none`
+- default feature scaling: `robust_zscore`
+- default cluster basis: `shape_plus_level`
 
 No experiment-specific cluster template system is required for the first version of this workflow.
