@@ -24,6 +24,7 @@ The goal is to preserve the current region-targeted analysis logic while making 
   what the analysis unit is,
   and what read or region representation is being contrasted.
 - Integrate cleanly with shared clustering workflows and pileup-backed summaries.
+- Preserve continuity with prior versions by leaving the current under-the-hood parsing architecture substantially intact and layering new region-analysis modules on top.
 
 ## Non-Goals
 
@@ -31,6 +32,7 @@ The goal is to preserve the current region-targeted analysis logic while making 
 - Hide biological interpretation behind vague names like "region test" or "single-read comparison".
 - Replace existing pileup/extract logic with one monolithic artifact type.
 - Implement every possible statistical test in the first version.
+- Rewrite the current low-level parsing layer unless the change is behavior-preserving and continuity-safe.
 
 ## Architectural Split
 
@@ -49,6 +51,23 @@ User model:
 
 - preprocessing/materialization lives here
 - downstream interpretation does not
+
+## Compatibility And Continuity Requirements
+
+The updated region-analysis architecture must preserve the current parsing model.
+
+Required constraints:
+
+- keep `parse_bam.pileup()` and `parse_bam.extract()` as the low-level preprocessing surface
+- do not substantially change the under-the-hood modkit-backed parsing logic unless the behavior is preserved
+- build `global_analysis`, `region_discovery`, and `region_contrasts` on top of current parsed outputs
+- prefer additive orchestration and metadata layers rather than replacing current parse output semantics
+- ensure old region-targeted analysis habits still map naturally onto the new modules
+
+User-facing consequence:
+
+- users who know the previous package should still recognize the preprocessing model
+- new modules explain what to do after parsing rather than redefining what parsing means
 
 ### `dimelo.global_analysis`
 
@@ -663,6 +682,7 @@ Add tests for:
 - effect-size-only ranking
 - beta-binomial path over predefined region counts
 - handoff from discovered regions into defined-region contrasts
+- regression coverage proving continuity for pre-existing pileup/extract-driven region-targeted workflows
 
 ### Integration Tests
 
@@ -704,5 +724,6 @@ These defaults are fixed for the first implementation:
 - default `representation`: `modified_fraction`
 - default `signal_source`: `pileup_counts`
 - default `test`: `beta_binomial` when the combination is valid
+- existing parsing entry points remain the continuity-preserving preprocessing layer
 
 This architecture should make it obvious what is being compared and why, while still supporting clean handoff into clustering and other downstream workflows.

@@ -19,6 +19,7 @@ The workflow should scale from thousands to millions of reads or regions per dat
 - Use a performant default that remains usable at million-row scale.
 - Introduce a hybrid batch model that supports both independent dataset processing and flexible cohort-level shared workflows.
 - Make downstream workflows consume reusable artifacts when available, while still being able to rebuild from raw inputs when necessary.
+- Preserve continuity with prior package versions by keeping the existing low-level parsing layer stable and building new workflows on top of it.
 
 ## Non-Goals
 
@@ -26,6 +27,7 @@ The workflow should scale from thousands to millions of reads or regions per dat
 - Ship experiment-specific hard-coded condition schemes as core logic.
 - Recluster separately for each condition or each region.
 - Store large raw matrices on result objects by default.
+- Rewrite or substantially alter the behavior of the existing parsing internals unless behavior-preserving refactors are required.
 
 ## User-Facing Workflow
 
@@ -189,6 +191,24 @@ Retains low-level primitives already present on the branch:
 - generic region-cluster plotting and summaries
 
 The new workflow should call these lower-level functions rather than duplicate them.
+
+## Compatibility And Continuity Requirements
+
+The shared clustering work must be additive around the existing parsing architecture.
+
+Required constraints:
+
+- keep `parse_bam.pileup()` and `parse_bam.extract()` as the core preprocessing entry points
+- keep existing modkit-backed parsing logic intact unless a change is behavior-preserving and covered by regression tests
+- avoid breaking existing output concepts and file semantics
+- prefer additive metadata or manifest layers over changing current parsed output formats
+- ensure new workflow wrappers call into existing parsing outputs rather than replacing them
+
+User-facing consequence:
+
+- previous preprocessing habits should still work
+- existing pileup or extract outputs should remain usable in the updated package
+- users should learn new downstream workflows without needing to relearn the parsing layer
 
 ## Data Model
 
@@ -684,6 +704,7 @@ Add new tests for:
 - `shape_only`, `level_only`, and `shape_plus_level` feature-path behavior
 - preservation of global shifts under `signal_normalization="none"`
 - expected correction behavior for `per_sample_global` and `control_regions`
+- regression coverage showing that pre-existing pileup/extract-driven workflows still work after the new shared clustering layer is added
 
 ### Integration Tests
 
@@ -733,5 +754,6 @@ These defaults are fixed for the first implementation:
 - default signal normalization: `none`
 - default feature scaling: `robust_zscore`
 - default cluster basis: `shape_plus_level`
+- existing low-level parsing entry points remain the continuity-preserving preprocessing surface
 
 No experiment-specific cluster template system is required for the first version of this workflow.
