@@ -24,7 +24,7 @@ class DatasetArtifact:
     path: str | Path
     format: str
     params: dict[str, Any]
-    provenance: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any]
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -42,15 +42,29 @@ class SharedClusterModel:
 @dataclass
 class SharedClusterResult:
     model: SharedClusterModel
-    assignments: pd.DataFrame | None
-    cluster_distribution: pd.DataFrame | None
-    condition_distribution: pd.DataFrame | None
+    assignments: pd.DataFrame
+    cluster_distribution: pd.DataFrame
+    condition_distribution: pd.DataFrame
     distribution_change: pd.DataFrame | None
     cluster_profiles: pd.DataFrame | None
     region_summaries: pd.DataFrame | None
     plot_data: dict[str, pd.DataFrame | dict[str, Any]]
     figures: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        required_fields = {
+            "assignments": self.assignments,
+            "cluster_distribution": self.cluster_distribution,
+            "condition_distribution": self.condition_distribution,
+            "plot_data": self.plot_data,
+        }
+        missing = [name for name, value in required_fields.items() if value is None]
+        if missing:
+            raise ValueError(
+                "SharedClusterResult requires non-None values for: "
+                f"{', '.join(missing)}"
+            )
 
 
 @dataclass

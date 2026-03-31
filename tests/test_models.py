@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from dimelo import models
 from dimelo.models import (
@@ -42,11 +43,24 @@ def test_dataset_artifact_stores_metadata():
         path=Path("sample-1.h5"),
         format="hdf5",
         params={"window_size": 200},
+        provenance={"pipeline": "parse_bam"},
         metadata={"source": "parse_bam"},
     )
 
     assert artifact.metadata == {"source": "parse_bam"}
     assert artifact.params == {"window_size": 200}
+    assert artifact.provenance == {"pipeline": "parse_bam"}
+
+
+def test_dataset_artifact_requires_provenance():
+    with pytest.raises(TypeError):
+        DatasetArtifact(
+            sample_id="sample-1",
+            artifact_type="extract",
+            path=Path("sample-1.h5"),
+            format="hdf5",
+            params={"window_size": 200},
+        )
 
 
 def test_shared_cluster_result_supports_plot_data():
@@ -74,6 +88,38 @@ def test_shared_cluster_result_supports_plot_data():
 
     assert result.plot_data["cluster_distribution_bar"] == {"kind": "bar"}
     assert result.model is model
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["assignments", "cluster_distribution", "condition_distribution", "plot_data"],
+)
+def test_shared_cluster_result_rejects_none_core_outputs(field_name):
+    model = SharedClusterModel(
+        mode="shared",
+        motifs=["A,0"],
+        feature_names=["A,0_mod_fraction"],
+        preprocessing={"scale": "standard"},
+        estimator=object(),
+        cluster_labels=["cluster-1"],
+        fit_metadata={"random_state": 7},
+    )
+    kwargs = {
+        "model": model,
+        "assignments": pd.DataFrame({"cluster": ["cluster-1"]}),
+        "cluster_distribution": pd.DataFrame({"cluster": ["cluster-1"]}),
+        "condition_distribution": pd.DataFrame({"condition": ["treated"]}),
+        "distribution_change": None,
+        "cluster_profiles": pd.DataFrame({"profile": [1.0]}),
+        "region_summaries": None,
+        "plot_data": {"cluster_distribution_bar": {"kind": "bar"}},
+        "figures": {},
+        "metadata": {"notes": "ok"},
+    }
+    kwargs[field_name] = None
+
+    with pytest.raises(ValueError):
+        SharedClusterResult(**kwargs)
 
 
 def test_cohort_spec_stores_workflow_and_params():
