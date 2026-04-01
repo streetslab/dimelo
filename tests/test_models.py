@@ -12,6 +12,7 @@ from dimelo.models import (
     DatasetArtifact,
     SampleSpec,
     RegionDiscoveryResult,
+    RegionDiscoveryClusterResult,
     RegionContrastResult,
     SharedClusterModel,
     SharedClusterResult,
@@ -390,6 +391,101 @@ def test_region_discovery_result_rejects_missing_required_fields(field_name):
 
     with pytest.raises(ValueError, match=field_name):
         RegionDiscoveryResult(**kwargs)
+
+
+def test_region_discovery_cluster_result_supports_wrapped_outputs():
+    discovery = RegionDiscoveryResult(
+        hits=pd.DataFrame({"region": ["chr1:0-1000"]}),
+        windows=pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+        contrast=None,
+        plot_data={"ranked_hits": pd.DataFrame({"region": ["chr1:0-1000"]})},
+        metadata={"analysis_unit": "genome"},
+        figures={"hit_track": object()},
+    )
+    clustering = SharedClusterResult(
+        model=SharedClusterModel(
+            mode="shared",
+            motifs=["A,0"],
+            feature_names=["A,0_mod_fraction"],
+            preprocessing={"scale": "standard"},
+            estimator=object(),
+            cluster_labels=["cluster-1"],
+            fit_metadata={"random_state": 7},
+        ),
+        assignments=pd.DataFrame({"cluster": ["cluster-1"]}),
+        cluster_distribution=pd.DataFrame({"cluster": ["cluster-1"]}),
+        condition_distribution=pd.DataFrame({"condition": ["treated"]}),
+        distribution_change=None,
+        cluster_profiles=pd.DataFrame({"profile": [1.0]}),
+        region_summaries=None,
+        plot_data={"cluster_distribution_bar": {"kind": "bar"}},
+        figures={},
+        metadata={"notes": "ok"},
+    )
+    selected_regions = pd.DataFrame(
+        [{"chromosome": "chr1", "start": 0, "end": 1000}]
+    )
+
+    result = RegionDiscoveryClusterResult(
+        discovery=discovery,
+        clustering=clustering,
+        selected_regions=selected_regions,
+        metadata={"selection_mode": "top_n"},
+        figures={"workflow": object()},
+    )
+
+    assert result.discovery is discovery
+    assert result.clustering is clustering
+    assert result.selected_regions.equals(selected_regions)
+    assert result.metadata == {"selection_mode": "top_n"}
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["discovery", "clustering", "selected_regions", "metadata", "figures"],
+)
+def test_region_discovery_cluster_result_rejects_missing_required_fields(
+    field_name,
+):
+    kwargs = {
+        "discovery": RegionDiscoveryResult(
+            hits=pd.DataFrame({"region": ["chr1:0-1000"]}),
+            windows=pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+            contrast=None,
+            plot_data={"ranked_hits": pd.DataFrame({"region": ["chr1:0-1000"]})},
+            metadata={"analysis_unit": "genome"},
+            figures={"hit_track": object()},
+        ),
+        "clustering": SharedClusterResult(
+            model=SharedClusterModel(
+                mode="shared",
+                motifs=["A,0"],
+                feature_names=["A,0_mod_fraction"],
+                preprocessing={"scale": "standard"},
+                estimator=object(),
+                cluster_labels=["cluster-1"],
+                fit_metadata={"random_state": 7},
+            ),
+            assignments=pd.DataFrame({"cluster": ["cluster-1"]}),
+            cluster_distribution=pd.DataFrame({"cluster": ["cluster-1"]}),
+            condition_distribution=pd.DataFrame({"condition": ["treated"]}),
+            distribution_change=None,
+            cluster_profiles=pd.DataFrame({"profile": [1.0]}),
+            region_summaries=None,
+            plot_data={"cluster_distribution_bar": {"kind": "bar"}},
+            figures={},
+            metadata={"notes": "ok"},
+        ),
+        "selected_regions": pd.DataFrame(
+            [{"chromosome": "chr1", "start": 0, "end": 1000}]
+        ),
+        "metadata": {"selection_mode": "top_n"},
+        "figures": {},
+    }
+    kwargs[field_name] = None
+
+    with pytest.raises(ValueError, match=field_name):
+        RegionDiscoveryClusterResult(**kwargs)
 
 
 def test_cohort_spec_stores_workflow_and_params():
