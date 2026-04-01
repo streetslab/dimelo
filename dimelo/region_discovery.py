@@ -13,6 +13,8 @@ from .region_contrasts import (
 )
 
 _WINDOW_KEY_COLUMNS = ["window_id", "chromosome", "start", "end", "strand"]
+_HIT_SORT_COLUMNS = ["chromosome", "strand", "start", "end", "rank"]
+_BED_COLUMNS = ["chrom", "start", "end", "name", "score", "strand"]
 
 
 def _validate_motifs(motifs: Iterable[str]) -> list[str]:
@@ -293,101 +295,181 @@ def _apply_min_coverage(
     return filtered, hits
 
 
-def _merge_adjacent_hits(hits: pd.DataFrame, *, merge_distance: int) -> pd.DataFrame:
-    if hits.empty or len(hits) == 1:
+def _sort_hits_for_deterministic_output(hits: pd.DataFrame) -> pd.DataFrame:
+    sort_columns = [column for column in _HIT_SORT_COLUMNS if column in hits.columns]
+    if not sort_columns:
+        return hits.copy()
+
+    ordered = hits.sort_values(
+        by=sort_columns,
+        ascending=[True] * len(sort_columns),
+        kind="mergesort",
+        na_position="last",
+    ).reset_index(drop=True)
+    return ordered
+
+
+def _merge_value(values: pd.Series, *, prefer: str) -> object:
+    non_null = values.dropna()
+    if non_null.empty:
+        return pd.NA
+    if prefer == "max":
+        return non_null.max()
+    if prefer == "min":
+        return non_null.min()
+    raise ValueError(f"Unsupported merge preference: {prefer}")
+
+
+def _build_merged_hit(group: pd.DataFrame) -> dict[str, object]:
+    merged = group.iloc[0].to_dict()
+
+    if {"chromosome", "start", "end"}.issubset(group.columns):
+        merged["chromosome"] = group.iloc[0]["chromosome"]
+        merged["start"] = int(group["start"].min())
+        merged["end"] = int(group["end"].max())
+
+    if "modified_count" in group.columns:
+        merged["modified_count"] = int(group["modified_count"].fillna(0).sum())
+    if "valid_count" in group.columns:
+        merged["valid_count"] = int(group["valid_count"].fillna(0).sum())
+    if {"modified_count", "valid_count"}.issubset(merged):
+        valid_count = int(merged.get("valid_count", 0))
+        modified_count = int(merged.get("modified_count", 0))
+        merged["window_fraction"] = 0.0 if valid_count == 0 else modified_count / valid_count
+
+    if "score_value" in group.columns:
+        merged["score_value"] = _merge_value(group["score_value"], prefer="max")
+    if "p_value" in group.columns:
+        merged["p_value"] = _merge_value(group["p_value"], prefer="min")
+    if "adjusted_p_value" in group.columns:
+        merged["adjusted_p_value"] = _merge_value(group["adjusted_p_value"], prefer="min")
+    if "rank" in group.columns:
+        rank_values = group["rank"].dropna()
+        if not rank_values.empty:
+            merged["rank"] = int(rank_values.min())
+
+    merged_window_count = 0
+    if "merged_window_count" in group.columns:
+        merged_window_count = int(group["merged_window_count"].fillna(1).sum())
+    else:
+        merged_window_count = len(group)
+    merged["merged_window_count"] = merged_window_count
+
+    if {"chromosome", "start", "end"}.issubset(merged):
+        merged["window_id"] = f"{merged['chromosome']}:{int(merged['start'])}-{int(merged['end'])}"
+
+    return merged
+
+
+def merge_adjacent_hits(hits: pd.DataFrame, merge_distance: int) -> pd.DataFrame:
+    if hits.empty:
         merged = hits.copy()
-        if not merged.empty and "window_id" in merged.columns:
+        if "merged_window_count" not in merged.columns:
+            merged["merged_window_count"] = pd.Series(dtype="int64")
+        return merged
+
+    ordered = _sort_hits_for_deterministic_output(hits)
+    if len(ordered) == 1:
+        merged = ordered.copy()
+        merged["merged_window_count"] = (
+            merged["merged_window_count"]
+            if "merged_window_count" in merged.columns
+            else 1
+        )
+        if {"chromosome", "start", "end"}.issubset(merged.columns):
             merged["window_id"] = merged.apply(
                 lambda row: f"{row['chromosome']}:{int(row['start'])}-{int(row['end'])}",
                 axis=1,
             )
-            if {"modified_count", "valid_count"}.issubset(merged.columns):
-                merged["window_fraction"] = _safe_fraction(
-                    merged["modified_count"], merged["valid_count"]
-                )
+        if {"modified_count", "valid_count"}.issubset(merged.columns):
+            merged["window_fraction"] = _safe_fraction(
+                merged["modified_count"], merged["valid_count"]
+            )
+        merged["rank"] = range(1, len(merged) + 1)
         return merged
 
-    ordered = hits.sort_values(
-        by=["chromosome", "strand", "start", "end", "rank"],
-        ascending=[True, True, True, True, True],
-        kind="mergesort",
-    ).reset_index(drop=True)
-
     merged_rows: list[dict[str, object]] = []
-    current = ordered.iloc[0].to_dict()
-    current["merged_window_count"] = 1
+    current_group: list[pd.Series] = [ordered.iloc[0]]
 
-    def _as_float(value: object) -> float | None:
-        return None if pd.isna(value) else float(value)
-
-    def _finalize_current() -> None:
-        current["window_id"] = f"{current['chromosome']}:{int(current['start'])}-{int(current['end'])}"
-        current_valid_count = int(current.get("valid_count", 0))
-        current_modified_count = int(current.get("modified_count", 0))
-        current["window_fraction"] = (
-            0.0
-            if current_valid_count == 0
-            else current_modified_count / current_valid_count
-        )
-        if {"numerator_modified_count", "numerator_valid_count", "denominator_modified_count", "denominator_valid_count"}.issubset(current):
-            numerator_fraction = (
-                0.0
-                if int(current["numerator_valid_count"]) == 0
-                else int(current["numerator_modified_count"]) / int(current["numerator_valid_count"])
-            )
-            denominator_fraction = (
-                0.0
-                if int(current["denominator_valid_count"]) == 0
-                else int(current["denominator_modified_count"]) / int(current["denominator_valid_count"])
-            )
-            current["score_value"] = abs(numerator_fraction - denominator_fraction)
-        merged_rows.append(current.copy())
+    def _can_merge(previous: pd.Series, row: pd.Series) -> bool:
+        same_chromosome = row.get("chromosome") == previous.get("chromosome")
+        same_strand = row.get("strand") == previous.get("strand")
+        within_distance = int(row["start"]) <= int(previous["end"]) + merge_distance
+        return same_chromosome and same_strand and within_distance
 
     for _, row in ordered.iloc[1:].iterrows():
-        same_chromosome = row["chromosome"] == current["chromosome"]
-        same_strand = row.get("strand") == current.get("strand")
-        within_distance = row["start"] <= int(current["end"]) + merge_distance
-        if same_chromosome and same_strand and within_distance:
-            current["end"] = max(int(current["end"]), int(row["end"]))
-            current["start"] = min(int(current["start"]), int(row["start"]))
-            current["modified_count"] = int(current["modified_count"]) + int(row["modified_count"])
-            current["valid_count"] = int(current["valid_count"]) + int(row["valid_count"])
-            current_score = _as_float(current.get("score_value"))
-            row_score = _as_float(row.get("score_value"))
-            if current_score is None:
-                current["score_value"] = row_score
-            elif row_score is not None:
-                current["score_value"] = max(current_score, row_score)
-            current_p_value = _as_float(current.get("p_value"))
-            row_p_value = _as_float(row.get("p_value"))
-            if current_p_value is None:
-                current["p_value"] = row_p_value
-            elif row_p_value is not None:
-                current["p_value"] = min(current_p_value, row_p_value)
-
-            current_adjusted = _as_float(current.get("adjusted_p_value"))
-            row_adjusted = _as_float(row.get("adjusted_p_value"))
-            if current_adjusted is None:
-                current["adjusted_p_value"] = row_adjusted
-            elif row_adjusted is not None:
-                current["adjusted_p_value"] = min(current_adjusted, row_adjusted)
-            current["rank"] = min(int(current["rank"]), int(row["rank"]))
-            current["merged_window_count"] += 1
+        if _can_merge(current_group[-1], row):
+            current_group.append(row)
             continue
+        merged_rows.append(_build_merged_hit(pd.DataFrame(current_group)))
+        current_group = [row]
 
-        _finalize_current()
-        current = row.to_dict()
-        current["merged_window_count"] = 1
-
-    _finalize_current()
+    merged_rows.append(_build_merged_hit(pd.DataFrame(current_group)))
     merged = pd.DataFrame(merged_rows)
-    merged = merged.sort_values(
-        by=["chromosome", "strand", "start", "end", "rank"],
-        ascending=[True, True, True, True, True],
-        kind="mergesort",
-    ).reset_index(drop=True)
+    merged = _sort_hits_for_deterministic_output(merged)
     merged["rank"] = range(1, len(merged) + 1)
-    return merged
+
+    if "window_id" not in merged.columns and {"chromosome", "start", "end"}.issubset(merged.columns):
+        merged["window_id"] = merged.apply(
+            lambda row: f"{row['chromosome']}:{int(row['start'])}-{int(row['end'])}",
+            axis=1,
+        )
+
+    if "merged_window_count" not in merged.columns:
+        merged["merged_window_count"] = 1
+
+    if {"modified_count", "valid_count"}.issubset(merged.columns) and "window_fraction" not in merged.columns:
+        merged["window_fraction"] = _safe_fraction(merged["modified_count"], merged["valid_count"])
+
+    ordered_columns = list(hits.columns)
+    if "rank" in merged.columns and "rank" not in ordered_columns:
+        ordered_columns.append("rank")
+    for column in ["window_id", "window_fraction", "merged_window_count"]:
+        if column in merged.columns and column not in ordered_columns:
+            ordered_columns.append(column)
+    merged = merged.loc[:, [column for column in ordered_columns if column in merged.columns]]
+    return merged.reset_index(drop=True)
+
+
+def hits_to_bed(hits: pd.DataFrame) -> pd.DataFrame:
+    if hits.empty:
+        return pd.DataFrame(columns=_BED_COLUMNS)
+
+    ordered = _sort_hits_for_deterministic_output(hits)
+
+    chrom_column = "chromosome" if "chromosome" in ordered.columns else "chrom"
+    chrom = ordered[chrom_column]
+    if "window_id" in ordered.columns:
+        name = ordered["window_id"]
+    else:
+        name = ordered.apply(
+            lambda row: f"{row.get('chromosome', row.get('chrom'))}:{int(row['start'])}-{int(row['end'])}",
+            axis=1,
+        )
+    if "score_value" in ordered.columns:
+        score = ordered["score_value"].fillna(0)
+    elif "rank" in ordered.columns:
+        score = ordered["rank"].fillna(0)
+    else:
+        score = 0
+    strand = ordered["strand"] if "strand" in ordered.columns else "."
+    strand = strand.where(strand.isin({"+", "-"}), ".") if isinstance(strand, pd.Series) else strand
+
+    bed = pd.DataFrame(
+        {
+            "chrom": chrom,
+            "start": ordered["start"],
+            "end": ordered["end"],
+            "name": name,
+            "score": score,
+            "strand": strand,
+        }
+    )
+    return bed.loc[:, _BED_COLUMNS].reset_index(drop=True)
+
+
+def _merge_adjacent_hits(hits: pd.DataFrame, *, merge_distance: int) -> pd.DataFrame:
+    return merge_adjacent_hits(hits, merge_distance=merge_distance)
 
 
 def scan_genome(
@@ -462,7 +544,7 @@ def scan_genome(
     hits = ranked.copy()
 
     if merge_hits:
-        hits = _merge_adjacent_hits(hits, merge_distance=merge_distance)
+        hits = merge_adjacent_hits(hits, merge_distance=merge_distance)
 
     plot_data = {
         "window_score_table": window_table.copy(),

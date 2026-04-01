@@ -72,6 +72,69 @@ def _mock_window_summary() -> pd.DataFrame:
     )
 
 
+def _merge_helper_hits() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "chromosome": "chr2",
+                "start": 100,
+                "end": 200,
+                "strand": "+",
+                "window_id": "chr2:100-200",
+                "score_value": 0.3,
+                "p_value": 0.03,
+                "adjusted_p_value": 0.06,
+                "rank": 4,
+                "modified_count": 3,
+                "valid_count": 10,
+                "window_fraction": 0.3,
+            },
+            {
+                "chromosome": "chr1",
+                "start": 200,
+                "end": 300,
+                "strand": "+",
+                "window_id": "chr1:200-300",
+                "score_value": 0.4,
+                "p_value": 0.04,
+                "adjusted_p_value": 0.08,
+                "rank": 2,
+                "modified_count": 4,
+                "valid_count": 10,
+                "window_fraction": 0.4,
+            },
+            {
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 100,
+                "strand": "+",
+                "window_id": "chr1:0-100",
+                "score_value": 0.9,
+                "p_value": 0.01,
+                "adjusted_p_value": 0.02,
+                "rank": 1,
+                "modified_count": 9,
+                "valid_count": 10,
+                "window_fraction": 0.9,
+            },
+            {
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 600,
+                "strand": "-",
+                "window_id": "chr1:500-600",
+                "score_value": 0.8,
+                "p_value": 0.05,
+                "adjusted_p_value": 0.07,
+                "rank": 5,
+                "modified_count": 8,
+                "valid_count": 10,
+                "window_fraction": 0.8,
+            },
+        ]
+    )
+
+
 def test_scan_genome_basic_behavior_with_mocked_window_summary(monkeypatch):
     captured = {}
 
@@ -120,6 +183,30 @@ def test_scan_genome_basic_behavior_with_mocked_window_summary(monkeypatch):
     assert list(result.hits["window_id"]) == ["chr1:0-1000", "chr1:1000-2000"]
     assert set(result.plot_data) >= {"window_score_table", "top_hits_table"}
     assert result.metadata["score"] == "effect_size_only"
+
+
+def test_merge_adjacent_hits_merges_nearby_windows_deterministically():
+    merged = region_discovery.merge_adjacent_hits(_merge_helper_hits(), merge_distance=150)
+
+    assert list(merged["window_id"]) == ["chr1:0-300", "chr1:500-600", "chr2:100-200"]
+    assert list(merged["rank"]) == [1, 2, 3]
+    assert list(merged["merged_window_count"]) == [2, 1, 1]
+    assert list(merged["score_value"]) == [pytest.approx(0.9), pytest.approx(0.8), pytest.approx(0.3)]
+    assert list(merged["p_value"]) == [pytest.approx(0.01), pytest.approx(0.05), pytest.approx(0.03)]
+    assert list(merged["adjusted_p_value"]) == [pytest.approx(0.02), pytest.approx(0.07), pytest.approx(0.06)]
+    assert list(merged["window_fraction"]) == [pytest.approx(13 / 20), pytest.approx(0.8), pytest.approx(0.3)]
+
+
+def test_hits_to_bed_projects_required_columns_in_order():
+    merged = region_discovery.merge_adjacent_hits(_merge_helper_hits(), merge_distance=150)
+    bed = region_discovery.hits_to_bed(merged)
+
+    assert list(bed.columns) == ["chrom", "start", "end", "name", "score", "strand"]
+    assert bed.to_dict(orient="records") == [
+        {"chrom": "chr1", "start": 0, "end": 300, "name": "chr1:0-300", "score": pytest.approx(0.9), "strand": "+"},
+        {"chrom": "chr1", "start": 500, "end": 600, "name": "chr1:500-600", "score": pytest.approx(0.8), "strand": "-"},
+        {"chrom": "chr2", "start": 100, "end": 200, "name": "chr2:100-200", "score": pytest.approx(0.3), "strand": "+"},
+    ]
 
 
 def test_scan_genome_filters_low_coverage_windows(monkeypatch):
