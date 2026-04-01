@@ -231,6 +231,8 @@ Three higher-level analysis guides now sit on top of the existing parsing layer:
 
 Use `parse_bam.pileup()` when you want defined-region abundance testing, and use `parse_bam.extract()` when you want read-level clustering or single-read follow-up.
 
+For an end-to-end discovery-to-clustering run, use `workflows.discovery_cluster_workflow()`. It keeps discovery output in BED-style `selected_regions`, then derives the serializable region spec that `shared_cluster_distribution(..., matched_regions=...)` consumes.
+
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
 
 ### Parsing outputs

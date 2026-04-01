@@ -194,6 +194,7 @@ def test_discovery_cluster_workflow_passes_selected_regions_into_clustering(monk
     )
 
     assert captured["matched_regions"] == ["chr1:0-500,+", "chr1:500-1000,-"]
+    assert list(result.selected_regions.columns) == ["chrom", "start", "end", "name", "score", "strand"]
     assert list(result.selected_regions["name"]) == ["chr1:0-500", "chr1:500-1000"]
 
 

@@ -68,6 +68,31 @@ The canonical outputs are data-first:
 - For downstream clustering, use the discovered loci to focus the region set before running the clustering workflow.
 - Keep discovery and contrast roles separate: discovery finds candidates, contrasts tests known regions, and clustering explains state mixtures.
 
+The combined discovery-to-clustering workflow uses the same handoff, but keeps it in memory:
+
+- discovery produces ranked hit rows
+- `hits_to_bed()` turns those rows into BED-style `selected_regions`
+- `discovery_cluster_workflow()` derives a serializable region-spec from those rows and passes it to `shared_cluster_distribution(..., matched_regions=...)`
+- the workflow returns the original discovery result, the BED-style `selected_regions` table, and the clustering result together
+
+```python
+from dimelo import workflows
+
+result = workflows.discovery_cluster_workflow(
+    samples=samples,
+    motifs=["A,0"],
+    genome_sizes={"chr1": 248956422},
+    discovery={
+        "window_size": 2000,
+        "step_size": 500,
+        "score": "beta_binomial",
+        "contrast": contrast,
+    },
+    clustering={"mode": "region_anchored", "n_clusters": 6},
+    selection={"mode": "top_n", "top_n": 250},
+)
+```
+
 ```python
 bed_df = region_discovery.hits_to_bed(result.hits)
 bed_df.to_csv("discovered_hits.bed", sep="\t", header=False, index=False)
