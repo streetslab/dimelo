@@ -1206,6 +1206,7 @@ def test_scan_genome_time_course_ranks_by_trajectory_amplitude_mean(monkeypatch)
 
     assert result.hits.loc[0, "trajectory_amplitude_mean"] == pytest.approx(0.55)
     assert result.hits.loc[0, "trajectory_amplitude_sd"] == pytest.approx(0.05)
+    assert result.metadata["pairing_key"] == "pair_id"
     assert result.metadata["paired_mode"] == "time_course"
     assert result.metadata["time_order"] == ["0min", "15min", "30min"]
     assert result.metadata["rank_by"] == "trajectory_amplitude_mean"
