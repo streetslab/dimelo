@@ -59,6 +59,8 @@ result = workflows.shared_cluster_distribution(
 
 `shared_cluster_distribution()` expects `matched_regions` to already be a serializable region spec. In the discovery-driven flow, `discovery_cluster_workflow()` is the caller that derives that spec from BED-style discovery rows and forwards it into this workflow. That keeps discovery output human-readable while still feeding clustering the compact region representation it needs.
 
+`discovery_cluster_contrast_workflow()` extends the same handoff one step further: it derives the serializable region spec from the BED-style discovery rows, passes that into clustering, and uses the same selected loci as the default follow-up region set for contrasts.
+
 ## Canonical Outputs
 
 The workflow returns a `SharedClusterResult` with canonical tables:
@@ -92,5 +94,6 @@ heatmap = result.plot_data["cluster_distribution_heatmap"].set_index("condition"
 - `mode="read_global"` supports shared read clustering from extract outputs.
 - `mode="region_anchored"` supports matched-region clustering from pileup-derived region vectors.
 - `discovery_cluster_workflow()` composes discovery and `region_anchored` clustering by passing derived matched regions into this workflow.
+- `discovery_cluster_contrast_workflow()` composes discovery, `region_anchored` clustering, and defined-region contrasts on the same selected loci.
 - The default supported clusterer is `minibatch_kmeans`.
 - Results are data-first: tables are the stable contract, while plotting is optional.

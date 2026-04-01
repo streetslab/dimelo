@@ -93,6 +93,43 @@ result = workflows.discovery_cluster_workflow(
 )
 ```
 
+When you want discovery, clustering, and defined-region contrasts in one pass, use `workflows.discovery_cluster_contrast_workflow()`:
+
+```python
+result = workflows.discovery_cluster_contrast_workflow(
+    samples=samples,
+    motifs=["A,0"],
+    genome_sizes={"chr1": 248956422},
+    discovery={
+        "window_size": 2000,
+        "step_size": 500,
+        "score": "beta_binomial",
+        "contrast": discovery_contrast,
+    },
+    clustering={
+        "mode": "region_anchored",
+        "n_clusters": 6,
+    },
+    contrasts={
+        "contrast": region_contrast,
+        "test": "beta_binomial",
+    },
+    selection={"mode": "top_n", "top_n": 250},
+)
+
+selected = result.selected_regions
+clustered = result.clustering.assignments
+scored = result.contrasts.regions
+windows = result.metadata["full_scan_windows"]
+```
+
+The contract is intentionally simple:
+
+- `result.selected_regions` is the BED-style selected follow-up set
+- clustering receives a serializable region-spec derived from those rows
+- `result.contrasts` scores the same selected loci by default
+- `result.metadata["full_scan_windows"]` carries the full discovery scan for context
+
 ```python
 bed_df = region_discovery.hits_to_bed(result.discovery.hits)
 bed_df.to_csv("discovered_hits.bed", sep="\t", header=False, index=False)

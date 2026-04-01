@@ -106,3 +106,39 @@ sns.scatterplot(
 - Run `parse_bam.pileup()` when you care about motif abundance, defined-region contrasts, or later de novo discovery.
 - Run `parse_bam.extract()` when you care about single-read analysis or clustering.
 - Run both when you want formal region-level abundance testing plus downstream read-level follow-up on the same samples.
+
+## Discovery-Driven Follow-Up
+
+When discovery, clustering, and contrasts are chained together, the combined workflow keeps the selected loci as the follow-up contract:
+
+```python
+from dimelo import workflows
+
+result = workflows.discovery_cluster_contrast_workflow(
+    samples=samples,
+    motifs=["A,0"],
+    genome_sizes={"chr1": 248956422},
+    discovery={
+        "window_size": 2000,
+        "step_size": 500,
+        "score": "beta_binomial",
+        "contrast": discovery_contrast,
+    },
+    clustering={
+        "mode": "region_anchored",
+        "n_clusters": 6,
+    },
+    contrasts={
+        "contrast": region_contrast,
+        "test": "beta_binomial",
+    },
+    selection={"mode": "top_n", "top_n": 250},
+)
+```
+
+The data contract is:
+
+- `result.selected_regions` is the BED-style follow-up set
+- clustering receives a serializable region-spec derived from those rows
+- `result.contrasts` scores the same selected loci by default
+- `result.metadata["full_scan_windows"]` keeps the full discovery table as context

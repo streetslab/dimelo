@@ -514,6 +514,8 @@ def test_discovery_cluster_contrast_workflow_returns_all_results(monkeypatch):
     assert result.clustering.model.mode == "region_anchored"
     assert result.contrasts.metadata["test"] == "effect_size_only"
     assert result.metadata["contrast_scope"] == "selected"
+    assert list(result.selected_regions.columns) == ["chrom", "start", "end", "name", "score", "strand"]
+    assert result.metadata["full_scan_windows"].equals(result.discovery.windows)
 
 
 def test_discovery_cluster_contrast_workflow_scores_selected_regions_by_default(monkeypatch):
