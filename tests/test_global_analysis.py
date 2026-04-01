@@ -157,3 +157,119 @@ def test_summarize_global_samples_requires_pileup_path():
 
     with pytest.raises(ValueError, match="missing metadata\\['pileup_path'\\]"):
         global_analysis.summarize_global_samples(samples=samples, motifs=["A,0"])
+
+
+def test_tile_windows_from_genome_sizes_dict():
+    windows = global_analysis.tile_genome_windows(
+        genome_sizes={"chr1": 2500},
+        window_size=1000,
+        step_size=500,
+    )
+
+    assert windows["window_id"].tolist() == [
+        "chr1:0-1000",
+        "chr1:500-1500",
+        "chr1:1000-2000",
+        "chr1:1500-2500",
+    ]
+
+
+def test_build_window_summary_from_regions_to_list(monkeypatch):
+    samples = [
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            metadata={"pileup_path": "s1.bed.gz"},
+        ),
+    ]
+    windows = pd.DataFrame(
+        {
+            "window_id": ["chr1:0-1000", "chr1:500-1500"],
+            "chromosome": ["chr1", "chr1"],
+            "start": [0, 500],
+            "end": [1000, 1500],
+            "strand": [".", "."],
+        }
+    )
+
+    captured = {}
+
+    def fake_tile_genome_windows(
+        genome_sizes,
+        window_size,
+        step_size,
+        include_contigs=None,
+        exclude_contigs=None,
+    ):
+        captured["genome_sizes"] = genome_sizes
+        captured["window_size"] = window_size
+        captured["step_size"] = step_size
+        captured["include_contigs"] = include_contigs
+        captured["exclude_contigs"] = exclude_contigs
+        return windows
+
+    def fake_regions_to_list(
+        function_handle,
+        regions,
+        window_size=None,
+        quiet=True,
+        cores=None,
+        split_large_regions=False,
+    ):
+        captured["function_handle"] = function_handle
+        captured["regions"] = list(regions)
+        captured["window_size_arg"] = window_size
+        captured["quiet"] = quiet
+        captured["cores"] = cores
+        captured["split_large_regions"] = split_large_regions
+        return [(5, 10), (1, 10)]
+
+    monkeypatch.setattr(global_analysis, "tile_genome_windows", fake_tile_genome_windows)
+    monkeypatch.setattr(
+        global_analysis.load_processed,
+        "regions_to_list",
+        fake_regions_to_list,
+    )
+
+    summary = global_analysis.build_window_summary(
+        samples=samples,
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        window_size=1000,
+        step_size=500,
+    )
+
+    assert captured["genome_sizes"] == {"chr1": 1500}
+    assert captured["window_size"] == 1000
+    assert captured["step_size"] == 500
+    assert captured["regions"] == ["chr1:0-1000,.", "chr1:500-1500,."]
+    assert captured["function_handle"].keywords["bedmethyl_file"] == "s1.bed.gz"
+    assert captured["function_handle"].keywords["motif"] == "A,0"
+    assert summary["window_fraction"].tolist() == [0.5, 0.1]
+
+
+def test_compute_global_normalization_factors_from_summary():
+    summary = pd.DataFrame(
+        {
+            "sample_id": ["s1", "s2"],
+            "condition": ["NS", "15min"],
+            "replicate": [None, None],
+            "motif": ["A,0", "A,0"],
+            "modified_count": [10, 30],
+            "valid_count": [100, 100],
+            "global_fraction": [0.1, 0.3],
+        }
+    )
+
+    factors = global_analysis.compute_global_normalization_factors(summary)
+
+    assert set(factors.columns) >= {
+        "sample_id",
+        "motif",
+        "global_fraction",
+        "reference_fraction",
+        "global_offset",
+    }
+    assert factors.loc[factors["sample_id"] == "s1", "global_offset"].iloc[0] == pytest.approx(-0.1)
+    assert factors.loc[factors["sample_id"] == "s2", "global_offset"].iloc[0] == pytest.approx(0.1)
