@@ -225,7 +225,7 @@ def extract(
 Three higher-level analysis guides now sit on top of the existing parsing layer:
 
 - [docs/global-analysis.md](docs/global-analysis.md) for pileup-backed global summaries and normalization factors
-- [docs/region-discovery.md](docs/region-discovery.md) for de novo locus discovery from tiled pileup scans
+- [docs/region-discovery.md](docs/region-discovery.md) for de novo and paired locus discovery from tiled pileup scans
 - [docs/shared-clustering.md](docs/shared-clustering.md) for shared-boundary clustering workflows
 - [docs/region-contrasts.md](docs/region-contrasts.md) for known-region motif-abundance contrasts
 

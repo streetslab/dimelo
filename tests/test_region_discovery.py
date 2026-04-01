@@ -1670,7 +1670,14 @@ def test_discovery_bed_handoff_into_region_contrasts(tmp_path, monkeypatch):
         "s2.bed.gz": [(9, 10), (2, 10), (1, 10)],
     }
 
-    def fake_regions_to_list(function_handle, regions, window_size=None, quiet=True, cores=None, split_large_regions=False):
+    def fake_regions_to_list(
+        function_handle,
+        regions,
+        window_size=None,
+        quiet=True,
+        cores=None,
+        split_large_regions=False,
+    ):
         pileup_path = function_handle.keywords["bedmethyl_file"]
         regions_dict = region_contrasts.utils.regions_dict_from_input(regions, window_size)
         n_regions = sum(len(region_list) for region_list in regions_dict.values())
@@ -1719,6 +1726,91 @@ def test_discovery_bed_handoff_into_region_contrasts(tmp_path, monkeypatch):
         "chr1:500-600,-",
     }
     assert list(result.summary["rank"]) == [1, 2, 3, 4]
+
+
+def test_paired_discovery_bed_handoff_into_region_contrasts(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: _mock_paired_pairwise_window_summary(),
+    )
+
+    discovery = region_discovery.scan_genome(
+        samples=_paired_samplespecs(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1000},
+        window_size=500,
+        step_size=500,
+        contrast=ContrastSpec(
+            mode="matched_pairwise",
+            numerator=["targeting"],
+            denominator=["nontargeting"],
+            pairing_key="pair_id",
+        ),
+        score="effect_size_only",
+    )
+    assert discovery.metadata["pairing_key"] == "pair_id"
+
+    bed_df = region_discovery.hits_to_bed(discovery.hits)
+    bed_path = tmp_path / "paired_discovered_hits.bed"
+    bed_df.to_csv(bed_path, sep="\t", header=False, index=False)
+
+    counts_by_pileup = {
+        "t1.bed.gz": [(8, 10), (7, 10)],
+        "t2.bed.gz": [(3, 10), (4, 10)],
+        "d1.bed.gz": [(2, 10), (3, 10)],
+        "d2.bed.gz": [(1, 10), (2, 10)],
+    }
+
+    def fake_regions_to_list(function_handle, regions, window_size=None, quiet=True, cores=None, split_large_regions=False):
+        pileup_path = function_handle.keywords["bedmethyl_file"]
+        regions_dict = region_contrasts.utils.regions_dict_from_input(regions, window_size)
+        n_regions = sum(len(region_list) for region_list in regions_dict.values())
+        base_counts = counts_by_pileup[pileup_path]
+        return (base_counts * ((n_regions // len(base_counts)) + 1))[:n_regions]
+
+    monkeypatch.setattr(region_contrasts.load_processed, "regions_to_list", fake_regions_to_list)
+
+    result = region_contrasts.score_regions(
+        samples=[
+            SampleSpec(
+                sample_id="t1",
+                condition="targeting",
+                extract_h5="t1.h5",
+                metadata={"pileup_path": "t1.bed.gz"},
+            ),
+            SampleSpec(
+                sample_id="t2",
+                condition="targeting",
+                extract_h5="t2.h5",
+                metadata={"pileup_path": "t2.bed.gz"},
+            ),
+            SampleSpec(
+                sample_id="d1",
+                condition="nontargeting",
+                extract_h5="d1.h5",
+                metadata={"pileup_path": "d1.bed.gz"},
+            ),
+            SampleSpec(
+                sample_id="d2",
+                condition="nontargeting",
+                extract_h5="d2.h5",
+                metadata={"pileup_path": "d2.bed.gz"},
+            ),
+        ],
+        regions=bed_path,
+        motifs=["A,0"],
+        contrast=ContrastSpec(
+            mode="pairwise",
+            numerator=["targeting"],
+            denominator=["nontargeting"],
+            reference_condition="nontargeting",
+        ),
+        test="effect_size_only",
+    )
+
+    assert len(result.regions) == 2
+    assert list(result.summary["rank"]) == [1, 2]
 
 
 def test_scan_genome_filters_low_coverage_windows(monkeypatch):
