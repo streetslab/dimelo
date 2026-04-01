@@ -90,6 +90,20 @@ def _mock_paired_window_summary() -> pd.DataFrame:
                 "window_fraction": 0.5,
             },
             {
+                "sample_id": "t1_rep2",
+                "condition": "targeting",
+                "replicate": 2,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 4,
+                "valid_count": 10,
+                "window_fraction": 0.4,
+            },
+            {
                 "sample_id": "d1",
                 "condition": "nontargeting",
                 "replicate": 1,
@@ -156,6 +170,12 @@ def _paired_samplespecs() -> list[SampleSpec]:
             condition="targeting",
             extract_h5="t1.h5",
             metadata={"pileup_path": "t1.bed.gz", "pair_id": "pair-1"},
+        ),
+        SampleSpec(
+            sample_id="t1_rep2",
+            condition="targeting",
+            extract_h5="t1_rep2.h5",
+            metadata={"pileup_path": "t1_rep2.bed.gz", "pair_id": "pair-1"},
         ),
         SampleSpec(
             sample_id="d1",
@@ -342,7 +362,9 @@ def test_scan_genome_matched_pairwise_uses_only_complete_pairs(monkeypatch):
     assert result.metadata["pairing_policy"] == "complete_pairs_only"
     assert result.metadata["n_pairs_used"] == 2
     assert result.metadata["n_pairs_dropped"] == 1
-    assert result.windows.loc[0, "valid_count"] == 80
+    assert result.windows.loc[0, "modified_count"] == 26
+    assert result.windows.loc[0, "valid_count"] == 90
+    assert result.windows.loc[0, "window_fraction"] == pytest.approx(26 / 90)
     assert result.windows.loc[0, "score_value"] == pytest.approx(0.25)
 
 
