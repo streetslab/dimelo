@@ -545,6 +545,176 @@ def test_score_regions_beta_binomial_rejects_unsupported_multiple_testing(monkey
         )
 
 
+def test_score_regions_beta_binomial_uses_row_specific_denominator_counts(monkeypatch):
+    contrast = ContrastSpec(
+        mode="pairwise",
+        numerator=["treated"],
+        denominator=["control"],
+    )
+    evidence = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "n1",
+                "condition": "treated",
+                "replicate": 1,
+                "modified_count": 5,
+                "valid_count": 10,
+                "mod_fraction": 0.5,
+            },
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "d1",
+                "condition": "control",
+                "replicate": 1,
+                "modified_count": 1,
+                "valid_count": 10,
+                "mod_fraction": 0.1,
+            },
+            {
+                "region_id": "reg2",
+                "chromosome": "chr2",
+                "start": 10,
+                "end": 20,
+                "strand": "-",
+                "sample_id": "n1",
+                "condition": "treated",
+                "replicate": 1,
+                "modified_count": 5,
+                "valid_count": 10,
+                "mod_fraction": 0.5,
+            },
+            {
+                "region_id": "reg2",
+                "chromosome": "chr2",
+                "start": 10,
+                "end": 20,
+                "strand": "-",
+                "sample_id": "d1",
+                "condition": "control",
+                "replicate": 1,
+                "modified_count": 4,
+                "valid_count": 10,
+                "mod_fraction": 0.4,
+            },
+        ]
+    )
+
+    monkeypatch.setattr(
+        region_contrasts,
+        "build_region_evidence_table",
+        lambda **kwargs: evidence.copy(),
+    )
+
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions="regions.bed",
+        motifs=["A,0"],
+        contrast=contrast,
+        test="beta_binomial",
+    )
+
+    row1 = result.summary.loc[result.summary["region_id"] == "reg1", "p_value"].iloc[0]
+    row2 = result.summary.loc[result.summary["region_id"] == "reg2", "p_value"].iloc[0]
+    assert row1 != row2
+
+
+def test_score_regions_beta_binomial_ranks_by_adjusted_p_value(monkeypatch):
+    contrast = ContrastSpec(
+        mode="pairwise",
+        numerator=["treated"],
+        denominator=["control"],
+    )
+    evidence = pd.DataFrame(
+        [
+            {
+                "region_id": "high_effect_low_significance",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 1,
+                "strand": "+",
+                "sample_id": "n1",
+                "condition": "treated",
+                "replicate": 1,
+                "modified_count": 1,
+                "valid_count": 1,
+                "mod_fraction": 1.0,
+            },
+            {
+                "region_id": "high_effect_low_significance",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 1,
+                "strand": "+",
+                "sample_id": "d1",
+                "condition": "control",
+                "replicate": 1,
+                "modified_count": 0,
+                "valid_count": 1,
+                "mod_fraction": 0.0,
+            },
+            {
+                "region_id": "lower_effect_higher_significance",
+                "chromosome": "chr2",
+                "start": 10,
+                "end": 20,
+                "strand": "-",
+                "sample_id": "n1",
+                "condition": "treated",
+                "replicate": 1,
+                "modified_count": 18,
+                "valid_count": 20,
+                "mod_fraction": 0.9,
+            },
+            {
+                "region_id": "lower_effect_higher_significance",
+                "chromosome": "chr2",
+                "start": 10,
+                "end": 20,
+                "strand": "-",
+                "sample_id": "d1",
+                "condition": "control",
+                "replicate": 1,
+                "modified_count": 10,
+                "valid_count": 20,
+                "mod_fraction": 0.5,
+            },
+        ]
+    )
+
+    monkeypatch.setattr(
+        region_contrasts,
+        "build_region_evidence_table",
+        lambda **kwargs: evidence.copy(),
+    )
+
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions="regions.bed",
+        motifs=["A,0"],
+        contrast=contrast,
+        test="beta_binomial",
+    )
+
+    assert result.summary.iloc[0]["region_id"] == "lower_effect_higher_significance"
+    assert result.summary.iloc[0]["adjusted_p_value"] <= result.summary.iloc[1]["adjusted_p_value"]
+    assert result.summary.iloc[0]["delta_fraction"] < result.summary.iloc[1]["delta_fraction"]
+    assert result.summary.iloc[0]["rank"] == 1
+
+
+def test_beta_binomial_two_sided_p_value_rejects_invalid_counts():
+    with pytest.raises(ValueError, match="modified_count"):
+        region_contrasts._beta_binomial_two_sided_p_value(6, 5, 2.0, 2.0)
+
+
 def test_score_regions_rejects_missing_denominator_condition(monkeypatch):
     contrast = ContrastSpec(
         mode="pairwise",

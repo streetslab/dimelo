@@ -113,14 +113,20 @@ def _zero_safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series
 
 
 def _estimate_beta_binomial_prior(
-    denominator_modified_count: pd.Series,
-    denominator_valid_count: pd.Series,
+    denominator_modified_count: int,
+    denominator_valid_count: int,
 ) -> tuple[float, float]:
-    total_modified = float(denominator_modified_count.sum())
-    total_unmodified = float(
-        (denominator_valid_count - denominator_modified_count).clip(lower=0).sum()
-    )
-    return total_modified + 1.0, total_unmodified + 1.0
+    if denominator_modified_count < 0:
+        raise ValueError("beta-binomial denominator modified_count must be >= 0.")
+    if denominator_valid_count < 0:
+        raise ValueError("beta-binomial denominator valid_count must be >= 0.")
+    if denominator_modified_count > denominator_valid_count:
+        raise ValueError(
+            "beta-binomial denominator modified_count cannot exceed valid_count."
+        )
+
+    denominator_unmodified_count = denominator_valid_count - denominator_modified_count
+    return float(denominator_modified_count + 1), float(denominator_unmodified_count + 1)
 
 
 def _log_beta_function(alpha: float, beta: float) -> float:
@@ -140,6 +146,12 @@ def _beta_binomial_logpmf(k: int, n: int, alpha: float, beta: float) -> float:
 
 
 def _beta_binomial_two_sided_p_value(k: int, n: int, alpha: float, beta: float) -> float:
+    if k < 0:
+        raise ValueError("beta-binomial modified_count must be >= 0.")
+    if n < 0:
+        raise ValueError("beta-binomial valid_count must be >= 0.")
+    if k > n:
+        raise ValueError("beta-binomial modified_count cannot exceed valid_count.")
     if n <= 0:
         return 1.0
 
@@ -183,21 +195,21 @@ def _add_beta_binomial_scores(
             "multiple_testing='fdr_bh'."
         )
 
-    alpha, beta = _estimate_beta_binomial_prior(
-        regions_table["denominator_modified_count"],
-        regions_table["denominator_valid_count"],
-    )
     scored = regions_table.copy()
     scored["p_value"] = [
         _beta_binomial_two_sided_p_value(
             int(modified_count),
             int(valid_count),
-            alpha,
-            beta,
+            *_estimate_beta_binomial_prior(
+                int(reference_modified_count),
+                int(reference_valid_count),
+            ),
         )
-        for modified_count, valid_count in zip(
+        for modified_count, valid_count, reference_modified_count, reference_valid_count in zip(
             scored["numerator_modified_count"],
             scored["numerator_valid_count"],
+            scored["denominator_modified_count"],
+            scored["denominator_valid_count"],
         )
     ]
     scored["adjusted_p_value"] = _adjust_p_values_bh(scored["p_value"])
@@ -343,16 +355,22 @@ def score_regions(
     else:
         merged["effect_size"] = merged["delta_fraction"].abs()
 
-    regions_table = merged.sort_values(
-        by="effect_size",
-        ascending=False,
-        kind="mergesort",
-    ).reset_index(drop=True)
     if test == "beta_binomial":
         regions_table = _add_beta_binomial_scores(
-            regions_table,
+            merged,
             multiple_testing=multiple_testing,
         )
+        regions_table = regions_table.sort_values(
+            by=["adjusted_p_value", "p_value"],
+            ascending=[True, True],
+            kind="mergesort",
+        ).reset_index(drop=True)
+    else:
+        regions_table = merged.sort_values(
+            by="effect_size",
+            ascending=False,
+            kind="mergesort",
+        ).reset_index(drop=True)
     regions_table["rank"] = range(1, len(regions_table) + 1)
 
     summary_columns = [
