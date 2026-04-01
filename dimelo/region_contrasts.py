@@ -30,9 +30,10 @@ def validate_region_contrast_request(
             "V1 region_contrasts inference requires representation to be "
             "'modified_fraction' or 'modified_count'."
         )
-    if test != "effect_size_only":
+    if test not in {"effect_size_only", "beta_binomial"}:
         raise ValueError(
-            "Current region_contrasts scoring support requires test='effect_size_only'."
+            "Current region_contrasts scoring support requires test in "
+            "{'effect_size_only', 'beta_binomial'}."
         )
 
 
@@ -109,6 +110,98 @@ def build_region_evidence_table(
 
 def _zero_safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
     return numerator.div(denominator.where(denominator != 0), fill_value=0).fillna(0.0)
+
+
+def _estimate_beta_binomial_prior(
+    denominator_modified_count: pd.Series,
+    denominator_valid_count: pd.Series,
+) -> tuple[float, float]:
+    total_modified = float(denominator_modified_count.sum())
+    total_unmodified = float(
+        (denominator_valid_count - denominator_modified_count).clip(lower=0).sum()
+    )
+    return total_modified + 1.0, total_unmodified + 1.0
+
+
+def _log_beta_function(alpha: float, beta: float) -> float:
+    return math.lgamma(alpha) + math.lgamma(beta) - math.lgamma(alpha + beta)
+
+
+def _beta_binomial_logpmf(k: int, n: int, alpha: float, beta: float) -> float:
+    if k < 0 or k > n:
+        return float("-inf")
+    return (
+        math.lgamma(n + 1)
+        - math.lgamma(k + 1)
+        - math.lgamma(n - k + 1)
+        + _log_beta_function(k + alpha, n - k + beta)
+        - _log_beta_function(alpha, beta)
+    )
+
+
+def _beta_binomial_two_sided_p_value(k: int, n: int, alpha: float, beta: float) -> float:
+    if n <= 0:
+        return 1.0
+
+    support = list(range(n + 1))
+    logpmf = [_beta_binomial_logpmf(x, n, alpha, beta) for x in support]
+    observed_logpmf = logpmf[k]
+    tail_probability = sum(
+        math.exp(value)
+        for value in logpmf
+        if value <= observed_logpmf + 1e-12
+    )
+    return min(max(tail_probability, 0.0), 1.0)
+
+
+def _adjust_p_values_bh(p_values: pd.Series) -> pd.Series:
+    if p_values.empty:
+        return pd.Series(dtype=float, index=p_values.index)
+
+    ranked = sorted(enumerate(p_values.tolist()), key=lambda item: item[1], reverse=True)
+    total = len(ranked)
+    adjusted = [1.0] * total
+    running_min = 1.0
+
+    for rank_from_end, (original_index, p_value) in enumerate(ranked, start=1):
+        rank = total - rank_from_end + 1
+        candidate = min(1.0, p_value * total / rank)
+        running_min = min(running_min, candidate)
+        adjusted[original_index] = running_min
+
+    return pd.Series(adjusted, index=p_values.index, dtype=float)
+
+
+def _add_beta_binomial_scores(
+    regions_table: pd.DataFrame,
+    *,
+    multiple_testing: str,
+) -> pd.DataFrame:
+    if multiple_testing != "fdr_bh":
+        raise ValueError(
+            "Current beta-binomial region contrast scoring requires "
+            "multiple_testing='fdr_bh'."
+        )
+
+    alpha, beta = _estimate_beta_binomial_prior(
+        regions_table["denominator_modified_count"],
+        regions_table["denominator_valid_count"],
+    )
+    scored = regions_table.copy()
+    scored["p_value"] = [
+        _beta_binomial_two_sided_p_value(
+            int(modified_count),
+            int(valid_count),
+            alpha,
+            beta,
+        )
+        for modified_count, valid_count in zip(
+            scored["numerator_modified_count"],
+            scored["numerator_valid_count"],
+        )
+    ]
+    scored["adjusted_p_value"] = _adjust_p_values_bh(scored["p_value"])
+    return scored
 
 
 def _pool_region_groups(evidence: pd.DataFrame, contrast: ContrastSpec) -> pd.DataFrame:
@@ -255,6 +348,11 @@ def score_regions(
         ascending=False,
         kind="mergesort",
     ).reset_index(drop=True)
+    if test == "beta_binomial":
+        regions_table = _add_beta_binomial_scores(
+            regions_table,
+            multiple_testing=multiple_testing,
+        )
     regions_table["rank"] = range(1, len(regions_table) + 1)
 
     summary_columns = [
@@ -271,6 +369,8 @@ def score_regions(
         "denominator_valid_count",
         "denominator_replicate_n",
     ]
+    if test == "beta_binomial":
+        summary_columns.extend(["p_value", "adjusted_p_value"])
     if representation == "modified_count":
         summary_columns.extend(["count", "reference_count", "delta_count", "log2_fc_count"])
     summary = regions_table.loc[:, summary_columns].copy()
