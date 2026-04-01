@@ -8,7 +8,7 @@ import pandas as pd
 import pysam
 
 from . import load_processed, utils
-from .models import SampleSpec
+from .models import GlobalAnalysisResult, SampleSpec
 
 
 def _global_counts_from_bedmethyl(
@@ -261,3 +261,52 @@ def compute_global_normalization_factors(summary: pd.DataFrame) -> pd.DataFrame:
             "global_offset",
         ],
     ].copy()
+
+
+def run_global_analysis(
+    *,
+    samples: Sequence[SampleSpec],
+    motifs: Iterable[str],
+    genome_sizes: dict[str, int],
+    window_size: int,
+    step_size: int,
+    include_contigs: Iterable[str] | None = None,
+    exclude_contigs: Iterable[str] | None = None,
+    quiet: bool = True,
+    cores: int | None = None,
+) -> GlobalAnalysisResult:
+    motifs = list(motifs)
+    summary = summarize_global_samples(samples=samples, motifs=motifs, quiet=quiet)
+    windows = build_window_summary(
+        samples=samples,
+        motifs=motifs,
+        genome_sizes=genome_sizes,
+        window_size=window_size,
+        step_size=step_size,
+        include_contigs=include_contigs,
+        exclude_contigs=exclude_contigs,
+        quiet=quiet,
+        cores=cores,
+    )
+    normalization_factors = compute_global_normalization_factors(summary)
+    plot_data = {
+        "global_fraction_bar": summary.loc[
+            :,
+            ["sample_id", "condition", "motif", "global_fraction"],
+        ].copy(),
+        "window_fraction_table": windows.copy(),
+    }
+
+    return GlobalAnalysisResult(
+        summary=summary,
+        windows=windows,
+        normalization_factors=normalization_factors,
+        plot_data=plot_data,
+        metadata={
+            "normalization_mode": "per_sample_global",
+            "window_size": window_size,
+            "step_size": step_size,
+            "motifs": motifs,
+        },
+        figures={},
+    )

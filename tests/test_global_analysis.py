@@ -273,3 +273,52 @@ def test_compute_global_normalization_factors_from_summary():
     }
     assert factors.loc[factors["sample_id"] == "s1", "global_offset"].iloc[0] == pytest.approx(-0.1)
     assert factors.loc[factors["sample_id"] == "s2", "global_offset"].iloc[0] == pytest.approx(0.1)
+
+
+def test_run_global_analysis_returns_result(monkeypatch):
+    samples = [
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            metadata={"pileup_path": "s1.bed.gz"},
+        ),
+    ]
+
+    monkeypatch.setattr(
+        global_analysis,
+        "summarize_global_samples",
+        lambda *, samples, motifs, quiet=True: pd.DataFrame(
+            {
+                "sample_id": ["s1"],
+                "condition": ["NS"],
+                "replicate": [None],
+                "motif": ["A,0"],
+                "modified_count": [10],
+                "valid_count": [100],
+                "global_fraction": [0.1],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **kwargs: pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+    )
+    monkeypatch.setattr(
+        global_analysis,
+        "compute_global_normalization_factors",
+        lambda summary: pd.DataFrame({"sample_id": ["s1"], "global_offset": [0.0]}),
+    )
+
+    result = global_analysis.run_global_analysis(
+        samples=samples,
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1000},
+        window_size=1000,
+        step_size=1000,
+    )
+
+    assert list(result.summary["sample_id"]) == ["s1"]
+    assert list(result.windows["window_id"]) == ["chr1:0-1000"]
+    assert "global_fraction_bar" in result.plot_data

@@ -220,10 +220,11 @@ def extract(
     override_checks: bool = False,) -> Path, Path:
 ```
 
-## Region contrasts
+## Analysis Guides
 
-Two higher-level analysis guides now sit on top of the existing parsing layer:
+Three higher-level analysis guides now sit on top of the existing parsing layer:
 
+- [docs/global-analysis.md](docs/global-analysis.md) for pileup-backed global summaries and normalization factors
 - [docs/shared-clustering.md](docs/shared-clustering.md) for shared-boundary clustering workflows
 - [docs/region-contrasts.md](docs/region-contrasts.md) for known-region motif-abundance contrasts
 
