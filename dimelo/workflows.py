@@ -409,6 +409,23 @@ def _normalize_region_id_value(
     return region_id_str
 
 
+def _normalize_region_id_frame(
+    region_frame: pd.DataFrame | None,
+    *,
+    default_region_ids: dict[str, str],
+) -> pd.DataFrame | None:
+    if region_frame is None or "region_id" not in region_frame.columns:
+        return region_frame
+
+    normalized_frame = region_frame.copy()
+    normalized_frame["region_id"] = normalized_frame.apply(
+        _normalize_region_id_value,
+        axis=1,
+        default_region_ids=default_region_ids,
+    )
+    return normalized_frame
+
+
 def _normalize_cluster_region_ids(
     clustering_result: SharedClusterResult,
     *,
@@ -418,22 +435,14 @@ def _normalize_cluster_region_ids(
         region_id.rsplit(",", 1)[0]: region_id for region_id in default_region_spec
     }
 
-    normalized_assignments = clustering_result.assignments.copy()
-    if "region_id" in normalized_assignments.columns:
-        normalized_assignments["region_id"] = normalized_assignments.apply(
-            _normalize_region_id_value,
-            axis=1,
-            default_region_ids=default_region_ids,
-        )
-
-    normalized_region_summaries = clustering_result.region_summaries
-    if normalized_region_summaries is not None and "region_id" in normalized_region_summaries.columns:
-        normalized_region_summaries = normalized_region_summaries.copy()
-        normalized_region_summaries["region_id"] = normalized_region_summaries.apply(
-            _normalize_region_id_value,
-            axis=1,
-            default_region_ids=default_region_ids,
-        )
+    normalized_assignments = _normalize_region_id_frame(
+        clustering_result.assignments,
+        default_region_ids=default_region_ids,
+    )
+    normalized_region_summaries = _normalize_region_id_frame(
+        clustering_result.region_summaries,
+        default_region_ids=default_region_ids,
+    )
 
     return SharedClusterResult(
         model=clustering_result.model,

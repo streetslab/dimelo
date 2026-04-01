@@ -581,7 +581,6 @@ def test_discovery_cluster_contrast_workflow_normalizes_clustering_region_ids_fo
                     "cluster": "C0",
                     "count": 1,
                     "fraction": 1.0,
-                    "strand": "+",
                 },
                 {
                     "region_id": "chr1:500-1000",
@@ -590,7 +589,6 @@ def test_discovery_cluster_contrast_workflow_normalizes_clustering_region_ids_fo
                     "cluster": "C1",
                     "count": 1,
                     "fraction": 1.0,
-                    "strand": "-",
                 },
             ]
         )
@@ -619,6 +617,7 @@ def test_discovery_cluster_contrast_workflow_normalizes_clustering_region_ids_fo
     contrast_region_ids = set(result.contrasts.regions["region_id"])
     assert set(result.clustering.assignments["region_id"]) == contrast_region_ids
     assert set(result.clustering.region_summaries["region_id"]) == contrast_region_ids
+    assert "strand" not in result.clustering.region_summaries.columns
 
 
 def test_discovery_cluster_contrast_workflow_uses_custom_contrast_regions_when_provided(
