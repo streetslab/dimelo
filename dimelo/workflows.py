@@ -387,6 +387,13 @@ def _normalize_region_id_value(
     if region_id_str in default_region_ids:
         return default_region_ids[region_id_str]
 
+    if "," not in region_id_str and region_id_str.count(":") >= 2:
+        region_core, strand = region_id_str.rsplit(":", 1)
+        strand_value = strand if strand in {"+", "-", "."} else "."
+        if region_core in default_region_ids:
+            return default_region_ids[region_core]
+        return f"{region_core},{strand_value}"
+
     chrom = row.get("chromosome", row.get("chrom"))
     start = row.get("start")
     end = row.get("end")

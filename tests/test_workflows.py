@@ -557,25 +557,23 @@ def test_discovery_cluster_contrast_workflow_normalizes_clustering_region_ids_fo
         result.assignments = pd.DataFrame(
             [
                 {
-                    "region_id": "chr1:0-500",
+                    "region_id": "chr1:0-500:+",
                     "sample_id": "s1",
                     "condition": "NS",
                     "cluster": "C0",
-                    "strand": "+",
                 },
                 {
-                    "region_id": "chr1:500-1000",
+                    "region_id": "chr1:500-1000:-",
                     "sample_id": "s2",
                     "condition": "15min",
                     "cluster": "C1",
-                    "strand": "-",
                 },
             ]
         )
         result.region_summaries = pd.DataFrame(
             [
                 {
-                    "region_id": "chr1:0-500",
+                    "region_id": "chr1:0-500:+",
                     "sample_id": "s1",
                     "condition": "NS",
                     "cluster": "C0",
@@ -583,7 +581,7 @@ def test_discovery_cluster_contrast_workflow_normalizes_clustering_region_ids_fo
                     "fraction": 1.0,
                 },
                 {
-                    "region_id": "chr1:500-1000",
+                    "region_id": "chr1:500-1000:-",
                     "sample_id": "s2",
                     "condition": "15min",
                     "cluster": "C1",
@@ -617,7 +615,9 @@ def test_discovery_cluster_contrast_workflow_normalizes_clustering_region_ids_fo
     contrast_region_ids = set(result.contrasts.regions["region_id"])
     assert set(result.clustering.assignments["region_id"]) == contrast_region_ids
     assert set(result.clustering.region_summaries["region_id"]) == contrast_region_ids
-    assert "strand" not in result.clustering.region_summaries.columns
+    assert set(result.clustering.assignments["region_id"]) == set(
+        result.clustering.region_summaries["region_id"]
+    )
 
 
 def test_discovery_cluster_contrast_workflow_uses_custom_contrast_regions_when_provided(
