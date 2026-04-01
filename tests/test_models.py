@@ -8,6 +8,7 @@ from dimelo.models import (
     BatchJob,
     CohortSpec,
     ContrastSpec,
+    GlobalAnalysisResult,
     DatasetArtifact,
     SampleSpec,
     RegionContrastResult,
@@ -267,6 +268,37 @@ def test_shared_cluster_result_rejects_none_core_outputs(field_name):
 
     with pytest.raises(ValueError):
         SharedClusterResult(**kwargs)
+
+
+def test_global_analysis_result_supports_summary_windows_and_normalization():
+    result = GlobalAnalysisResult(
+        summary=pd.DataFrame({"sample_id": ["s1"]}),
+        windows=pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+        normalization_factors=pd.DataFrame(
+            {"sample_id": ["s1"], "global_offset": [0.1]}
+        ),
+        plot_data={"global_fraction_bar": pd.DataFrame({"sample_id": ["s1"]})},
+        metadata={"normalization_mode": "per_sample_global"},
+        figures={},
+    )
+
+    assert list(result.summary["sample_id"]) == ["s1"]
+    assert list(result.windows["window_id"]) == ["chr1:0-1000"]
+    assert list(result.normalization_factors["sample_id"]) == ["s1"]
+
+
+def test_global_analysis_result_rejects_none_core_outputs():
+    with pytest.raises(
+        ValueError, match="summary, normalization_factors, plot_data"
+    ):
+        GlobalAnalysisResult(
+            summary=None,
+            windows=None,
+            normalization_factors=None,
+            plot_data=None,
+            metadata={},
+            figures={},
+        )
 
 
 def test_region_contrast_result_rejects_none_core_tables():

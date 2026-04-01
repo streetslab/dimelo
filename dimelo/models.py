@@ -126,6 +126,29 @@ class SharedClusterResult:
 
 
 @dataclass
+class GlobalAnalysisResult:
+    summary: pd.DataFrame
+    windows: pd.DataFrame | None
+    normalization_factors: pd.DataFrame
+    plot_data: dict[str, pd.DataFrame | dict[str, Any]]
+    metadata: dict[str, Any] = field(default_factory=dict)
+    figures: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        required_fields = {
+            "summary": self.summary,
+            "normalization_factors": self.normalization_factors,
+            "plot_data": self.plot_data,
+        }
+        missing = [name for name, value in required_fields.items() if value is None]
+        if missing:
+            raise ValueError(
+                "GlobalAnalysisResult requires non-None values for: "
+                f"{', '.join(missing)}"
+            )
+
+
+@dataclass
 class RegionContrastResult:
     regions: pd.DataFrame
     summary: pd.DataFrame
