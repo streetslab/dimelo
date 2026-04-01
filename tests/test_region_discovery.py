@@ -1229,7 +1229,6 @@ def test_scan_genome_time_course_errors_when_time_order_conditions_are_missing(m
             score="effect_size_only",
         )
 
-
 def test_scan_genome_time_course_filters_incomplete_trajectories_per_window(monkeypatch):
     monkeypatch.setattr(
         global_analysis,
@@ -1602,8 +1601,6 @@ def test_scan_genome_time_course_ignores_extra_conditions_outside_time_order(mon
 
     assert result.hits.loc[0, "trajectory_amplitude_mean"] == pytest.approx(0.35)
     assert result.hits.loc[0, "trajectory_amplitude_sd"] == pytest.approx(0.05)
-
-
 def test_scan_genome_time_course_errors_on_missing_pairing_key(monkeypatch):
     monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_window_summary())
 

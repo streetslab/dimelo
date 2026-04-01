@@ -317,7 +317,6 @@ def _score_paired_time_course(
 
     ordered = paired_window_table.loc[paired_window_table["condition"].isin(time_order)].copy()
     _validate_time_order(ordered, time_order)
-
     ordered["condition"] = pd.Categorical(
         ordered["condition"],
         categories=time_order,
@@ -355,7 +354,6 @@ def _score_paired_time_course(
         how="inner",
         sort=False,
     )
-
     per_pair = (
         ordered.groupby(_WINDOW_KEY_COLUMNS + ["pair_id"], as_index=False, sort=False)
         .agg(
