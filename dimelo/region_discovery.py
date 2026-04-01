@@ -105,6 +105,31 @@ def _side_counts(
     return grouped
 
 
+def _validate_contrast_conditions(
+    *,
+    condition_counts: pd.DataFrame,
+    contrast: ContrastSpec | None,
+) -> None:
+    if contrast is None:
+        return
+
+    available_conditions = set(condition_counts["condition"].dropna().tolist())
+    missing: list[str] = []
+    for side_name, conditions in (
+        ("numerator", contrast.numerator or []),
+        ("denominator", contrast.denominator or []),
+    ):
+        absent = sorted(set(conditions) - available_conditions)
+        if absent:
+            missing.append(f"{side_name}: {', '.join(absent)}")
+
+    if missing:
+        raise ValueError(
+            "scan_genome contrast requested missing condition(s): "
+            + "; ".join(missing)
+        )
+
+
 def _score_with_contrast(
     window_totals: pd.DataFrame,
     condition_counts: pd.DataFrame,
@@ -151,7 +176,9 @@ def _score_with_contrast(
 
         scored["score_value"] = _safe_fraction(
             scored["numerator_modified_count"], scored["numerator_valid_count"]
-        ) - _safe_fraction(scored["denominator_modified_count"], scored["denominator_valid_count"])
+        ).sub(
+            _safe_fraction(scored["denominator_modified_count"], scored["denominator_valid_count"])
+        ).abs()
 
         scored["p_value"] = [
             _beta_binomial_two_sided_p_value(
@@ -200,7 +227,9 @@ def _score_with_contrast(
 
     scored["score_value"] = _safe_fraction(
         scored["numerator_modified_count"], scored["numerator_valid_count"]
-    ) - _safe_fraction(scored["denominator_modified_count"], scored["denominator_valid_count"])
+    ).sub(
+        _safe_fraction(scored["denominator_modified_count"], scored["denominator_valid_count"])
+    ).abs()
 
     if score == "beta_binomial":
         scored["p_value"] = [
@@ -266,11 +295,21 @@ def _apply_min_coverage(
 
 def _merge_adjacent_hits(hits: pd.DataFrame, *, merge_distance: int) -> pd.DataFrame:
     if hits.empty or len(hits) == 1:
-        return hits.copy()
+        merged = hits.copy()
+        if not merged.empty and "window_id" in merged.columns:
+            merged["window_id"] = merged.apply(
+                lambda row: f"{row['chromosome']}:{int(row['start'])}-{int(row['end'])}",
+                axis=1,
+            )
+            if {"modified_count", "valid_count"}.issubset(merged.columns):
+                merged["window_fraction"] = _safe_fraction(
+                    merged["modified_count"], merged["valid_count"]
+                )
+        return merged
 
     ordered = hits.sort_values(
-        by=["chromosome", "start", "end", "rank"],
-        ascending=[True, True, True, True],
+        by=["chromosome", "strand", "start", "end", "rank"],
+        ascending=[True, True, True, True, True],
         kind="mergesort",
     ).reset_index(drop=True)
 
@@ -281,11 +320,36 @@ def _merge_adjacent_hits(hits: pd.DataFrame, *, merge_distance: int) -> pd.DataF
     def _as_float(value: object) -> float | None:
         return None if pd.isna(value) else float(value)
 
+    def _finalize_current() -> None:
+        current["window_id"] = f"{current['chromosome']}:{int(current['start'])}-{int(current['end'])}"
+        current_valid_count = int(current.get("valid_count", 0))
+        current_modified_count = int(current.get("modified_count", 0))
+        current["window_fraction"] = (
+            0.0
+            if current_valid_count == 0
+            else current_modified_count / current_valid_count
+        )
+        if {"numerator_modified_count", "numerator_valid_count", "denominator_modified_count", "denominator_valid_count"}.issubset(current):
+            numerator_fraction = (
+                0.0
+                if int(current["numerator_valid_count"]) == 0
+                else int(current["numerator_modified_count"]) / int(current["numerator_valid_count"])
+            )
+            denominator_fraction = (
+                0.0
+                if int(current["denominator_valid_count"]) == 0
+                else int(current["denominator_modified_count"]) / int(current["denominator_valid_count"])
+            )
+            current["score_value"] = abs(numerator_fraction - denominator_fraction)
+        merged_rows.append(current.copy())
+
     for _, row in ordered.iloc[1:].iterrows():
         same_chromosome = row["chromosome"] == current["chromosome"]
+        same_strand = row.get("strand") == current.get("strand")
         within_distance = row["start"] <= int(current["end"]) + merge_distance
-        if same_chromosome and within_distance:
+        if same_chromosome and same_strand and within_distance:
             current["end"] = max(int(current["end"]), int(row["end"]))
+            current["start"] = min(int(current["start"]), int(row["start"]))
             current["modified_count"] = int(current["modified_count"]) + int(row["modified_count"])
             current["valid_count"] = int(current["valid_count"]) + int(row["valid_count"])
             current_score = _as_float(current.get("score_value"))
@@ -311,12 +375,17 @@ def _merge_adjacent_hits(hits: pd.DataFrame, *, merge_distance: int) -> pd.DataF
             current["merged_window_count"] += 1
             continue
 
-        merged_rows.append(current)
+        _finalize_current()
         current = row.to_dict()
         current["merged_window_count"] = 1
 
-    merged_rows.append(current)
+    _finalize_current()
     merged = pd.DataFrame(merged_rows)
+    merged = merged.sort_values(
+        by=["chromosome", "strand", "start", "end", "rank"],
+        ascending=[True, True, True, True, True],
+        kind="mergesort",
+    ).reset_index(drop=True)
     merged["rank"] = range(1, len(merged) + 1)
     return merged
 
@@ -356,14 +425,37 @@ def scan_genome(
 
     window_totals = _aggregate_window_counts(window_summary)
     condition_counts = _aggregate_condition_counts(window_summary)
+    _validate_contrast_conditions(condition_counts=condition_counts, contrast=contrast)
+
+    covered_mask = window_totals["valid_count"] >= min_coverage
+    covered_window_totals = window_totals.loc[covered_mask].copy()
+    covered_keys = covered_window_totals.loc[:, _WINDOW_KEY_COLUMNS]
+    covered_condition_counts = condition_counts.merge(
+        covered_keys,
+        on=_WINDOW_KEY_COLUMNS,
+        how="inner",
+    )
+
     scored = _score_with_contrast(
-        window_totals=window_totals,
-        condition_counts=condition_counts,
+        window_totals=covered_window_totals,
+        condition_counts=covered_condition_counts,
         contrast=contrast,
         score=score,
     )
     ranked = _rank_windows(scored, score=score)
-    window_table, hits = _apply_min_coverage(ranked, min_coverage=min_coverage)
+    scored_columns = [
+        column
+        for column in ranked.columns
+        if column not in _WINDOW_KEY_COLUMNS
+        and column not in {"modified_count", "valid_count", "window_fraction"}
+    ]
+    window_table = window_totals.merge(
+        ranked.loc[:, _WINDOW_KEY_COLUMNS + scored_columns],
+        on=_WINDOW_KEY_COLUMNS,
+        how="left",
+        sort=False,
+    )
+    hits = ranked.copy()
 
     if merge_hits:
         hits = _merge_adjacent_hits(hits, merge_distance=merge_distance)
