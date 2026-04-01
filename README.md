@@ -40,7 +40,7 @@ This README document contains installation instructions and documentation for va
 
 -[2.5 Clustering scaffolding](#clustering-scaffolding)
 
--[2.6 Region contrasts](#region-contrasts)
+-[2.6 Analysis guides](#analysis-guides)
 
 [3.0 Known Issues](#known-issues)
 

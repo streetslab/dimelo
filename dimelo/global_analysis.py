@@ -276,18 +276,25 @@ def run_global_analysis(
     cores: int | None = None,
 ) -> GlobalAnalysisResult:
     motifs = list(motifs)
+    if len(motifs) == 0:
+        raise ValueError("run_global_analysis requires at least one motif.")
+
     summary = summarize_global_samples(samples=samples, motifs=motifs, quiet=quiet)
-    windows = build_window_summary(
-        samples=samples,
-        motifs=motifs,
-        genome_sizes=genome_sizes,
-        window_size=window_size,
-        step_size=step_size,
-        include_contigs=include_contigs,
-        exclude_contigs=exclude_contigs,
-        quiet=quiet,
-        cores=cores,
-    )
+    per_motif_windows = [
+        build_window_summary(
+            samples=samples,
+            motifs=[motif],
+            genome_sizes=genome_sizes,
+            window_size=window_size,
+            step_size=step_size,
+            include_contigs=include_contigs,
+            exclude_contigs=exclude_contigs,
+            quiet=quiet,
+            cores=cores,
+        )
+        for motif in motifs
+    ]
+    windows = pd.concat(per_motif_windows, ignore_index=True)
     normalization_factors = compute_global_normalization_factors(summary)
     plot_data = {
         "global_fraction_bar": summary.loc[

@@ -322,3 +322,72 @@ def test_run_global_analysis_returns_result(monkeypatch):
     assert list(result.summary["sample_id"]) == ["s1"]
     assert list(result.windows["window_id"]) == ["chr1:0-1000"]
     assert "global_fraction_bar" in result.plot_data
+
+
+def test_run_global_analysis_supports_multiple_motifs(monkeypatch):
+    samples = [
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            metadata={"pileup_path": "s1.bed.gz"},
+        ),
+    ]
+    observed_build_calls = []
+
+    monkeypatch.setattr(
+        global_analysis,
+        "summarize_global_samples",
+        lambda *, samples, motifs, quiet=True: pd.DataFrame(
+            {
+                "sample_id": ["s1", "s1"],
+                "condition": ["NS", "NS"],
+                "replicate": [None, None],
+                "motif": list(motifs),
+                "modified_count": [10, 20],
+                "valid_count": [100, 200],
+                "global_fraction": [0.1, 0.1],
+            }
+        ),
+    )
+
+    def fake_build_window_summary(**kwargs):
+        motifs = list(kwargs["motifs"])
+        observed_build_calls.append(motifs)
+        return pd.DataFrame(
+            {
+                "window_id": ["chr1:0-1000"],
+                "motif": motifs,
+            }
+        )
+
+    monkeypatch.setattr(global_analysis, "build_window_summary", fake_build_window_summary)
+    monkeypatch.setattr(
+        global_analysis,
+        "compute_global_normalization_factors",
+        lambda summary: pd.DataFrame(
+            {"sample_id": ["s1", "s1"], "motif": ["A,0", "CG,0"], "global_offset": [0.0, 0.0]}
+        ),
+    )
+
+    result = global_analysis.run_global_analysis(
+        samples=samples,
+        motifs=["A,0", "CG,0"],
+        genome_sizes={"chr1": 1000},
+        window_size=1000,
+        step_size=1000,
+    )
+
+    assert observed_build_calls == [["A,0"], ["CG,0"]]
+    assert result.windows["motif"].tolist() == ["A,0", "CG,0"]
+
+
+def test_run_global_analysis_requires_at_least_one_motif():
+    with pytest.raises(ValueError, match="at least one motif"):
+        global_analysis.run_global_analysis(
+            samples=[],
+            motifs=[],
+            genome_sizes={"chr1": 1000},
+            window_size=1000,
+            step_size=1000,
+        )
