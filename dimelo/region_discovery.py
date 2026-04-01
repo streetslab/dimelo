@@ -785,6 +785,8 @@ def scan_genome(
             ]
             window_table.loc[~covered_mask, paired_score_columns] = pd.NA
             hits = _sort_hits_for_output(window_table.loc[covered_mask].copy())
+            if not hits.empty:
+                hits["rank"] = range(1, len(hits) + 1)
 
             plot_data = {
                 "window_score_table": window_table.copy(),

@@ -608,6 +608,141 @@ def test_scan_genome_matched_pairwise_applies_min_coverage_filtering(monkeypatch
     assert pd.isna(result.windows.loc[0, "score_value"])
 
 
+def test_scan_genome_matched_pairwise_reranks_surviving_hits_after_coverage_filter(monkeypatch):
+    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: pd.DataFrame(
+        [
+            {
+                "sample_id": "t1",
+                "condition": "targeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 9,
+                "valid_count": 10,
+                "window_fraction": 0.9,
+            },
+            {
+                "sample_id": "d1",
+                "condition": "nontargeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 1,
+                "valid_count": 10,
+                "window_fraction": 0.1,
+            },
+            {
+                "sample_id": "t2",
+                "condition": "targeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 12,
+                "valid_count": 60,
+                "window_fraction": 0.2,
+            },
+            {
+                "sample_id": "d2",
+                "condition": "nontargeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 6,
+                "valid_count": 60,
+                "window_fraction": 0.1,
+            },
+            {
+                "sample_id": "t1",
+                "condition": "targeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:1000-1500",
+                "chromosome": "chr1",
+                "start": 1000,
+                "end": 1500,
+                "strand": ".",
+                "modified_count": 10,
+                "valid_count": 60,
+                "window_fraction": 1 / 6,
+            },
+            {
+                "sample_id": "d1",
+                "condition": "nontargeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:1000-1500",
+                "chromosome": "chr1",
+                "start": 1000,
+                "end": 1500,
+                "strand": ".",
+                "modified_count": 6,
+                "valid_count": 60,
+                "window_fraction": 0.1,
+            },
+        ]
+    ))
+
+    result = region_discovery.scan_genome(
+        samples=[
+            SampleSpec(
+                sample_id="t1",
+                condition="targeting",
+                extract_h5="t1.h5",
+                metadata={"pileup_path": "t1.bed.gz", "pair_id": "pair-1"},
+            ),
+            SampleSpec(
+                sample_id="d1",
+                condition="nontargeting",
+                extract_h5="d1.h5",
+                metadata={"pileup_path": "d1.bed.gz", "pair_id": "pair-1"},
+            ),
+            SampleSpec(
+                sample_id="t2",
+                condition="targeting",
+                extract_h5="t2.h5",
+                metadata={"pileup_path": "t2.bed.gz", "pair_id": "pair-2"},
+            ),
+            SampleSpec(
+                sample_id="d2",
+                condition="nontargeting",
+                extract_h5="d2.h5",
+                metadata={"pileup_path": "d2.bed.gz", "pair_id": "pair-2"},
+            ),
+        ],
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        window_size=500,
+        step_size=500,
+        min_coverage=50,
+        contrast=ContrastSpec(
+            mode="matched_pairwise",
+            numerator=["targeting"],
+            denominator=["nontargeting"],
+            pairing_key="pair_id",
+        ),
+        score="effect_size_only",
+    )
+
+    assert list(result.hits["window_id"]) == ["chr1:500-1000", "chr1:1000-1500"]
+    assert list(result.hits["rank"]) == [1, 2]
+
+
 def test_scan_genome_matched_pairwise_rejects_merge_hits(monkeypatch):
     monkeypatch.setattr(
         global_analysis,
