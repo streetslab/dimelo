@@ -295,8 +295,22 @@ def _select_discovery_hits(
     selection_mode: str,
     top_n: int | None,
 ) -> pd.DataFrame:
+    resolved_top_n = _resolve_discovery_selection_top_n(
+        selection_mode=selection_mode,
+        top_n=top_n,
+    )
     if selection_mode == "all":
         return hits.copy()
+    return hits.head(resolved_top_n).copy()
+
+
+def _resolve_discovery_selection_top_n(
+    *,
+    selection_mode: str,
+    top_n: int | None,
+) -> int | None:
+    if selection_mode == "all":
+        return None
     if selection_mode != "top_n":
         raise ValueError(
             f"Unsupported selection mode: {selection_mode!r}. Supported modes are 'top_n' and 'all'."
@@ -305,7 +319,35 @@ def _select_discovery_hits(
     resolved_top_n = _DISCOVERY_SELECTION_DEFAULT_TOP_N if top_n is None else int(top_n)
     if resolved_top_n < 0:
         raise ValueError("selection.top_n must be non-negative.")
-    return hits.head(resolved_top_n).copy()
+    return resolved_top_n
+
+
+def _validate_shared_cluster_distribution_config(
+    *,
+    mode: str,
+    clusterer: str,
+    signal_normalization: str,
+    feature_scaling: str,
+    cluster_basis: str,
+    sample_count: int,
+) -> None:
+    if mode not in {"read_global", "region_anchored"}:
+        raise NotImplementedError(
+            "The first workflow slice implements mode='read_global' and "
+            "mode='region_anchored' only."
+        )
+    if sample_count < 2:
+        raise ValueError("shared_cluster_distribution requires at least two datasets.")
+    if clusterer != "minibatch_kmeans":
+        raise NotImplementedError(
+            "The first workflow slice supports clusterer='minibatch_kmeans' only."
+        )
+    if signal_normalization not in _SUPPORTED_SIGNAL_NORMALIZATION:
+        raise ValueError(f"Unsupported signal_normalization: {signal_normalization}")
+    if feature_scaling not in _SUPPORTED_FEATURE_SCALING:
+        raise ValueError(f"Unsupported feature_scaling: {feature_scaling}")
+    if cluster_basis not in _SUPPORTED_CLUSTER_BASIS:
+        raise ValueError(f"Unsupported cluster_basis: {cluster_basis}")
 
 
 def _selected_regions_to_region_spec(selected_regions: pd.DataFrame) -> list[str]:
@@ -338,6 +380,18 @@ def discovery_cluster_workflow(
     selection_config = dict(selection or {})
     selection_mode = str(selection_config.get("mode", "top_n"))
     selection_top_n = selection_config.get("top_n")
+    resolved_top_n = _resolve_discovery_selection_top_n(
+        selection_mode=selection_mode,
+        top_n=selection_top_n,
+    )
+    _validate_shared_cluster_distribution_config(
+        mode=str(clustering.get("mode", "read_global")),
+        clusterer=str(clustering.get("clusterer", "minibatch_kmeans")),
+        signal_normalization=str(clustering.get("signal_normalization", "none")),
+        feature_scaling=str(clustering.get("feature_scaling", "robust_zscore")),
+        cluster_basis=str(clustering.get("cluster_basis", "shape_plus_level")),
+        sample_count=len(sample_list),
+    )
 
     discovery_result = region_discovery.scan_genome(
         samples=sample_list,
@@ -360,11 +414,6 @@ def discovery_cluster_workflow(
         motifs=motif_list,
         matched_regions=matched_regions,
         **clustering,
-    )
-    resolved_top_n = (
-        None
-        if selection_mode == "all"
-        else _DISCOVERY_SELECTION_DEFAULT_TOP_N if selection_top_n is None else int(selection_top_n)
     )
     return RegionDiscoveryClusterResult(
         discovery=discovery_result,
@@ -530,23 +579,14 @@ def shared_cluster_distribution(
         raise ValueError("samples must contain at least one sample.")
     if not motif_list:
         raise ValueError("motifs must contain at least one motif.")
-    if mode not in {"read_global", "region_anchored"}:
-        raise NotImplementedError(
-            "The first workflow slice implements mode='read_global' and "
-            "mode='region_anchored' only."
-        )
-    if len(sample_list) < 2:
-        raise ValueError("shared_cluster_distribution requires at least two datasets.")
-    if clusterer != "minibatch_kmeans":
-        raise NotImplementedError(
-            "The first workflow slice supports clusterer='minibatch_kmeans' only."
-        )
-    if signal_normalization not in _SUPPORTED_SIGNAL_NORMALIZATION:
-        raise ValueError(f"Unsupported signal_normalization: {signal_normalization}")
-    if feature_scaling not in _SUPPORTED_FEATURE_SCALING:
-        raise ValueError(f"Unsupported feature_scaling: {feature_scaling}")
-    if cluster_basis not in _SUPPORTED_CLUSTER_BASIS:
-        raise ValueError(f"Unsupported cluster_basis: {cluster_basis}")
+    _validate_shared_cluster_distribution_config(
+        mode=mode,
+        clusterer=clusterer,
+        signal_normalization=signal_normalization,
+        feature_scaling=feature_scaling,
+        cluster_basis=cluster_basis,
+        sample_count=len(sample_list),
+    )
 
     if mode == "region_anchored":
         if matched_regions is None:

@@ -214,7 +214,13 @@ def test_discovery_cluster_workflow_errors_when_no_hits_survive_selection(monkey
 
 
 def test_discovery_cluster_workflow_rejects_unknown_selection_mode(monkeypatch):
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    called = {"scan_genome": False}
+
+    def fake_scan_genome(*args, **kwargs):
+        called["scan_genome"] = True
+        raise AssertionError("scan_genome should not be called for invalid selection config")
+
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", fake_scan_genome)
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
 
     with pytest.raises(ValueError, match="Unsupported selection mode"):
@@ -226,6 +232,28 @@ def test_discovery_cluster_workflow_rejects_unknown_selection_mode(monkeypatch):
             clustering={"mode": "region_anchored", "n_clusters": 2},
             selection={"mode": "invalid"},
         )
+    assert called["scan_genome"] is False
+
+
+def test_discovery_cluster_workflow_rejects_invalid_clustering_config_before_scan(monkeypatch):
+    called = {"scan_genome": False}
+
+    def fake_scan_genome(*args, **kwargs):
+        called["scan_genome"] = True
+        raise AssertionError("scan_genome should not be called for invalid clustering config")
+
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", fake_scan_genome)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+
+    with pytest.raises(NotImplementedError, match="clusterer='minibatch_kmeans' only"):
+        workflows.discovery_cluster_workflow(
+            samples=_workflow_samples(),
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1500},
+            discovery={"window_size": 500, "step_size": 500},
+            clustering={"mode": "region_anchored", "clusterer": "agglomerative", "n_clusters": 2},
+        )
+    assert called["scan_genome"] is False
 
 
 def test_discovery_cluster_workflow_region_anchored_uses_serializable_matched_regions(monkeypatch):

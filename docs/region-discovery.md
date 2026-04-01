@@ -94,7 +94,7 @@ result = workflows.discovery_cluster_workflow(
 ```
 
 ```python
-bed_df = region_discovery.hits_to_bed(result.hits)
+bed_df = region_discovery.hits_to_bed(result.discovery.hits)
 bed_df.to_csv("discovered_hits.bed", sep="\t", header=False, index=False)
 ```
 
