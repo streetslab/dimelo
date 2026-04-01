@@ -126,6 +126,13 @@ def _pool_region_groups(evidence: pd.DataFrame, contrast: ContrastSpec) -> pd.Da
 
     for side, conditions in side_specs.items():
         side_evidence = evidence.loc[evidence["condition"].isin(conditions)].copy()
+        available_conditions = set(side_evidence["condition"].dropna().unique())
+        missing_conditions = sorted(set(conditions) - available_conditions)
+        if missing_conditions:
+            missing_display = ", ".join(missing_conditions)
+            raise ValueError(
+                f"Missing {side} evidence for requested condition(s): {missing_display}."
+            )
         pooled = (
             side_evidence.groupby(
                 ["region_id", "chromosome", "start", "end", "strand"],
@@ -157,7 +164,7 @@ def score_regions(
     analysis_unit: str = "ensemble_region",
     representation: str = "modified_fraction",
     signal_source: str = "pileup_counts",
-    test: str = "beta_binomial",
+    test: str = "effect_size_only",
     multiple_testing: str = "fdr_bh",
 ) -> RegionContrastResult:
     validate_region_contrast_request(
@@ -225,7 +232,6 @@ def score_regions(
     merged["log2_fc"] = (
         (merged["fraction"] + pseudocount) / (merged["reference_fraction"] + pseudocount)
     ).map(math.log2)
-    merged["abs_delta_fraction"] = merged["delta_fraction"].abs()
 
     integer_columns = [
         "numerator_modified_count",
@@ -237,8 +243,19 @@ def score_regions(
     ]
     merged[integer_columns] = merged[integer_columns].astype(int)
 
+    if representation == "modified_count":
+        merged["count"] = merged["numerator_modified_count"]
+        merged["reference_count"] = merged["denominator_modified_count"]
+        merged["delta_count"] = merged["count"] - merged["reference_count"]
+        merged["log2_fc_count"] = (
+            (merged["count"] + pseudocount) / (merged["reference_count"] + pseudocount)
+        ).map(math.log2)
+        merged["effect_size"] = merged["delta_count"].abs()
+    else:
+        merged["effect_size"] = merged["delta_fraction"].abs()
+
     regions_table = merged.sort_values(
-        by="abs_delta_fraction",
+        by="effect_size",
         ascending=False,
         kind="mergesort",
     ).reset_index(drop=True)
@@ -258,6 +275,8 @@ def score_regions(
         "denominator_valid_count",
         "denominator_replicate_n",
     ]
+    if representation == "modified_count":
+        summary_columns.extend(["count", "reference_count", "delta_count", "log2_fc_count"])
     summary = regions_table.loc[:, summary_columns].copy()
 
     contrast_metadata = contrast.metadata or {}
