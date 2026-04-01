@@ -223,7 +223,7 @@ def test_build_window_summary_from_regions_to_list(monkeypatch):
         captured["quiet"] = quiet
         captured["cores"] = cores
         captured["split_large_regions"] = split_large_regions
-        return [(5, 10), (1, 10)]
+        return [(5, 10), (0, 0)]
 
     monkeypatch.setattr(global_analysis, "tile_genome_windows", fake_tile_genome_windows)
     monkeypatch.setattr(
@@ -246,7 +246,7 @@ def test_build_window_summary_from_regions_to_list(monkeypatch):
     assert captured["regions"] == ["chr1:0-1000,.", "chr1:500-1500,."]
     assert captured["function_handle"].keywords["bedmethyl_file"] == "s1.bed.gz"
     assert captured["function_handle"].keywords["motif"] == "A,0"
-    assert summary["window_fraction"].tolist() == [0.5, 0.1]
+    assert summary["window_fraction"].tolist() == [0.5, 0.0]
 
 
 def test_compute_global_normalization_factors_from_summary():

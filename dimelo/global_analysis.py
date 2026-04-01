@@ -203,9 +203,7 @@ def build_window_summary(
             counts_by_window,
         ):
             window_fraction = (
-                float("nan")
-                if valid_count == 0
-                else modified_count / valid_count
+                0.0 if valid_count == 0 else modified_count / valid_count
             )
             rows.append(
                 {
