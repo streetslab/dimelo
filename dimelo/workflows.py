@@ -332,12 +332,13 @@ def discovery_cluster_workflow(
     clustering: dict[str, Any],
     selection: dict[str, Any] | None = None,
 ) -> RegionDiscoveryClusterResult:
+    sample_list = list(samples)
     selection_config = dict(selection or {})
     selection_mode = str(selection_config.get("mode", "top_n"))
     selection_top_n = selection_config.get("top_n")
 
     discovery_result = region_discovery.scan_genome(
-        samples=samples,
+        samples=sample_list,
         motifs=motifs,
         genome_sizes=genome_sizes,
         **discovery,
@@ -353,7 +354,7 @@ def discovery_cluster_workflow(
     selected_regions = region_discovery.hits_to_bed(selected_hits)
     matched_regions = _selected_regions_to_region_spec(selected_regions)
     clustering_result = shared_cluster_distribution(
-        samples=samples,
+        samples=sample_list,
         motifs=motifs,
         matched_regions=matched_regions,
         **clustering,

@@ -322,6 +322,36 @@ def test_discovery_cluster_workflow_artifact_params_keep_matched_regions_json_se
     assert result.clustering.metadata["cache_hits"] == {"s1": "s1.bed.gz", "s2": "s2.bed.gz"}
 
 
+def test_discovery_cluster_workflow_materializes_samples_iterable(monkeypatch):
+    captured = {}
+
+    def fake_discovery(*args, **kwargs):
+        captured["discovery_sample_ids"] = [sample.sample_id for sample in kwargs["samples"]]
+        return _mock_discovery_result(*args, **kwargs)
+
+    def fake_cluster(**kwargs):
+        captured["sample_ids"] = [sample.sample_id for sample in kwargs["samples"]]
+        return _mock_cluster_result(**kwargs)
+
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", fake_discovery)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", fake_cluster)
+
+    result = workflows.discovery_cluster_workflow(
+        samples=(sample for sample in _workflow_samples()),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2},
+        selection={"mode": "top_n", "top_n": 2},
+    )
+
+    assert result.discovery.hits.shape[0] == 3
+    assert result.clustering.model.mode == "region_anchored"
+    assert captured["discovery_sample_ids"] == ["s1", "s2"]
+    assert captured["sample_ids"] == ["s1", "s2"]
+    assert list(result.selected_regions["name"]) == ["chr1:0-500", "chr1:500-1000"]
+
+
 def test_shared_cluster_distribution_read_global(monkeypatch):
     fake_samples = [
         SampleSpec(sample_id="s1", condition="NS", extract_h5="s1.h5"),
