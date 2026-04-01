@@ -710,9 +710,144 @@ def test_score_regions_beta_binomial_ranks_by_adjusted_p_value(monkeypatch):
     assert result.summary.iloc[0]["rank"] == 1
 
 
+def test_score_regions_beta_binomial_uses_p_value_tiebreak_when_adjusted_values_match(
+    monkeypatch,
+):
+    contrast = ContrastSpec(
+        mode="pairwise",
+        numerator=["treated"],
+        denominator=["control"],
+    )
+    evidence = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "n1",
+                "condition": "treated",
+                "replicate": 1,
+                "modified_count": 8,
+                "valid_count": 10,
+                "mod_fraction": 0.8,
+            },
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "d1",
+                "condition": "control",
+                "replicate": 1,
+                "modified_count": 2,
+                "valid_count": 10,
+                "mod_fraction": 0.2,
+            },
+            {
+                "region_id": "reg2",
+                "chromosome": "chr2",
+                "start": 10,
+                "end": 20,
+                "strand": "-",
+                "sample_id": "n1",
+                "condition": "treated",
+                "replicate": 1,
+                "modified_count": 5,
+                "valid_count": 10,
+                "mod_fraction": 0.5,
+            },
+            {
+                "region_id": "reg2",
+                "chromosome": "chr2",
+                "start": 10,
+                "end": 20,
+                "strand": "-",
+                "sample_id": "d1",
+                "condition": "control",
+                "replicate": 1,
+                "modified_count": 4,
+                "valid_count": 10,
+                "mod_fraction": 0.4,
+            },
+        ]
+    )
+
+    monkeypatch.setattr(
+        region_contrasts,
+        "build_region_evidence_table",
+        lambda **kwargs: evidence.copy(),
+    )
+
+    original_add = region_contrasts._add_beta_binomial_scores
+
+    def fake_add_beta_binomial_scores(regions_table, *, multiple_testing):
+        scored = original_add(regions_table, multiple_testing=multiple_testing)
+        scored.loc[scored["region_id"] == "reg1", "p_value"] = 0.02
+        scored.loc[scored["region_id"] == "reg2", "p_value"] = 0.01
+        scored["adjusted_p_value"] = 0.05
+        return scored
+
+    monkeypatch.setattr(
+        region_contrasts,
+        "_add_beta_binomial_scores",
+        fake_add_beta_binomial_scores,
+    )
+
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions="regions.bed",
+        motifs=["A,0"],
+        contrast=contrast,
+        test="beta_binomial",
+    )
+
+    assert list(result.summary["region_id"]) == ["reg2", "reg1"]
+    assert list(result.summary["rank"]) == [1, 2]
+
+
 def test_beta_binomial_two_sided_p_value_rejects_invalid_counts():
     with pytest.raises(ValueError, match="modified_count"):
         region_contrasts._beta_binomial_two_sided_p_value(6, 5, 2.0, 2.0)
+
+
+@pytest.mark.parametrize(
+    ("denominator_modified_count", "denominator_valid_count"),
+    [
+        (-1, 5),
+        (3, -1),
+        (6, 5),
+    ],
+)
+def test_estimate_beta_binomial_prior_rejects_invalid_denominator_counts(
+    denominator_modified_count, denominator_valid_count
+):
+    with pytest.raises(ValueError):
+        region_contrasts._estimate_beta_binomial_prior(
+            denominator_modified_count,
+            denominator_valid_count,
+        )
+
+
+@pytest.mark.parametrize(
+    ("modified_count", "valid_count"),
+    [
+        (-1, 5),
+        (1, -1),
+    ],
+)
+def test_beta_binomial_two_sided_p_value_rejects_negative_counts(
+    modified_count, valid_count
+):
+    with pytest.raises(ValueError):
+        region_contrasts._beta_binomial_two_sided_p_value(
+            modified_count,
+            valid_count,
+            2.0,
+            2.0,
+        )
 
 
 def test_score_regions_rejects_missing_denominator_condition(monkeypatch):
