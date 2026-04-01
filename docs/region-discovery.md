@@ -127,7 +127,8 @@ The contract is intentionally simple:
 
 - `result.selected_regions` is the BED-style selected follow-up set
 - clustering receives a serializable region-spec derived from those rows
-- `result.contrasts` scores the same selected loci by default
+- clustering-side `region_id` values in the combined result are normalized to the same `chr:start-end,strand` key used by contrasts
+- `result.contrasts` scores the same selected loci by default, or `contrasts["regions"]` if you provide an explicit override
 - `result.metadata["full_scan_windows"]` carries the full discovery scan for context
 
 ```python

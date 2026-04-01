@@ -233,7 +233,7 @@ Use `parse_bam.pileup()` when you want defined-region abundance testing, and use
 
 For an end-to-end discovery-to-clustering run, use `workflows.discovery_cluster_workflow()`. It keeps discovery output in BED-style `selected_regions`, then derives the serializable region spec that `shared_cluster_distribution(..., matched_regions=...)` consumes.
 
-For discovery-to-clustering-to-contrast follow-up, use `workflows.discovery_cluster_contrast_workflow()`. It keeps discovery output in BED-style `selected_regions`, passes the derived serializable region spec into clustering, scores the same selected loci by default, and stores the full discovery scan in `metadata["full_scan_windows"]`.
+For discovery-to-clustering-to-contrast follow-up, use `workflows.discovery_cluster_contrast_workflow()`. It keeps discovery output in BED-style `selected_regions`, passes the derived serializable region spec into clustering, normalizes clustering-side `region_id` values to the same `chr:start-end,strand` key used by contrasts, scores the same selected loci by default, honors an explicit `contrasts["regions"]` override when provided, and stores the full discovery scan in `metadata["full_scan_windows"]`.
 
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
 

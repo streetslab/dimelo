@@ -374,6 +374,81 @@ def _selected_regions_to_region_spec(selected_regions: pd.DataFrame) -> list[str
     return region_spec
 
 
+def _normalize_region_id_value(
+    row: pd.Series,
+    *,
+    default_region_ids: dict[str, str],
+) -> Any:
+    region_id = row.get("region_id")
+    if pd.isna(region_id):
+        return region_id
+
+    region_id_str = str(region_id)
+    if region_id_str in default_region_ids:
+        return default_region_ids[region_id_str]
+
+    chrom = row.get("chromosome", row.get("chrom"))
+    start = row.get("start")
+    end = row.get("end")
+    if pd.notna(chrom) and pd.notna(start) and pd.notna(end):
+        strand = row.get("strand", ".")
+        strand_value = strand if strand in {"+", "-", "."} else "."
+        return f"{chrom}:{int(start)}-{int(end)},{strand_value}"
+
+    if "," in region_id_str:
+        region_core, strand = region_id_str.rsplit(",", 1)
+        strand_value = strand if strand in {"+", "-", "."} else "."
+        return f"{region_core},{strand_value}"
+
+    strand = row.get("strand")
+    if pd.notna(strand):
+        strand_value = str(strand)
+        if strand_value in {"+", "-", "."}:
+            return f"{region_id_str},{strand_value}"
+
+    return region_id_str
+
+
+def _normalize_cluster_region_ids(
+    clustering_result: SharedClusterResult,
+    *,
+    default_region_spec: list[str],
+) -> SharedClusterResult:
+    default_region_ids = {
+        region_id.rsplit(",", 1)[0]: region_id for region_id in default_region_spec
+    }
+
+    normalized_assignments = clustering_result.assignments.copy()
+    if "region_id" in normalized_assignments.columns:
+        normalized_assignments["region_id"] = normalized_assignments.apply(
+            _normalize_region_id_value,
+            axis=1,
+            default_region_ids=default_region_ids,
+        )
+
+    normalized_region_summaries = clustering_result.region_summaries
+    if normalized_region_summaries is not None and "region_id" in normalized_region_summaries.columns:
+        normalized_region_summaries = normalized_region_summaries.copy()
+        normalized_region_summaries["region_id"] = normalized_region_summaries.apply(
+            _normalize_region_id_value,
+            axis=1,
+            default_region_ids=default_region_ids,
+        )
+
+    return SharedClusterResult(
+        model=clustering_result.model,
+        assignments=normalized_assignments,
+        cluster_distribution=clustering_result.cluster_distribution,
+        condition_distribution=clustering_result.condition_distribution,
+        distribution_change=clustering_result.distribution_change,
+        cluster_profiles=clustering_result.cluster_profiles,
+        region_summaries=normalized_region_summaries,
+        plot_data=clustering_result.plot_data,
+        figures=clustering_result.figures,
+        metadata=clustering_result.metadata,
+    )
+
+
 def discovery_cluster_workflow(
     *,
     samples: Iterable[SampleSpec],
@@ -470,24 +545,33 @@ def discovery_cluster_contrast_workflow(
         clustering=clustering,
         selection=selection,
     )
-    selected_region_spec = _selected_regions_to_region_spec(
-        discovery_cluster_result.selected_regions
-    )
+    selected_region_spec = _selected_regions_to_region_spec(discovery_cluster_result.selected_regions)
+    contrast_regions = contrast_config.pop("regions", None)
+    contrast_scope = "selected"
+    if contrast_regions is None:
+        contrast_regions = selected_region_spec
+    else:
+        contrast_scope = "custom"
+
     contrast_result = region_contrasts.score_regions(
         samples=sample_list,
-        regions=selected_region_spec,
+        regions=contrast_regions,
         motifs=motif_list,
         **contrast_config,
+    )
+    normalized_clustering = _normalize_cluster_region_ids(
+        discovery_cluster_result.clustering,
+        default_region_spec=selected_region_spec,
     )
 
     return RegionDiscoveryClusterContrastResult(
         discovery=discovery_cluster_result.discovery,
-        clustering=discovery_cluster_result.clustering,
+        clustering=normalized_clustering,
         contrasts=contrast_result,
         selected_regions=discovery_cluster_result.selected_regions,
         metadata={
             **discovery_cluster_result.metadata,
-            "contrast_scope": "selected",
+            "contrast_scope": contrast_scope,
             "full_scan_windows": discovery_cluster_result.discovery.windows.copy(),
         },
     )

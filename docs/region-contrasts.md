@@ -109,7 +109,7 @@ sns.scatterplot(
 
 ## Discovery-Driven Follow-Up
 
-When discovery, clustering, and contrasts are chained together, the combined workflow keeps the selected loci as the follow-up contract:
+When discovery, clustering, and contrasts are chained together, the combined workflow uses the selected loci as the default follow-up contract:
 
 ```python
 from dimelo import workflows
@@ -140,5 +140,7 @@ The data contract is:
 
 - `result.selected_regions` is the BED-style follow-up set
 - clustering receives a serializable region-spec derived from those rows
+- clustering-side `result.clustering.assignments["region_id"]` and `result.clustering.region_summaries["region_id"]` are normalized to the same `chr:start-end,strand` key used by `result.contrasts`
 - `result.contrasts` scores the same selected loci by default
+- pass `contrasts={"regions": ...}` to override that default and set `result.metadata["contrast_scope"] == "custom"` instead
 - `result.metadata["full_scan_windows"]` keeps the full discovery table as context

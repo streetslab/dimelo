@@ -549,6 +549,114 @@ def test_discovery_cluster_contrast_workflow_scores_selected_regions_by_default(
     assert result.selected_regions["name"].tolist() == ["chr1:0-500", "chr1:500-1000"]
 
 
+def test_discovery_cluster_contrast_workflow_normalizes_clustering_region_ids_for_joining(
+    monkeypatch,
+):
+    def fake_cluster(**kwargs):
+        result = _mock_cluster_result(**kwargs)
+        result.assignments = pd.DataFrame(
+            [
+                {
+                    "region_id": "chr1:0-500",
+                    "sample_id": "s1",
+                    "condition": "NS",
+                    "cluster": "C0",
+                    "strand": "+",
+                },
+                {
+                    "region_id": "chr1:500-1000",
+                    "sample_id": "s2",
+                    "condition": "15min",
+                    "cluster": "C1",
+                    "strand": "-",
+                },
+            ]
+        )
+        result.region_summaries = pd.DataFrame(
+            [
+                {
+                    "region_id": "chr1:0-500",
+                    "sample_id": "s1",
+                    "condition": "NS",
+                    "cluster": "C0",
+                    "count": 1,
+                    "fraction": 1.0,
+                    "strand": "+",
+                },
+                {
+                    "region_id": "chr1:500-1000",
+                    "sample_id": "s2",
+                    "condition": "15min",
+                    "cluster": "C1",
+                    "count": 1,
+                    "fraction": 1.0,
+                    "strand": "-",
+                },
+            ]
+        )
+        return result
+
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", fake_cluster)
+    monkeypatch.setattr(workflows.region_contrasts, "score_regions", _mock_region_contrast_result)
+
+    result = workflows.discovery_cluster_contrast_workflow(
+        samples=_workflow_samples(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2},
+        contrasts={
+            "contrast": ContrastSpec(
+                mode="pairwise",
+                numerator=["15min"],
+                denominator=["NS"],
+            ),
+        },
+        selection={"mode": "top_n", "top_n": 2},
+    )
+
+    contrast_region_ids = set(result.contrasts.regions["region_id"])
+    assert set(result.clustering.assignments["region_id"]) == contrast_region_ids
+    assert set(result.clustering.region_summaries["region_id"]) == contrast_region_ids
+
+
+def test_discovery_cluster_contrast_workflow_uses_custom_contrast_regions_when_provided(
+    monkeypatch,
+):
+    captured = {}
+
+    def fake_score_regions(**kwargs):
+        captured["regions"] = kwargs["regions"]
+        return _mock_region_contrast_result(**kwargs)
+
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+    monkeypatch.setattr(workflows.region_contrasts, "score_regions", fake_score_regions)
+
+    custom_regions = ["chr2:0-100,+", "chr2:100-200,-"]
+    result = workflows.discovery_cluster_contrast_workflow(
+        samples=_workflow_samples(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2},
+        contrasts={
+            "contrast": ContrastSpec(
+                mode="pairwise",
+                numerator=["15min"],
+                denominator=["NS"],
+            ),
+            "regions": custom_regions,
+        },
+        selection={"mode": "top_n", "top_n": 2},
+    )
+
+    assert captured["regions"] == custom_regions
+    assert result.metadata["contrast_scope"] == "custom"
+    assert result.selected_regions["name"].tolist() == ["chr1:0-500", "chr1:500-1000"]
+
+
 def test_discovery_cluster_contrast_workflow_preserves_full_scan_windows_context(monkeypatch):
     monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
