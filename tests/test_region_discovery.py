@@ -72,6 +72,118 @@ def _mock_window_summary() -> pd.DataFrame:
     )
 
 
+def _mock_paired_window_summary() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "sample_id": "t1",
+                "condition": "targeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 10,
+                "valid_count": 20,
+                "window_fraction": 0.5,
+            },
+            {
+                "sample_id": "d1",
+                "condition": "nontargeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 4,
+                "valid_count": 20,
+                "window_fraction": 0.2,
+            },
+            {
+                "sample_id": "t2",
+                "condition": "targeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 6,
+                "valid_count": 20,
+                "window_fraction": 0.3,
+            },
+            {
+                "sample_id": "d2",
+                "condition": "nontargeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 2,
+                "valid_count": 20,
+                "window_fraction": 0.1,
+            },
+            {
+                "sample_id": "t3",
+                "condition": "targeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 100,
+                "valid_count": 100,
+                "window_fraction": 1.0,
+            },
+        ]
+    )
+
+
+def _paired_samplespecs() -> list[SampleSpec]:
+    return [
+        SampleSpec(
+            sample_id="t1",
+            condition="targeting",
+            extract_h5="t1.h5",
+            metadata={"pileup_path": "t1.bed.gz", "pair_id": "pair-1"},
+        ),
+        SampleSpec(
+            sample_id="d1",
+            condition="nontargeting",
+            extract_h5="d1.h5",
+            metadata={"pileup_path": "d1.bed.gz", "pair_id": "pair-1"},
+        ),
+        SampleSpec(
+            sample_id="t2",
+            condition="targeting",
+            extract_h5="t2.h5",
+            metadata={"pileup_path": "t2.bed.gz", "pair_id": "pair-2"},
+        ),
+        SampleSpec(
+            sample_id="d2",
+            condition="nontargeting",
+            extract_h5="d2.h5",
+            metadata={"pileup_path": "d2.bed.gz", "pair_id": "pair-2"},
+        ),
+        SampleSpec(
+            sample_id="t3",
+            condition="targeting",
+            extract_h5="t3.h5",
+            metadata={"pileup_path": "t3.bed.gz", "pair_id": "pair-3"},
+        ),
+    ]
+
+
 def _merge_helper_hits() -> pd.DataFrame:
     return pd.DataFrame(
         [
@@ -207,6 +319,49 @@ def test_scan_genome_basic_behavior_with_mocked_window_summary(monkeypatch):
         "contrast_numerator": ["treated"],
         "contrast_denominator": ["NS"],
     }
+
+
+def test_scan_genome_matched_pairwise_uses_only_complete_pairs(monkeypatch):
+    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_window_summary())
+
+    result = region_discovery.scan_genome(
+        samples=_paired_samplespecs(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1000},
+        window_size=500,
+        step_size=500,
+        contrast=ContrastSpec(
+            mode="matched_pairwise",
+            numerator=["targeting"],
+            denominator=["nontargeting"],
+            pairing_key="pair_id",
+        ),
+        score="effect_size_only",
+    )
+
+    assert result.metadata["pairing_policy"] == "complete_pairs_only"
+    assert result.metadata["n_pairs_used"] == 2
+    assert result.metadata["n_pairs_dropped"] == 1
+    assert result.windows.loc[0, "valid_count"] == 80
+    assert result.windows.loc[0, "score_value"] == pytest.approx(0.25)
+
+
+def test_scan_genome_time_course_errors_on_missing_pairing_key(monkeypatch):
+    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_window_summary())
+
+    with pytest.raises(ValueError, match="pairing_key"):
+        region_discovery.scan_genome(
+            samples=_paired_samplespecs(),
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1000},
+            window_size=500,
+            step_size=500,
+            contrast=ContrastSpec(
+                mode="time_course",
+                time_order=["0min", "15min"],
+            ),
+            score="effect_size_only",
+        )
 
 
 def test_merge_adjacent_hits_preserves_rank_order_and_merges_counts():
@@ -810,7 +965,7 @@ def test_scan_genome_raises_for_missing_contrast_condition(monkeypatch):
 
 
 def test_scan_genome_rejects_unimplemented_contrast_modes():
-    with pytest.raises(ValueError, match="pairwise/group_vs_group"):
+    with pytest.raises(ValueError, match="paired contrast modes"):
         region_discovery.scan_genome(
             samples=[],
             motifs=["A,0"],
@@ -818,10 +973,7 @@ def test_scan_genome_rejects_unimplemented_contrast_modes():
             window_size=1000,
             step_size=1000,
             contrast=ContrastSpec(
-                mode="matched_pairwise",
-                numerator=["treated"],
-                denominator=["NS"],
-                pairing_key="donor",
+                mode="single_dataset",
             ),
             score="effect_size_only",
             min_coverage=1,

@@ -133,6 +133,67 @@ def _validate_contrast_conditions(
         )
 
 
+def _pairing_policy_value(pairing_policy: str | None) -> str:
+    return pairing_policy or "complete_pairs_only"
+
+
+def _is_paired_contrast(contrast: ContrastSpec | None) -> bool:
+    return contrast is not None and contrast.mode in {"matched_pairwise", "time_course"}
+
+
+def _resolve_pair_ids(samples, pairing_key: str) -> dict[str, object]:
+    if not pairing_key:
+        raise ValueError("scan_genome paired discovery requires an explicit pairing_key.")
+
+    pair_ids: dict[str, object] = {}
+    for sample in samples:
+        metadata = sample.metadata or {}
+        if pairing_key not in metadata:
+            raise ValueError(
+                f"scan_genome paired discovery requires sample.metadata['{pairing_key}'] for every sample."
+            )
+        pair_ids[sample.sample_id] = metadata[pairing_key]
+    return pair_ids
+
+
+def _build_paired_window_table(
+    summary: pd.DataFrame,
+    *,
+    samples,
+    pairing_key: str | None,
+    required_conditions: list[str],
+    pairing_policy: str,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    sample_to_pair = _resolve_pair_ids(samples, pairing_key or "")
+
+    paired = summary.copy()
+    paired["pair_id"] = paired["sample_id"].map(sample_to_pair)
+    paired = paired.dropna(subset=["pair_id"])
+
+    pair_conditions = (
+        paired.loc[:, ["pair_id", "condition"]]
+        .drop_duplicates()
+        .groupby("pair_id")["condition"]
+        .agg(lambda values: set(values))
+    )
+    required_condition_set = set(required_conditions)
+    complete_pair_ids = [
+        pair_id for pair_id, conditions in pair_conditions.items() if required_condition_set.issubset(conditions)
+    ]
+    dropped_pair_count = int(len(pair_conditions) - len(complete_pair_ids))
+
+    if pairing_policy == "error_on_missing" and dropped_pair_count:
+        raise ValueError("scan_genome paired discovery found incomplete matched units.")
+    if not complete_pair_ids:
+        raise ValueError("scan_genome paired discovery found no complete matched units.")
+
+    paired = paired.loc[paired["pair_id"].isin(complete_pair_ids)].copy()
+    return paired, {
+        "n_pairs_used": len(complete_pair_ids),
+        "n_pairs_dropped": dropped_pair_count,
+    }
+
+
 def _score_with_contrast(
     window_totals: pd.DataFrame,
     condition_counts: pd.DataFrame,
@@ -540,9 +601,14 @@ def scan_genome(
         raise ValueError("scan_genome requires score in {'effect_size_only', 'beta_binomial'}.")
     if score == "beta_binomial" and contrast is None:
         raise ValueError("scan_genome score='beta_binomial' requires an explicit contrast.")
-    if contrast is not None and contrast.mode not in {"pairwise", "group_vs_group"}:
+    if contrast is not None and contrast.mode not in {
+        "pairwise",
+        "group_vs_group",
+        "matched_pairwise",
+        "time_course",
+    }:
         raise ValueError(
-            "scan_genome currently supports only pairwise/group_vs_group contrast modes."
+            "scan_genome currently supports only pairwise/group_vs_group and paired contrast modes."
         )
 
     window_summary = global_analysis.build_window_summary(
@@ -556,6 +622,20 @@ def scan_genome(
         quiet=quiet,
         cores=cores,
     )
+
+    pairing_metadata: dict[str, object] = {}
+    if _is_paired_contrast(contrast):
+        pairing_policy = _pairing_policy_value(None)
+        required_conditions = list(contrast.time_order or []) if contrast.mode == "time_course" else list(
+            dict.fromkeys((contrast.numerator or []) + (contrast.denominator or []))
+        )
+        window_summary, pairing_metadata = _build_paired_window_table(
+            window_summary,
+            samples=samples,
+            pairing_key=contrast.pairing_key,
+            required_conditions=required_conditions,
+            pairing_policy=pairing_policy,
+        )
 
     window_totals = _aggregate_window_counts(window_summary)
     condition_counts = _aggregate_condition_counts(window_summary)
@@ -616,6 +696,10 @@ def scan_genome(
         metadata["contrast_mode"] = contrast.mode
         metadata["contrast_numerator"] = list(contrast.numerator or [])
         metadata["contrast_denominator"] = list(contrast.denominator or [])
+    if pairing_metadata:
+        metadata["pairing_policy"] = _pairing_policy_value(None)
+        metadata["n_pairs_used"] = pairing_metadata["n_pairs_used"]
+        metadata["n_pairs_dropped"] = pairing_metadata["n_pairs_dropped"]
 
     return RegionDiscoveryResult(
         hits=hits.reset_index(drop=True),
