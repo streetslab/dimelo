@@ -6,7 +6,7 @@ import pytest
 from dimelo import global_analysis
 from dimelo.models import ContrastSpec, RegionDiscoveryResult, SampleSpec
 
-from dimelo import region_discovery
+from dimelo import region_contrasts, region_discovery
 
 
 def _mock_window_summary() -> pd.DataFrame:
@@ -247,6 +247,68 @@ def test_hits_to_bed_projects_required_columns_in_order():
         {"chrom": "chr1", "start": 0, "end": 200, "name": "chr1:0-200", "score": 300, "strand": "+"},
         {"chrom": "chr1", "start": 500, "end": 600, "name": "chr1:500-600", "score": 800, "strand": "-"},
     ]
+
+
+def test_discovery_bed_handoff_into_region_contrasts(tmp_path, monkeypatch):
+    hits = _merge_helper_hits()
+    bed_df = region_discovery.hits_to_bed(hits)
+    bed_path = tmp_path / "discovered_hits.bed"
+    bed_df.to_csv(bed_path, sep="\t", header=False, index=False)
+
+    counts_by_pileup = {
+        "s1.bed.gz": [(1, 10), (1, 10), (8, 10)],
+        "s2.bed.gz": [(9, 10), (2, 10), (1, 10)],
+    }
+
+    def fake_regions_to_list(function_handle, regions, window_size=None, quiet=True, cores=None, split_large_regions=False):
+        pileup_path = function_handle.keywords["bedmethyl_file"]
+        regions_dict = region_contrasts.utils.regions_dict_from_input(regions, window_size)
+        n_regions = sum(len(region_list) for region_list in regions_dict.values())
+        base_counts = counts_by_pileup[pileup_path]
+        if len(base_counts) >= n_regions:
+            return base_counts[:n_regions]
+        repeats = (n_regions // len(base_counts)) + 1
+        return (base_counts * repeats)[:n_regions]
+
+    monkeypatch.setattr(region_contrasts.load_processed, "regions_to_list", fake_regions_to_list)
+
+    samples = [
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            metadata={"pileup_path": "s1.bed.gz"},
+        ),
+        SampleSpec(
+            sample_id="s2",
+            condition="treated",
+            extract_h5="s2.h5",
+            metadata={"pileup_path": "s2.bed.gz"},
+        ),
+    ]
+    contrast = ContrastSpec(
+        mode="pairwise",
+        numerator=["treated"],
+        denominator=["NS"],
+        reference_condition="NS",
+    )
+
+    result = region_contrasts.score_regions(
+        samples=samples,
+        regions=bed_path,
+        motifs=["A,0"],
+        contrast=contrast,
+        test="effect_size_only",
+    )
+
+    assert len(result.regions) == 4
+    assert set(result.regions["region_id"]) == {
+        "chr2:100-200,+",
+        "chr1:0-100,+",
+        "chr1:101-200,+",
+        "chr1:500-600,-",
+    }
+    assert list(result.summary["rank"]) == [1, 2, 3, 4]
 
 
 def test_scan_genome_filters_low_coverage_windows(monkeypatch):
