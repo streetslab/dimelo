@@ -784,9 +784,17 @@ def scan_genome(
                 if column in window_table.columns
             ]
             window_table.loc[~covered_mask, paired_score_columns] = pd.NA
-            hits = _sort_hits_for_output(window_table.loc[covered_mask].copy())
+            covered_hits = ranked.merge(
+                window_totals.loc[:, _WINDOW_KEY_COLUMNS + ["modified_count", "valid_count", "window_fraction"]],
+                on=_WINDOW_KEY_COLUMNS,
+                how="left",
+                sort=False,
+            )
+            hits = covered_hits.loc[covered_hits["valid_count"] >= min_coverage].copy()
             if not hits.empty:
                 hits["rank"] = range(1, len(hits) + 1)
+                rank_lookup = hits.set_index("window_id")["rank"]
+                window_table["rank"] = window_table["window_id"].map(rank_lookup)
 
             plot_data = {
                 "window_score_table": window_table.copy(),

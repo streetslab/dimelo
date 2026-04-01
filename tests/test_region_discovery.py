@@ -741,6 +741,9 @@ def test_scan_genome_matched_pairwise_reranks_surviving_hits_after_coverage_filt
 
     assert list(result.hits["window_id"]) == ["chr1:500-1000", "chr1:1000-1500"]
     assert list(result.hits["rank"]) == [1, 2]
+    covered_windows = result.windows.loc[result.windows["valid_count"] >= 50]
+    assert list(covered_windows["window_id"]) == list(result.hits["window_id"])
+    assert list(covered_windows["rank"]) == list(result.hits["rank"])
 
 
 def test_scan_genome_matched_pairwise_rejects_merge_hits(monkeypatch):
