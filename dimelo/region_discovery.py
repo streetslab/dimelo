@@ -597,7 +597,7 @@ def scan_genome(
         "top_hits_table": hits.copy(),
     }
     metadata = {
-        "analysis_unit": "de_novo_window",
+        "analysis_unit": "ensemble_region",
         "representation": "modified_fraction",
         "signal_source": "pileup_counts",
         "score": score,

@@ -189,8 +189,24 @@ def test_scan_genome_basic_behavior_with_mocked_window_summary(monkeypatch):
     assert result.windows.loc[0, "score_value"] == pytest.approx(0.4)
     assert list(result.hits["rank"]) == [1, 2]
     assert list(result.hits["window_id"]) == ["chr1:0-1000", "chr1:1000-2000"]
-    assert set(result.plot_data) >= {"window_score_table", "top_hits_table"}
-    assert result.metadata["score"] == "effect_size_only"
+    assert set(result.plot_data) == {"window_score_table", "top_hits_table"}
+    assert result.metadata == {
+        "analysis_unit": "ensemble_region",
+        "representation": "modified_fraction",
+        "signal_source": "pileup_counts",
+        "score": "effect_size_only",
+        "window_size": 1000,
+        "step_size": 1000,
+        "min_coverage": 5,
+        "merge_hits": False,
+        "merge_distance": 0,
+        "motifs": ["A,0"],
+        "include_contigs": None,
+        "exclude_contigs": None,
+        "contrast_mode": "pairwise",
+        "contrast_numerator": ["treated"],
+        "contrast_denominator": ["NS"],
+    }
 
 
 def test_merge_adjacent_hits_preserves_rank_order_and_merges_counts():
