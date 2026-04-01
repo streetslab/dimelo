@@ -903,6 +903,333 @@ def test_build_paired_window_table_collapses_duplicate_rows():
     assert pairing_meta == {"n_pairs_used": 2, "n_pairs_dropped": 1}
 
 
+def _paired_time_course_samplespecs() -> list[SampleSpec]:
+    return [
+        SampleSpec(
+            sample_id="tp1_0",
+            condition="0min",
+            extract_h5="tp1_0.h5",
+            metadata={"pileup_path": "tp1_0.bed.gz", "pair_id": "pair-1"},
+        ),
+        SampleSpec(
+            sample_id="tp1_15",
+            condition="15min",
+            extract_h5="tp1_15.h5",
+            metadata={"pileup_path": "tp1_15.bed.gz", "pair_id": "pair-1"},
+        ),
+        SampleSpec(
+            sample_id="tp1_30",
+            condition="30min",
+            extract_h5="tp1_30.h5",
+            metadata={"pileup_path": "tp1_30.bed.gz", "pair_id": "pair-1"},
+        ),
+        SampleSpec(
+            sample_id="tp2_0",
+            condition="0min",
+            extract_h5="tp2_0.h5",
+            metadata={"pileup_path": "tp2_0.bed.gz", "pair_id": "pair-2"},
+        ),
+        SampleSpec(
+            sample_id="tp2_15",
+            condition="15min",
+            extract_h5="tp2_15.h5",
+            metadata={"pileup_path": "tp2_15.bed.gz", "pair_id": "pair-2"},
+        ),
+        SampleSpec(
+            sample_id="tp2_30",
+            condition="30min",
+            extract_h5="tp2_30.h5",
+            metadata={"pileup_path": "tp2_30.bed.gz", "pair_id": "pair-2"},
+        ),
+        SampleSpec(
+            sample_id="tp3_0",
+            condition="0min",
+            extract_h5="tp3_0.h5",
+            metadata={"pileup_path": "tp3_0.bed.gz", "pair_id": "pair-3"},
+        ),
+        SampleSpec(
+            sample_id="tp3_15",
+            condition="15min",
+            extract_h5="tp3_15.h5",
+            metadata={"pileup_path": "tp3_15.bed.gz", "pair_id": "pair-3"},
+        ),
+    ]
+
+
+def _mock_paired_time_course_window_summary() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "sample_id": "tp1_0",
+                "condition": "0min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 2,
+                "valid_count": 10,
+                "window_fraction": 0.2,
+            },
+            {
+                "sample_id": "tp1_15",
+                "condition": "15min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 7,
+                "valid_count": 10,
+                "window_fraction": 0.7,
+            },
+            {
+                "sample_id": "tp1_30",
+                "condition": "30min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 8,
+                "valid_count": 10,
+                "window_fraction": 0.8,
+            },
+            {
+                "sample_id": "tp2_0",
+                "condition": "0min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 1,
+                "valid_count": 10,
+                "window_fraction": 0.1,
+            },
+            {
+                "sample_id": "tp2_15",
+                "condition": "15min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 6,
+                "valid_count": 10,
+                "window_fraction": 0.6,
+            },
+            {
+                "sample_id": "tp2_30",
+                "condition": "30min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 6,
+                "valid_count": 10,
+                "window_fraction": 0.6,
+            },
+            {
+                "sample_id": "tp3_0",
+                "condition": "0min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 3,
+                "valid_count": 10,
+                "window_fraction": 0.3,
+            },
+            {
+                "sample_id": "tp3_15",
+                "condition": "15min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 5,
+                "valid_count": 10,
+                "window_fraction": 0.5,
+            },
+            {
+                "sample_id": "tp1_0",
+                "condition": "0min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 1,
+                "valid_count": 10,
+                "window_fraction": 0.1,
+            },
+            {
+                "sample_id": "tp1_15",
+                "condition": "15min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 2,
+                "valid_count": 10,
+                "window_fraction": 0.2,
+            },
+            {
+                "sample_id": "tp1_30",
+                "condition": "30min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 4,
+                "valid_count": 10,
+                "window_fraction": 0.4,
+            },
+            {
+                "sample_id": "tp2_0",
+                "condition": "0min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 2,
+                "valid_count": 10,
+                "window_fraction": 0.2,
+            },
+            {
+                "sample_id": "tp2_15",
+                "condition": "15min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 3,
+                "valid_count": 10,
+                "window_fraction": 0.3,
+            },
+            {
+                "sample_id": "tp2_30",
+                "condition": "30min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 3,
+                "valid_count": 10,
+                "window_fraction": 0.3,
+            },
+            {
+                "sample_id": "tp3_0",
+                "condition": "0min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 4,
+                "valid_count": 10,
+                "window_fraction": 0.4,
+            },
+            {
+                "sample_id": "tp3_15",
+                "condition": "15min",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 6,
+                "valid_count": 10,
+                "window_fraction": 0.6,
+            },
+        ]
+    )
+
+
+def test_scan_genome_time_course_ranks_by_trajectory_amplitude_mean(monkeypatch):
+    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_time_course_window_summary())
+
+    result = region_discovery.scan_genome(
+        samples=_paired_time_course_samplespecs(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1000},
+        window_size=500,
+        step_size=500,
+        contrast=ContrastSpec(
+            mode="time_course",
+            time_order=["0min", "15min", "30min"],
+            pairing_key="pair_id",
+        ),
+        score="effect_size_only",
+    )
+
+    assert result.hits.loc[0, "trajectory_amplitude_mean"] == pytest.approx(0.55)
+    assert result.hits.loc[0, "trajectory_amplitude_sd"] == pytest.approx(0.05)
+    assert result.metadata["paired_mode"] == "time_course"
+    assert result.metadata["time_order"] == ["0min", "15min", "30min"]
+    assert result.metadata["rank_by"] == "trajectory_amplitude_mean"
+
+
+def test_scan_genome_time_course_errors_when_time_order_conditions_are_missing(monkeypatch):
+    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_time_course_window_summary())
+
+    with pytest.raises(ValueError, match="time_order"):
+        region_discovery.scan_genome(
+            samples=_paired_time_course_samplespecs(),
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1000},
+            window_size=500,
+            step_size=500,
+            contrast=ContrastSpec(
+                mode="time_course",
+                time_order=["0min", "15min", "60min"],
+                pairing_key="pair_id",
+            ),
+            score="effect_size_only",
+        )
+
+
 def test_scan_genome_time_course_errors_on_missing_pairing_key(monkeypatch):
     monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_window_summary())
 

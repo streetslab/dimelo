@@ -290,6 +290,69 @@ def _score_matched_pairwise(
     return scored
 
 
+def _validate_time_order(paired_window_table: pd.DataFrame, time_order: list[str]) -> None:
+    available_conditions = set(paired_window_table["condition"].dropna().tolist())
+    missing = [condition for condition in time_order if condition not in available_conditions]
+    if missing:
+        raise ValueError(
+            "scan_genome paired time_course requested missing time_order condition(s): "
+            + ", ".join(missing)
+        )
+
+
+def _score_paired_time_course(
+    paired_window_table: pd.DataFrame,
+    *,
+    time_order: list[str],
+) -> pd.DataFrame:
+    if paired_window_table.empty:
+        scored = pd.DataFrame(columns=_WINDOW_KEY_COLUMNS)
+        scored["trajectory_amplitude_mean"] = pd.Series(dtype="float64")
+        scored["trajectory_amplitude_sd"] = pd.Series(dtype="float64")
+        scored["n_pairs_used"] = pd.Series(dtype="int64")
+        scored["score_value"] = pd.Series(dtype="float64")
+        scored["p_value"] = pd.Series(dtype="object")
+        scored["adjusted_p_value"] = pd.Series(dtype="object")
+        return scored
+
+    _validate_time_order(paired_window_table, time_order)
+
+    ordered = paired_window_table.copy()
+    ordered["condition"] = pd.Categorical(
+        ordered["condition"],
+        categories=time_order,
+        ordered=True,
+    )
+    ordered = ordered.sort_values(
+        by=_WINDOW_KEY_COLUMNS + ["pair_id", "condition"],
+        ascending=[True] * (len(_WINDOW_KEY_COLUMNS) + 2),
+        kind="mergesort",
+        na_position="last",
+    ).reset_index(drop=True)
+
+    per_pair = (
+        ordered.groupby(_WINDOW_KEY_COLUMNS + ["pair_id"], as_index=False, sort=False)
+        .agg(
+            trajectory_amplitude=("window_fraction", lambda values: float(values.max() - values.min())),
+        )
+        .copy()
+    )
+
+    scored = (
+        per_pair.groupby(_WINDOW_KEY_COLUMNS, as_index=False, sort=False)
+        .agg(
+            trajectory_amplitude_mean=("trajectory_amplitude", "mean"),
+            trajectory_amplitude_sd=("trajectory_amplitude", lambda values: float(values.std(ddof=0))),
+            n_pairs_used=("pair_id", "nunique"),
+        )
+        .copy()
+    )
+    scored["score_value"] = scored["trajectory_amplitude_mean"]
+    scored["p_value"] = pd.NA
+    scored["adjusted_p_value"] = pd.NA
+    return scored
+
+
 def _score_with_contrast(
     window_totals: pd.DataFrame,
     condition_counts: pd.DataFrame,
@@ -725,6 +788,22 @@ def scan_genome(
     active_pairing_policy = _pairing_policy_value(pairing_policy)
     active_rank_by = rank_by
     if _is_paired_contrast(contrast):
+        if contrast.mode == "time_course":
+            if not contrast.pairing_key:
+                raise ValueError("scan_genome paired discovery requires an explicit pairing_key.")
+            active_rank_by = active_rank_by or "trajectory_amplitude_mean"
+            if active_rank_by != "trajectory_amplitude_mean":
+                raise ValueError(
+                    "scan_genome time_course currently supports rank_by='trajectory_amplitude_mean'."
+                )
+            time_order = list(dict.fromkeys(contrast.time_order or []))
+            available_conditions = set(window_summary["condition"].dropna().tolist())
+            missing_time_order = [condition for condition in time_order if condition not in available_conditions]
+            if missing_time_order:
+                raise ValueError(
+                    "scan_genome paired time_course requested missing time_order condition(s): "
+                    + ", ".join(missing_time_order)
+                )
         if contrast.mode == "matched_pairwise":
             numerator_conditions = list(contrast.numerator or [])
             denominator_conditions = list(contrast.denominator or [])
@@ -820,6 +899,89 @@ def scan_genome(
                 "n_pairs_used": pairing_metadata["n_pairs_used"],
                 "n_pairs_dropped": pairing_metadata["n_pairs_dropped"],
                 "paired_mode": contrast.mode,
+                "rank_by": active_rank_by,
+            }
+            return RegionDiscoveryResult(
+                hits=hits.reset_index(drop=True),
+                windows=window_table.reset_index(drop=True),
+                contrast=contrast,
+                plot_data=plot_data,
+                metadata=metadata,
+                figures={},
+            )
+        if contrast.mode == "time_course":
+            if score != "effect_size_only":
+                raise ValueError("scan_genome time_course currently supports score='effect_size_only'.")
+            if merge_hits:
+                raise ValueError("scan_genome time_course does not support merge_hits=True.")
+            time_order = list(dict.fromkeys(contrast.time_order or []))
+            window_totals = _aggregate_window_counts(window_summary)
+            scored = _score_paired_time_course(window_summary, time_order=time_order)
+            ranked = _rank_windows(scored, score=score)
+            scored_columns = [
+                column
+                for column in ranked.columns
+                if column not in _WINDOW_KEY_COLUMNS
+                and column not in {"modified_count", "valid_count", "window_fraction"}
+            ]
+            window_table = window_totals.merge(
+                ranked.loc[:, _WINDOW_KEY_COLUMNS + scored_columns],
+                on=_WINDOW_KEY_COLUMNS,
+                how="left",
+                sort=False,
+            )
+            covered_mask = window_table["valid_count"] >= min_coverage
+            paired_score_columns = [
+                column
+                for column in [
+                    "trajectory_amplitude_mean",
+                    "trajectory_amplitude_sd",
+                    "n_pairs_used",
+                    "score_value",
+                    "p_value",
+                    "adjusted_p_value",
+                    "rank",
+                ]
+                if column in window_table.columns
+            ]
+            window_table.loc[~covered_mask, paired_score_columns] = pd.NA
+            covered_hits = ranked.merge(
+                window_totals.loc[:, _WINDOW_KEY_COLUMNS + ["modified_count", "valid_count", "window_fraction"]],
+                on=_WINDOW_KEY_COLUMNS,
+                how="left",
+                sort=False,
+            )
+            hits = covered_hits.loc[covered_hits["valid_count"] >= min_coverage].copy()
+            if not hits.empty:
+                hits["rank"] = range(1, len(hits) + 1)
+                rank_lookup = hits.set_index("window_id")["rank"]
+                window_table["rank"] = window_table["window_id"].map(rank_lookup)
+
+            plot_data = {
+                "window_score_table": window_table.copy(),
+                "top_hits_table": hits.copy(),
+            }
+            metadata = {
+                "analysis_unit": "ensemble_region",
+                "representation": "modified_fraction",
+                "signal_source": "pileup_counts",
+                "score": score,
+                "window_size": window_size,
+                "step_size": step_size,
+                "min_coverage": min_coverage,
+                "merge_hits": merge_hits,
+                "merge_distance": merge_distance,
+                "motifs": motif_list,
+                "include_contigs": list(include_contigs) if include_contigs is not None else None,
+                "exclude_contigs": list(exclude_contigs) if exclude_contigs is not None else None,
+                "contrast_mode": contrast.mode,
+                "contrast_numerator": list(contrast.numerator or []),
+                "contrast_denominator": list(contrast.denominator or []),
+                "pairing_policy": active_pairing_policy,
+                "n_pairs_used": pairing_metadata["n_pairs_used"],
+                "n_pairs_dropped": pairing_metadata["n_pairs_dropped"],
+                "paired_mode": contrast.mode,
+                "time_order": time_order,
                 "rank_by": active_rank_by,
             }
             return RegionDiscoveryResult(
