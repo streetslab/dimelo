@@ -368,6 +368,28 @@ def test_scan_genome_matched_pairwise_uses_only_complete_pairs(monkeypatch):
     assert result.windows.loc[0, "score_value"] == pytest.approx(0.25)
 
 
+def test_build_paired_window_table_collapses_duplicate_rows():
+    paired_table, pairing_meta = region_discovery._build_paired_window_table(
+        _mock_paired_window_summary(),
+        samples=_paired_samplespecs(),
+        pairing_key="pair_id",
+        required_conditions=["targeting", "nontargeting"],
+        pairing_policy="complete_pairs_only",
+    )
+
+    collapsed = paired_table.loc[
+        (paired_table["window_id"] == "chr1:0-500")
+        & (paired_table["pair_id"] == "pair-1")
+        & (paired_table["condition"] == "targeting")
+    ]
+
+    assert len(collapsed) == 1
+    assert collapsed.iloc[0]["modified_count"] == 14
+    assert collapsed.iloc[0]["valid_count"] == 30
+    assert collapsed.iloc[0]["window_fraction"] == pytest.approx(14 / 30)
+    assert pairing_meta == {"n_pairs_used": 2, "n_pairs_dropped": 1}
+
+
 def test_scan_genome_time_course_errors_on_missing_pairing_key(monkeypatch):
     monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_window_summary())
 
