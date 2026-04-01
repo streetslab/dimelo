@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from dimelo import region_contrasts
-from dimelo.models import SampleSpec
+from dimelo.models import ContrastSpec, SampleSpec
 
 
 def test_validate_supported_v1_combination():
@@ -135,3 +135,231 @@ def test_build_region_evidence_table_from_pileup_counts(monkeypatch):
     )
 
     pd.testing.assert_frame_equal(evidence.reset_index(drop=True), expected)
+
+
+def test_score_regions_effect_size_only_pairwise_ranks_largest_delta_first(monkeypatch):
+    contrast = ContrastSpec(
+        mode="pairwise",
+        numerator=["treated"],
+        denominator=["control"],
+    )
+    evidence = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "n1",
+                "condition": "treated",
+                "replicate": 1,
+                "modified_count": 8,
+                "valid_count": 10,
+                "mod_fraction": 0.8,
+            },
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "d1",
+                "condition": "control",
+                "replicate": 1,
+                "modified_count": 2,
+                "valid_count": 10,
+                "mod_fraction": 0.2,
+            },
+            {
+                "region_id": "reg2",
+                "chromosome": "chr2",
+                "start": 10,
+                "end": 20,
+                "strand": "-",
+                "sample_id": "n1",
+                "condition": "treated",
+                "replicate": 1,
+                "modified_count": 6,
+                "valid_count": 10,
+                "mod_fraction": 0.6,
+            },
+            {
+                "region_id": "reg2",
+                "chromosome": "chr2",
+                "start": 10,
+                "end": 20,
+                "strand": "-",
+                "sample_id": "d1",
+                "condition": "control",
+                "replicate": 1,
+                "modified_count": 4,
+                "valid_count": 10,
+                "mod_fraction": 0.4,
+            },
+        ]
+    )
+
+    monkeypatch.setattr(
+        region_contrasts,
+        "build_region_evidence_table",
+        lambda **kwargs: evidence.copy(),
+    )
+
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions="regions.bed",
+        motifs=["A,0"],
+        contrast=contrast,
+        test="effect_size_only",
+    )
+
+    expected_summary = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "fraction": 0.8,
+                "reference_fraction": 0.2,
+                "delta_fraction": 0.6,
+                "rank": 1,
+            },
+            {
+                "region_id": "reg2",
+                "fraction": 0.6,
+                "reference_fraction": 0.4,
+                "delta_fraction": 0.2,
+                "rank": 2,
+            },
+        ]
+    )
+
+    actual_summary = result.summary[
+        [
+            "region_id",
+            "fraction",
+            "reference_fraction",
+            "delta_fraction",
+            "log2_fc",
+            "rank",
+        ]
+    ].reset_index(drop=True)
+
+    pd.testing.assert_frame_equal(
+        actual_summary.drop(columns=["log2_fc"]),
+        expected_summary,
+    )
+    assert actual_summary.loc[0, "log2_fc"] == pytest.approx(1.99999459)
+    assert actual_summary.loc[1, "log2_fc"] == pytest.approx(0.58496124)
+    assert list(result.regions["region_id"]) == ["reg1", "reg2"]
+    assert set(result.plot_data) == {"region_effect_sizes"}
+    assert result.metadata["contrast_mode"] == "pairwise"
+
+
+def test_score_regions_effect_size_only_group_vs_group_pools_conditions(monkeypatch):
+    contrast = ContrastSpec(
+        mode="group_vs_group",
+        numerator=["treated_a", "treated_b"],
+        denominator=["control_a", "control_b"],
+    )
+    evidence = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "n1",
+                "condition": "treated_a",
+                "replicate": 1,
+                "modified_count": 4,
+                "valid_count": 10,
+                "mod_fraction": 0.4,
+            },
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "n2",
+                "condition": "treated_b",
+                "replicate": 1,
+                "modified_count": 8,
+                "valid_count": 10,
+                "mod_fraction": 0.8,
+            },
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "d1",
+                "condition": "control_a",
+                "replicate": 1,
+                "modified_count": 2,
+                "valid_count": 10,
+                "mod_fraction": 0.2,
+            },
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "d2",
+                "condition": "control_b",
+                "replicate": 1,
+                "modified_count": 4,
+                "valid_count": 10,
+                "mod_fraction": 0.4,
+            },
+        ]
+    )
+
+    monkeypatch.setattr(
+        region_contrasts,
+        "build_region_evidence_table",
+        lambda **kwargs: evidence.copy(),
+    )
+
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions="regions.bed",
+        motifs=["A,0"],
+        contrast=contrast,
+        test="effect_size_only",
+    )
+
+    summary_row = result.summary.iloc[0]
+    assert summary_row["region_id"] == "reg1"
+    assert summary_row["fraction"] == pytest.approx(0.6)
+    assert summary_row["reference_fraction"] == pytest.approx(0.3)
+    assert summary_row["delta_fraction"] == pytest.approx(0.3)
+    assert summary_row["numerator_replicate_n"] == 2
+    assert summary_row["denominator_replicate_n"] == 2
+
+
+def test_score_regions_effect_size_only_rejects_unsupported_contrast_mode(monkeypatch):
+    contrast = ContrastSpec(
+        mode="matched_pairwise",
+        numerator=["treated"],
+        denominator=["control"],
+        pairing_key="donor_id",
+    )
+
+    monkeypatch.setattr(
+        region_contrasts,
+        "build_region_evidence_table",
+        lambda **kwargs: pd.DataFrame(),
+    )
+
+    with pytest.raises(NotImplementedError, match="matched_pairwise"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions="regions.bed",
+            motifs=["A,0"],
+            contrast=contrast,
+            test="effect_size_only",
+        )
