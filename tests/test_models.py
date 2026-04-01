@@ -11,6 +11,7 @@ from dimelo.models import (
     GlobalAnalysisResult,
     DatasetArtifact,
     SampleSpec,
+    RegionDiscoveryResult,
     RegionContrastResult,
     SharedClusterModel,
     SharedClusterResult,
@@ -351,6 +352,44 @@ def test_region_contrast_result_rejects_none_contrast():
             contrast=None,
             plot_data={"volcano": pd.DataFrame({"x": [1.0]})},
         )
+
+
+def test_region_discovery_result_accepts_tables_and_plot_data():
+    result = RegionDiscoveryResult(
+        hits=pd.DataFrame({"region": ["chr1:0-1000"]}),
+        windows=pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+        contrast=None,
+        plot_data={
+            "ranked_hits": pd.DataFrame({"region": ["chr1:0-1000"]}),
+            "summary": {"kind": "table"},
+        },
+        metadata={"analysis_unit": "genome"},
+        figures={"hit_track": object()},
+    )
+
+    assert list(result.hits["region"]) == ["chr1:0-1000"]
+    assert list(result.windows["window_id"]) == ["chr1:0-1000"]
+    assert result.plot_data["summary"] == {"kind": "table"}
+    assert result.metadata == {"analysis_unit": "genome"}
+
+
+@pytest.mark.parametrize("field_name", ["hits", "windows", "plot_data"])
+def test_region_discovery_result_rejects_missing_required_fields(field_name):
+    kwargs = {
+        "hits": pd.DataFrame({"region": ["chr1:0-1000"]}),
+        "windows": pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+        "contrast": None,
+        "plot_data": {
+            "ranked_hits": pd.DataFrame({"region": ["chr1:0-1000"]}),
+            "summary": {"kind": "table"},
+        },
+        "metadata": {"analysis_unit": "genome"},
+        "figures": {},
+    }
+    kwargs[field_name] = None
+
+    with pytest.raises(ValueError, match=field_name):
+        RegionDiscoveryResult(**kwargs)
 
 
 def test_cohort_spec_stores_workflow_and_params():

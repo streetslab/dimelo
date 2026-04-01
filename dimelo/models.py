@@ -175,6 +175,29 @@ class RegionContrastResult:
 
 
 @dataclass
+class RegionDiscoveryResult:
+    hits: pd.DataFrame
+    windows: pd.DataFrame
+    contrast: ContrastSpec | None
+    plot_data: dict[str, pd.DataFrame | dict[str, Any]]
+    metadata: dict[str, Any] = field(default_factory=dict)
+    figures: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        required_fields = {
+            "hits": self.hits,
+            "windows": self.windows,
+            "plot_data": self.plot_data,
+        }
+        missing = [name for name, value in required_fields.items() if value is None]
+        if missing:
+            raise ValueError(
+                "RegionDiscoveryResult requires non-None values for: "
+                f"{', '.join(missing)}"
+            )
+
+
+@dataclass
 class CohortSpec:
     cohort_id: str
     sample_ids: list[str]
