@@ -12,7 +12,7 @@
 
 ```python
 from dimelo import region_discovery
-from dimelo.models import SampleSpec
+from dimelo.models import ContrastSpec, SampleSpec
 
 result = region_discovery.scan_genome(
     samples=[
@@ -33,6 +33,12 @@ result = region_discovery.scan_genome(
     genome_sizes={"chr1": 248956422},
     window_size=2000,
     step_size=500,
+    contrast=ContrastSpec(
+        mode="pairwise",
+        numerator=["treated"],
+        denominator=["NS"],
+        reference_condition="NS",
+    ),
     score="beta_binomial",
     min_coverage=10,
 )
@@ -47,7 +53,11 @@ The canonical outputs are data-first:
 
 ## Handoff Guidance
 
-- For formal region testing, convert discovered hits into BED and pass them into `region_contrasts.score_regions(...)`.
+- For formal region testing, convert discovered hits into BED and write them to disk before passing the BED path into `region_contrasts.score_regions(...)`.
 - For downstream clustering, use the discovered loci to focus the region set before running the clustering workflow.
 - Keep discovery and contrast roles separate: discovery finds candidates, contrasts tests known regions, and clustering explains state mixtures.
 
+```python
+bed_df = region_discovery.hits_to_bed(result.hits)
+bed_df.to_csv("discovered_hits.bed", sep="\t", header=False, index=False)
+```

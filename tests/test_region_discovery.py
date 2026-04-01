@@ -766,6 +766,19 @@ def test_scan_genome_rejects_unimplemented_contrast_modes():
         )
 
 
+def test_scan_genome_beta_binomial_requires_explicit_contrast():
+    with pytest.raises(ValueError, match="requires an explicit contrast"):
+        region_discovery.scan_genome(
+            samples=[],
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1000},
+            window_size=1000,
+            step_size=1000,
+            score="beta_binomial",
+            min_coverage=1,
+        )
+
+
 def test_scan_genome_reranks_hits_after_min_coverage_filtering(monkeypatch):
     def fake_build_window_summary(**kwargs):
         return pd.DataFrame(
