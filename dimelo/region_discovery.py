@@ -203,6 +203,93 @@ def _build_paired_window_table(
     }
 
 
+def _score_matched_pairwise(
+    paired_window_table: pd.DataFrame,
+    *,
+    contrast: ContrastSpec,
+    rank_by: str = "mean_abs_delta",
+) -> pd.DataFrame:
+    if rank_by != "mean_abs_delta":
+        raise ValueError("scan_genome matched_pairwise currently supports rank_by='mean_abs_delta'.")
+
+    numerator = paired_window_table.loc[
+        paired_window_table["condition"].isin(contrast.numerator or [])
+    ].copy()
+    denominator = paired_window_table.loc[
+        paired_window_table["condition"].isin(contrast.denominator or [])
+    ].copy()
+
+    if numerator.empty or denominator.empty:
+        scored = pd.DataFrame(columns=_WINDOW_KEY_COLUMNS)
+        scored["mean_delta"] = pd.Series(dtype="float64")
+        scored["mean_abs_delta"] = pd.Series(dtype="float64")
+        scored["delta_sd"] = pd.Series(dtype="float64")
+        scored["sign_agreement"] = pd.Series(dtype="float64")
+        scored["n_pairs_used"] = pd.Series(dtype="int64")
+        scored["score_value"] = pd.Series(dtype="float64")
+        scored["p_value"] = pd.Series(dtype="object")
+        scored["adjusted_p_value"] = pd.Series(dtype="object")
+        return scored
+
+    numerator = numerator.rename(
+        columns={
+            "modified_count": "numerator_modified_count",
+            "valid_count": "numerator_valid_count",
+            "window_fraction": "numerator_fraction",
+        }
+    )
+    denominator = denominator.rename(
+        columns={
+            "modified_count": "denominator_modified_count",
+            "valid_count": "denominator_valid_count",
+            "window_fraction": "denominator_fraction",
+        }
+    )
+
+    merged = numerator.merge(
+        denominator[
+            _WINDOW_KEY_COLUMNS
+            + ["pair_id", "denominator_modified_count", "denominator_valid_count", "denominator_fraction"]
+        ],
+        on=_WINDOW_KEY_COLUMNS + ["pair_id"],
+        how="inner",
+    )
+    if merged.empty:
+        scored = pd.DataFrame(columns=_WINDOW_KEY_COLUMNS)
+        scored["mean_delta"] = pd.Series(dtype="float64")
+        scored["mean_abs_delta"] = pd.Series(dtype="float64")
+        scored["delta_sd"] = pd.Series(dtype="float64")
+        scored["sign_agreement"] = pd.Series(dtype="float64")
+        scored["n_pairs_used"] = pd.Series(dtype="int64")
+        scored["score_value"] = pd.Series(dtype="float64")
+        scored["p_value"] = pd.Series(dtype="object")
+        scored["adjusted_p_value"] = pd.Series(dtype="object")
+        return scored
+
+    merged["delta"] = merged["numerator_fraction"] - merged["denominator_fraction"]
+
+    scored = (
+        merged.groupby(_WINDOW_KEY_COLUMNS, as_index=False, sort=False)
+        .agg(
+            mean_delta=("delta", "mean"),
+            mean_abs_delta=("delta", lambda values: float(values.abs().mean())),
+            delta_sd=("delta", lambda values: float(values.std(ddof=0))),
+            sign_agreement=(
+                "delta",
+                lambda values: float(
+                    max((values.gt(0)).mean(), (values.lt(0)).mean()) if len(values) else 0.0
+                ),
+            ),
+            n_pairs_used=("pair_id", "nunique"),
+        )
+        .copy()
+    )
+    scored["score_value"] = scored["mean_abs_delta"]
+    scored["p_value"] = pd.NA
+    scored["adjusted_p_value"] = pd.NA
+    return scored
+
+
 def _score_with_contrast(
     window_totals: pd.DataFrame,
     condition_counts: pd.DataFrame,
@@ -602,6 +689,8 @@ def scan_genome(
     merge_distance: int = 0,
     score: str = "effect_size_only",
     contrast: ContrastSpec | None = None,
+    pairing_policy: str | None = None,
+    rank_by: str | None = None,
     quiet: bool = True,
     cores: int | None = None,
 ) -> RegionDiscoveryResult:
@@ -633,8 +722,9 @@ def scan_genome(
     )
 
     pairing_metadata: dict[str, object] = {}
+    active_pairing_policy = _pairing_policy_value(pairing_policy)
+    active_rank_by = rank_by
     if _is_paired_contrast(contrast):
-        pairing_policy = _pairing_policy_value(None)
         required_conditions = list(contrast.time_order or []) if contrast.mode == "time_course" else list(
             dict.fromkeys((contrast.numerator or []) + (contrast.denominator or []))
         )
@@ -643,8 +733,70 @@ def scan_genome(
             samples=samples,
             pairing_key=contrast.pairing_key,
             required_conditions=required_conditions,
-            pairing_policy=pairing_policy,
+            pairing_policy=active_pairing_policy,
         )
+        if contrast.mode == "matched_pairwise":
+            if score != "effect_size_only":
+                raise ValueError("scan_genome matched_pairwise currently supports score='effect_size_only'.")
+            active_rank_by = active_rank_by or "mean_abs_delta"
+            window_totals = _aggregate_window_counts(window_summary)
+            scored = _score_matched_pairwise(
+                window_summary,
+                contrast=contrast,
+                rank_by=active_rank_by,
+            )
+            ranked = _rank_windows(scored, score=score)
+            scored_columns = [
+                column
+                for column in ranked.columns
+                if column not in _WINDOW_KEY_COLUMNS
+                and column not in {"modified_count", "valid_count", "window_fraction"}
+            ]
+            window_table = window_totals.merge(
+                ranked.loc[:, _WINDOW_KEY_COLUMNS + scored_columns],
+                on=_WINDOW_KEY_COLUMNS,
+                how="left",
+                sort=False,
+            )
+            hits = ranked.copy()
+
+            if merge_hits:
+                hits = merge_adjacent_hits(hits, merge_distance=merge_distance)
+
+            plot_data = {
+                "window_score_table": window_table.copy(),
+                "top_hits_table": hits.copy(),
+            }
+            metadata = {
+                "analysis_unit": "ensemble_region",
+                "representation": "modified_fraction",
+                "signal_source": "pileup_counts",
+                "score": score,
+                "window_size": window_size,
+                "step_size": step_size,
+                "min_coverage": min_coverage,
+                "merge_hits": merge_hits,
+                "merge_distance": merge_distance,
+                "motifs": motif_list,
+                "include_contigs": list(include_contigs) if include_contigs is not None else None,
+                "exclude_contigs": list(exclude_contigs) if exclude_contigs is not None else None,
+                "contrast_mode": contrast.mode,
+                "contrast_numerator": list(contrast.numerator or []),
+                "contrast_denominator": list(contrast.denominator or []),
+                "pairing_policy": active_pairing_policy,
+                "n_pairs_used": pairing_metadata["n_pairs_used"],
+                "n_pairs_dropped": pairing_metadata["n_pairs_dropped"],
+                "paired_mode": contrast.mode,
+                "rank_by": active_rank_by,
+            }
+            return RegionDiscoveryResult(
+                hits=hits.reset_index(drop=True),
+                windows=window_table.reset_index(drop=True),
+                contrast=contrast,
+                plot_data=plot_data,
+                metadata=metadata,
+                figures={},
+            )
 
     window_totals = _aggregate_window_counts(window_summary)
     condition_counts = _aggregate_condition_counts(window_summary)
@@ -706,9 +858,11 @@ def scan_genome(
         metadata["contrast_numerator"] = list(contrast.numerator or [])
         metadata["contrast_denominator"] = list(contrast.denominator or [])
     if pairing_metadata:
-        metadata["pairing_policy"] = _pairing_policy_value(None)
+        metadata["pairing_policy"] = active_pairing_policy
         metadata["n_pairs_used"] = pairing_metadata["n_pairs_used"]
         metadata["n_pairs_dropped"] = pairing_metadata["n_pairs_dropped"]
+        metadata["paired_mode"] = contrast.mode if contrast is not None else None
+        metadata["rank_by"] = active_rank_by
 
     return RegionDiscoveryResult(
         hits=hits.reset_index(drop=True),

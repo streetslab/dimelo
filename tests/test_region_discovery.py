@@ -163,6 +163,167 @@ def _mock_paired_window_summary() -> pd.DataFrame:
     )
 
 
+def _mock_paired_pairwise_window_summary() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "sample_id": "t1",
+                "condition": "targeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 4,
+                "valid_count": 5,
+                "window_fraction": 0.8,
+            },
+            {
+                "sample_id": "t1_rep2",
+                "condition": "targeting",
+                "replicate": 2,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 4,
+                "valid_count": 5,
+                "window_fraction": 0.8,
+            },
+            {
+                "sample_id": "d1",
+                "condition": "nontargeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 4,
+                "valid_count": 10,
+                "window_fraction": 0.4,
+            },
+            {
+                "sample_id": "t2",
+                "condition": "targeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 7,
+                "valid_count": 10,
+                "window_fraction": 0.7,
+            },
+            {
+                "sample_id": "d2",
+                "condition": "nontargeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 4,
+                "valid_count": 10,
+                "window_fraction": 0.4,
+            },
+            {
+                "sample_id": "t1",
+                "condition": "targeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 1,
+                "valid_count": 5,
+                "window_fraction": 0.2,
+            },
+            {
+                "sample_id": "t1_rep2",
+                "condition": "targeting",
+                "replicate": 2,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 1,
+                "valid_count": 5,
+                "window_fraction": 0.2,
+            },
+            {
+                "sample_id": "d1",
+                "condition": "nontargeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 4,
+                "valid_count": 10,
+                "window_fraction": 0.4,
+            },
+            {
+                "sample_id": "t2",
+                "condition": "targeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 3,
+                "valid_count": 10,
+                "window_fraction": 0.3,
+            },
+            {
+                "sample_id": "d2",
+                "condition": "nontargeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": ".",
+                "modified_count": 4,
+                "valid_count": 10,
+                "window_fraction": 0.4,
+            },
+            {
+                "sample_id": "t3",
+                "condition": "targeting",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": ".",
+                "modified_count": 5,
+                "valid_count": 10,
+                "window_fraction": 0.5,
+            },
+        ]
+    )
+
+
 def _paired_samplespecs() -> list[SampleSpec]:
     return [
         SampleSpec(
@@ -365,7 +526,58 @@ def test_scan_genome_matched_pairwise_uses_only_complete_pairs(monkeypatch):
     assert result.windows.loc[0, "modified_count"] == 26
     assert result.windows.loc[0, "valid_count"] == 90
     assert result.windows.loc[0, "window_fraction"] == pytest.approx(26 / 90)
-    assert result.windows.loc[0, "score_value"] == pytest.approx(0.25)
+    assert result.windows.loc[0, "score_value"] == pytest.approx(7 / 30)
+
+
+def test_scan_genome_matched_pairwise_ranks_by_mean_abs_delta(monkeypatch):
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: _mock_paired_pairwise_window_summary(),
+    )
+
+    result = region_discovery.scan_genome(
+        samples=_paired_samplespecs(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1000},
+        window_size=500,
+        step_size=500,
+        contrast=ContrastSpec(
+            mode="matched_pairwise",
+            numerator=["targeting"],
+            denominator=["nontargeting"],
+            pairing_key="pair_id",
+        ),
+        score="effect_size_only",
+    )
+
+    assert list(result.hits["window_id"]) == ["chr1:0-500", "chr1:500-1000"]
+    assert result.hits.loc[0, "mean_delta"] == pytest.approx(0.35)
+    assert result.hits.loc[0, "mean_abs_delta"] == pytest.approx(0.35)
+    assert result.hits.loc[0, "sign_agreement"] == pytest.approx(1.0)
+    assert result.metadata["paired_mode"] == "matched_pairwise"
+    assert result.metadata["rank_by"] == "mean_abs_delta"
+
+
+def test_scan_genome_matched_pairwise_errors_on_missing_pairs_in_strict_mode(monkeypatch):
+    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_window_summary())
+
+    with pytest.raises(ValueError, match="incomplete matched units"):
+        region_discovery.scan_genome(
+            samples=_paired_samplespecs(),
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1000},
+            window_size=500,
+            step_size=500,
+            contrast=ContrastSpec(
+                mode="matched_pairwise",
+                numerator=["targeting"],
+                denominator=["nontargeting"],
+                pairing_key="pair_id",
+            ),
+            score="effect_size_only",
+            pairing_policy="error_on_missing",
+        )
 
 
 def test_build_paired_window_table_collapses_duplicate_rows():
