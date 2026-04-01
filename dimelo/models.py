@@ -7,6 +7,29 @@ from typing import Any
 import pandas as pd
 
 
+_SELECTED_REGION_CHROM_COLUMNS = {"chrom", "chromosome"}
+_SELECTED_REGION_REQUIRED_COLUMNS = {"start", "end"}
+
+
+def _validate_selected_regions_dataframe(
+    selected_regions: pd.DataFrame,
+    *,
+    owner: str,
+) -> None:
+    if not isinstance(selected_regions, pd.DataFrame):
+        raise TypeError(f"{owner}.selected_regions must be a pandas DataFrame")
+
+    has_chrom_column = bool(_SELECTED_REGION_CHROM_COLUMNS & set(selected_regions.columns))
+    has_required_columns = _SELECTED_REGION_REQUIRED_COLUMNS.issubset(
+        selected_regions.columns
+    )
+    if not has_chrom_column or not has_required_columns:
+        raise ValueError(
+            f"{owner}.selected_regions must include 'start', 'end', and either "
+            "'chrom' or 'chromosome'"
+        )
+
+
 @dataclass
 class SampleSpec:
     sample_id: str
@@ -236,6 +259,10 @@ class RegionDiscoveryClusterContrastResult:
                 "RegionDiscoveryClusterContrastResult.contrasts must be a "
                 "RegionContrastResult"
             )
+        _validate_selected_regions_dataframe(
+            self.selected_regions,
+            owner="RegionDiscoveryClusterContrastResult",
+        )
 
 
 @dataclass

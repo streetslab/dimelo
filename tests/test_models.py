@@ -746,6 +746,117 @@ def test_region_discovery_cluster_contrast_result_rejects_invalid_wrapper_types(
         RegionDiscoveryClusterContrastResult(**kwargs)
 
 
+def test_region_discovery_cluster_contrast_result_rejects_non_dataframe_selected_regions():
+    with pytest.raises(TypeError, match="selected_regions must be a pandas DataFrame"):
+        RegionDiscoveryClusterContrastResult(
+            discovery=RegionDiscoveryResult(
+                hits=pd.DataFrame({"region": ["chr1:0-1000"]}),
+                windows=pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+                contrast=None,
+                plot_data={"ranked_hits": pd.DataFrame({"region": ["chr1:0-1000"]})},
+                metadata={"analysis_unit": "genome"},
+                figures={"hit_track": object()},
+            ),
+            clustering=SharedClusterResult(
+                model=SharedClusterModel(
+                    mode="shared",
+                    motifs=["A,0"],
+                    feature_names=["A,0_mod_fraction"],
+                    preprocessing={"scale": "standard"},
+                    estimator=object(),
+                    cluster_labels=["cluster-1"],
+                    fit_metadata={"random_state": 7},
+                ),
+                assignments=pd.DataFrame({"cluster": ["cluster-1"]}),
+                cluster_distribution=pd.DataFrame({"cluster": ["cluster-1"]}),
+                condition_distribution=pd.DataFrame({"condition": ["treated"]}),
+                distribution_change=None,
+                cluster_profiles=pd.DataFrame({"profile": [1.0]}),
+                region_summaries=None,
+                plot_data={"cluster_distribution_bar": {"kind": "bar"}},
+                figures={},
+                metadata={"notes": "ok"},
+            ),
+            contrasts=RegionContrastResult(
+                regions=pd.DataFrame({"region": ["chr1:0-1000"]}),
+                summary=pd.DataFrame({"metric": [1.0]}),
+                contrast=ContrastSpec(
+                    mode="pairwise",
+                    numerator=["15min"],
+                    denominator=["NS"],
+                    reference_condition="NS",
+                ),
+                plot_data={"volcano": pd.DataFrame({"x": [1.0]})},
+                metadata={"notes": "ok"},
+                figures={},
+            ),
+            selected_regions=[{"chrom": "chr1", "start": 0, "end": 1000}],
+            metadata={"contrast_scope": "selected"},
+        )
+
+
+@pytest.mark.parametrize(
+    "selected_regions",
+    [
+        pd.DataFrame([{"start": 0, "end": 1000}]),
+        pd.DataFrame([{"chrom": "chr1", "end": 1000}]),
+        pd.DataFrame([{"chromosome": "chr1", "start": 0}]),
+    ],
+)
+def test_region_discovery_cluster_contrast_result_rejects_invalid_selected_regions_schema(
+    selected_regions,
+):
+    with pytest.raises(
+        ValueError,
+        match="selected_regions must include 'start', 'end', and either 'chrom' or 'chromosome'",
+    ):
+        RegionDiscoveryClusterContrastResult(
+            discovery=RegionDiscoveryResult(
+                hits=pd.DataFrame({"region": ["chr1:0-1000"]}),
+                windows=pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+                contrast=None,
+                plot_data={"ranked_hits": pd.DataFrame({"region": ["chr1:0-1000"]})},
+                metadata={"analysis_unit": "genome"},
+                figures={"hit_track": object()},
+            ),
+            clustering=SharedClusterResult(
+                model=SharedClusterModel(
+                    mode="shared",
+                    motifs=["A,0"],
+                    feature_names=["A,0_mod_fraction"],
+                    preprocessing={"scale": "standard"},
+                    estimator=object(),
+                    cluster_labels=["cluster-1"],
+                    fit_metadata={"random_state": 7},
+                ),
+                assignments=pd.DataFrame({"cluster": ["cluster-1"]}),
+                cluster_distribution=pd.DataFrame({"cluster": ["cluster-1"]}),
+                condition_distribution=pd.DataFrame({"condition": ["treated"]}),
+                distribution_change=None,
+                cluster_profiles=pd.DataFrame({"profile": [1.0]}),
+                region_summaries=None,
+                plot_data={"cluster_distribution_bar": {"kind": "bar"}},
+                figures={},
+                metadata={"notes": "ok"},
+            ),
+            contrasts=RegionContrastResult(
+                regions=pd.DataFrame({"region": ["chr1:0-1000"]}),
+                summary=pd.DataFrame({"metric": [1.0]}),
+                contrast=ContrastSpec(
+                    mode="pairwise",
+                    numerator=["15min"],
+                    denominator=["NS"],
+                    reference_condition="NS",
+                ),
+                plot_data={"volcano": pd.DataFrame({"x": [1.0]})},
+                metadata={"notes": "ok"},
+                figures={},
+            ),
+            selected_regions=selected_regions,
+            metadata={"contrast_scope": "selected"},
+        )
+
+
 def test_cohort_spec_stores_workflow_and_params():
     cohort = CohortSpec(
         cohort_id="cohort-1",
