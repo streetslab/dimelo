@@ -696,96 +696,6 @@ def test_scan_genome_matched_pairwise_reranks_surviving_hits_after_coverage_filt
             },
         ]
     ))
-
-def test_scan_genome_matched_pairwise_reranks_surviving_hits_after_coverage_filter(monkeypatch):
-    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: pd.DataFrame(
-        [
-            {
-                "sample_id": "t1",
-                "condition": "targeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:0-500",
-                "chromosome": "chr1",
-                "start": 0,
-                "end": 500,
-                "strand": ".",
-                "modified_count": 9,
-                "valid_count": 10,
-                "window_fraction": 0.9,
-            },
-            {
-                "sample_id": "d1",
-                "condition": "nontargeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:0-500",
-                "chromosome": "chr1",
-                "start": 0,
-                "end": 500,
-                "strand": ".",
-                "modified_count": 1,
-                "valid_count": 10,
-                "window_fraction": 0.1,
-            },
-            {
-                "sample_id": "t2",
-                "condition": "targeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:500-1000",
-                "chromosome": "chr1",
-                "start": 500,
-                "end": 1000,
-                "strand": ".",
-                "modified_count": 12,
-                "valid_count": 60,
-                "window_fraction": 0.2,
-            },
-            {
-                "sample_id": "d2",
-                "condition": "nontargeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:500-1000",
-                "chromosome": "chr1",
-                "start": 500,
-                "end": 1000,
-                "strand": ".",
-                "modified_count": 6,
-                "valid_count": 60,
-                "window_fraction": 0.1,
-            },
-            {
-                "sample_id": "t1",
-                "condition": "targeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:1000-1500",
-                "chromosome": "chr1",
-                "start": 1000,
-                "end": 1500,
-                "strand": ".",
-                "modified_count": 10,
-                "valid_count": 60,
-                "window_fraction": 1 / 6,
-            },
-            {
-                "sample_id": "d1",
-                "condition": "nontargeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:1000-1500",
-                "chromosome": "chr1",
-                "start": 1000,
-                "end": 1500,
-                "strand": ".",
-                "modified_count": 6,
-                "valid_count": 60,
-                "window_fraction": 0.1,
-            },
-        ]
-    ))
     result = region_discovery.scan_genome(
         samples=[
             SampleSpec(
@@ -832,6 +742,31 @@ def test_scan_genome_matched_pairwise_reranks_surviving_hits_after_coverage_filt
     covered_windows = result.windows.loc[result.windows["valid_count"] >= 50]
     assert list(covered_windows["window_id"]) == list(result.hits["window_id"])
     assert list(covered_windows["rank"]) == list(result.hits["rank"])
+
+
+def test_scan_genome_rejects_invalid_pairing_policy(monkeypatch):
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: _mock_paired_pairwise_window_summary(),
+    )
+
+    with pytest.raises(ValueError, match="pairing_policy"):
+        region_discovery.scan_genome(
+            samples=_paired_samplespecs(),
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1000},
+            window_size=500,
+            step_size=500,
+            pairing_policy="complete_pairs_typo",
+            contrast=ContrastSpec(
+                mode="matched_pairwise",
+                numerator=["targeting"],
+                denominator=["nontargeting"],
+                pairing_key="pair_id",
+            ),
+            score="effect_size_only",
+        )
 def test_scan_genome_matched_pairwise_rejects_merge_hits(monkeypatch):
     monkeypatch.setattr(
         global_analysis,

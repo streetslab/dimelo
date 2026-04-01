@@ -134,7 +134,13 @@ def _validate_contrast_conditions(
 
 
 def _pairing_policy_value(pairing_policy: str | None) -> str:
-    return pairing_policy or "complete_pairs_only"
+    active_pairing_policy = pairing_policy or "complete_pairs_only"
+    if active_pairing_policy not in {"complete_pairs_only", "error_on_missing"}:
+        raise ValueError(
+            "scan_genome paired discovery requires pairing_policy in "
+            "{'complete_pairs_only', 'error_on_missing'}."
+        )
+    return active_pairing_policy
 
 
 def _is_paired_contrast(contrast: ContrastSpec | None) -> bool:
