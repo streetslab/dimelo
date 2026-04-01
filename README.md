@@ -40,6 +40,8 @@ This README document contains installation instructions and documentation for va
 
 -[2.5 Clustering scaffolding](#clustering-scaffolding)
 
+-[2.6 Region contrasts](#region-contrasts)
+
 [3.0 Known Issues](#known-issues)
 
 -[3.1 No progress bars](#no-progress-bars)
@@ -217,6 +219,15 @@ def extract(
     quiet: bool = False,
     override_checks: bool = False,) -> Path, Path:
 ```
+
+## Region contrasts
+
+Two higher-level analysis guides now sit on top of the existing parsing layer:
+
+- [docs/shared-clustering.md](docs/shared-clustering.md) for shared-boundary clustering workflows
+- [docs/region-contrasts.md](docs/region-contrasts.md) for known-region motif-abundance contrasts
+
+Use `parse_bam.pileup()` when you want defined-region abundance testing, and use `parse_bam.extract()` when you want read-level clustering or single-read follow-up.
 
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
 
