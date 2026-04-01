@@ -219,6 +219,16 @@ class RegionDiscoveryClusterResult:
                 "RegionDiscoveryClusterResult requires non-None values for: "
                 f"{', '.join(missing)}"
             )
+        if not isinstance(self.discovery, RegionDiscoveryResult):
+            raise TypeError(
+                "RegionDiscoveryClusterResult.discovery must be a "
+                "RegionDiscoveryResult"
+            )
+        if not isinstance(self.clustering, SharedClusterResult):
+            raise TypeError(
+                "RegionDiscoveryClusterResult.clustering must be a "
+                "SharedClusterResult"
+            )
 
 
 @dataclass

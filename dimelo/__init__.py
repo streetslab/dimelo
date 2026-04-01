@@ -18,7 +18,6 @@ from . import (
     region_contrasts,
     workflows,
 )
-from .models import RegionDiscoveryClusterResult
 
 __all__ = [
     "cluster",
@@ -38,6 +37,5 @@ __all__ = [
     "region_discovery",
     "region_analysis",
     "region_contrasts",
-    "RegionDiscoveryClusterResult",
     "workflows",
 ]
