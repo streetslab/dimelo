@@ -388,8 +388,6 @@ def test_build_paired_window_table_collapses_duplicate_rows():
     assert collapsed.iloc[0]["valid_count"] == 30
     assert collapsed.iloc[0]["window_fraction"] == pytest.approx(14 / 30)
     assert pairing_meta == {"n_pairs_used": 2, "n_pairs_dropped": 1}
-
-
 def test_scan_genome_time_course_errors_on_missing_pairing_key(monkeypatch):
     monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_window_summary())
 
