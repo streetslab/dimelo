@@ -30,10 +30,9 @@ def validate_region_contrast_request(
             "V1 region_contrasts inference requires representation to be "
             "'modified_fraction' or 'modified_count'."
         )
-    if test not in {"beta_binomial", "effect_size_only"}:
+    if test != "effect_size_only":
         raise ValueError(
-            "V1 region_contrasts inference requires test to be "
-            "'beta_binomial' or 'effect_size_only'."
+            "Current region_contrasts scoring support requires test='effect_size_only'."
         )
 
 
@@ -178,9 +177,6 @@ def score_regions(
         regions=regions,
         motifs=motifs,
     )
-
-    if test != "effect_size_only":
-        raise NotImplementedError(f"score_regions does not yet implement test='{test}'.")
 
     pooled = _pool_region_groups(evidence=evidence, contrast=contrast)
     numerator = (

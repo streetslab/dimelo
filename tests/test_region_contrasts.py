@@ -12,7 +12,7 @@ def test_validate_supported_v1_combination():
         analysis_unit="ensemble_region",
         representation="modified_fraction",
         signal_source="pileup_counts",
-        test="beta_binomial",
+        test="effect_size_only",
     )
 
 
@@ -22,6 +22,39 @@ def test_validate_rejects_unsupported_single_read_beta_binomial():
             analysis_unit="single_read",
             representation="read_mod_fraction",
             signal_source="pileup_counts",
+            test="beta_binomial",
+        )
+
+
+def test_validate_rejects_unimplemented_beta_binomial_scoring():
+    with pytest.raises(ValueError, match="test='effect_size_only'"):
+        region_contrasts.validate_region_contrast_request(
+            analysis_unit="ensemble_region",
+            representation="modified_fraction",
+            signal_source="pileup_counts",
+            test="beta_binomial",
+        )
+
+
+def test_score_regions_rejects_unimplemented_beta_binomial_scoring(monkeypatch):
+    contrast = ContrastSpec(
+        mode="pairwise",
+        numerator=["treated"],
+        denominator=["control"],
+    )
+
+    monkeypatch.setattr(
+        region_contrasts,
+        "build_region_evidence_table",
+        lambda **kwargs: pd.DataFrame(),
+    )
+
+    with pytest.raises(ValueError, match="test='effect_size_only'"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions="regions.bed",
+            motifs=["A,0"],
+            contrast=contrast,
             test="beta_binomial",
         )
 
@@ -442,6 +475,58 @@ def test_score_regions_rejects_missing_denominator_condition(monkeypatch):
     )
 
     with pytest.raises(ValueError, match="denominator.*cntrol"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions="regions.bed",
+            motifs=["A,0"],
+            contrast=contrast,
+        )
+
+
+def test_score_regions_rejects_missing_numerator_condition(monkeypatch):
+    contrast = ContrastSpec(
+        mode="pairwise",
+        numerator=["trated"],
+        denominator=["control"],
+    )
+    evidence = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "n1",
+                "condition": "treated",
+                "replicate": 1,
+                "modified_count": 8,
+                "valid_count": 10,
+                "mod_fraction": 0.8,
+            },
+            {
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 10,
+                "strand": "+",
+                "sample_id": "d1",
+                "condition": "control",
+                "replicate": 1,
+                "modified_count": 2,
+                "valid_count": 10,
+                "mod_fraction": 0.2,
+            },
+        ]
+    )
+
+    monkeypatch.setattr(
+        region_contrasts,
+        "build_region_evidence_table",
+        lambda **kwargs: evidence.copy(),
+    )
+
+    with pytest.raises(ValueError, match="numerator.*trated"):
         region_contrasts.score_regions(
             samples=[],
             regions="regions.bed",
