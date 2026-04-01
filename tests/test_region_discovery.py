@@ -580,6 +580,83 @@ def test_scan_genome_matched_pairwise_errors_on_missing_pairs_in_strict_mode(mon
         )
 
 
+def test_scan_genome_matched_pairwise_applies_min_coverage_filtering(monkeypatch):
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: _mock_paired_pairwise_window_summary(),
+    )
+
+    result = region_discovery.scan_genome(
+        samples=_paired_samplespecs(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1000},
+        window_size=500,
+        step_size=500,
+        min_coverage=50,
+        contrast=ContrastSpec(
+            mode="matched_pairwise",
+            numerator=["targeting"],
+            denominator=["nontargeting"],
+            pairing_key="pair_id",
+        ),
+        score="effect_size_only",
+    )
+
+    assert result.hits.empty
+    assert pd.isna(result.windows.loc[0, "rank"])
+    assert pd.isna(result.windows.loc[0, "score_value"])
+
+
+def test_scan_genome_matched_pairwise_rejects_merge_hits(monkeypatch):
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: _mock_paired_pairwise_window_summary(),
+    )
+
+    with pytest.raises(ValueError, match="does not support merge_hits=True"):
+        region_discovery.scan_genome(
+            samples=_paired_samplespecs(),
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1000},
+            window_size=500,
+            step_size=500,
+            merge_hits=True,
+            contrast=ContrastSpec(
+                mode="matched_pairwise",
+                numerator=["targeting"],
+                denominator=["nontargeting"],
+                pairing_key="pair_id",
+            ),
+            score="effect_size_only",
+        )
+
+
+def test_scan_genome_matched_pairwise_rejects_multi_condition_sides(monkeypatch):
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: _mock_paired_pairwise_window_summary(),
+    )
+
+    with pytest.raises(ValueError, match="exactly one numerator and one denominator condition"):
+        region_discovery.scan_genome(
+            samples=_paired_samplespecs(),
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1000},
+            window_size=500,
+            step_size=500,
+            contrast=ContrastSpec(
+                mode="matched_pairwise",
+                numerator=["targeting", "backup"],
+                denominator=["nontargeting"],
+                pairing_key="pair_id",
+            ),
+            score="effect_size_only",
+        )
+
+
 def test_build_paired_window_table_collapses_duplicate_rows():
     paired_table, pairing_meta = region_discovery._build_paired_window_table(
         _mock_paired_window_summary(),

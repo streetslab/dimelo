@@ -725,6 +725,13 @@ def scan_genome(
     active_pairing_policy = _pairing_policy_value(pairing_policy)
     active_rank_by = rank_by
     if _is_paired_contrast(contrast):
+        if contrast.mode == "matched_pairwise":
+            numerator_conditions = list(contrast.numerator or [])
+            denominator_conditions = list(contrast.denominator or [])
+            if len(numerator_conditions) != 1 or len(denominator_conditions) != 1:
+                raise ValueError(
+                    "scan_genome matched_pairwise requires exactly one numerator and one denominator condition."
+                )
         required_conditions = list(contrast.time_order or []) if contrast.mode == "time_course" else list(
             dict.fromkeys((contrast.numerator or []) + (contrast.denominator or []))
         )
@@ -738,6 +745,8 @@ def scan_genome(
         if contrast.mode == "matched_pairwise":
             if score != "effect_size_only":
                 raise ValueError("scan_genome matched_pairwise currently supports score='effect_size_only'.")
+            if merge_hits:
+                raise ValueError("scan_genome matched_pairwise does not support merge_hits=True.")
             active_rank_by = active_rank_by or "mean_abs_delta"
             window_totals = _aggregate_window_counts(window_summary)
             scored = _score_matched_pairwise(
@@ -758,10 +767,24 @@ def scan_genome(
                 how="left",
                 sort=False,
             )
-            hits = ranked.copy()
-
-            if merge_hits:
-                hits = merge_adjacent_hits(hits, merge_distance=merge_distance)
+            covered_mask = window_table["valid_count"] >= min_coverage
+            paired_score_columns = [
+                column
+                for column in [
+                    "mean_delta",
+                    "mean_abs_delta",
+                    "delta_sd",
+                    "sign_agreement",
+                    "n_pairs_used",
+                    "score_value",
+                    "p_value",
+                    "adjusted_p_value",
+                    "rank",
+                ]
+                if column in window_table.columns
+            ]
+            window_table.loc[~covered_mask, paired_score_columns] = pd.NA
+            hits = _sort_hits_for_output(window_table.loc[covered_mask].copy())
 
             plot_data = {
                 "window_score_table": window_table.copy(),
