@@ -7,14 +7,21 @@ import numpy as np
 import pandas as pd
 
 from .artifacts import resolve_artifact
-from . import cluster, distribution, plotting, region_analysis
-from .models import DatasetArtifact, SampleSpec, SharedClusterModel, SharedClusterResult
+from . import cluster, distribution, plotting, region_analysis, region_discovery
+from .models import (
+    DatasetArtifact,
+    RegionDiscoveryClusterResult,
+    SampleSpec,
+    SharedClusterModel,
+    SharedClusterResult,
+)
 
 _SUPPORTED_SIGNAL_NORMALIZATION = {"none", "per_sample_global", "control_regions"}
 _SUPPORTED_FEATURE_SCALING = {"none", "robust_zscore"}
 _SUPPORTED_CLUSTER_BASIS = {"shape_only", "shape_plus_level", "level_only"}
 _PACKAGE_VERSION = "1.0.0"
 _PREDICTION_CHUNK_SIZE = 100_000
+_DISCOVERY_SELECTION_DEFAULT_TOP_N = 250
 _LEVEL_FEATURES = {
     "global_mean",
     "global_var",
@@ -279,6 +286,79 @@ def _build_region_summary(assignments: pd.DataFrame) -> pd.DataFrame:
     totals = summary.groupby(["region_id", "sample_id", "condition"])["count"].transform("sum")
     summary["fraction"] = summary["count"] / totals
     return summary
+
+
+def _select_discovery_hits(
+    hits: pd.DataFrame,
+    *,
+    selection_mode: str,
+    top_n: int | None,
+) -> pd.DataFrame:
+    if selection_mode == "all":
+        return hits.copy()
+    if selection_mode != "top_n":
+        raise ValueError(
+            f"Unsupported selection mode: {selection_mode!r}. Supported modes are 'top_n' and 'all'."
+        )
+
+    resolved_top_n = _DISCOVERY_SELECTION_DEFAULT_TOP_N if top_n is None else int(top_n)
+    if resolved_top_n < 0:
+        raise ValueError("selection.top_n must be non-negative.")
+    return hits.head(resolved_top_n).copy()
+
+
+def discovery_cluster_workflow(
+    *,
+    samples: Iterable[SampleSpec],
+    motifs: Iterable[str],
+    genome_sizes: dict[str, int],
+    discovery: dict[str, Any],
+    clustering: dict[str, Any],
+    selection: dict[str, Any] | None = None,
+) -> RegionDiscoveryClusterResult:
+    selection_config = dict(selection or {})
+    selection_mode = str(selection_config.get("mode", "top_n"))
+    selection_top_n = selection_config.get("top_n")
+
+    discovery_result = region_discovery.scan_genome(
+        samples=samples,
+        motifs=motifs,
+        genome_sizes=genome_sizes,
+        **discovery,
+    )
+    selected_hits = _select_discovery_hits(
+        discovery_result.hits,
+        selection_mode=selection_mode,
+        top_n=selection_top_n,
+    )
+    if selected_hits.empty:
+        raise ValueError("No discovery hits remained after selection.")
+
+    selected_regions = region_discovery.hits_to_bed(selected_hits)
+    clustering_result = shared_cluster_distribution(
+        samples=samples,
+        motifs=motifs,
+        matched_regions=selected_regions,
+        **clustering,
+    )
+    resolved_top_n = (
+        None
+        if selection_mode == "all"
+        else _DISCOVERY_SELECTION_DEFAULT_TOP_N if selection_top_n is None else int(selection_top_n)
+    )
+    return RegionDiscoveryClusterResult(
+        discovery=discovery_result,
+        clustering=clustering_result,
+        selected_regions=selected_regions,
+        metadata={
+            "selection": {
+                "mode": selection_mode,
+                "top_n": resolved_top_n,
+                "discovered_hit_count": int(len(discovery_result.hits)),
+                "selected_hit_count": int(len(selected_hits)),
+            }
+        },
+    )
 
 
 def _build_shared_cluster_result(

@@ -4,7 +4,213 @@ import pytest
 
 from dimelo import workflows
 from dimelo.models import DatasetArtifact
-from dimelo.models import SampleSpec
+from dimelo.models import RegionDiscoveryResult, SampleSpec, SharedClusterModel, SharedClusterResult
+
+
+def _workflow_samples():
+    return [
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            regions_bed="control-s1.bed",
+            metadata={"pileup_path": "s1.bed.gz"},
+        ),
+        SampleSpec(
+            sample_id="s2",
+            condition="15min",
+            extract_h5="s2.h5",
+            regions_bed="control-s2.bed",
+            metadata={"pileup_path": "s2.bed.gz"},
+        ),
+    ]
+
+
+def _mock_discovery_result(*args, **kwargs):
+    hits = pd.DataFrame(
+        [
+            {
+                "window_id": "chr1:0-500",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": "+",
+                "score_value": 0.9,
+                "adjusted_p_value": 0.01,
+            },
+            {
+                "window_id": "chr1:500-1000",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": "-",
+                "score_value": 0.6,
+                "adjusted_p_value": 0.02,
+            },
+            {
+                "window_id": "chr1:1000-1500",
+                "chromosome": "chr1",
+                "start": 1000,
+                "end": 1500,
+                "strand": "+",
+                "score_value": 0.2,
+                "adjusted_p_value": 0.20,
+            },
+        ]
+    )
+    return RegionDiscoveryResult(
+        hits=hits,
+        windows=hits.copy(),
+        contrast=None,
+        plot_data={},
+        metadata={"score": "effect_size_only"},
+    )
+
+
+def _mock_cluster_result(*args, **kwargs):
+    assignments = pd.DataFrame(
+        [
+            {"sample_id": "s1", "condition": "NS", "cluster": "C0"},
+            {"sample_id": "s2", "condition": "15min", "cluster": "C1"},
+        ]
+    )
+    return SharedClusterResult(
+        model=SharedClusterModel(
+            mode=kwargs["mode"],
+            motifs=list(kwargs["motifs"]),
+            feature_names=["f0"],
+            preprocessing={},
+            estimator=object(),
+            cluster_labels=["C0", "C1"],
+            fit_metadata={},
+        ),
+        assignments=assignments,
+        cluster_distribution=pd.DataFrame(
+            [
+                {"sample_id": "s1", "condition": "NS", "cluster": "C0", "count": 1, "fraction": 1.0},
+                {"sample_id": "s2", "condition": "15min", "cluster": "C1", "count": 1, "fraction": 1.0},
+            ]
+        ),
+        condition_distribution=pd.DataFrame(
+            [
+                {"condition": "NS", "cluster": "C0", "fraction": 1.0, "replicate_n": 1},
+                {"condition": "15min", "cluster": "C1", "fraction": 1.0, "replicate_n": 1},
+            ]
+        ),
+        distribution_change=None,
+        cluster_profiles=pd.DataFrame([{"cluster": "C0", "count": 1, "f0": 0.0}]),
+        region_summaries=None,
+        plot_data={},
+        metadata={"matched_regions": kwargs.get("matched_regions")},
+    )
+
+
+def test_discovery_cluster_workflow_returns_both_results(monkeypatch):
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+
+    result = workflows.discovery_cluster_workflow(
+        samples=_workflow_samples(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2},
+    )
+
+    assert result.discovery.hits.shape[0] == 3
+    assert result.clustering.model.mode == "region_anchored"
+    assert list(result.selected_regions.columns) == ["chrom", "start", "end", "name", "score", "strand"]
+    assert result.metadata["selection"]["mode"] == "top_n"
+    assert result.metadata["selection"]["top_n"] == 250
+
+
+def test_discovery_cluster_workflow_selects_top_n_hits(monkeypatch):
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+
+    result = workflows.discovery_cluster_workflow(
+        samples=_workflow_samples(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2},
+        selection={"mode": "top_n", "top_n": 1},
+    )
+
+    assert result.selected_regions["name"].tolist() == ["chr1:0-500"]
+
+
+def test_discovery_cluster_workflow_selects_all_hits(monkeypatch):
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+
+    result = workflows.discovery_cluster_workflow(
+        samples=_workflow_samples(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2},
+        selection={"mode": "all"},
+    )
+
+    assert set(result.selected_regions["name"].tolist()) == {
+        "chr1:0-500",
+        "chr1:500-1000",
+        "chr1:1000-1500",
+    }
+    assert result.metadata["selection"]["top_n"] is None
+
+
+def test_discovery_cluster_workflow_passes_selected_regions_into_clustering(monkeypatch):
+    captured = {}
+
+    def fake_cluster(**kwargs):
+        captured["matched_regions"] = kwargs["matched_regions"]
+        return _mock_cluster_result(**kwargs)
+
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", fake_cluster)
+
+    result = workflows.discovery_cluster_workflow(
+        samples=_workflow_samples(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2},
+        selection={"mode": "top_n", "top_n": 2},
+    )
+
+    assert captured["matched_regions"].equals(result.selected_regions)
+
+
+def test_discovery_cluster_workflow_errors_when_no_hits_survive_selection(monkeypatch):
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+
+    with pytest.raises(ValueError, match="No discovery hits remained after selection"):
+        workflows.discovery_cluster_workflow(
+            samples=_workflow_samples(),
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1500},
+            discovery={"window_size": 500, "step_size": 500},
+            clustering={"mode": "region_anchored", "n_clusters": 2},
+            selection={"mode": "top_n", "top_n": 0},
+        )
+
+
+def test_discovery_cluster_workflow_rejects_unknown_selection_mode(monkeypatch):
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+
+    with pytest.raises(ValueError, match="Unsupported selection mode"):
+        workflows.discovery_cluster_workflow(
+            samples=_workflow_samples(),
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1500},
+            discovery={"window_size": 500, "step_size": 500},
+            clustering={"mode": "region_anchored", "n_clusters": 2},
+            selection={"mode": "invalid"},
+        )
 
 
 def test_shared_cluster_distribution_read_global(monkeypatch):
