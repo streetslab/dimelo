@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import dimelo
 import pandas as pd
 import pytest
 
@@ -24,8 +23,10 @@ def test_dimelo_package_exports_models():
     assert models.SampleSpec is SampleSpec
 
 
-def test_dimelo_package_root_does_not_export_region_discovery_cluster_result():
-    assert not hasattr(dimelo, "RegionDiscoveryClusterResult")
+def test_dimelo_package_root_exports_region_discovery_cluster_result():
+    from dimelo import RegionDiscoveryClusterResult as RootRegionDiscoveryClusterResult
+
+    assert RootRegionDiscoveryClusterResult is RegionDiscoveryClusterResult
 
 
 def test_sample_spec_fields():
