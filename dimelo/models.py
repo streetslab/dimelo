@@ -139,6 +139,8 @@ class GlobalAnalysisResult:
             "summary": self.summary,
             "normalization_factors": self.normalization_factors,
             "plot_data": self.plot_data,
+            "metadata": self.metadata,
+            "figures": self.figures,
         }
         missing = [name for name, value in required_fields.items() if value is None]
         if missing:

@@ -301,6 +301,24 @@ def test_global_analysis_result_rejects_none_core_outputs():
         )
 
 
+@pytest.mark.parametrize("field_name", ["metadata", "figures"])
+def test_global_analysis_result_rejects_none_optional_outputs(field_name):
+    kwargs = {
+        "summary": pd.DataFrame({"sample_id": ["s1"]}),
+        "windows": pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+        "normalization_factors": pd.DataFrame(
+            {"sample_id": ["s1"], "global_offset": [0.1]}
+        ),
+        "plot_data": {"global_fraction_bar": pd.DataFrame({"sample_id": ["s1"]})},
+        "metadata": {"normalization_mode": "per_sample_global"},
+        "figures": {},
+    }
+    kwargs[field_name] = None
+
+    with pytest.raises(ValueError, match=field_name):
+        GlobalAnalysisResult(**kwargs)
+
+
 def test_region_contrast_result_rejects_none_core_tables():
     contrast = ContrastSpec(
         mode="pairwise",
