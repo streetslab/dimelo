@@ -105,6 +105,19 @@ def _mock_cluster_result(*args, **kwargs):
     )
 
 
+def _fake_region_anchored_extract(*args, **kwargs):
+    regions = kwargs["regions"]
+    region_list = list(regions) if isinstance(regions, list) else [regions]
+    metadata = []
+    for region in region_list:
+        chrom_coords, strand = region.split(",")
+        chrom, coords = chrom_coords.split(":")
+        start, end = coords.split("-")
+        metadata.append((chrom, int(start), int(end), strand))
+    matrix = np.array([[0.2, 0.8], [0.8, 0.2]], dtype=np.float32)
+    return matrix[: len(metadata)], metadata
+
+
 def test_discovery_cluster_workflow_returns_both_results(monkeypatch):
     monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
@@ -180,7 +193,8 @@ def test_discovery_cluster_workflow_passes_selected_regions_into_clustering(monk
         selection={"mode": "top_n", "top_n": 2},
     )
 
-    assert captured["matched_regions"].equals(result.selected_regions)
+    assert captured["matched_regions"] == ["chr1:0-500,+", "chr1:500-1000,-"]
+    assert list(result.selected_regions["name"]) == ["chr1:0-500", "chr1:500-1000"]
 
 
 def test_discovery_cluster_workflow_errors_when_no_hits_survive_selection(monkeypatch):
@@ -211,6 +225,101 @@ def test_discovery_cluster_workflow_rejects_unknown_selection_mode(monkeypatch):
             clustering={"mode": "region_anchored", "n_clusters": 2},
             selection={"mode": "invalid"},
         )
+
+
+def test_discovery_cluster_workflow_region_anchored_uses_serializable_matched_regions(monkeypatch):
+    captured = {"resolve_params": []}
+
+    def fake_resolve_artifact(requested_artifact, available_artifacts, artifact_policy):
+        captured["resolve_params"].append(requested_artifact.params["matched_regions"])
+        return None
+
+    def fake_region_features(*args, **kwargs):
+        regions = kwargs["regions"]
+        captured["regions"] = regions
+        return _fake_region_anchored_extract(*args, **kwargs)
+
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "resolve_artifact", fake_resolve_artifact)
+    monkeypatch.setattr(
+        workflows.cluster,
+        "region_feature_matrix_from_pileup",
+        fake_region_features,
+    )
+
+    result = workflows.discovery_cluster_workflow(
+        samples=_workflow_samples(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2, "make_plots": False},
+        selection={"mode": "top_n", "top_n": 2},
+    )
+
+    assert captured["regions"] == ["chr1:0-500,+", "chr1:500-1000,-"]
+    assert captured["resolve_params"] == [
+        ["chr1:0-500,+", "chr1:500-1000,-"],
+        ["chr1:0-500,+", "chr1:500-1000,-"],
+    ]
+    assert result.clustering.metadata["matched_regions"] == ["chr1:0-500,+", "chr1:500-1000,-"]
+
+
+def test_discovery_cluster_workflow_artifact_params_keep_matched_regions_json_serializable(monkeypatch):
+    captured = {}
+    region_spec = ["chr1:0-500,+", "chr1:500-1000,-"]
+    artifact_samples = []
+    for sample in _workflow_samples():
+        artifact_samples.append(
+            SampleSpec(
+                sample_id=sample.sample_id,
+                condition=sample.condition,
+                extract_h5=sample.extract_h5,
+                regions_bed=sample.regions_bed,
+                metadata={
+                    "pileup_path": sample.metadata["pileup_path"],
+                    "artifacts": [
+                        DatasetArtifact(
+                            sample_id=sample.sample_id,
+                            artifact_type="pileup",
+                            path=sample.metadata["pileup_path"],
+                            format="bed.gz",
+                            params={
+                                "motifs": ["A,0"],
+                                "matched_regions": region_spec,
+                                "signal_normalization": "none",
+                                "feature_scaling": "robust_zscore",
+                                "cluster_basis": "shape_plus_level",
+                            },
+                            provenance={"pipeline": "parse_bam", "source_files": [], "source_fingerprints": []},
+                        )
+                    ],
+                },
+            )
+        )
+
+    def fake_resolve_artifact(requested_artifact, available_artifacts, artifact_policy):
+        captured.setdefault("params", []).append(requested_artifact.params["matched_regions"])
+        return available_artifacts[0]
+
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "resolve_artifact", fake_resolve_artifact)
+    monkeypatch.setattr(
+        workflows.cluster,
+        "region_feature_matrix_from_pileup",
+        _fake_region_anchored_extract,
+    )
+
+    result = workflows.discovery_cluster_workflow(
+        samples=artifact_samples,
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2, "make_plots": False},
+        selection={"mode": "top_n", "top_n": 2},
+    )
+
+    assert captured["params"] == [region_spec, region_spec]
+    assert result.clustering.metadata["cache_hits"] == {"s1": "s1.bed.gz", "s2": "s2.bed.gz"}
 
 
 def test_shared_cluster_distribution_read_global(monkeypatch):

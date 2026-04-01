@@ -307,6 +307,22 @@ def _select_discovery_hits(
     return hits.head(resolved_top_n).copy()
 
 
+def _selected_regions_to_region_spec(selected_regions: pd.DataFrame) -> list[str]:
+    if selected_regions.empty:
+        return []
+
+    chrom_column = "chrom" if "chrom" in selected_regions.columns else "chromosome"
+    region_spec: list[str] = []
+    for row in selected_regions.itertuples(index=False):
+        chrom = getattr(row, chrom_column)
+        start = int(getattr(row, "start"))
+        end = int(getattr(row, "end"))
+        strand = getattr(row, "strand", ".")
+        strand_value = strand if strand in {"+", "-", "."} else "."
+        region_spec.append(f"{chrom}:{start}-{end},{strand_value}")
+    return region_spec
+
+
 def discovery_cluster_workflow(
     *,
     samples: Iterable[SampleSpec],
@@ -335,10 +351,11 @@ def discovery_cluster_workflow(
         raise ValueError("No discovery hits remained after selection.")
 
     selected_regions = region_discovery.hits_to_bed(selected_hits)
+    matched_regions = _selected_regions_to_region_spec(selected_regions)
     clustering_result = shared_cluster_distribution(
         samples=samples,
         motifs=motifs,
-        matched_regions=selected_regions,
+        matched_regions=matched_regions,
         **clustering,
     )
     resolved_top_n = (
