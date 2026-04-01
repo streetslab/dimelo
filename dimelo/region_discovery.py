@@ -188,6 +188,15 @@ def _build_paired_window_table(
         raise ValueError("scan_genome paired discovery found no complete matched units.")
 
     paired = paired.loc[paired["pair_id"].isin(complete_pair_ids)].copy()
+    paired = (
+        paired.groupby(_WINDOW_KEY_COLUMNS + ["pair_id", "condition"], as_index=False, sort=False)
+        .agg(
+            modified_count=("modified_count", "sum"),
+            valid_count=("valid_count", "sum"),
+        )
+        .copy()
+    )
+    paired["window_fraction"] = _safe_fraction(paired["modified_count"], paired["valid_count"])
     return paired, {
         "n_pairs_used": len(complete_pair_ids),
         "n_pairs_dropped": dropped_pair_count,
