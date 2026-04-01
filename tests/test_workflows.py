@@ -3,8 +3,14 @@ import pandas as pd
 import pytest
 
 from dimelo import workflows
-from dimelo.models import DatasetArtifact
-from dimelo.models import RegionDiscoveryResult, SampleSpec, SharedClusterModel, SharedClusterResult
+from dimelo.models import ContrastSpec, DatasetArtifact
+from dimelo.models import (
+    RegionContrastResult,
+    RegionDiscoveryResult,
+    SampleSpec,
+    SharedClusterModel,
+    SharedClusterResult,
+)
 
 
 def _workflow_samples():
@@ -102,6 +108,81 @@ def _mock_cluster_result(*args, **kwargs):
         region_summaries=None,
         plot_data={},
         metadata={"matched_regions": kwargs.get("matched_regions")},
+    )
+
+
+def _mock_region_contrast_result(*args, **kwargs):
+    contrast = kwargs["contrast"]
+    regions = pd.DataFrame(
+        [
+            {
+                "region_id": "chr1:0-500,+",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 500,
+                "strand": "+",
+                "fraction": 0.8,
+                "reference_fraction": 0.2,
+                "delta_fraction": 0.6,
+                "log2_fc": 2.0,
+                "effect_size": 0.6,
+                "rank": 1,
+                "numerator_modified_count": 8,
+                "numerator_valid_count": 10,
+                "numerator_replicate_n": 1,
+                "denominator_modified_count": 2,
+                "denominator_valid_count": 10,
+                "denominator_replicate_n": 1,
+            },
+            {
+                "region_id": "chr1:500-1000,-",
+                "chromosome": "chr1",
+                "start": 500,
+                "end": 1000,
+                "strand": "-",
+                "fraction": 0.6,
+                "reference_fraction": 0.3,
+                "delta_fraction": 0.3,
+                "log2_fc": 1.0,
+                "effect_size": 0.3,
+                "rank": 2,
+                "numerator_modified_count": 6,
+                "numerator_valid_count": 10,
+                "numerator_replicate_n": 1,
+                "denominator_modified_count": 3,
+                "denominator_valid_count": 10,
+                "denominator_replicate_n": 1,
+            },
+        ]
+    )
+    summary = regions[
+        [
+            "region_id",
+            "fraction",
+            "reference_fraction",
+            "delta_fraction",
+            "log2_fc",
+            "rank",
+            "numerator_modified_count",
+            "numerator_valid_count",
+            "numerator_replicate_n",
+            "denominator_modified_count",
+            "denominator_valid_count",
+            "denominator_replicate_n",
+        ]
+    ].copy()
+    return RegionContrastResult(
+        regions=regions,
+        summary=summary,
+        contrast=contrast,
+        plot_data={"region_effect_sizes": summary.copy()},
+        metadata={
+            "analysis_unit": kwargs.get("analysis_unit", "ensemble_region"),
+            "representation": kwargs.get("representation", "modified_fraction"),
+            "signal_source": kwargs.get("signal_source", "pileup_counts"),
+            "test": kwargs.get("test", "effect_size_only"),
+            "multiple_testing": kwargs.get("multiple_testing", "fdr_bh"),
+        },
     )
 
 
@@ -406,6 +487,134 @@ def test_discovery_cluster_workflow_materializes_motif_generator(monkeypatch):
 
     assert captured["discovery_motifs"] == ["A,0", "CG,1"]
     assert captured["clustering_motifs"] == ["A,0", "CG,1"]
+
+
+def test_discovery_cluster_contrast_workflow_returns_all_results(monkeypatch):
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+    monkeypatch.setattr(workflows.region_contrasts, "score_regions", _mock_region_contrast_result)
+
+    result = workflows.discovery_cluster_contrast_workflow(
+        samples=_workflow_samples(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2},
+        contrasts={
+            "contrast": ContrastSpec(
+                mode="pairwise",
+                numerator=["15min"],
+                denominator=["NS"],
+            ),
+            "test": "effect_size_only",
+        },
+    )
+
+    assert result.discovery.hits.shape[0] == 3
+    assert result.clustering.model.mode == "region_anchored"
+    assert result.contrasts.metadata["test"] == "effect_size_only"
+    assert result.metadata["contrast_scope"] == "selected"
+
+
+def test_discovery_cluster_contrast_workflow_scores_selected_regions_by_default(monkeypatch):
+    captured = {}
+
+    def fake_score_regions(**kwargs):
+        captured["regions"] = kwargs["regions"]
+        return _mock_region_contrast_result(**kwargs)
+
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+    monkeypatch.setattr(workflows.region_contrasts, "score_regions", fake_score_regions)
+
+    result = workflows.discovery_cluster_contrast_workflow(
+        samples=_workflow_samples(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2},
+        contrasts={
+            "contrast": ContrastSpec(
+                mode="pairwise",
+                numerator=["15min"],
+                denominator=["NS"],
+            ),
+        },
+        selection={"mode": "top_n", "top_n": 2},
+    )
+
+    assert captured["regions"] == ["chr1:0-500,+", "chr1:500-1000,-"]
+    assert result.selected_regions["name"].tolist() == ["chr1:0-500", "chr1:500-1000"]
+
+
+def test_discovery_cluster_contrast_workflow_preserves_full_scan_windows_context(monkeypatch):
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+    monkeypatch.setattr(workflows.region_contrasts, "score_regions", _mock_region_contrast_result)
+
+    result = workflows.discovery_cluster_contrast_workflow(
+        samples=_workflow_samples(),
+        motifs=["A,0"],
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2},
+        contrasts={
+            "contrast": ContrastSpec(
+                mode="pairwise",
+                numerator=["15min"],
+                denominator=["NS"],
+            ),
+        },
+    )
+
+    assert result.metadata["full_scan_windows"].equals(result.discovery.windows)
+
+
+def test_discovery_cluster_contrast_workflow_rejects_missing_contrast_config(monkeypatch):
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+
+    with pytest.raises(ValueError, match=r"requires contrasts\['contrast'\]"):
+        workflows.discovery_cluster_contrast_workflow(
+            samples=_workflow_samples(),
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1500},
+            discovery={"window_size": 500, "step_size": 500},
+            clustering={"mode": "region_anchored", "n_clusters": 2},
+            contrasts={"test": "effect_size_only"},
+        )
+
+
+def test_discovery_cluster_contrast_workflow_fast_fails_invalid_contrast_config_before_scan(
+    monkeypatch,
+):
+    called = {"scan_genome": False}
+
+    def fake_scan_genome(*args, **kwargs):
+        called["scan_genome"] = True
+        raise AssertionError("scan_genome should not be called for invalid contrast config")
+
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", fake_scan_genome)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
+
+    with pytest.raises(ValueError, match="analysis_unit='ensemble_region'"):
+        workflows.discovery_cluster_contrast_workflow(
+            samples=_workflow_samples(),
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1500},
+            discovery={"window_size": 500, "step_size": 500},
+            clustering={"mode": "region_anchored", "n_clusters": 2},
+            contrasts={
+                "contrast": ContrastSpec(
+                    mode="pairwise",
+                    numerator=["15min"],
+                    denominator=["NS"],
+                ),
+                "analysis_unit": "single_read",
+            },
+        )
+
+    assert called["scan_genome"] is False
 
 
 def test_shared_cluster_distribution_read_global(monkeypatch):

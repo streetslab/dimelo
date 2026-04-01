@@ -7,9 +7,17 @@ import numpy as np
 import pandas as pd
 
 from .artifacts import resolve_artifact
-from . import cluster, distribution, plotting, region_analysis, region_discovery
+from . import (
+    cluster,
+    distribution,
+    plotting,
+    region_analysis,
+    region_contrasts,
+    region_discovery,
+)
 from .models import (
     DatasetArtifact,
+    RegionDiscoveryClusterContrastResult,
     RegionDiscoveryClusterResult,
     SampleSpec,
     SharedClusterModel,
@@ -426,6 +434,61 @@ def discovery_cluster_workflow(
                 "discovered_hit_count": int(len(discovery_result.hits)),
                 "selected_hit_count": int(len(selected_hits)),
             }
+        },
+    )
+
+
+def discovery_cluster_contrast_workflow(
+    *,
+    samples: Iterable[SampleSpec],
+    motifs: Iterable[str],
+    genome_sizes: dict[str, int],
+    discovery: dict[str, Any],
+    clustering: dict[str, Any],
+    contrasts: dict[str, Any],
+    selection: dict[str, Any] | None = None,
+) -> RegionDiscoveryClusterContrastResult:
+    sample_list = list(samples)
+    motif_list = list(motifs)
+    contrast_config = dict(contrasts)
+    contrast_spec = contrast_config.get("contrast")
+    if contrast_spec is None:
+        raise ValueError("discovery_cluster_contrast_workflow requires contrasts['contrast'].")
+
+    region_contrasts.validate_region_contrast_request(
+        analysis_unit=str(contrast_config.get("analysis_unit", "ensemble_region")),
+        representation=str(contrast_config.get("representation", "modified_fraction")),
+        signal_source=str(contrast_config.get("signal_source", "pileup_counts")),
+        test=str(contrast_config.get("test", "effect_size_only")),
+    )
+
+    discovery_cluster_result = discovery_cluster_workflow(
+        samples=sample_list,
+        motifs=motif_list,
+        genome_sizes=genome_sizes,
+        discovery=discovery,
+        clustering=clustering,
+        selection=selection,
+    )
+    selected_region_spec = _selected_regions_to_region_spec(
+        discovery_cluster_result.selected_regions
+    )
+    contrast_result = region_contrasts.score_regions(
+        samples=sample_list,
+        regions=selected_region_spec,
+        motifs=motif_list,
+        **contrast_config,
+    )
+
+    return RegionDiscoveryClusterContrastResult(
+        discovery=discovery_cluster_result.discovery,
+        clustering=discovery_cluster_result.clustering,
+        contrasts=contrast_result,
+        selected_regions=discovery_cluster_result.selected_regions,
+        metadata={
+            **discovery_cluster_result.metadata,
+            "contrast_scope": "selected",
+            "full_scan_windows": discovery_cluster_result.discovery.windows.copy(),
         },
     )
 
