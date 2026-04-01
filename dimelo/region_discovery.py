@@ -315,9 +315,9 @@ def _score_paired_time_course(
         scored["adjusted_p_value"] = pd.Series(dtype="object")
         return scored
 
-    _validate_time_order(paired_window_table, time_order)
+    ordered = paired_window_table.loc[paired_window_table["condition"].isin(time_order)].copy()
+    _validate_time_order(ordered, time_order)
 
-    ordered = paired_window_table.copy()
     ordered["condition"] = pd.Categorical(
         ordered["condition"],
         categories=time_order,
@@ -329,6 +329,32 @@ def _score_paired_time_course(
         kind="mergesort",
         na_position="last",
     ).reset_index(drop=True)
+
+    complete_trajectories = (
+        ordered.drop_duplicates(subset=_WINDOW_KEY_COLUMNS + ["pair_id", "condition"])
+        .groupby(_WINDOW_KEY_COLUMNS + ["pair_id"], as_index=False, sort=False)
+        .agg(trajectory_condition_count=("condition", "nunique"))
+    )
+    complete_trajectory_ids = complete_trajectories.loc[
+        complete_trajectories["trajectory_condition_count"] == len(time_order),
+        _WINDOW_KEY_COLUMNS + ["pair_id"],
+    ]
+    if complete_trajectory_ids.empty:
+        scored = pd.DataFrame(columns=_WINDOW_KEY_COLUMNS)
+        scored["trajectory_amplitude_mean"] = pd.Series(dtype="float64")
+        scored["trajectory_amplitude_sd"] = pd.Series(dtype="float64")
+        scored["n_pairs_used"] = pd.Series(dtype="int64")
+        scored["score_value"] = pd.Series(dtype="float64")
+        scored["p_value"] = pd.Series(dtype="object")
+        scored["adjusted_p_value"] = pd.Series(dtype="object")
+        return scored
+
+    ordered = ordered.merge(
+        complete_trajectory_ids,
+        on=_WINDOW_KEY_COLUMNS + ["pair_id"],
+        how="inner",
+        sort=False,
+    )
 
     per_pair = (
         ordered.groupby(_WINDOW_KEY_COLUMNS + ["pair_id"], as_index=False, sort=False)
