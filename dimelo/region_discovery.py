@@ -13,7 +13,8 @@ from .region_contrasts import (
 )
 
 _WINDOW_KEY_COLUMNS = ["window_id", "chromosome", "start", "end", "strand"]
-_HIT_SORT_COLUMNS = ["chromosome", "strand", "start", "end", "rank"]
+_MERGE_SORT_COLUMNS = ["chromosome", "strand", "start", "end", "rank"]
+_OUTPUT_SORT_COLUMNS = ["rank", "chromosome", "strand", "start", "end"]
 _BED_COLUMNS = ["chrom", "start", "end", "name", "score", "strand"]
 
 
@@ -295,14 +296,29 @@ def _apply_min_coverage(
     return filtered, hits
 
 
-def _sort_hits_for_deterministic_output(hits: pd.DataFrame) -> pd.DataFrame:
-    sort_columns = [column for column in _HIT_SORT_COLUMNS if column in hits.columns]
+def _sort_hits_for_merge(hits: pd.DataFrame) -> pd.DataFrame:
+    sort_columns = [column for column in _MERGE_SORT_COLUMNS if column in hits.columns]
     if not sort_columns:
         return hits.copy()
 
     ordered = hits.sort_values(
         by=sort_columns,
         ascending=[True] * len(sort_columns),
+        kind="mergesort",
+        na_position="last",
+    ).reset_index(drop=True)
+    return ordered
+
+
+def _sort_hits_for_output(hits: pd.DataFrame) -> pd.DataFrame:
+    sort_columns = [column for column in _OUTPUT_SORT_COLUMNS if column in hits.columns]
+    if not sort_columns:
+        return hits.copy()
+
+    ascending = [True] * len(sort_columns)
+    ordered = hits.sort_values(
+        by=sort_columns,
+        ascending=ascending,
         kind="mergesort",
         na_position="last",
     ).reset_index(drop=True)
@@ -348,12 +364,39 @@ def _build_merged_hit(group: pd.DataFrame) -> dict[str, object]:
         if not rank_values.empty:
             merged["rank"] = int(rank_values.min())
 
+    contrast_count_fields = [
+        "numerator_modified_count",
+        "numerator_valid_count",
+        "denominator_modified_count",
+        "denominator_valid_count",
+    ]
+    contrast_counts_present = any(
+        field in group.columns and group[field].notna().any() for field in contrast_count_fields
+    )
+    if contrast_counts_present:
+        for field in contrast_count_fields:
+            if field in group.columns and group[field].notna().any():
+                merged[field] = int(group[field].fillna(0).sum())
+
     merged_window_count = 0
     if "merged_window_count" in group.columns:
         merged_window_count = int(group["merged_window_count"].fillna(1).sum())
     else:
         merged_window_count = len(group)
     merged["merged_window_count"] = merged_window_count
+
+    if contrast_counts_present and all(
+        field in merged and not pd.isna(merged[field]) for field in contrast_count_fields
+    ):
+        numerator_fraction = _safe_fraction(
+            pd.Series([merged["numerator_modified_count"]], dtype="float64"),
+            pd.Series([merged["numerator_valid_count"]], dtype="float64"),
+        ).iloc[0]
+        denominator_fraction = _safe_fraction(
+            pd.Series([merged["denominator_modified_count"]], dtype="float64"),
+            pd.Series([merged["denominator_valid_count"]], dtype="float64"),
+        ).iloc[0]
+        merged["score_value"] = abs(float(numerator_fraction) - float(denominator_fraction))
 
     if {"chromosome", "start", "end"}.issubset(merged):
         merged["window_id"] = f"{merged['chromosome']}:{int(merged['start'])}-{int(merged['end'])}"
@@ -368,7 +411,7 @@ def merge_adjacent_hits(hits: pd.DataFrame, merge_distance: int) -> pd.DataFrame
             merged["merged_window_count"] = pd.Series(dtype="int64")
         return merged
 
-    ordered = _sort_hits_for_deterministic_output(hits)
+    ordered = _sort_hits_for_merge(hits)
     if len(ordered) == 1:
         merged = ordered.copy()
         merged["merged_window_count"] = (
@@ -385,7 +428,6 @@ def merge_adjacent_hits(hits: pd.DataFrame, merge_distance: int) -> pd.DataFrame
             merged["window_fraction"] = _safe_fraction(
                 merged["modified_count"], merged["valid_count"]
             )
-        merged["rank"] = range(1, len(merged) + 1)
         return merged
 
     merged_rows: list[dict[str, object]] = []
@@ -406,8 +448,7 @@ def merge_adjacent_hits(hits: pd.DataFrame, merge_distance: int) -> pd.DataFrame
 
     merged_rows.append(_build_merged_hit(pd.DataFrame(current_group)))
     merged = pd.DataFrame(merged_rows)
-    merged = _sort_hits_for_deterministic_output(merged)
-    merged["rank"] = range(1, len(merged) + 1)
+    merged = _sort_hits_for_output(merged)
 
     if "window_id" not in merged.columns and {"chromosome", "start", "end"}.issubset(merged.columns):
         merged["window_id"] = merged.apply(
@@ -435,7 +476,7 @@ def hits_to_bed(hits: pd.DataFrame) -> pd.DataFrame:
     if hits.empty:
         return pd.DataFrame(columns=_BED_COLUMNS)
 
-    ordered = _sort_hits_for_deterministic_output(hits)
+    ordered = _sort_hits_for_output(hits)
 
     chrom_column = "chromosome" if "chromosome" in ordered.columns else "chrom"
     chrom = ordered[chrom_column]
@@ -447,11 +488,16 @@ def hits_to_bed(hits: pd.DataFrame) -> pd.DataFrame:
             axis=1,
         )
     if "score_value" in ordered.columns:
-        score = ordered["score_value"].fillna(0)
-    elif "rank" in ordered.columns:
-        score = ordered["rank"].fillna(0)
+        score = (
+            ordered["score_value"]
+            .fillna(0.0)
+            .mul(1000)
+            .round()
+            .clip(lower=0, upper=1000)
+            .astype(int)
+        )
     else:
-        score = 0
+        score = pd.Series([0] * len(ordered), index=ordered.index, dtype="int64")
     strand = ordered["strand"] if "strand" in ordered.columns else "."
     strand = strand.where(strand.isin({"+", "-"}), ".") if isinstance(strand, pd.Series) else strand
 

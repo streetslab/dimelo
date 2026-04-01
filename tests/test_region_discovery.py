@@ -81,27 +81,13 @@ def _merge_helper_hits() -> pd.DataFrame:
                 "end": 200,
                 "strand": "+",
                 "window_id": "chr2:100-200",
-                "score_value": 0.3,
-                "p_value": 0.03,
-                "adjusted_p_value": 0.06,
-                "rank": 4,
-                "modified_count": 3,
-                "valid_count": 10,
-                "window_fraction": 0.3,
-            },
-            {
-                "chromosome": "chr1",
-                "start": 200,
-                "end": 300,
-                "strand": "+",
-                "window_id": "chr1:200-300",
-                "score_value": 0.4,
-                "p_value": 0.04,
-                "adjusted_p_value": 0.08,
-                "rank": 2,
-                "modified_count": 4,
-                "valid_count": 10,
-                "window_fraction": 0.4,
+                "score_value": 0.95,
+                "p_value": 0.01,
+                "adjusted_p_value": 0.01,
+                "rank": 1,
+                "modified_count": 19,
+                "valid_count": 20,
+                "window_fraction": 0.95,
             },
             {
                 "chromosome": "chr1",
@@ -109,13 +95,35 @@ def _merge_helper_hits() -> pd.DataFrame:
                 "end": 100,
                 "strand": "+",
                 "window_id": "chr1:0-100",
-                "score_value": 0.9,
-                "p_value": 0.01,
-                "adjusted_p_value": 0.02,
-                "rank": 1,
-                "modified_count": 9,
+                "score_value": 0.2,
+                "p_value": 0.04,
+                "adjusted_p_value": 0.08,
+                "rank": 2,
+                "modified_count": 2,
                 "valid_count": 10,
-                "window_fraction": 0.9,
+                "window_fraction": 0.2,
+                "numerator_modified_count": 2,
+                "numerator_valid_count": 4,
+                "denominator_modified_count": 1,
+                "denominator_valid_count": 4,
+            },
+            {
+                "chromosome": "chr1",
+                "start": 101,
+                "end": 200,
+                "strand": "+",
+                "window_id": "chr1:101-200",
+                "score_value": 0.4,
+                "p_value": 0.03,
+                "adjusted_p_value": 0.06,
+                "rank": 3,
+                "modified_count": 6,
+                "valid_count": 10,
+                "window_fraction": 0.6,
+                "numerator_modified_count": 4,
+                "numerator_valid_count": 6,
+                "denominator_modified_count": 2,
+                "denominator_valid_count": 6,
             },
             {
                 "chromosome": "chr1",
@@ -126,7 +134,7 @@ def _merge_helper_hits() -> pd.DataFrame:
                 "score_value": 0.8,
                 "p_value": 0.05,
                 "adjusted_p_value": 0.07,
-                "rank": 5,
+                "rank": 4,
                 "modified_count": 8,
                 "valid_count": 10,
                 "window_fraction": 0.8,
@@ -185,27 +193,43 @@ def test_scan_genome_basic_behavior_with_mocked_window_summary(monkeypatch):
     assert result.metadata["score"] == "effect_size_only"
 
 
-def test_merge_adjacent_hits_merges_nearby_windows_deterministically():
-    merged = region_discovery.merge_adjacent_hits(_merge_helper_hits(), merge_distance=150)
+def test_merge_adjacent_hits_preserves_rank_order_and_merges_counts():
+    merged = region_discovery.merge_adjacent_hits(_merge_helper_hits(), merge_distance=1)
 
-    assert list(merged["window_id"]) == ["chr1:0-300", "chr1:500-600", "chr2:100-200"]
-    assert list(merged["rank"]) == [1, 2, 3]
-    assert list(merged["merged_window_count"]) == [2, 1, 1]
-    assert list(merged["score_value"]) == [pytest.approx(0.9), pytest.approx(0.8), pytest.approx(0.3)]
-    assert list(merged["p_value"]) == [pytest.approx(0.01), pytest.approx(0.05), pytest.approx(0.03)]
-    assert list(merged["adjusted_p_value"]) == [pytest.approx(0.02), pytest.approx(0.07), pytest.approx(0.06)]
-    assert list(merged["window_fraction"]) == [pytest.approx(13 / 20), pytest.approx(0.8), pytest.approx(0.3)]
+    assert list(merged["window_id"]) == ["chr2:100-200", "chr1:0-200", "chr1:500-600"]
+    assert list(merged["rank"]) == [1, 2, 4]
+    assert list(merged["merged_window_count"]) == [1, 2, 1]
+    assert list(merged["score_value"]) == [pytest.approx(0.95), pytest.approx(0.3), pytest.approx(0.8)]
+    assert list(merged["p_value"]) == [pytest.approx(0.01), pytest.approx(0.03), pytest.approx(0.05)]
+    assert list(merged["adjusted_p_value"]) == [pytest.approx(0.01), pytest.approx(0.06), pytest.approx(0.07)]
+    assert list(merged["modified_count"]) == [19, 8, 8]
+    assert list(merged["valid_count"]) == [20, 20, 10]
+    assert list(merged["window_fraction"]) == [pytest.approx(0.95), pytest.approx(0.4), pytest.approx(0.8)]
+    assert pd.isna(merged.loc[0, "numerator_modified_count"])
+    assert merged.loc[1, "numerator_modified_count"] == 6
+    assert pd.isna(merged.loc[2, "numerator_modified_count"])
+    assert pd.isna(merged.loc[0, "numerator_valid_count"])
+    assert merged.loc[1, "numerator_valid_count"] == 10
+    assert pd.isna(merged.loc[2, "numerator_valid_count"])
+    assert pd.isna(merged.loc[0, "denominator_modified_count"])
+    assert merged.loc[1, "denominator_modified_count"] == 3
+    assert pd.isna(merged.loc[2, "denominator_modified_count"])
+    assert pd.isna(merged.loc[0, "denominator_valid_count"])
+    assert merged.loc[1, "denominator_valid_count"] == 10
+    assert pd.isna(merged.loc[2, "denominator_valid_count"])
 
 
 def test_hits_to_bed_projects_required_columns_in_order():
-    merged = region_discovery.merge_adjacent_hits(_merge_helper_hits(), merge_distance=150)
+    merged = region_discovery.merge_adjacent_hits(_merge_helper_hits(), merge_distance=1)
     bed = region_discovery.hits_to_bed(merged)
 
     assert list(bed.columns) == ["chrom", "start", "end", "name", "score", "strand"]
+    assert pd.api.types.is_integer_dtype(bed["score"])
+    assert bed["score"].between(0, 1000).all()
     assert bed.to_dict(orient="records") == [
-        {"chrom": "chr1", "start": 0, "end": 300, "name": "chr1:0-300", "score": pytest.approx(0.9), "strand": "+"},
-        {"chrom": "chr1", "start": 500, "end": 600, "name": "chr1:500-600", "score": pytest.approx(0.8), "strand": "-"},
-        {"chrom": "chr2", "start": 100, "end": 200, "name": "chr2:100-200", "score": pytest.approx(0.3), "strand": "+"},
+        {"chrom": "chr2", "start": 100, "end": 200, "name": "chr2:100-200", "score": 950, "strand": "+"},
+        {"chrom": "chr1", "start": 0, "end": 200, "name": "chr1:0-200", "score": 300, "strand": "+"},
+        {"chrom": "chr1", "start": 500, "end": 600, "name": "chr1:500-600", "score": 800, "strand": "-"},
     ]
 
 
@@ -954,4 +978,4 @@ def test_scan_genome_merge_hits_keeps_strand_and_recomputes_window_fields(monkey
     assert list(result.hits["strand"]) == ["+", "-"]
     assert result.hits.loc[0, "window_fraction"] == pytest.approx(0.25)
     assert result.hits.loc[0, "merged_window_count"] == 2
-    assert list(result.hits["rank"]) == [1, 2]
+    assert list(result.hits["rank"]) == [1, 3]
