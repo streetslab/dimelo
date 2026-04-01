@@ -410,6 +410,10 @@ def scan_genome(
     motif_list = _validate_motifs(motifs)
     if score not in {"effect_size_only", "beta_binomial"}:
         raise ValueError("scan_genome requires score in {'effect_size_only', 'beta_binomial'}.")
+    if contrast is not None and contrast.mode not in {"pairwise", "group_vs_group"}:
+        raise ValueError(
+            "scan_genome currently supports only pairwise/group_vs_group contrast modes."
+        )
 
     window_summary = global_analysis.build_window_summary(
         samples=samples,

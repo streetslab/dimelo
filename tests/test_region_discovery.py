@@ -620,6 +620,25 @@ def test_scan_genome_raises_for_missing_contrast_condition(monkeypatch):
         )
 
 
+def test_scan_genome_rejects_unimplemented_contrast_modes():
+    with pytest.raises(ValueError, match="pairwise/group_vs_group"):
+        region_discovery.scan_genome(
+            samples=[],
+            motifs=["A,0"],
+            genome_sizes={"chr1": 1000},
+            window_size=1000,
+            step_size=1000,
+            contrast=ContrastSpec(
+                mode="matched_pairwise",
+                numerator=["treated"],
+                denominator=["NS"],
+                pairing_key="donor",
+            ),
+            score="effect_size_only",
+            min_coverage=1,
+        )
+
+
 def test_scan_genome_reranks_hits_after_min_coverage_filtering(monkeypatch):
     def fake_build_window_summary(**kwargs):
         return pd.DataFrame(
