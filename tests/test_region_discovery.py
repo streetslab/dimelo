@@ -607,7 +607,6 @@ def test_scan_genome_matched_pairwise_applies_min_coverage_filtering(monkeypatch
     assert pd.isna(result.windows.loc[0, "rank"])
     assert pd.isna(result.windows.loc[0, "score_value"])
 
-
 def test_scan_genome_matched_pairwise_reranks_surviving_hits_after_coverage_filter(monkeypatch):
     monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: pd.DataFrame(
         [
@@ -744,8 +743,6 @@ def test_scan_genome_matched_pairwise_reranks_surviving_hits_after_coverage_filt
     covered_windows = result.windows.loc[result.windows["valid_count"] >= 50]
     assert list(covered_windows["window_id"]) == list(result.hits["window_id"])
     assert list(covered_windows["rank"]) == list(result.hits["rank"])
-
-
 def test_scan_genome_matched_pairwise_rejects_merge_hits(monkeypatch):
     monkeypatch.setattr(
         global_analysis,
