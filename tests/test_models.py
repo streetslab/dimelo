@@ -12,6 +12,7 @@ from dimelo.models import (
     DatasetArtifact,
     SampleSpec,
     RegionDiscoveryResult,
+    RegionDiscoveryClusterContrastResult,
     RegionDiscoveryClusterResult,
     RegionContrastResult,
     SharedClusterModel,
@@ -27,6 +28,14 @@ def test_dimelo_package_root_exports_region_discovery_cluster_result():
     from dimelo import RegionDiscoveryClusterResult as RootRegionDiscoveryClusterResult
 
     assert RootRegionDiscoveryClusterResult is RegionDiscoveryClusterResult
+
+
+def test_dimelo_package_root_exports_region_discovery_cluster_contrast_result():
+    from dimelo import (
+        RegionDiscoveryClusterContrastResult as RootRegionDiscoveryClusterContrastResult,
+    )
+
+    assert RootRegionDiscoveryClusterContrastResult is RegionDiscoveryClusterContrastResult
 
 
 def test_sample_spec_fields():
@@ -545,6 +554,196 @@ def test_region_discovery_cluster_result_rejects_invalid_wrapper_types(
 
     with pytest.raises(TypeError, match=expected_type):
         RegionDiscoveryClusterResult(**kwargs)
+
+
+def test_region_discovery_cluster_contrast_result_supports_wrapped_outputs():
+    discovery = RegionDiscoveryResult(
+        hits=pd.DataFrame({"region": ["chr1:0-1000"]}),
+        windows=pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+        contrast=None,
+        plot_data={"ranked_hits": pd.DataFrame({"region": ["chr1:0-1000"]})},
+        metadata={"analysis_unit": "genome"},
+        figures={"hit_track": object()},
+    )
+    clustering = SharedClusterResult(
+        model=SharedClusterModel(
+            mode="shared",
+            motifs=["A,0"],
+            feature_names=["A,0_mod_fraction"],
+            preprocessing={"scale": "standard"},
+            estimator=object(),
+            cluster_labels=["cluster-1"],
+            fit_metadata={"random_state": 7},
+        ),
+        assignments=pd.DataFrame({"cluster": ["cluster-1"]}),
+        cluster_distribution=pd.DataFrame({"cluster": ["cluster-1"]}),
+        condition_distribution=pd.DataFrame({"condition": ["treated"]}),
+        distribution_change=None,
+        cluster_profiles=pd.DataFrame({"profile": [1.0]}),
+        region_summaries=None,
+        plot_data={"cluster_distribution_bar": {"kind": "bar"}},
+        figures={},
+        metadata={"notes": "ok"},
+    )
+    contrasts = RegionContrastResult(
+        regions=pd.DataFrame({"region": ["chr1:0-1000"]}),
+        summary=pd.DataFrame({"metric": [1.0]}),
+        contrast=ContrastSpec(
+            mode="pairwise",
+            numerator=["15min"],
+            denominator=["NS"],
+            reference_condition="NS",
+        ),
+        plot_data={"volcano": pd.DataFrame({"x": [1.0]})},
+        metadata={"notes": "ok"},
+        figures={},
+    )
+    selected_regions = pd.DataFrame(
+        [{"chromosome": "chr1", "start": 0, "end": 1000}]
+    )
+
+    result = RegionDiscoveryClusterContrastResult(
+        discovery=discovery,
+        clustering=clustering,
+        contrasts=contrasts,
+        selected_regions=selected_regions,
+        metadata={"contrast_scope": "selected"},
+        figures={"workflow": object()},
+    )
+
+    assert result.discovery is discovery
+    assert result.clustering is clustering
+    assert result.contrasts is contrasts
+    assert result.selected_regions.equals(selected_regions)
+    assert result.metadata == {"contrast_scope": "selected"}
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["discovery", "clustering", "contrasts", "selected_regions", "metadata", "figures"],
+)
+def test_region_discovery_cluster_contrast_result_rejects_missing_required_fields(
+    field_name,
+):
+    kwargs = {
+        "discovery": RegionDiscoveryResult(
+            hits=pd.DataFrame({"region": ["chr1:0-1000"]}),
+            windows=pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+            contrast=None,
+            plot_data={"ranked_hits": pd.DataFrame({"region": ["chr1:0-1000"]})},
+            metadata={"analysis_unit": "genome"},
+            figures={"hit_track": object()},
+        ),
+        "clustering": SharedClusterResult(
+            model=SharedClusterModel(
+                mode="shared",
+                motifs=["A,0"],
+                feature_names=["A,0_mod_fraction"],
+                preprocessing={"scale": "standard"},
+                estimator=object(),
+                cluster_labels=["cluster-1"],
+                fit_metadata={"random_state": 7},
+            ),
+            assignments=pd.DataFrame({"cluster": ["cluster-1"]}),
+            cluster_distribution=pd.DataFrame({"cluster": ["cluster-1"]}),
+            condition_distribution=pd.DataFrame({"condition": ["treated"]}),
+            distribution_change=None,
+            cluster_profiles=pd.DataFrame({"profile": [1.0]}),
+            region_summaries=None,
+            plot_data={"cluster_distribution_bar": {"kind": "bar"}},
+            figures={},
+            metadata={"notes": "ok"},
+        ),
+        "contrasts": RegionContrastResult(
+            regions=pd.DataFrame({"region": ["chr1:0-1000"]}),
+            summary=pd.DataFrame({"metric": [1.0]}),
+            contrast=ContrastSpec(
+                mode="pairwise",
+                numerator=["15min"],
+                denominator=["NS"],
+                reference_condition="NS",
+            ),
+            plot_data={"volcano": pd.DataFrame({"x": [1.0]})},
+            metadata={"notes": "ok"},
+            figures={},
+        ),
+        "selected_regions": pd.DataFrame(
+            [{"chromosome": "chr1", "start": 0, "end": 1000}]
+        ),
+        "metadata": {"contrast_scope": "selected"},
+        "figures": {},
+    }
+    kwargs[field_name] = None
+
+    with pytest.raises(ValueError, match=field_name):
+        RegionDiscoveryClusterContrastResult(**kwargs)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "expected_type"),
+    [
+        ("discovery", object(), "RegionDiscoveryResult"),
+        ("clustering", object(), "SharedClusterResult"),
+        ("contrasts", object(), "RegionContrastResult"),
+    ],
+)
+def test_region_discovery_cluster_contrast_result_rejects_invalid_wrapper_types(
+    field_name,
+    value,
+    expected_type,
+):
+    kwargs = {
+        "discovery": RegionDiscoveryResult(
+            hits=pd.DataFrame({"region": ["chr1:0-1000"]}),
+            windows=pd.DataFrame({"window_id": ["chr1:0-1000"]}),
+            contrast=None,
+            plot_data={"ranked_hits": pd.DataFrame({"region": ["chr1:0-1000"]})},
+            metadata={"analysis_unit": "genome"},
+            figures={"hit_track": object()},
+        ),
+        "clustering": SharedClusterResult(
+            model=SharedClusterModel(
+                mode="shared",
+                motifs=["A,0"],
+                feature_names=["A,0_mod_fraction"],
+                preprocessing={"scale": "standard"},
+                estimator=object(),
+                cluster_labels=["cluster-1"],
+                fit_metadata={"random_state": 7},
+            ),
+            assignments=pd.DataFrame({"cluster": ["cluster-1"]}),
+            cluster_distribution=pd.DataFrame({"cluster": ["cluster-1"]}),
+            condition_distribution=pd.DataFrame({"condition": ["treated"]}),
+            distribution_change=None,
+            cluster_profiles=pd.DataFrame({"profile": [1.0]}),
+            region_summaries=None,
+            plot_data={"cluster_distribution_bar": {"kind": "bar"}},
+            figures={},
+            metadata={"notes": "ok"},
+        ),
+        "contrasts": RegionContrastResult(
+            regions=pd.DataFrame({"region": ["chr1:0-1000"]}),
+            summary=pd.DataFrame({"metric": [1.0]}),
+            contrast=ContrastSpec(
+                mode="pairwise",
+                numerator=["15min"],
+                denominator=["NS"],
+                reference_condition="NS",
+            ),
+            plot_data={"volcano": pd.DataFrame({"x": [1.0]})},
+            metadata={"notes": "ok"},
+            figures={},
+        ),
+        "selected_regions": pd.DataFrame(
+            [{"chromosome": "chr1", "start": 0, "end": 1000}]
+        ),
+        "metadata": {"contrast_scope": "selected"},
+        "figures": {},
+    }
+    kwargs[field_name] = value
+
+    with pytest.raises(TypeError, match=expected_type):
+        RegionDiscoveryClusterContrastResult(**kwargs)
 
 
 def test_cohort_spec_stores_workflow_and_params():

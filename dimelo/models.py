@@ -198,6 +198,47 @@ class RegionDiscoveryResult:
 
 
 @dataclass
+class RegionDiscoveryClusterContrastResult:
+    discovery: RegionDiscoveryResult
+    clustering: SharedClusterResult
+    contrasts: RegionContrastResult
+    selected_regions: pd.DataFrame
+    metadata: dict[str, Any] = field(default_factory=dict)
+    figures: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        required_fields = {
+            "discovery": self.discovery,
+            "clustering": self.clustering,
+            "contrasts": self.contrasts,
+            "selected_regions": self.selected_regions,
+            "metadata": self.metadata,
+            "figures": self.figures,
+        }
+        missing = [name for name, value in required_fields.items() if value is None]
+        if missing:
+            raise ValueError(
+                "RegionDiscoveryClusterContrastResult requires non-None values for: "
+                f"{', '.join(missing)}"
+            )
+        if not isinstance(self.discovery, RegionDiscoveryResult):
+            raise TypeError(
+                "RegionDiscoveryClusterContrastResult.discovery must be a "
+                "RegionDiscoveryResult"
+            )
+        if not isinstance(self.clustering, SharedClusterResult):
+            raise TypeError(
+                "RegionDiscoveryClusterContrastResult.clustering must be a "
+                "SharedClusterResult"
+            )
+        if not isinstance(self.contrasts, RegionContrastResult):
+            raise TypeError(
+                "RegionDiscoveryClusterContrastResult.contrasts must be a "
+                "RegionContrastResult"
+            )
+
+
+@dataclass
 class RegionDiscoveryClusterResult:
     discovery: RegionDiscoveryResult
     clustering: SharedClusterResult
