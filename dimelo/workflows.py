@@ -31,6 +31,7 @@ _LEVEL_FEATURES = {
     "iqr",
     "global_mod_fraction",
 }
+RegionSpec = str | Path | list[str | Path] | None
 
 
 def _source_fingerprint(path: Path) -> dict[str, Any]:
@@ -333,13 +334,14 @@ def discovery_cluster_workflow(
     selection: dict[str, Any] | None = None,
 ) -> RegionDiscoveryClusterResult:
     sample_list = list(samples)
+    motif_list = list(motifs)
     selection_config = dict(selection or {})
     selection_mode = str(selection_config.get("mode", "top_n"))
     selection_top_n = selection_config.get("top_n")
 
     discovery_result = region_discovery.scan_genome(
         samples=sample_list,
-        motifs=motifs,
+        motifs=motif_list,
         genome_sizes=genome_sizes,
         **discovery,
     )
@@ -355,7 +357,7 @@ def discovery_cluster_workflow(
     matched_regions = _selected_regions_to_region_spec(selected_regions)
     clustering_result = shared_cluster_distribution(
         samples=sample_list,
-        motifs=motifs,
+        motifs=motif_list,
         matched_regions=matched_regions,
         **clustering,
     )
@@ -506,7 +508,7 @@ def shared_cluster_distribution(
     samples: Iterable[SampleSpec],
     mode: str,
     motifs: Iterable[str],
-    matched_regions: str | None = None,
+    matched_regions: RegionSpec = None,
     signal_normalization: str = "none",
     feature_scaling: str = "robust_zscore",
     cluster_basis: str = "shape_plus_level",
@@ -547,6 +549,11 @@ def shared_cluster_distribution(
         raise ValueError(f"Unsupported cluster_basis: {cluster_basis}")
 
     if mode == "region_anchored":
+        if matched_regions is None:
+            raise ValueError(
+                "mode='region_anchored' requires matched_regions; per-sample regions_bed is not used "
+                "as an implicit fallback."
+            )
         pileup_paths: dict[str, str | Path] = {}
         cache_hits: dict[str, str] = {}
         cache_misses: list[str] = []

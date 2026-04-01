@@ -353,6 +353,33 @@ def test_discovery_cluster_workflow_materializes_samples_iterable(monkeypatch):
     assert list(result.selected_regions["name"]) == ["chr1:0-500", "chr1:500-1000"]
 
 
+def test_discovery_cluster_workflow_materializes_motif_generator(monkeypatch):
+    captured = {}
+
+    def fake_discovery(*args, **kwargs):
+        captured["discovery_motifs"] = list(kwargs["motifs"])
+        return _mock_discovery_result(*args, **kwargs)
+
+    def fake_cluster(**kwargs):
+        captured["clustering_motifs"] = list(kwargs["motifs"])
+        return _mock_cluster_result(**kwargs)
+
+    monkeypatch.setattr(workflows.region_discovery, "scan_genome", fake_discovery)
+    monkeypatch.setattr(workflows, "shared_cluster_distribution", fake_cluster)
+
+    workflows.discovery_cluster_workflow(
+        samples=_workflow_samples(),
+        motifs=(motif for motif in ["A,0", "CG,1"]),
+        genome_sizes={"chr1": 1500},
+        discovery={"window_size": 500, "step_size": 500},
+        clustering={"mode": "region_anchored", "n_clusters": 2},
+        selection={"mode": "top_n", "top_n": 2},
+    )
+
+    assert captured["discovery_motifs"] == ["A,0", "CG,1"]
+    assert captured["clustering_motifs"] == ["A,0", "CG,1"]
+
+
 def test_shared_cluster_distribution_read_global(monkeypatch):
     fake_samples = [
         SampleSpec(sample_id="s1", condition="NS", extract_h5="s1.h5"),
@@ -488,6 +515,59 @@ def test_shared_cluster_distribution_region_anchored(monkeypatch):
     assert {"region_id", "sample_id", "condition", "cluster", "count", "fraction"} <= set(
         result.region_summaries.columns
     )
+
+
+def test_shared_cluster_distribution_region_anchored_requires_matched_regions():
+    with pytest.raises(ValueError, match="requires matched_regions"):
+        workflows.shared_cluster_distribution(
+            samples=_workflow_samples(),
+            mode="region_anchored",
+            motifs=["A,0"],
+            make_plots=False,
+        )
+
+
+def test_shared_cluster_distribution_region_anchored_accepts_list_matched_regions(monkeypatch):
+    captured = {}
+
+    def fake_region_table(*args, **kwargs):
+        captured["matched_regions"] = kwargs["matched_regions"]
+        return np.array([[0.2, 0.8], [0.7, 0.3]]), [
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "replicate": None,
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 2,
+                "strand": "+",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "15min",
+                "replicate": None,
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 2,
+                "strand": "+",
+            },
+        ]
+
+    monkeypatch.setattr(workflows.region_analysis, "build_region_feature_table", fake_region_table)
+
+    result = workflows.shared_cluster_distribution(
+        samples=_workflow_samples(),
+        mode="region_anchored",
+        motifs=["A,0"],
+        matched_regions=["chr1:0-2,+", "chr1:2-4,-"],
+        n_clusters=2,
+        make_plots=False,
+    )
+
+    assert captured["matched_regions"] == ["chr1:0-2,+", "chr1:2-4,-"]
+    assert not result.assignments.empty
 
 
 def test_shared_cluster_distribution_tracks_condition_replicates(monkeypatch):
