@@ -79,12 +79,71 @@ def test_summarize_global_samples_from_pileup(monkeypatch):
                 "motif": "CG,0",
                 "modified_count": 0,
                 "valid_count": 0,
-                "global_fraction": 0.0,
+                "global_fraction": float("nan"),
             },
         ]
     )
 
     pd.testing.assert_frame_equal(result, expected)
+
+
+def test_global_counts_from_bedmethyl_sums_only_matching_rows(monkeypatch):
+    rows_by_contig = {
+        "chr1": ["row-1", "row-2"],
+        "chr2": ["row-3"],
+    }
+
+    class FakeTabixFile:
+        def __init__(self, path):
+            assert path == "pileup.bed.gz"
+            self.contigs = tuple(rows_by_contig)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def fetch(self, contig):
+            return iter(rows_by_contig[contig])
+
+    parsed_motifs = []
+
+    def fake_parsed_motif(motif):
+        parsed_motifs.append(motif)
+        return {"motif": motif}
+
+    processed_rows = []
+    process_results = {
+        "row-1": (True, 10, 3, 8),
+        "row-2": (False, 11, 20, 30),
+        "row-3": (True, 12, 5, 10),
+    }
+
+    def fake_process_pileup_row(row, parsed_motif, region_strand, single_strand=False):
+        processed_rows.append((row, parsed_motif, region_strand, single_strand))
+        return process_results[row]
+
+    monkeypatch.setattr(global_analysis.pysam, "TabixFile", FakeTabixFile)
+    monkeypatch.setattr(global_analysis.utils, "ParsedMotif", fake_parsed_motif)
+    monkeypatch.setattr(
+        global_analysis.load_processed,
+        "process_pileup_row",
+        fake_process_pileup_row,
+    )
+
+    modified_count, valid_count = global_analysis._global_counts_from_bedmethyl(
+        bedmethyl_file="pileup.bed.gz",
+        motif="A,0",
+    )
+
+    assert (modified_count, valid_count) == (8, 18)
+    assert parsed_motifs == ["A,0"]
+    assert processed_rows == [
+        ("row-1", {"motif": "A,0"}, ".", False),
+        ("row-2", {"motif": "A,0"}, ".", False),
+        ("row-3", {"motif": "A,0"}, ".", False),
+    ]
 
 
 def test_summarize_global_samples_requires_pileup_path():

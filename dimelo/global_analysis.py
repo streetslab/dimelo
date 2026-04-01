@@ -75,7 +75,7 @@ def summarize_global_samples(
                     "modified_count": modified_count,
                     "valid_count": valid_count,
                     "global_fraction": (
-                        modified_count / valid_count if valid_count else 0.0
+                        modified_count / valid_count if valid_count else float("nan")
                     ),
                 }
             )
