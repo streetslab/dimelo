@@ -47,6 +47,9 @@ def validate_axis_spec(axis: AxisSpec, *, plot_family: str) -> None:
     if axis.coordinate_mode == "segment_map" and not axis.segments:
         raise ValueError("segment_map requires segments.")
 
+    if plot_family == "single_read_raster" and axis.coordinate_mode == "segment_map":
+        raise ValueError("segment_map is aggregate-only for single_read_raster plots.")
+
     if axis.coordinate_mode == "fixed_window":
         if axis.upstream_bp is None or axis.downstream_bp is None:
             raise ValueError("fixed_window requires upstream_bp and downstream_bp.")
@@ -132,6 +135,62 @@ def _prepare_fixed_window_plot_data(
     return plot_table, axis_table
 
 
+def _build_segment_axis_table(segments: list[SegmentSpec]) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    running_start = 0
+
+    for segment in segments:
+        span = segment.bins if segment.bins is not None else segment.end_ref - segment.start_ref
+        rows.append(
+            {
+                "segment_id": segment.segment_id,
+                "label": segment.label,
+                "start_ref": segment.start_ref,
+                "end_ref": segment.end_ref,
+                "mode": segment.mode,
+                "bins": segment.bins,
+                "plot_start": running_start,
+                "plot_end": running_start + span,
+                "contiguous_with_previous": segment.contiguous_with_previous,
+                "plot_gap_after": segment.plot_gap_after,
+                "discontinuity_before": not segment.contiguous_with_previous,
+                "discontinuity_after": segment.plot_gap_after,
+            }
+        )
+        running_start += span
+
+    return pd.DataFrame(rows)
+
+
+def _prepare_segment_map_plot_data(
+    table: pd.DataFrame,
+    *,
+    axis: AxisSpec,
+    segment_id_column: str,
+    segment_position_column: str,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if not axis.segments:
+        raise ValueError("segment_map requires segments.")
+
+    _require_columns(table, (segment_id_column, segment_position_column), "plot_table")
+
+    axis_table = _build_segment_axis_table(axis.segments)
+    plot_table = table.copy()
+    axis_lookup = axis_table.loc[:, ["segment_id", "plot_start"]].rename(
+        columns={"segment_id": "_axis_segment_id"}
+    )
+    plot_table = plot_table.merge(
+        axis_lookup,
+        left_on=segment_id_column,
+        right_on="_axis_segment_id",
+        how="left",
+    )
+    plot_table["plot_x"] = plot_table["plot_start"] + plot_table[segment_position_column].astype(float)
+    plot_table = plot_table.drop(columns=["_axis_segment_id", "plot_start"])
+
+    return plot_table, axis_table
+
+
 def prepare_single_read_plot_data(
     table: pd.DataFrame,
     *,
@@ -164,21 +223,36 @@ def prepare_aggregate_plot_data(
     axis: AxisSpec,
     aggregation: AggregationSpec,
     value_column: str,
-    position_column: str,
-    anchor_column: str,
+    position_column: str | None = None,
+    anchor_column: str | None = None,
     region_strand_column: str | None = None,
+    segment_id_column: str | None = None,
+    segment_position_column: str | None = None,
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     validate_axis_spec(axis, plot_family=plot_family)
     validate_aggregation_spec(aggregation)
     _require_columns(table, (value_column,), "plot_table")
 
-    plot_table, axis_table = _prepare_fixed_window_plot_data(
-        table,
-        axis=axis,
-        position_column=position_column,
-        anchor_column=anchor_column,
-        region_strand_column=region_strand_column,
-    )
+    if axis.coordinate_mode == "segment_map":
+        if segment_id_column is None or segment_position_column is None:
+            raise ValueError("segment_map plotting requires segment_id_column and segment_position_column.")
+        plot_table, axis_table = _prepare_segment_map_plot_data(
+            table,
+            axis=axis,
+            segment_id_column=segment_id_column,
+            segment_position_column=segment_position_column,
+        )
+    else:
+        if position_column is None or anchor_column is None:
+            raise ValueError("fixed_window plotting requires position_column and anchor_column.")
+        plot_table, axis_table = _prepare_fixed_window_plot_data(
+            table,
+            axis=axis,
+            position_column=position_column,
+            anchor_column=anchor_column,
+            region_strand_column=region_strand_column,
+        )
+
     metadata = {
         "plot_family": plot_family,
         "orientation": axis.orientation,
@@ -188,6 +262,8 @@ def prepare_aggregate_plot_data(
         "signal_normalization": aggregation.signal_normalization,
         "layout": aggregation.layout,
     }
+    if axis.coordinate_mode == "segment_map":
+        metadata["segment_count"] = len(axis_table)
     return {"plot_table": plot_table, "axis_table": axis_table, "metadata": metadata}
 
 

@@ -307,3 +307,120 @@ def test_prepare_aggregate_plot_data_retains_metadata_for_fixed_window():
 
     assert {"plot_table", "axis_table", "metadata"} <= set(payload)
     assert payload["metadata"]["orientation"] == "region_5to3"
+
+
+def test_prepare_single_read_plot_data_rejects_segment_map_axes():
+    reads = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "region_strand": "+",
+                "event_pos": 110,
+                "anchor": 100,
+                "read_id": "r1",
+            }
+        ]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[
+            plotting.SegmentSpec(
+                segment_id="body",
+                label="Body",
+                start_ref=100,
+                end_ref=200,
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="segment_map is aggregate-only"):
+        plotting.prepare_single_read_plot_data(
+            reads,
+            plot_family="single_read_raster",
+            axis=axis,
+            position_column="event_pos",
+            anchor_column="anchor",
+            region_strand_column="region_strand",
+        )
+
+
+def test_prepare_aggregate_plot_data_builds_concatenated_segment_axis():
+    table = pd.DataFrame(
+        [
+            {"region_id": "reg1", "segment_id": "upstream", "segment_pos": 0, "signal": 1.0},
+            {"region_id": "reg1", "segment_id": "body", "segment_pos": 10, "signal": 2.0},
+        ]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[
+            plotting.SegmentSpec("upstream", "Upstream", 0, 100, "raw", bins=20),
+            plotting.SegmentSpec("body", "Body", 100, 400, "scaled", bins=50, contiguous_with_previous=True),
+        ],
+    )
+    aggregation = plotting.AggregationSpec(
+        weighting="equal_region",
+        within_region_summary="mean",
+        signal_normalization="none",
+        layout="concatenated",
+    )
+
+    payload = plotting.prepare_aggregate_plot_data(
+        table,
+        plot_family="aggregate_profile",
+        axis=axis,
+        aggregation=aggregation,
+        value_column="signal",
+        segment_id_column="segment_id",
+        segment_position_column="segment_pos",
+    )
+
+    assert list(payload["axis_table"]["segment_id"]) == ["upstream", "body"]
+    assert list(payload["axis_table"]["plot_start"]) == [0, 20]
+    assert list(payload["axis_table"]["plot_end"]) == [20, 70]
+    assert payload["axis_table"]["plot_start"].is_monotonic_increasing
+    assert list(payload["plot_table"]["plot_x"]) == [0.0, 30.0]
+
+
+def test_prepare_aggregate_plot_data_marks_non_contiguous_segment_breaks():
+    table = pd.DataFrame(
+        [{"region_id": "reg1", "segment_id": "exon1", "segment_pos": 5, "signal": 1.0}]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[
+            plotting.SegmentSpec("exon1", "Exon 1", 100, 200, "scaled", bins=20),
+            plotting.SegmentSpec(
+                "exon3",
+                "Exon 3",
+                500,
+                650,
+                "scaled",
+                bins=20,
+                contiguous_with_previous=False,
+                plot_gap_after=True,
+            ),
+        ],
+    )
+    aggregation = plotting.AggregationSpec(
+        weighting="equal_region",
+        within_region_summary="mean",
+        signal_normalization="none",
+        layout="faceted",
+    )
+
+    payload = plotting.prepare_aggregate_plot_data(
+        table,
+        plot_family="aggregate_profile",
+        axis=axis,
+        aggregation=aggregation,
+        value_column="signal",
+        segment_id_column="segment_id",
+        segment_position_column="segment_pos",
+    )
+
+    assert list(payload["axis_table"]["contiguous_with_previous"]) == [True, False]
+    assert list(payload["axis_table"]["plot_gap_after"]) == [False, True]
