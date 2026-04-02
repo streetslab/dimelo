@@ -32,7 +32,7 @@ This directory tracks internal design and implementation work for the current br
 
 ### Cleanup And Docs
 
-- [2026-04-02-superpowers-docs-cleanup-design.md](specs/2026-04-02-superpowers-docs-cleanup-design.md) - central index and status-map cleanup for internal planning docs. Status: `partially implemented`
+- [2026-04-02-superpowers-docs-cleanup-design.md](specs/2026-04-02-superpowers-docs-cleanup-design.md) - central index and status-map cleanup for internal planning docs. Status: `implemented`
 
 ## Plans
 
@@ -42,7 +42,7 @@ This directory tracks internal design and implementation work for the current br
 
 ### Region Analysis
 
-- [2026-03-31-global-analysis-foundations.md](plans/2026-03-31-global-analysis-foundations.md) - global analysis models, workflows, and artifact plumbing. Status: `implemented`
+- [2026-03-31-global-analysis-foundations.md](plans/2026-03-31-global-analysis-foundations.md) - global analysis models, workflows, and artifact plumbing. Status: `partially implemented`
 - [2026-03-31-region-contrasts-foundations.md](plans/2026-03-31-region-contrasts-foundations.md) - defined-region contrast foundations and scoring paths. Status: `implemented`
 - [2026-04-01-cluster-occupancy-region-contrasts.md](plans/2026-04-01-cluster-occupancy-region-contrasts.md) - cluster-occupancy evidence and scoring for region contrasts. Status: `implemented`
 
@@ -60,7 +60,7 @@ This directory tracks internal design and implementation work for the current br
 
 ### Cleanup And Docs
 
-- [2026-04-02-superpowers-docs-cleanup.md](plans/2026-04-02-superpowers-docs-cleanup.md) - central docs index and tracked-plan cleanup. Status: `partially implemented`
+- [2026-04-02-superpowers-docs-cleanup.md](plans/2026-04-02-superpowers-docs-cleanup.md) - central docs index and tracked-plan cleanup. Status: `implemented`
 
 ## Current Themes
 
