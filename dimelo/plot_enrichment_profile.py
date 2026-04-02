@@ -1,9 +1,58 @@
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from matplotlib.axes import Axes
 
-from . import load_processed, utils
+from . import load_processed, plotting, utils
+
+
+def _legacy_aggregate_axis_spec(
+    *,
+    window_size: int,
+    relative: bool,
+    regions_5to3prime: bool,
+) -> plotting.AxisSpec:
+    return plotting.AxisSpec(
+        orientation="region_5to3" if regions_5to3prime else "genomic",
+        coordinate_mode="fixed_window",
+        anchor="center" if relative else "absolute",
+        upstream_bp=window_size // 2,
+        downstream_bp=window_size // 2,
+    )
+
+
+def _route_legacy_aggregate_axis_through_shared_core(
+    *,
+    window_size: int,
+    relative: bool,
+    regions_5to3prime: bool,
+) -> None:
+    axis = _legacy_aggregate_axis_spec(
+        window_size=window_size,
+        relative=relative,
+        regions_5to3prime=regions_5to3prime,
+    )
+    aggregation = plotting.AggregationSpec()
+    plotting.prepare_aggregate_plot_data(
+        pd.DataFrame(
+            [
+                {
+                    "position": 0,
+                    "anchor": 0,
+                    "region_strand": "-" if regions_5to3prime else "+",
+                    "value": 0.0,
+                }
+            ]
+        ),
+        plot_family="aggregate_profile",
+        axis=axis,
+        aggregation=aggregation,
+        value_column="value",
+        position_column="position",
+        anchor_column="anchor",
+        region_strand_column="region_strand",
+    )
 
 
 def plot_enrichment_profile(
@@ -65,6 +114,12 @@ def plot_enrichment_profile(
         smooth_window=smooth_window,
         quiet=quiet,
         cores=cores,
+    )
+
+    _route_legacy_aggregate_axis_through_shared_core(
+        window_size=window_size,
+        relative=relative,
+        regions_5to3prime=regions_5to3prime,
     )
 
     if relative:

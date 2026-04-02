@@ -1,7 +1,8 @@
-import pytest
 import pandas as pd
+import numpy as np
+import pytest
 
-from dimelo import plotting
+from dimelo import plot_enrichment_profile, plotting
 
 
 def test_axis_spec_accepts_fixed_window_region_5to3():
@@ -307,6 +308,47 @@ def test_prepare_aggregate_plot_data_retains_metadata_for_fixed_window():
 
     assert {"plot_table", "axis_table", "metadata"} <= set(payload)
     assert payload["metadata"]["orientation"] == "region_5to3"
+
+
+def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(monkeypatch):
+    called = {}
+
+    def fake_prepare_aggregate_plot_data(table, *, plot_family, axis, aggregation, **kwargs):
+        called["table"] = table
+        called["plot_family"] = plot_family
+        called["axis"] = axis
+        called["aggregation"] = aggregation
+        return {
+            "plot_table": table.copy(),
+            "axis_table": pd.DataFrame(),
+            "metadata": {},
+        }
+
+    monkeypatch.setattr(plotting, "prepare_aggregate_plot_data", fake_prepare_aggregate_plot_data)
+    monkeypatch.setattr(
+        "dimelo.plot_enrichment_profile.get_enrichment_profiles",
+        lambda **kwargs: [np.array([0.25, 0.75])],
+    )
+    monkeypatch.setattr(
+        "dimelo.plot_enrichment_profile.make_enrichment_profile_plot",
+        lambda **kwargs: object(),
+    )
+
+    result = plot_enrichment_profile.plot_enrichment_profile(
+        mod_file_names=["sample.fake"],
+        regions_list=["regions.bed"],
+        motifs=["A"],
+        sample_names=["sample"],
+        window_size=10,
+        regions_5to3prime=True,
+    )
+
+    assert result is not None
+    assert called["plot_family"] == "aggregate_profile"
+    assert called["axis"].orientation == "region_5to3"
+    assert called["axis"].coordinate_mode == "fixed_window"
+    assert called["axis"].anchor == "center"
+    assert called["aggregation"].layout == "faceted"
 
 
 def test_prepare_single_read_plot_data_rejects_segment_map_axes():
