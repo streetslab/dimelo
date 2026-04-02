@@ -592,22 +592,25 @@ def test_prepare_global_analysis_summary_data_returns_expected_tables():
     payload = plotting.prepare_global_analysis_summary_data(result=result)
 
     assert set(payload) == {"sample_summary", "condition_summary", "normalization_table", "metadata"}
-    assert payload["sample_summary"]["sample_id"].tolist() == ["s1", "s2", "s3"]
-    assert payload["normalization_table"]["sample_id"].tolist() == ["s1", "s2", "s3"]
-    assert payload["condition_summary"]["condition"].tolist() == ["NS", "treated"]
-    assert payload["condition_summary"]["sample_n"].tolist() == [1, 2]
-    assert payload["metadata"]["motifs"] == ["A,0"]
+    assert payload["sample_summary"]["sample_id"].tolist() == ["s1", "s2", "s3", "s1"]
+    assert payload["normalization_table"]["sample_id"].tolist() == ["s1", "s2", "s3", "s1"]
+    assert (
+        payload["condition_summary"][["condition", "motif"]].apply(tuple, axis=1).tolist()
+        == [("NS", "A,0"), ("treated", "A,0"), ("NS", "CG,0")]
+    )
+    assert payload["condition_summary"]["sample_n"].tolist() == [1, 2, 1]
+    assert payload["metadata"]["motifs"] == ["A,0", "CG,0"]
 
 
 def test_prepare_global_analysis_summary_data_computes_condition_means():
     result = _make_global_analysis_result()
 
     payload = plotting.prepare_global_analysis_summary_data(result=result)
-    condition_summary = payload["condition_summary"].set_index("condition")
+    condition_summary = payload["condition_summary"].set_index(["condition", "motif"])
 
-    assert condition_summary.loc["NS", "global_fraction_mean"] == pytest.approx(0.5)
-    assert condition_summary.loc["treated", "global_fraction_mean"] == pytest.approx(0.7)
-    assert condition_summary.loc["treated", "global_fraction_median"] == pytest.approx(0.7)
+    assert condition_summary.loc[("NS", "A,0"), "global_fraction_mean"] == pytest.approx(0.5)
+    assert condition_summary.loc[("treated", "A,0"), "global_fraction_mean"] == pytest.approx(0.7)
+    assert condition_summary.loc[("treated", "A,0"), "global_fraction_median"] == pytest.approx(0.7)
 
 
 def test_prepare_global_analysis_summary_data_filters_motifs():

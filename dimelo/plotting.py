@@ -130,6 +130,25 @@ def _region_contrast_metadata(result) -> dict[str, object]:
     }
 
 
+def _validate_global_analysis_result(result) -> None:
+    if result is None:
+        raise ValueError("plotting helpers require a GlobalAnalysisResult.")
+    required_attrs = ("summary", "windows", "normalization_factors", "metadata")
+    if not all(hasattr(result, attr) for attr in required_attrs):
+        raise TypeError("plotting helpers require a GlobalAnalysisResult-like object.")
+
+
+def _filter_motif_table(table: pd.DataFrame, motifs: list[str] | None, *, owner: str) -> pd.DataFrame:
+    _require_columns(table, ("motif",), owner)
+    if motifs is None:
+        return table.copy()
+
+    filtered = table.loc[table["motif"].isin(motifs)].copy()
+    if filtered.empty:
+        raise ValueError(f"Requested motifs are not present in {owner}.")
+    return filtered
+
+
 def _validate_region_discovery_result(result) -> None:
     if result is None:
         raise ValueError("plotting helpers require a RegionDiscoveryResult.")
@@ -631,6 +650,68 @@ def prepare_region_contrast_heatmap_data(
     }
     profile_payload["summary_table"] = row_order
     return profile_payload
+
+
+def prepare_global_analysis_summary_data(
+    *,
+    result,
+    motifs: list[str] | None = None,
+    aggregate_conditions: bool = True,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    _validate_global_analysis_result(result)
+
+    sample_summary = _filter_motif_table(result.summary, motifs, owner="result.summary")
+    normalization_table = _filter_motif_table(
+        result.normalization_factors,
+        motifs,
+        owner="result.normalization_factors",
+    )
+
+    if sample_summary.empty:
+        condition_summary = pd.DataFrame(
+            columns=[
+                "condition",
+                "motif",
+                "global_fraction_mean",
+                "global_fraction_median",
+                "sample_n",
+            ]
+        )
+        motif_values = list(motifs) if motifs is not None else []
+    else:
+        motif_values = sample_summary["motif"].drop_duplicates().tolist()
+        if aggregate_conditions:
+            condition_summary = (
+                sample_summary.groupby(["condition", "motif"], as_index=False, sort=False)
+                .agg(
+                    global_fraction_mean=("global_fraction", "mean"),
+                    global_fraction_median=("global_fraction", "median"),
+                    sample_n=("sample_id", "nunique"),
+                )
+                .copy()
+            )
+        else:
+            condition_summary = pd.DataFrame(
+                columns=[
+                    "condition",
+                    "motif",
+                    "global_fraction_mean",
+                    "global_fraction_median",
+                    "sample_n",
+                ]
+            )
+
+    return {
+        "sample_summary": sample_summary.reset_index(drop=True),
+        "condition_summary": condition_summary.reset_index(drop=True),
+        "normalization_table": normalization_table.reset_index(drop=True),
+        "metadata": {
+            "motifs": motif_values,
+            "window_size": result.metadata.get("window_size"),
+            "step_size": result.metadata.get("step_size"),
+            "aggregate_conditions": aggregate_conditions,
+        },
+    }
 
 
 def prepare_region_discovery_scan_data(
