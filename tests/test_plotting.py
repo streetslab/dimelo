@@ -526,6 +526,33 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
     assert payload["metadata"]["plot_family"] == "region_contrast_heatmap"
 
 
+def test_prepare_region_contrast_heatmap_data_requires_both_contrast_sides():
+    result, _, axis, aggregation = _region_contrast_plot_setup(
+        _region_contrast_position_rows()
+    )
+    position_table = pd.DataFrame(
+        [
+            {
+                "region_id": "chr1:90-110,+",
+                "condition": "NS",
+                "position": 95,
+                "anchor": 100,
+                "value": 0.1,
+                "region_strand": "+",
+            }
+        ]
+    )
+
+    with pytest.raises(ValueError, match="both contrast sides"):
+        plotting.prepare_region_contrast_heatmap_data(
+            result=result,
+            position_table=position_table,
+            axis=axis,
+            aggregation=aggregation,
+            value_mode="all",
+        )
+
+
 def test_prepare_region_contrast_profile_data_requires_grouping_key():
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
         _region_contrast_position_rows(include_grouping_key=False)

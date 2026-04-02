@@ -483,6 +483,54 @@ def prepare_region_contrast_profile_data(
     return prepared
 
 
+def prepare_region_contrast_heatmap_data(
+    *,
+    result,
+    position_table: pd.DataFrame,
+    axis: AxisSpec,
+    aggregation: AggregationSpec,
+    value_mode: str = "all",
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    profile_payload = prepare_region_contrast_profile_data(
+        result=result,
+        position_table=position_table,
+        axis=axis,
+        aggregation=aggregation,
+        value_mode=value_mode,
+    )
+
+    _require_columns(result.summary, ("region_id", "rank"), "result.summary")
+    row_order = (
+        result.summary.loc[:, ["region_id", "rank"]]
+        .dropna(subset=["region_id", "rank"])
+        .drop_duplicates(subset=["region_id"], keep="first")
+        .sort_values(["rank", "region_id"], kind="stable")
+        .reset_index(drop=True)
+    )
+    row_order["row_order"] = range(len(row_order))
+
+    plot_table = profile_payload["plot_table"].merge(
+        row_order.loc[:, ["region_id", "row_order"]],
+        on="region_id",
+        how="left",
+    )
+    if plot_table["row_order"].isna().any():
+        missing_region_ids = sorted(plot_table.loc[plot_table["row_order"].isna(), "region_id"].astype(str).unique())
+        raise ValueError(
+            "result.summary does not provide rank values for all plotted regions. "
+            f"Missing region_id values: {', '.join(missing_region_ids)}."
+        )
+    plot_table = plot_table.sort_values(["row_order", "value_mode", "position"], kind="stable").reset_index(drop=True)
+
+    profile_payload["plot_table"] = plot_table
+    profile_payload["metadata"] = {
+        **profile_payload["metadata"],
+        "plot_family": "region_contrast_heatmap",
+    }
+    profile_payload["summary_table"] = row_order
+    return profile_payload
+
+
 def prepare_single_read_plot_data(
     table: pd.DataFrame,
     *,
