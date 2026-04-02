@@ -377,6 +377,15 @@ def _make_global_analysis_result() -> GlobalAnalysisResult:
                 "valid_count": 20,
                 "global_fraction": 0.6,
             },
+            {
+                "sample_id": "s1",
+                "condition": "NS",
+                "replicate": 1,
+                "motif": "CG,0",
+                "modified_count": 4,
+                "valid_count": 20,
+                "global_fraction": 0.2,
+            },
         ]
     )
     normalization_factors = pd.DataFrame(
@@ -407,6 +416,15 @@ def _make_global_analysis_result() -> GlobalAnalysisResult:
                 "global_fraction": 0.6,
                 "reference_fraction": 0.6333333333,
                 "global_offset": -0.0333333333,
+            },
+            {
+                "sample_id": "s1",
+                "condition": "NS",
+                "replicate": 1,
+                "motif": "CG,0",
+                "global_fraction": 0.2,
+                "reference_fraction": 0.2,
+                "global_offset": 0.0,
             },
         ]
     )
@@ -602,6 +620,8 @@ def test_prepare_global_analysis_summary_data_filters_motifs():
 
     assert payload["sample_summary"]["motif"].unique().tolist() == ["A,0"]
     assert payload["normalization_table"]["motif"].unique().tolist() == ["A,0"]
+    assert "CG,0" not in payload["sample_summary"]["motif"].tolist()
+    assert "CG,0" not in payload["normalization_table"]["motif"].tolist()
 
 
 def test_prepare_region_discovery_hit_context_data_rejects_padding_bp():
