@@ -456,6 +456,58 @@ def _make_global_analysis_result() -> GlobalAnalysisResult:
     )
 
 
+def _make_global_window_result() -> GlobalAnalysisResult:
+    result = _make_global_analysis_result()
+    result.windows = pd.DataFrame(
+        [
+            {
+                "sample_id": "s1",
+                "condition": "NS",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-100",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 100,
+                "strand": ".",
+                "modified_count": 5,
+                "valid_count": 10,
+                "window_fraction": 0.5,
+            },
+            {
+                "sample_id": "s2",
+                "condition": "treated",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-100",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 100,
+                "strand": ".",
+                "modified_count": 8,
+                "valid_count": 10,
+                "window_fraction": 0.8,
+            },
+            {
+                "sample_id": "s3",
+                "condition": "treated",
+                "replicate": 2,
+                "motif": "A,0",
+                "window_id": "chr2:0-100",
+                "chromosome": "chr2",
+                "start": 0,
+                "end": 100,
+                "strand": ".",
+                "modified_count": 6,
+                "valid_count": 10,
+                "window_fraction": 0.6,
+            },
+        ]
+    )
+    result.plot_data["window_fraction_table"] = result.windows.copy()
+    return result
+
+
 def test_prepare_region_discovery_scan_data_returns_expected_tables():
     result = _make_region_discovery_result()
 
@@ -637,6 +689,48 @@ def test_prepare_global_analysis_summary_data_skips_condition_aggregation_when_d
 
     assert payload["condition_summary"].empty
     assert payload["metadata"]["aggregate_conditions"] is False
+
+
+def test_prepare_global_analysis_window_data_returns_expected_tables():
+    result = _make_global_window_result()
+
+    payload = plotting.prepare_global_analysis_window_data(result=result)
+
+    assert set(payload) == {"window_table", "condition_window_table", "metadata"}
+    assert payload["window_table"]["contig"].tolist() == ["chr1", "chr1", "chr2"]
+    assert payload["window_table"]["window_midpoint"].tolist() == [50.0, 50.0, 50.0]
+    assert payload["metadata"]["contig_order"] == ["chr1", "chr2"]
+
+
+def test_prepare_global_analysis_window_data_filters_contigs_in_requested_order():
+    result = _make_global_window_result()
+
+    payload = plotting.prepare_global_analysis_window_data(
+        result=result,
+        contigs=["chr2"],
+    )
+
+    assert payload["metadata"]["contig_order"] == ["chr2"]
+    assert payload["window_table"]["contig"].tolist() == ["chr2"]
+
+
+def test_prepare_global_analysis_window_data_aggregates_conditions():
+    result = _make_global_window_result()
+
+    payload = plotting.prepare_global_analysis_window_data(
+        result=result,
+        aggregate_conditions=True,
+    )
+
+    condition_rows = payload["condition_window_table"]
+    ns_row = condition_rows.loc[condition_rows["condition"] == "NS"].iloc[0]
+    treated_chr1 = condition_rows.loc[
+        (condition_rows["condition"] == "treated")
+        & (condition_rows["contig"] == "chr1")
+    ].iloc[0]
+
+    assert ns_row["window_fraction_mean"] == pytest.approx(0.5)
+    assert treated_chr1["window_fraction_mean"] == pytest.approx(0.8)
 
 
 def test_prepare_region_discovery_hit_context_data_rejects_padding_bp():
