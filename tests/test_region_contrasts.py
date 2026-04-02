@@ -328,6 +328,24 @@ def test_build_cluster_occupancy_evidence_table_zero_count_groups_stay_zero_entr
     assert reg2_ns1["cluster_entropy"].tolist() == [0.0, 0.0]
 
 
+@pytest.mark.parametrize("count", [-1, float("nan"), float("inf"), float("-inf")])
+def test_build_cluster_occupancy_evidence_table_rejects_invalid_counts(count):
+    with pytest.raises(ValueError, match="count values must be finite and >= 0"):
+        region_contrasts.build_cluster_occupancy_evidence_table(
+            region_summaries=pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1",
+                        "condition": "NS",
+                        "cluster": "C1",
+                        "count": count,
+                    }
+                ]
+            ),
+        )
+
+
 def test_build_region_evidence_table_from_pileup_counts(monkeypatch):
     samples = [
         SampleSpec(
@@ -1542,6 +1560,66 @@ def test_score_regions_cluster_occupancy_group_vs_group_aggregates_condition_gro
     assert row["numerator_replicate_n"] == 4
     assert row["denominator_replicate_n"] == 4
     assert result.summary.iloc[0]["delta_fraction"] == pytest.approx(0.3)
+
+
+def test_score_regions_cluster_occupancy_group_vs_group_uses_sample_weighted_dominant_cluster():
+    occupancy_table = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "na1",
+                "condition": "treated_a",
+                "dominant_cluster": "C1",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "nb1",
+                "condition": "treated_b",
+                "dominant_cluster": "C2",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "nb2",
+                "condition": "treated_b",
+                "dominant_cluster": "C2",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "ca1",
+                "condition": "control_a",
+                "dominant_cluster": "C1",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "ca2",
+                "condition": "control_a",
+                "dominant_cluster": "C1",
+            },
+        ]
+    )
+
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions=None,
+        motifs=[],
+        contrast=ContrastSpec(
+            mode="group_vs_group",
+            numerator=["treated_a", "treated_b"],
+            denominator=["control_a"],
+        ),
+        analysis_unit="cluster_occupancy",
+        representation="dominant_cluster",
+        signal_source="cluster_occupancy",
+        test="effect_size_only",
+        occupancy_table=occupancy_table,
+    )
+
+    row = result.regions.iloc[0]
+    assert row["dominant_cluster"] == "C2"
+    assert row["reference_dominant_cluster"] == "C1"
+    assert row["dominant_cluster_changed"]
+    assert row["numerator_replicate_n"] == 3
+    assert row["denominator_replicate_n"] == 2
 
 
 def test_score_regions_cluster_occupancy_rejects_missing_occupancy_columns():

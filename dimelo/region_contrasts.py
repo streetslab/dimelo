@@ -159,6 +159,13 @@ def build_cluster_occupancy_evidence_table(
         )
 
     evidence = region_summaries.copy()
+    counts = pd.to_numeric(evidence["count"], errors="raise")
+    invalid_counts = counts.isna() | (counts < 0) | ~counts.map(math.isfinite)
+    if invalid_counts.any():
+        raise ValueError(
+            "build_cluster_occupancy_evidence_table count values must be finite and >= 0."
+        )
+
     grouped_keys = ["region_id", "sample_id", "condition"]
     totals = evidence.groupby(grouped_keys, dropna=False)["count"].transform("sum")
     evidence["fraction"] = (
@@ -561,31 +568,24 @@ def _score_cluster_occupancy(
             evidence,
             required_columns={"region_id", "sample_id", "condition", "dominant_cluster"},
         )
-        pooled = (
-            evidence.loc[:, ["region_id", "sample_id", "condition", "dominant_cluster"]]
-            .drop_duplicates()
-            .groupby(["region_id", "condition"], dropna=False, sort=False)
-            .agg(
-                dominant_cluster=("dominant_cluster", _dominant_label),
-                replicate_n=("sample_id", "nunique"),
-            )
-            .reset_index()
-        )
+        sample_level = evidence.loc[
+            :, ["region_id", "sample_id", "condition", "dominant_cluster"]
+        ].drop_duplicates()
         numerator = (
-            pooled.loc[pooled["condition"].isin(contrast.numerator or [])]
+            sample_level.loc[sample_level["condition"].isin(contrast.numerator or [])]
             .groupby("region_id", dropna=False, sort=False)
             .agg(
                 dominant_cluster=("dominant_cluster", _dominant_label),
-                numerator_replicate_n=("replicate_n", "sum"),
+                numerator_replicate_n=("sample_id", "nunique"),
             )
             .reset_index()
         )
         denominator = (
-            pooled.loc[pooled["condition"].isin(contrast.denominator or [])]
+            sample_level.loc[sample_level["condition"].isin(contrast.denominator or [])]
             .groupby("region_id", dropna=False, sort=False)
             .agg(
                 reference_dominant_cluster=("dominant_cluster", _dominant_label),
-                denominator_replicate_n=("replicate_n", "sum"),
+                denominator_replicate_n=("sample_id", "nunique"),
             )
             .reset_index()
         )
