@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from dimelo.models import ContrastSpec, RegionContrastResult
 from dimelo import plot_enrichment_profile, plot_reads, plotting
 
 
@@ -112,6 +113,198 @@ def test_prepare_cluster_distribution_heatmap_data_pivots_columns_in_sorted_orde
     assert fifteen_min["C1"] == 0.75
     assert ns_row["C0"] == 0.75
     assert ns_row["C1"] == 0.25
+
+
+def _minimal_region_contrast_result() -> RegionContrastResult:
+    regions = pd.DataFrame(
+        [
+            {"region_id": "chr1:90-110,+", "condition": "NS", "fraction": 0.20, "rank": 2},
+            {"region_id": "chr1:90-110,+", "condition": "15min", "fraction": 0.55, "rank": 2},
+            {"region_id": "chr1:190-210,-", "condition": "NS", "fraction": 0.30, "rank": 1},
+            {"region_id": "chr1:190-210,-", "condition": "15min", "fraction": 0.70, "rank": 1},
+        ]
+    )
+    summary = pd.DataFrame(
+        [
+            {
+                "region_id": "chr1:90-110,+",
+                "fraction": 0.55,
+                "reference_fraction": 0.20,
+                "delta_fraction": 0.35,
+                "rank": 2,
+            },
+            {
+                "region_id": "chr1:190-210,-",
+                "fraction": 0.70,
+                "reference_fraction": 0.30,
+                "delta_fraction": 0.40,
+                "rank": 1,
+            },
+        ]
+    )
+    return RegionContrastResult(
+        regions=regions,
+        summary=summary,
+        contrast=ContrastSpec(
+            mode="pairwise",
+            numerator=["15min"],
+            denominator=["NS"],
+            reference_condition="NS",
+        ),
+        metadata={
+            "analysis_unit": "ensemble_region",
+            "representation": "modified_fraction",
+            "signal_source": "pileup_counts",
+            "test": "effect_size_only",
+        },
+        plot_data={},
+    )
+
+
+def test_prepare_region_contrast_profile_data_returns_all_value_modes():
+    result = _minimal_region_contrast_result()
+    position_table = pd.DataFrame(
+        [
+            {
+                "region_id": "chr1:90-110,+",
+                "condition": "NS",
+                "position": 95,
+                "anchor": 100,
+                "value": 0.1,
+                "region_strand": "+",
+            },
+            {
+                "region_id": "chr1:90-110,+",
+                "condition": "15min",
+                "position": 95,
+                "anchor": 100,
+                "value": 0.6,
+                "region_strand": "+",
+            },
+            {
+                "region_id": "chr1:190-210,-",
+                "condition": "NS",
+                "position": 205,
+                "anchor": 200,
+                "value": 0.2,
+                "region_strand": "-",
+            },
+            {
+                "region_id": "chr1:190-210,-",
+                "condition": "15min",
+                "position": 205,
+                "anchor": 200,
+                "value": 0.8,
+                "region_strand": "-",
+            },
+        ]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="fixed_window",
+        anchor="center",
+        upstream_bp=20,
+        downstream_bp=20,
+    )
+    aggregation = plotting.AggregationSpec()
+
+    payload = plotting.prepare_region_contrast_profile_data(
+        result=result,
+        position_table=position_table,
+        axis=axis,
+        aggregation=aggregation,
+        value_mode="all",
+    )
+
+    assert set(payload["plot_table"]["value_mode"]) == {"numerator", "denominator", "delta"}
+    assert payload["metadata"]["plot_family"] == "region_contrast_profile"
+
+
+def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
+    result = _minimal_region_contrast_result()
+    position_table = pd.DataFrame(
+        [
+            {
+                "region_id": "chr1:90-110,+",
+                "condition": "NS",
+                "position": 95,
+                "anchor": 100,
+                "value": 0.1,
+                "region_strand": "+",
+            },
+            {
+                "region_id": "chr1:90-110,+",
+                "condition": "15min",
+                "position": 95,
+                "anchor": 100,
+                "value": 0.6,
+                "region_strand": "+",
+            },
+            {
+                "region_id": "chr1:190-210,-",
+                "condition": "NS",
+                "position": 205,
+                "anchor": 200,
+                "value": 0.2,
+                "region_strand": "-",
+            },
+            {
+                "region_id": "chr1:190-210,-",
+                "condition": "15min",
+                "position": 205,
+                "anchor": 200,
+                "value": 0.8,
+                "region_strand": "-",
+            },
+        ]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="fixed_window",
+        anchor="center",
+        upstream_bp=20,
+        downstream_bp=20,
+    )
+    aggregation = plotting.AggregationSpec()
+
+    payload = plotting.prepare_region_contrast_heatmap_data(
+        result=result,
+        position_table=position_table,
+        axis=axis,
+        aggregation=aggregation,
+        value_mode="all",
+    )
+
+    rank_rows = payload["plot_table"].loc[:, ["region_id", "row_order"]].drop_duplicates()
+    assert list(rank_rows.sort_values("row_order")["region_id"]) == [
+        "chr1:190-210,-",
+        "chr1:90-110,+",
+    ]
+    assert payload["metadata"]["plot_family"] == "region_contrast_heatmap"
+
+
+def test_prepare_region_contrast_profile_data_requires_joinable_grouping_key():
+    result = _minimal_region_contrast_result()
+    position_table = pd.DataFrame(
+        [{"region_id": "chr1:90-110,+", "position": 95, "anchor": 100, "value": 0.1, "region_strand": "+"}]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="fixed_window",
+        anchor="center",
+        upstream_bp=20,
+        downstream_bp=20,
+    )
+    aggregation = plotting.AggregationSpec()
+
+    with pytest.raises(ValueError, match="sample_id or condition"):
+        plotting.prepare_region_contrast_profile_data(
+            result=result,
+            position_table=position_table,
+            axis=axis,
+            aggregation=aggregation,
+            value_mode="all",
+        )
 
 
 def test_prepare_single_read_plot_data_flips_negative_regions_to_5to3():
