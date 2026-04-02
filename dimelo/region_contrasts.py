@@ -374,6 +374,55 @@ def _require_supported_cluster_occupancy_mode(contrast: ContrastSpec) -> None:
         )
 
 
+def _validate_occupancy_table_numeric_columns(occupancy_table: pd.DataFrame) -> None:
+    numeric_specs = [
+        (
+            "fraction",
+            "occupancy_table fraction values must be finite and between 0 and 1.",
+            lambda values: values.isna() | ~values.map(math.isfinite) | (values < 0) | (values > 1),
+        ),
+        (
+            "cluster_entropy",
+            "occupancy_table cluster_entropy values must be finite and >= 0.",
+            lambda values: values.isna() | ~values.map(math.isfinite) | (values < 0),
+        ),
+        (
+            "count",
+            "occupancy_table count values must be finite and >= 0.",
+            lambda values: values.isna() | ~values.map(math.isfinite) | (values < 0),
+        ),
+    ]
+
+    for column, message, invalid_mask_builder in numeric_specs:
+        if column not in occupancy_table.columns:
+            continue
+        values = pd.to_numeric(occupancy_table[column], errors="coerce")
+        invalid_values = invalid_mask_builder(values)
+        if invalid_values.any():
+            raise ValueError(message)
+
+
+def _zero_fill_missing_cluster_fraction_rows(
+    side_evidence: pd.DataFrame,
+    *,
+    cluster_universe: pd.DataFrame,
+) -> pd.DataFrame:
+    sample_columns = ["region_id", "sample_id", "condition"]
+    sample_level = side_evidence.loc[:, sample_columns].drop_duplicates()
+    if sample_level.empty:
+        return side_evidence
+
+    complete_index = sample_level.merge(cluster_universe, on="region_id", how="inner")
+    merged = complete_index.merge(
+        side_evidence,
+        on=sample_columns + ["cluster"],
+        how="left",
+        sort=False,
+    )
+    merged["fraction"] = merged["fraction"].fillna(0.0)
+    return merged
+
+
 def _pool_cluster_occupancy_groups(
     evidence: pd.DataFrame,
     contrast: ContrastSpec,
@@ -388,6 +437,9 @@ def _pool_cluster_occupancy_groups(
         "numerator": contrast.numerator or [],
         "denominator": contrast.denominator or [],
     }
+    cluster_universe = None
+    if value_column == "fraction":
+        cluster_universe = evidence.loc[:, ["region_id", "cluster"]].drop_duplicates()
 
     for side, conditions in side_specs.items():
         side_evidence = evidence.loc[evidence["condition"].isin(conditions)].copy()
@@ -397,6 +449,11 @@ def _pool_cluster_occupancy_groups(
             missing_display = ", ".join(missing_conditions)
             raise ValueError(
                 f"Missing {side} evidence for requested condition(s): {missing_display}."
+            )
+        if value_column == "fraction":
+            side_evidence = _zero_fill_missing_cluster_fraction_rows(
+                side_evidence,
+                cluster_universe=cluster_universe,
             )
 
         pooled = (
@@ -717,6 +774,7 @@ def score_regions(
             raise ValueError(
                 "cluster_occupancy scoring currently requires occupancy_table."
             )
+        _validate_occupancy_table_numeric_columns(occupancy_table)
         regions_table, summary = _score_cluster_occupancy(
             evidence=occupancy_table.copy(),
             contrast=contrast,

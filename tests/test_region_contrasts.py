@@ -1622,6 +1622,124 @@ def test_score_regions_cluster_occupancy_group_vs_group_uses_sample_weighted_dom
     assert row["denominator_replicate_n"] == 2
 
 
+def test_score_regions_cluster_fraction_treats_missing_sample_cluster_rows_as_zero():
+    occupancy_table = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "ns1",
+                "condition": "NS",
+                "cluster": "C1",
+                "fraction": 1.0,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "ns2",
+                "condition": "NS",
+                "cluster": "C1",
+                "fraction": 1.0,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "tx1",
+                "condition": "15min",
+                "cluster": "C1",
+                "fraction": 1.0,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "tx1",
+                "condition": "15min",
+                "cluster": "C2",
+                "fraction": 0.0,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "tx2",
+                "condition": "15min",
+                "cluster": "C1",
+                "fraction": 0.0,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "tx2",
+                "condition": "15min",
+                "cluster": "C2",
+                "fraction": 1.0,
+            },
+        ]
+    )
+
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions=None,
+        motifs=[],
+        contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+        analysis_unit="cluster_occupancy",
+        representation="cluster_fraction",
+        signal_source="cluster_occupancy",
+        test="fraction_test",
+        occupancy_table=occupancy_table,
+    )
+
+    c2_row = result.regions.loc[result.regions["cluster"] == "C2"].iloc[0]
+    assert c2_row["fraction"] == pytest.approx(0.5)
+    assert c2_row["reference_fraction"] == pytest.approx(0.0)
+    assert c2_row["numerator_replicate_n"] == 2
+    assert c2_row["denominator_replicate_n"] == 2
+    assert c2_row["numerator_sample_values"] == (0.0, 1.0)
+    assert c2_row["denominator_sample_values"] == (0.0, 0.0)
+    assert c2_row["p_value"] == pytest.approx(0.5)
+
+
+@pytest.mark.parametrize(
+    ("representation", "column", "value", "message"),
+    [
+        ("cluster_fraction", "fraction", 1.2, "fraction values must be finite and between 0 and 1"),
+        ("cluster_fraction", "fraction", float("nan"), "fraction values must be finite and between 0 and 1"),
+        ("cluster_entropy", "cluster_entropy", float("inf"), "cluster_entropy values must be finite and >= 0"),
+        ("cluster_entropy", "cluster_entropy", -0.1, "cluster_entropy values must be finite and >= 0"),
+    ],
+)
+def test_score_regions_cluster_occupancy_rejects_invalid_numeric_values(
+    representation,
+    column,
+    value,
+    message,
+):
+    occupancy_table = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                column: value,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "15min",
+                column: 0.5 if column == "fraction" else 0.5,
+            },
+        ]
+    )
+    if representation == "cluster_fraction":
+        occupancy_table["cluster"] = ["C1", "C1"]
+
+    with pytest.raises(ValueError, match=message):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+            analysis_unit="cluster_occupancy",
+            representation=representation,
+            signal_source="cluster_occupancy",
+            test="effect_size_only",
+            occupancy_table=occupancy_table,
+        )
+
+
 def test_score_regions_cluster_occupancy_rejects_missing_occupancy_columns():
     with pytest.raises(ValueError, match="occupancy_table requires columns"):
         region_contrasts.score_regions(
