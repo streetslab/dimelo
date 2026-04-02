@@ -223,6 +223,69 @@ def _mock_cluster_occupancy_evidence():
     )
 
 
+def _mock_group_vs_group_cluster_fraction_evidence():
+    return pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "na1",
+                "condition": "treated_a",
+                "cluster": "C1",
+                "fraction": 0.2,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "na2",
+                "condition": "treated_a",
+                "cluster": "C1",
+                "fraction": 0.4,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "nb1",
+                "condition": "treated_b",
+                "cluster": "C1",
+                "fraction": 0.8,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "nb2",
+                "condition": "treated_b",
+                "cluster": "C1",
+                "fraction": 1.0,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "ca1",
+                "condition": "control_a",
+                "cluster": "C1",
+                "fraction": 0.0,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "ca2",
+                "condition": "control_a",
+                "cluster": "C1",
+                "fraction": 0.2,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "cb1",
+                "condition": "control_b",
+                "cluster": "C1",
+                "fraction": 0.4,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "cb2",
+                "condition": "control_b",
+                "cluster": "C1",
+                "fraction": 0.6,
+            },
+        ]
+    )
+
+
 def test_build_cluster_occupancy_evidence_table_summarizes_region_sample_clusters():
     evidence = region_contrasts.build_cluster_occupancy_evidence_table(
         region_summaries=_mock_region_summaries(),
@@ -1414,6 +1477,32 @@ def test_score_regions_cluster_occupancy_rejects_matched_pairwise():
         )
 
 
+@pytest.mark.parametrize(
+    "representation",
+    ["cluster_fraction", "dominant_cluster", "cluster_entropy"],
+)
+def test_score_regions_cluster_occupancy_rejects_unsupported_contrast_modes_for_all_representations(
+    representation,
+):
+    with pytest.raises(NotImplementedError, match="matched_pairwise"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=ContrastSpec(
+                mode="matched_pairwise",
+                numerator=["15min"],
+                denominator=["NS"],
+                pairing_key="donor_id",
+            ),
+            analysis_unit="cluster_occupancy",
+            representation=representation,
+            signal_source="cluster_occupancy",
+            test="effect_size_only",
+            occupancy_table=_mock_cluster_occupancy_evidence(),
+        )
+
+
 def test_score_regions_cluster_occupancy_rejects_fraction_test_for_dominant_cluster():
     with pytest.raises(ValueError, match="cluster_fraction"):
         region_contrasts.score_regions(
@@ -1427,6 +1516,32 @@ def test_score_regions_cluster_occupancy_rejects_fraction_test_for_dominant_clus
             test="fraction_test",
             occupancy_table=_mock_cluster_occupancy_evidence(),
         )
+
+
+def test_score_regions_cluster_occupancy_group_vs_group_aggregates_condition_groups():
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions=None,
+        motifs=[],
+        contrast=ContrastSpec(
+            mode="group_vs_group",
+            numerator=["treated_a", "treated_b"],
+            denominator=["control_a", "control_b"],
+        ),
+        analysis_unit="cluster_occupancy",
+        representation="cluster_fraction",
+        signal_source="cluster_occupancy",
+        test="effect_size_only",
+        occupancy_table=_mock_group_vs_group_cluster_fraction_evidence(),
+    )
+
+    row = result.regions.iloc[0]
+    assert row["fraction"] == pytest.approx(0.6)
+    assert row["reference_fraction"] == pytest.approx(0.3)
+    assert row["delta_fraction"] == pytest.approx(0.3)
+    assert row["numerator_replicate_n"] == 4
+    assert row["denominator_replicate_n"] == 4
+    assert result.summary.iloc[0]["delta_fraction"] == pytest.approx(0.3)
 
 
 def test_score_regions_cluster_occupancy_rejects_missing_occupancy_columns():

@@ -360,6 +360,13 @@ def _require_occupancy_columns(
         raise ValueError(f"occupancy_table requires columns: {missing_display}.")
 
 
+def _require_supported_cluster_occupancy_mode(contrast: ContrastSpec) -> None:
+    if contrast.mode not in {"pairwise", "group_vs_group"}:
+        raise NotImplementedError(
+            f"Cluster occupancy scoring is not implemented for contrast mode '{contrast.mode}'."
+        )
+
+
 def _pool_cluster_occupancy_groups(
     evidence: pd.DataFrame,
     contrast: ContrastSpec,
@@ -367,10 +374,7 @@ def _pool_cluster_occupancy_groups(
     value_column: str,
     group_columns: list[str],
 ) -> pd.DataFrame:
-    if contrast.mode not in {"pairwise", "group_vs_group"}:
-        raise NotImplementedError(
-            f"Cluster occupancy scoring is not implemented for contrast mode '{contrast.mode}'."
-        )
+    _require_supported_cluster_occupancy_mode(contrast)
 
     pooled_frames = []
     side_specs = {
@@ -454,6 +458,7 @@ def _score_cluster_occupancy(
     multiple_testing: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     pseudocount = 1e-6
+    _require_supported_cluster_occupancy_mode(contrast)
 
     if representation == "cluster_fraction":
         _require_occupancy_columns(
