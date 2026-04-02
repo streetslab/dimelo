@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dimelo.models import ContrastSpec, RegionContrastResult
+from dimelo.models import ContrastSpec, RegionContrastResult, RegionDiscoveryResult
 from dimelo import plot_enrichment_profile, plot_reads, plotting
 
 
@@ -291,6 +291,92 @@ def _region_contrast_position_rows(*, include_grouping_key: bool = True) -> list
         {key: value for key, value in row.items() if key != "condition"}
         for row in base_rows[:1]
     ]
+
+
+def _make_region_discovery_result() -> RegionDiscoveryResult:
+    windows = pd.DataFrame(
+        [
+            {
+                "window_id": "chr1:0-100:+",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 100,
+                "strand": "+",
+                "score_value": 0.2,
+                "rank": 3,
+            },
+            {
+                "window_id": "chr1:100-200:+",
+                "chromosome": "chr1",
+                "start": 100,
+                "end": 200,
+                "strand": "+",
+                "score_value": 0.9,
+                "rank": 1,
+            },
+            {
+                "window_id": "chr2:0-100:+",
+                "chromosome": "chr2",
+                "start": 0,
+                "end": 100,
+                "strand": "+",
+                "score_value": 0.5,
+                "rank": 2,
+            },
+        ]
+    )
+    hits = windows.loc[windows["rank"] <= 2].copy()
+    return RegionDiscoveryResult(
+        windows=windows,
+        hits=hits,
+        contrast=None,
+        plot_data={
+            "window_score_table": windows.copy(),
+            "top_hits_table": hits.copy(),
+        },
+        metadata={
+            "score": "effect_size_only",
+            "contrast_mode": "pairwise",
+            "merge_hits": False,
+        },
+    )
+
+
+def test_prepare_region_discovery_scan_data_returns_expected_tables():
+    result = _make_region_discovery_result()
+
+    payload = plotting.prepare_region_discovery_scan_data(result=result)
+
+    assert set(payload) == {"scan_table", "hit_table", "metadata"}
+    assert list(payload["scan_table"]["contig"]) == ["chr1", "chr1", "chr2"]
+    assert list(payload["hit_table"]["rank"]) == [1, 2]
+    assert payload["scan_table"]["is_hit"].tolist() == [False, True, True]
+    assert payload["metadata"]["contig_order"] == ["chr1", "chr2"]
+    assert payload["metadata"]["score_column"] == "score_value"
+
+
+def test_prepare_region_discovery_scan_data_filters_contigs_in_requested_order():
+    result = _make_region_discovery_result()
+
+    payload = plotting.prepare_region_discovery_scan_data(
+        result=result,
+        contigs=["chr2", "chr1"],
+    )
+
+    assert payload["metadata"]["contig_order"] == ["chr2", "chr1"]
+    assert payload["scan_table"]["contig"].tolist() == ["chr2", "chr1", "chr1"]
+
+
+def test_prepare_region_discovery_scan_data_limits_hit_overlay():
+    result = _make_region_discovery_result()
+
+    payload = plotting.prepare_region_discovery_scan_data(
+        result=result,
+        top_n_hits=1,
+    )
+
+    assert payload["hit_table"]["rank"].tolist() == [1]
+    assert payload["scan_table"]["is_hit"].tolist() == [False, True, False]
 
 
 def test_prepare_region_contrast_profile_data_returns_all_value_modes():
