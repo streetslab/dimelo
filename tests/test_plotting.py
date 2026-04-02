@@ -423,6 +423,51 @@ def test_prepare_region_discovery_scan_data_rejects_hits_missing_from_filtered_w
         )
 
 
+def test_prepare_region_discovery_hit_context_data_uses_top_ranked_hits():
+    result = _make_region_discovery_result()
+
+    payload = plotting.prepare_region_discovery_hit_context_data(
+        result=result,
+        top_n=1,
+        padding_windows=1,
+    )
+
+    assert set(payload) == {"context_table", "selected_hits", "metadata"}
+    assert payload["selected_hits"]["rank"].tolist() == [1]
+    assert payload["context_table"]["selected_hit_rank"].nunique() == 1
+    assert payload["context_table"]["selected_hit_rank"].iloc[0] == 1
+    assert payload["context_table"]["is_selected_hit"].sum() == 1
+
+
+def test_prepare_region_discovery_hit_context_data_adds_relative_window_offsets():
+    result = _make_region_discovery_result()
+
+    payload = plotting.prepare_region_discovery_hit_context_data(
+        result=result,
+        top_n=1,
+        padding_windows=1,
+    )
+
+    assert sorted(payload["context_table"]["relative_window_offset"].tolist()) == [-1, 0]
+
+
+def test_prepare_region_discovery_hit_context_data_returns_empty_payload_for_no_hits():
+    base_result = _make_region_discovery_result()
+    result = RegionDiscoveryResult(
+        windows=base_result.windows.copy(),
+        hits=pd.DataFrame(columns=base_result.hits.columns),
+        contrast=None,
+        plot_data={},
+        metadata={"score": "effect_size_only", "contrast_mode": "pairwise", "merge_hits": False},
+    )
+
+    payload = plotting.prepare_region_discovery_hit_context_data(result=result)
+
+    assert payload["context_table"].empty
+    assert payload["selected_hits"].empty
+    assert payload["metadata"]["selection_mode"] == "top_n"
+
+
 def test_prepare_region_contrast_profile_data_returns_all_value_modes():
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
         _region_contrast_position_rows()
