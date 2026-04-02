@@ -738,6 +738,131 @@ def prepare_global_analysis_summary_data(
     }
 
 
+def prepare_global_analysis_window_data(
+    *,
+    result,
+    contigs: list[str] | None = None,
+    motifs: list[str] | None = None,
+    aggregate_conditions: bool = False,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    _validate_global_analysis_result(result)
+
+    condition_window_columns = [
+        "condition",
+        "motif",
+        "contig",
+        "start",
+        "end",
+        "window_midpoint",
+        "window_fraction_mean",
+        "window_fraction_median",
+        "sample_n",
+    ]
+    empty_window_columns = [
+        "sample_id",
+        "condition",
+        "replicate",
+        "motif",
+        "window_id",
+        "contig",
+        "start",
+        "end",
+        "strand",
+        "window_fraction",
+        "window_midpoint",
+    ]
+
+    if result.windows is None:
+        return {
+            "window_table": pd.DataFrame(columns=empty_window_columns),
+            "condition_window_table": pd.DataFrame(columns=condition_window_columns),
+            "metadata": {
+                "contig_order": [],
+                "motifs": [] if motifs is None else list(motifs),
+                "aggregate_conditions": aggregate_conditions,
+            },
+        }
+
+    _require_columns(
+        result.windows,
+        (
+            "sample_id",
+            "condition",
+            "replicate",
+            "motif",
+            "window_id",
+            "chromosome",
+            "start",
+            "end",
+            "strand",
+            "window_fraction",
+        ),
+        "result.windows",
+    )
+    window_table = _filter_motif_table(result.windows, motifs, owner="result.windows")
+
+    if window_table.empty:
+        return {
+            "window_table": pd.DataFrame(columns=empty_window_columns),
+            "condition_window_table": pd.DataFrame(columns=condition_window_columns),
+            "metadata": {
+                "contig_order": [],
+                "motifs": [] if motifs is None else list(motifs),
+                "aggregate_conditions": aggregate_conditions,
+            },
+        }
+
+    window_table = window_table.copy()
+    window_table["contig"] = window_table["chromosome"]
+
+    if contigs is not None:
+        window_table = window_table.loc[window_table["contig"].isin(contigs)].copy()
+        if window_table.empty:
+            raise ValueError("Requested contigs are not present in result.windows.")
+        contig_order = list(contigs)
+    else:
+        contig_order = window_table["contig"].drop_duplicates().tolist()
+
+    window_table["window_midpoint"] = (window_table["start"] + window_table["end"]) / 2.0
+    window_table = _sort_discovery_table(
+        window_table,
+        contig_order=contig_order,
+        sort_columns=["start", "end", "sample_id"],
+    )
+
+    if aggregate_conditions:
+        condition_window_table = (
+            window_table.groupby(
+                ["condition", "motif", "contig", "start", "end", "window_midpoint"],
+                as_index=False,
+                sort=False,
+            )
+            .agg(
+                window_fraction_mean=("window_fraction", "mean"),
+                window_fraction_median=("window_fraction", "median"),
+                sample_n=("sample_id", "nunique"),
+            )
+            .copy()
+        )
+        condition_window_table = _sort_discovery_table(
+            condition_window_table,
+            contig_order=contig_order,
+            sort_columns=["start", "end", "condition"],
+        )
+    else:
+        condition_window_table = pd.DataFrame(columns=condition_window_columns)
+
+    return {
+        "window_table": window_table.reset_index(drop=True),
+        "condition_window_table": condition_window_table.reset_index(drop=True),
+        "metadata": {
+            "contig_order": contig_order,
+            "motifs": window_table["motif"].drop_duplicates().tolist(),
+            "aggregate_conditions": aggregate_conditions,
+        },
+    }
+
+
 def prepare_region_discovery_scan_data(
     *,
     result,
