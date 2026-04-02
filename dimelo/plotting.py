@@ -367,93 +367,79 @@ def _prepare_region_contrast_value_modes(
                 f"{side_name} side. Duplicate rows: {duplicate_rows.to_dict(orient='records')}."
             )
 
-    coordinate_columns = ["region_id", "position", "anchor", "region_strand"]
-    numerator_coordinates = numerator.loc[:, coordinate_columns].copy()
-    denominator_coordinates = denominator.loc[:, coordinate_columns].copy()
-    coordinate_match = numerator_coordinates.merge(
-        denominator_coordinates,
-        on="region_id",
-        suffixes=("_numerator", "_denominator"),
-        how="inner",
+    coordinate_match = numerator.loc[:, join_keys].merge(
+        denominator.loc[:, join_keys],
+        on=join_keys,
+        how="outer",
+        indicator=True,
     )
-    if coordinate_match.empty or len(coordinate_match) != len(numerator_coordinates) or len(coordinate_match) != len(denominator_coordinates):
-        raise ValueError("Unable to compute delta because numerator and denominator positions do not align.")
-
-    coordinate_mismatch = (
-        (coordinate_match["position_numerator"] != coordinate_match["position_denominator"])
-        | (coordinate_match["anchor_numerator"] != coordinate_match["anchor_denominator"])
-        | (coordinate_match["region_strand_numerator"] != coordinate_match["region_strand_denominator"])
-    )
-    if coordinate_mismatch.any():
-        mismatched_rows = coordinate_match.loc[
-            coordinate_mismatch,
-            [
-                "region_id",
-                "position_numerator",
-                "position_denominator",
-                "anchor_numerator",
-                "anchor_denominator",
-                "region_strand_numerator",
-                "region_strand_denominator",
-            ],
-        ].copy()
+    if not (coordinate_match["_merge"] == "both").all():
+        mismatched_rows = coordinate_match.loc[coordinate_match["_merge"] != "both", join_keys + ["_merge"]].copy()
         raise ValueError(
             "position_table contains mismatched coordinates between contrast sides. "
             f"Mismatched rows: {mismatched_rows.to_dict(orient='records')}."
         )
 
-    summary_columns = ["region_id", "fraction", "reference_fraction", "delta_fraction"]
-    if "rank" in result.summary.columns:
-        summary_columns.append("rank")
-    _require_columns(result.summary, tuple(summary_columns), "result.summary")
-    summary = result.summary.loc[:, summary_columns].copy()
-
-    plot_table = coordinate_match.loc[
-        :,
-        ["region_id", "position_numerator", "anchor_numerator", "region_strand_numerator"],
-    ].rename(
-        columns={
-            "position_numerator": "position",
-            "anchor_numerator": "anchor",
-            "region_strand_numerator": "region_strand",
-        }
+    paired = numerator.merge(
+        denominator,
+        on=join_keys,
+        suffixes=("_numerator", "_denominator"),
+        how="inner",
     )
-    plot_table = plot_table.merge(summary, on="region_id", how="inner")
+    if paired.empty or len(paired) != len(numerator) or len(paired) != len(denominator):
+        raise ValueError("Unable to compute delta because numerator and denominator positions do not align.")
 
-    if plot_table.empty:
-        raise ValueError("position_table does not contain any region_id values present in the contrast result.")
+    if "rank" in result.summary.columns:
+        _require_columns(result.summary, ("region_id", "rank"), "result.summary")
+        rank_table = result.summary.loc[:, ["region_id", "rank"]].drop_duplicates(subset=["region_id"])
+    else:
+        rank_table = None
 
-    side_labels = {
-        "numerator": ", ".join(str(value) for value in (contrast.numerator or [])) or "numerator",
-        "denominator": ", ".join(str(value) for value in (contrast.denominator or [])) or "denominator",
-    }
-    value_frames = []
-    for value_mode, value_column in (
-        ("numerator", "fraction"),
-        ("denominator", "reference_fraction"),
-        ("delta", "delta_fraction"),
-    ):
-        value_frame = plot_table.loc[:, [column for column in plot_table.columns if column != "fraction" and column != "reference_fraction" and column != "delta_fraction"]].copy()
-        value_frame["value"] = plot_table[value_column]
-        value_frame[grouping_key] = side_labels.get(value_mode, value_mode)
-        value_frame["value_mode"] = value_mode
-        value_frames.append(
-            value_frame.loc[
-                :,
-                [
-                    "region_id",
-                    grouping_key,
-                    "position",
-                    "anchor",
-                    "value",
-                    "region_strand",
-                    "value_mode",
-                ]
-                + (["rank"] if "rank" in value_frame.columns else []),
-            ]
-        )
+    def _attach_rank(table: pd.DataFrame) -> pd.DataFrame:
+        if rank_table is None:
+            return table
+        return table.merge(rank_table, on="region_id", how="left")
 
-    return pd.concat(value_frames, ignore_index=True)
+    numerator_table = numerator.loc[:, ["region_id", grouping_key, "position", "anchor", "value", "region_strand"]].copy()
+    numerator_table["value_mode"] = "numerator"
+    numerator_table = _attach_rank(numerator_table)
+
+    denominator_table = denominator.loc[:, ["region_id", grouping_key, "position", "anchor", "value", "region_strand"]].copy()
+    denominator_table["value_mode"] = "denominator"
+    denominator_table = _attach_rank(denominator_table)
+
+    delta_table = paired.loc[
+        :,
+        [
+            "region_id",
+            "position",
+            "anchor",
+            "region_strand",
+            "value_numerator",
+            "value_denominator",
+        ],
+    ].copy()
+    delta_table["value"] = delta_table["value_numerator"] - delta_table["value_denominator"]
+    delta_table[grouping_key] = "delta"
+    delta_table["value_mode"] = "delta"
+    delta_table = delta_table.loc[
+        :,
+        ["region_id", grouping_key, "position", "anchor", "value", "region_strand", "value_mode"]
+    ]
+    delta_table = _attach_rank(delta_table)
+
+    ordered_columns = ["region_id", grouping_key, "position", "anchor", "value", "region_strand", "value_mode"]
+    if rank_table is not None:
+        ordered_columns.append("rank")
+
+    return pd.concat(
+        [
+            numerator_table.loc[:, ordered_columns],
+            denominator_table.loc[:, ordered_columns],
+            delta_table.loc[:, ordered_columns],
+        ],
+        ignore_index=True,
+    )
 
 
 def prepare_region_contrast_profile_data(

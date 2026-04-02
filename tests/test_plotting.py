@@ -200,9 +200,25 @@ def _region_contrast_position_rows(*, include_grouping_key: bool = True) -> list
             "region_strand": "+",
         },
         {
+            "region_id": "chr1:90-110,+",
+            "condition": "NS",
+            "position": 105,
+            "anchor": 100,
+            "value": 0.2,
+            "region_strand": "+",
+        },
+        {
+            "region_id": "chr1:90-110,+",
+            "condition": "15min",
+            "position": 105,
+            "anchor": 100,
+            "value": 0.7,
+            "region_strand": "+",
+        },
+        {
             "region_id": "chr1:190-210,-",
             "condition": "NS",
-            "position": 205,
+            "position": 195,
             "anchor": 200,
             "value": 0.2,
             "region_strand": "-",
@@ -210,9 +226,25 @@ def _region_contrast_position_rows(*, include_grouping_key: bool = True) -> list
         {
             "region_id": "chr1:190-210,-",
             "condition": "15min",
-            "position": 205,
+            "position": 195,
             "anchor": 200,
             "value": 0.8,
+            "region_strand": "-",
+        },
+        {
+            "region_id": "chr1:190-210,-",
+            "condition": "NS",
+            "position": 205,
+            "anchor": 200,
+            "value": 0.3,
+            "region_strand": "-",
+        },
+        {
+            "region_id": "chr1:190-210,-",
+            "condition": "15min",
+            "position": 205,
+            "anchor": 200,
+            "value": 0.9,
             "region_strand": "-",
         },
     ]
@@ -238,40 +270,94 @@ def test_prepare_region_contrast_profile_data_returns_all_value_modes():
     )
 
     plot_table = payload["plot_table"]
-    assert len(plot_table) == 6
+    assert len(plot_table) == 12
     assert set(payload["plot_table"]["value_mode"]) == {"numerator", "denominator", "delta"}
-    assert plot_table.groupby(["region_id", "value_mode"]).size().to_dict() == {
-        ("chr1:90-110,+", "numerator"): 1,
-        ("chr1:90-110,+", "denominator"): 1,
-        ("chr1:90-110,+", "delta"): 1,
-        ("chr1:190-210,-", "numerator"): 1,
-        ("chr1:190-210,-", "denominator"): 1,
-        ("chr1:190-210,-", "delta"): 1,
+    assert plot_table.groupby(["region_id", "position", "value_mode"]).size().to_dict() == {
+        ("chr1:90-110,+", 95, "numerator"): 1,
+        ("chr1:90-110,+", 95, "denominator"): 1,
+        ("chr1:90-110,+", 95, "delta"): 1,
+        ("chr1:90-110,+", 105, "numerator"): 1,
+        ("chr1:90-110,+", 105, "denominator"): 1,
+        ("chr1:90-110,+", 105, "delta"): 1,
+        ("chr1:190-210,-", 195, "numerator"): 1,
+        ("chr1:190-210,-", 195, "denominator"): 1,
+        ("chr1:190-210,-", 195, "delta"): 1,
+        ("chr1:190-210,-", 205, "numerator"): 1,
+        ("chr1:190-210,-", 205, "denominator"): 1,
+        ("chr1:190-210,-", 205, "delta"): 1,
     }
     assert plot_table.loc[
-        (plot_table["region_id"] == "chr1:90-110,+") & (plot_table["value_mode"] == "numerator"),
+        (plot_table["region_id"] == "chr1:90-110,+")
+        & (plot_table["position"] == 95)
+        & (plot_table["value_mode"] == "numerator"),
         "value",
-    ].iloc[0] == 0.55
+    ].iloc[0] == pytest.approx(0.6)
     assert plot_table.loc[
-        (plot_table["region_id"] == "chr1:90-110,+") & (plot_table["value_mode"] == "denominator"),
+        (plot_table["region_id"] == "chr1:90-110,+")
+        & (plot_table["position"] == 95)
+        & (plot_table["value_mode"] == "denominator"),
         "value",
-    ].iloc[0] == 0.20
+    ].iloc[0] == pytest.approx(0.1)
     assert plot_table.loc[
-        (plot_table["region_id"] == "chr1:90-110,+") & (plot_table["value_mode"] == "delta"),
+        (plot_table["region_id"] == "chr1:90-110,+")
+        & (plot_table["position"] == 95)
+        & (plot_table["value_mode"] == "delta"),
         "value",
-    ].iloc[0] == 0.35
+    ].iloc[0] == pytest.approx(0.5)
     assert plot_table.loc[
-        (plot_table["region_id"] == "chr1:190-210,-") & (plot_table["value_mode"] == "numerator"),
+        (plot_table["region_id"] == "chr1:90-110,+")
+        & (plot_table["position"] == 105)
+        & (plot_table["value_mode"] == "numerator"),
         "value",
-    ].iloc[0] == 0.70
+    ].iloc[0] == pytest.approx(0.7)
     assert plot_table.loc[
-        (plot_table["region_id"] == "chr1:190-210,-") & (plot_table["value_mode"] == "denominator"),
+        (plot_table["region_id"] == "chr1:90-110,+")
+        & (plot_table["position"] == 105)
+        & (plot_table["value_mode"] == "denominator"),
         "value",
-    ].iloc[0] == 0.30
+    ].iloc[0] == pytest.approx(0.2)
     assert plot_table.loc[
-        (plot_table["region_id"] == "chr1:190-210,-") & (plot_table["value_mode"] == "delta"),
+        (plot_table["region_id"] == "chr1:90-110,+")
+        & (plot_table["position"] == 105)
+        & (plot_table["value_mode"] == "delta"),
         "value",
-    ].iloc[0] == 0.40
+    ].iloc[0] == pytest.approx(0.5)
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:190-210,-")
+        & (plot_table["position"] == 195)
+        & (plot_table["value_mode"] == "numerator"),
+        "value",
+    ].iloc[0] == pytest.approx(0.8)
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:190-210,-")
+        & (plot_table["position"] == 195)
+        & (plot_table["value_mode"] == "denominator"),
+        "value",
+    ].iloc[0] == pytest.approx(0.2)
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:190-210,-")
+        & (plot_table["position"] == 195)
+        & (plot_table["value_mode"] == "delta"),
+        "value",
+    ].iloc[0] == pytest.approx(0.6)
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:190-210,-")
+        & (plot_table["position"] == 205)
+        & (plot_table["value_mode"] == "numerator"),
+        "value",
+    ].iloc[0] == pytest.approx(0.9)
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:190-210,-")
+        & (plot_table["position"] == 205)
+        & (plot_table["value_mode"] == "denominator"),
+        "value",
+    ].iloc[0] == pytest.approx(0.3)
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:190-210,-")
+        & (plot_table["position"] == 205)
+        & (plot_table["value_mode"] == "delta"),
+        "value",
+    ].iloc[0] == pytest.approx(0.6)
     assert payload["metadata"]["plot_family"] == "region_contrast_profile"
 
 
