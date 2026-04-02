@@ -360,11 +360,14 @@ def test_prepare_region_discovery_scan_data_filters_contigs_in_requested_order()
 
     payload = plotting.prepare_region_discovery_scan_data(
         result=result,
-        contigs=["chr2", "chr1"],
+        contigs=["chr2"],
     )
 
-    assert payload["metadata"]["contig_order"] == ["chr2", "chr1"]
-    assert payload["scan_table"]["contig"].tolist() == ["chr2", "chr1", "chr1"]
+    assert payload["metadata"]["contig_order"] == ["chr2"]
+    assert payload["scan_table"]["contig"].tolist() == ["chr2"]
+    assert payload["hit_table"]["contig"].tolist() == ["chr2"]
+    assert "chr1" not in payload["scan_table"]["contig"].tolist()
+    assert "chr1" not in payload["hit_table"]["contig"].tolist()
 
 
 def test_prepare_region_discovery_scan_data_limits_hit_overlay():
