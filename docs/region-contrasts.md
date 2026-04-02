@@ -207,7 +207,16 @@ heatmap_payload = plotting.prepare_region_contrast_heatmap_data(
 )
 ```
 
-`position_table` must already be an aggregated positional substrate from the parsing/loading layer, not raw per-read events.
+`position_table` must already be an aggregated positional substrate from the parsing/loading layer, not raw per-read events. The current helper contract expects at minimum:
+
+- `region_id`
+- `position`
+- `anchor`
+- `value`
+- `region_strand`
+- either `condition` or `sample_id`
+
+For `prepare_region_contrast_heatmap_data(...)`, `result.summary` must also provide one unambiguous `rank` value per plotted region.
 
 ## Preprocessing Reminder
 
