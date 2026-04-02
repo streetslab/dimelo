@@ -25,11 +25,8 @@ def _legacy_aggregate_axis_spec(
 def _legacy_aggregate_profile_table(
     trace_vectors: list[np.ndarray],
     sample_names: list[str],
-    *,
-    regions_5to3prime: bool,
 ) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
-    region_strand = "-" if regions_5to3prime else "+"
 
     for sample_name, trace_vector in zip(sample_names, trace_vectors, strict=True):
         positions = np.arange(
@@ -42,7 +39,7 @@ def _legacy_aggregate_profile_table(
                     "sample_name": sample_name,
                     "position": float(position),
                     "anchor": 0.0,
-                    "region_strand": region_strand,
+                    "region_strand": "+",
                     "value": float(value),
                 }
             )
@@ -80,7 +77,6 @@ def _route_legacy_aggregate_axis_through_shared_core(
     aggregate_table = _legacy_aggregate_profile_table(
         trace_vectors,
         sample_names,
-        regions_5to3prime=regions_5to3prime,
     )
     prepared_payload = plotting.prepare_aggregate_plot_data(
         aggregate_table,

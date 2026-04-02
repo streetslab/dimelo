@@ -319,14 +319,9 @@ def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(
         called["plot_family"] = plot_family
         called["axis"] = axis
         called["aggregation"] = aggregation
+        assert set(table["region_strand"]) == {"+"}
         return {
-            "plot_table": pd.DataFrame(
-                {
-                    "sample_name": ["sample", "sample"],
-                    "plot_x": [1.0, 0.0],
-                    "value": [9.0, 8.0],
-                }
-            ),
+            "plot_table": table.copy().assign(plot_x=table["position"]),
             "axis_table": pd.DataFrame(),
             "metadata": {},
         }
@@ -366,7 +361,7 @@ def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(
     assert list(called["table"]["sample_name"]) == ["sample", "sample"]
     assert list(called["table"]["value"]) == [0.25, 0.75]
     assert len(captured["trace_vectors"]) == 1
-    assert np.array_equal(captured["trace_vectors"][0], np.array([8.0, 9.0]))
+    assert np.array_equal(captured["trace_vectors"][0], np.array([0.25, 0.75]))
     assert captured["sample_names"] == ["sample"]
 
 
