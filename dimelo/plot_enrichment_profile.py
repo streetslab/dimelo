@@ -17,9 +17,50 @@ def _legacy_aggregate_axis_spec(
         orientation="region_5to3" if regions_5to3prime else "genomic",
         coordinate_mode="fixed_window",
         anchor="center" if relative else "absolute",
-        upstream_bp=window_size // 2,
-        downstream_bp=window_size // 2,
+        upstream_bp=window_size,
+        downstream_bp=window_size,
     )
+
+
+def _legacy_aggregate_profile_table(
+    trace_vectors: list[np.ndarray],
+    sample_names: list[str],
+    *,
+    regions_5to3prime: bool,
+) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    region_strand = "-" if regions_5to3prime else "+"
+
+    for sample_name, trace_vector in zip(sample_names, trace_vectors, strict=True):
+        positions = np.arange(
+            -(len(trace_vector) // 2),
+            len(trace_vector) // 2 + len(trace_vector) % 2,
+        )
+        for position, value in zip(positions, trace_vector, strict=True):
+            rows.append(
+                {
+                    "sample_name": sample_name,
+                    "position": float(position),
+                    "anchor": 0.0,
+                    "region_strand": region_strand,
+                    "value": float(value),
+                }
+            )
+
+    return pd.DataFrame(rows)
+
+
+def _prepare_legacy_aggregate_profile_vectors(
+    prepared_table: pd.DataFrame,
+    *,
+    sample_names: list[str],
+) -> list[np.ndarray]:
+    prepared_vectors: list[np.ndarray] = []
+    for sample_name in sample_names:
+        sample_table = prepared_table.loc[prepared_table["sample_name"] == sample_name].copy()
+        sample_table = sample_table.sort_values("plot_x")
+        prepared_vectors.append(sample_table["value"].to_numpy())
+    return prepared_vectors
 
 
 def _route_legacy_aggregate_axis_through_shared_core(
@@ -27,24 +68,22 @@ def _route_legacy_aggregate_axis_through_shared_core(
     window_size: int,
     relative: bool,
     regions_5to3prime: bool,
-) -> None:
+    trace_vectors: list[np.ndarray],
+    sample_names: list[str],
+) -> list[np.ndarray]:
     axis = _legacy_aggregate_axis_spec(
         window_size=window_size,
         relative=relative,
         regions_5to3prime=regions_5to3prime,
     )
     aggregation = plotting.AggregationSpec()
-    plotting.prepare_aggregate_plot_data(
-        pd.DataFrame(
-            [
-                {
-                    "position": 0,
-                    "anchor": 0,
-                    "region_strand": "-" if regions_5to3prime else "+",
-                    "value": 0.0,
-                }
-            ]
-        ),
+    aggregate_table = _legacy_aggregate_profile_table(
+        trace_vectors,
+        sample_names,
+        regions_5to3prime=regions_5to3prime,
+    )
+    prepared_payload = plotting.prepare_aggregate_plot_data(
+        aggregate_table,
         plot_family="aggregate_profile",
         axis=axis,
         aggregation=aggregation,
@@ -52,6 +91,10 @@ def _route_legacy_aggregate_axis_through_shared_core(
         position_column="position",
         anchor_column="anchor",
         region_strand_column="region_strand",
+    )
+    return _prepare_legacy_aggregate_profile_vectors(
+        prepared_payload["plot_table"],
+        sample_names=sample_names,
     )
 
 
@@ -116,10 +159,12 @@ def plot_enrichment_profile(
         cores=cores,
     )
 
-    _route_legacy_aggregate_axis_through_shared_core(
+    trace_vectors = _route_legacy_aggregate_axis_through_shared_core(
         window_size=window_size,
         relative=relative,
         regions_5to3prime=regions_5to3prime,
+        trace_vectors=trace_vectors,
+        sample_names=sample_names,
     )
 
     if relative:

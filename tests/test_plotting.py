@@ -312,6 +312,7 @@ def test_prepare_aggregate_plot_data_retains_metadata_for_fixed_window():
 
 def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(monkeypatch):
     called = {}
+    captured = {}
 
     def fake_prepare_aggregate_plot_data(table, *, plot_family, axis, aggregation, **kwargs):
         called["table"] = table
@@ -319,7 +320,13 @@ def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(
         called["axis"] = axis
         called["aggregation"] = aggregation
         return {
-            "plot_table": table.copy(),
+            "plot_table": pd.DataFrame(
+                {
+                    "sample_name": ["sample", "sample"],
+                    "plot_x": [1.0, 0.0],
+                    "value": [9.0, 8.0],
+                }
+            ),
             "axis_table": pd.DataFrame(),
             "metadata": {},
         }
@@ -329,9 +336,16 @@ def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(
         "dimelo.plot_enrichment_profile.get_enrichment_profiles",
         lambda **kwargs: [np.array([0.25, 0.75])],
     )
+
+    def fake_make_enrichment_profile_plot(*, trace_vectors, sample_names, offset_center=0, **kwargs):
+        captured["trace_vectors"] = trace_vectors
+        captured["sample_names"] = sample_names
+        captured["offset_center"] = offset_center
+        return object()
+
     monkeypatch.setattr(
         "dimelo.plot_enrichment_profile.make_enrichment_profile_plot",
-        lambda **kwargs: object(),
+        fake_make_enrichment_profile_plot,
     )
 
     result = plot_enrichment_profile.plot_enrichment_profile(
@@ -349,6 +363,11 @@ def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(
     assert called["axis"].coordinate_mode == "fixed_window"
     assert called["axis"].anchor == "center"
     assert called["aggregation"].layout == "faceted"
+    assert list(called["table"]["sample_name"]) == ["sample", "sample"]
+    assert list(called["table"]["value"]) == [0.25, 0.75]
+    assert len(captured["trace_vectors"]) == 1
+    assert np.array_equal(captured["trace_vectors"][0], np.array([8.0, 9.0]))
+    assert captured["sample_names"] == ["sample"]
 
 
 def test_prepare_single_read_plot_data_rejects_segment_map_axes():
