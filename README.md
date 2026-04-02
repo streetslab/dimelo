@@ -264,6 +264,8 @@ Legacy plotting entry points remain supported, but they now share a common plott
 - Single-read plots remain coordinate-preserving. They can use fixed-window coordinates and 5'->3' orientation, but they do not stretch variable-length regions onto a synthetic continuous axis.
 - Built-in Matplotlib plotting is still available, while plot-ready tables remain the stable contract for users who prefer seaborn, Plotly, Altair, or custom renderers.
 
+Newer region-contrast plotting helpers accept a `RegionContrastResult` plus an explicit `position_table` from the parsing/loading layer. This keeps region scoring and positional extraction separate while still using the shared plotting-axis system.
+
 `plot_enrichment_profile` module for pileup line plot profiles across one or more region
 ```
 def plot_enrichment_profile(

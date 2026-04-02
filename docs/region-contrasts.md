@@ -175,6 +175,40 @@ sns.scatterplot(
 )
 ```
 
+For region-contrast-specific plots, use the new plotting helpers with a `RegionContrastResult`, an explicit `position_table`, and the shared axis/aggregation spec:
+
+```python
+from dimelo import plotting
+
+profile_payload = plotting.prepare_region_contrast_profile_data(
+    result=result,
+    position_table=position_table,
+    axis=plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="fixed_window",
+        anchor="center",
+        upstream_bp=2000,
+        downstream_bp=2000,
+    ),
+    aggregation=plotting.AggregationSpec(),
+)
+
+heatmap_payload = plotting.prepare_region_contrast_heatmap_data(
+    result=result,
+    position_table=position_table,
+    axis=plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="fixed_window",
+        anchor="center",
+        upstream_bp=2000,
+        downstream_bp=2000,
+    ),
+    aggregation=plotting.AggregationSpec(),
+)
+```
+
+`position_table` must already be an aggregated positional substrate from the parsing/loading layer, not raw per-read events.
+
 ## Preprocessing Reminder
 
 - Run `parse_bam.pileup()` when you care about motif abundance, defined-region contrasts, or later de novo discovery.
