@@ -310,27 +310,48 @@ def test_prepare_aggregate_plot_data_retains_metadata_for_fixed_window():
     assert payload["metadata"]["orientation"] == "region_5to3"
 
 
-def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(monkeypatch):
+@pytest.mark.parametrize(
+    "relative, regions_dict, expected_anchor, expected_offset_center",
+    [
+        (True, None, "center", 0),
+        (False, {"regions.bed": [(100, 140)]}, "absolute", 120),
+    ],
+)
+def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(
+    monkeypatch,
+    relative,
+    regions_dict,
+    expected_anchor,
+    expected_offset_center,
+):
     called = {}
     captured = {}
 
-    def fake_prepare_aggregate_plot_data(table, *, plot_family, axis, aggregation, **kwargs):
+    real_prepare_aggregate_plot_data = plotting.prepare_aggregate_plot_data
+
+    def spy_prepare_aggregate_plot_data(table, *, plot_family, axis, aggregation, **kwargs):
         called["table"] = table
         called["plot_family"] = plot_family
         called["axis"] = axis
         called["aggregation"] = aggregation
-        assert set(table["region_strand"]) == {"+"}
-        return {
-            "plot_table": table.copy().assign(plot_x=table["position"]),
-            "axis_table": pd.DataFrame(),
-            "metadata": {},
-        }
+        return real_prepare_aggregate_plot_data(
+            table,
+            plot_family=plot_family,
+            axis=axis,
+            aggregation=aggregation,
+            **kwargs,
+        )
 
-    monkeypatch.setattr(plotting, "prepare_aggregate_plot_data", fake_prepare_aggregate_plot_data)
+    monkeypatch.setattr(plotting, "prepare_aggregate_plot_data", spy_prepare_aggregate_plot_data)
     monkeypatch.setattr(
         "dimelo.plot_enrichment_profile.get_enrichment_profiles",
         lambda **kwargs: [np.array([0.25, 0.75])],
     )
+    if regions_dict is not None:
+        monkeypatch.setattr(
+            "dimelo.plot_enrichment_profile.utils.regions_dict_from_input",
+            lambda *args, **kwargs: regions_dict,
+        )
 
     def fake_make_enrichment_profile_plot(*, trace_vectors, sample_names, offset_center=0, **kwargs):
         captured["trace_vectors"] = trace_vectors
@@ -349,6 +370,7 @@ def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(
         motifs=["A"],
         sample_names=["sample"],
         window_size=10,
+        relative=relative,
         regions_5to3prime=True,
     )
 
@@ -356,13 +378,15 @@ def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(
     assert called["plot_family"] == "aggregate_profile"
     assert called["axis"].orientation == "region_5to3"
     assert called["axis"].coordinate_mode == "fixed_window"
-    assert called["axis"].anchor == "center"
+    assert called["axis"].anchor == expected_anchor
     assert called["aggregation"].layout == "faceted"
     assert list(called["table"]["sample_name"]) == ["sample", "sample"]
     assert list(called["table"]["value"]) == [0.25, 0.75]
+    assert list(called["table"]["region_strand"]) == ["+", "+"]
     assert len(captured["trace_vectors"]) == 1
     assert np.array_equal(captured["trace_vectors"][0], np.array([0.25, 0.75]))
     assert captured["sample_names"] == ["sample"]
+    assert captured["offset_center"] == expected_offset_center
 
 
 def test_prepare_single_read_plot_data_rejects_segment_map_axes():
