@@ -145,6 +145,134 @@ def test_prepare_single_read_plot_data_flips_negative_regions_to_5to3():
     assert payload["plot_table"].loc[0, "plot_x"] == -10
 
 
+def test_prepare_single_read_plot_data_genomic_fixed_window_does_not_require_strand_column():
+    reads = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "event_pos": 110,
+                "anchor": 100,
+                "read_id": "r1",
+            }
+        ]
+    )
+    axis = plotting.AxisSpec(
+        orientation="genomic",
+        coordinate_mode="fixed_window",
+        anchor="custom",
+        upstream_bp=20,
+        downstream_bp=20,
+    )
+
+    payload = plotting.prepare_single_read_plot_data(
+        reads,
+        plot_family="single_read_raster",
+        axis=axis,
+        position_column="event_pos",
+        anchor_column="anchor",
+    )
+
+    assert list(payload["plot_table"]["plot_x"]) == [10.0]
+
+
+def test_prepare_single_read_plot_data_filters_rows_outside_fixed_window_bounds():
+    reads = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "region_strand": "+",
+                "event_pos": 89,
+                "anchor": 100,
+                "read_id": "r0",
+            },
+            {
+                "region_id": "reg1",
+                "region_strand": "+",
+                "event_pos": 95,
+                "anchor": 100,
+                "read_id": "r1",
+            },
+            {
+                "region_id": "reg1",
+                "region_strand": "+",
+                "event_pos": 105,
+                "anchor": 100,
+                "read_id": "r2",
+            },
+            {
+                "region_id": "reg1",
+                "region_strand": "+",
+                "event_pos": 111,
+                "anchor": 100,
+                "read_id": "r3",
+            },
+        ]
+    )
+    axis = plotting.AxisSpec(
+        orientation="genomic",
+        coordinate_mode="fixed_window",
+        anchor="custom",
+        upstream_bp=10,
+        downstream_bp=10,
+    )
+
+    payload = plotting.prepare_single_read_plot_data(
+        reads,
+        plot_family="single_read_raster",
+        axis=axis,
+        position_column="event_pos",
+        anchor_column="anchor",
+    )
+
+    assert list(payload["plot_table"]["read_id"]) == ["r1", "r2"]
+    assert list(payload["plot_table"]["plot_x"]) == [-5.0, 5.0]
+
+
+@pytest.mark.parametrize("upstream_bp, downstream_bp", [(-1, 10), (10, -1)])
+def test_validate_axis_spec_rejects_negative_fixed_window_bounds(upstream_bp, downstream_bp):
+    axis = plotting.AxisSpec(
+        orientation="genomic",
+        coordinate_mode="fixed_window",
+        anchor="custom",
+        upstream_bp=upstream_bp,
+        downstream_bp=downstream_bp,
+    )
+
+    with pytest.raises(ValueError, match="non-negative"):
+        plotting.validate_axis_spec(axis, plot_family="aggregate_profile")
+
+
+def test_prepare_single_read_plot_data_rejects_invalid_region_strand_in_region_5to3():
+    reads = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "region_strand": "?",
+                "event_pos": 110,
+                "anchor": 100,
+                "read_id": "r1",
+            }
+        ]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="fixed_window",
+        anchor="custom",
+        upstream_bp=20,
+        downstream_bp=20,
+    )
+
+    with pytest.raises(ValueError, match="region_strand values"):
+        plotting.prepare_single_read_plot_data(
+            reads,
+            plot_family="single_read_raster",
+            axis=axis,
+            position_column="event_pos",
+            anchor_column="anchor",
+            region_strand_column="region_strand",
+        )
+
+
 def test_prepare_aggregate_plot_data_retains_metadata_for_fixed_window():
     table = pd.DataFrame(
         [

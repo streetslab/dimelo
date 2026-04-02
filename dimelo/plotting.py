@@ -47,6 +47,12 @@ def validate_axis_spec(axis: AxisSpec, *, plot_family: str) -> None:
     if axis.coordinate_mode == "segment_map" and not axis.segments:
         raise ValueError("segment_map requires segments.")
 
+    if axis.coordinate_mode == "fixed_window":
+        if axis.upstream_bp is None or axis.downstream_bp is None:
+            raise ValueError("fixed_window requires upstream_bp and downstream_bp.")
+        if axis.upstream_bp < 0 or axis.downstream_bp < 0:
+            raise ValueError("fixed_window upstream_bp and downstream_bp must be non-negative.")
+
     if plot_family == "single_read_raster" and axis.segments:
         if any(segment.mode == "scaled" for segment in axis.segments):
             raise ValueError(
@@ -73,7 +79,13 @@ def _relative_position(position: float, anchor: float) -> float:
 
 
 def _orient_position(relative_position: float, region_strand: str, orientation: str) -> float:
-    if orientation == "region_5to3" and region_strand == "-":
+    if orientation != "region_5to3":
+        return relative_position
+
+    if region_strand not in {"+", "-"}:
+        raise ValueError("region_5to3 fixed_window prep requires region_strand values of '+' or '-'.")
+
+    if region_strand == "-":
         return -relative_position
     return relative_position
 
@@ -84,25 +96,29 @@ def _prepare_fixed_window_plot_data(
     axis: AxisSpec,
     position_column: str,
     anchor_column: str,
-    region_strand_column: str,
+    region_strand_column: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     if axis.coordinate_mode != "fixed_window":
         raise ValueError("fixed_window prep only supports coordinate_mode='fixed_window'.")
-    if axis.upstream_bp is None or axis.downstream_bp is None:
-        raise ValueError("fixed_window prep requires upstream_bp and downstream_bp.")
 
-    _require_columns(
-        table,
-        (position_column, anchor_column, region_strand_column),
-        "plot_table",
-    )
+    _require_columns(table, (position_column, anchor_column), "plot_table")
+    if axis.orientation == "region_5to3":
+        if region_strand_column is None:
+            raise ValueError("region_5to3 fixed_window prep requires region_strand_column.")
+        _require_columns(table, (region_strand_column,), "plot_table")
 
     plot_table = table.copy()
     relative_position = plot_table[position_column].astype(float) - plot_table[anchor_column].astype(float)
-    plot_table["plot_x"] = [
-        _orient_position(relative_position=rel, region_strand=strand, orientation=axis.orientation)
-        for rel, strand in zip(relative_position, plot_table[region_strand_column], strict=True)
-    ]
+    if axis.orientation == "region_5to3":
+        plot_table["plot_x"] = [
+            _orient_position(relative_position=rel, region_strand=strand, orientation=axis.orientation)
+            for rel, strand in zip(relative_position, plot_table[region_strand_column], strict=True)
+        ]
+    else:
+        plot_table["plot_x"] = relative_position
+
+    window_mask = plot_table["plot_x"].between(-axis.upstream_bp, axis.downstream_bp)
+    plot_table = plot_table.loc[window_mask].copy().reset_index(drop=True)
 
     axis_table = pd.DataFrame(
         [
@@ -123,7 +139,7 @@ def prepare_single_read_plot_data(
     axis: AxisSpec,
     position_column: str,
     anchor_column: str,
-    region_strand_column: str,
+    region_strand_column: str | None = None,
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     validate_axis_spec(axis, plot_family=plot_family)
     plot_table, axis_table = _prepare_fixed_window_plot_data(
@@ -150,7 +166,7 @@ def prepare_aggregate_plot_data(
     value_column: str,
     position_column: str,
     anchor_column: str,
-    region_strand_column: str,
+    region_strand_column: str | None = None,
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     validate_axis_spec(axis, plot_family=plot_family)
     validate_aggregation_spec(aggregation)
