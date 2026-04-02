@@ -493,6 +493,20 @@ def _make_global_window_result() -> GlobalAnalysisResult:
                 "condition": "treated",
                 "replicate": 2,
                 "motif": "A,0",
+                "window_id": "chr1:0-100",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 100,
+                "strand": ".",
+                "modified_count": 4,
+                "valid_count": 10,
+                "window_fraction": 0.4,
+            },
+            {
+                "sample_id": "s3",
+                "condition": "treated",
+                "replicate": 2,
+                "motif": "A,0",
                 "window_id": "chr2:0-100",
                 "chromosome": "chr2",
                 "start": 0,
@@ -697,8 +711,9 @@ def test_prepare_global_analysis_window_data_returns_expected_tables():
     payload = plotting.prepare_global_analysis_window_data(result=result)
 
     assert set(payload) == {"window_table", "condition_window_table", "metadata"}
-    assert payload["window_table"]["contig"].tolist() == ["chr1", "chr1", "chr2"]
-    assert payload["window_table"]["window_midpoint"].tolist() == [50.0, 50.0, 50.0]
+    assert payload["window_table"]["contig"].tolist() == ["chr1", "chr1", "chr1", "chr2"]
+    assert payload["window_table"]["window_midpoint"].tolist() == [50.0, 50.0, 50.0, 50.0]
+    assert payload["condition_window_table"].empty
     assert payload["metadata"]["contig_order"] == ["chr1", "chr2"]
 
 
@@ -730,7 +745,8 @@ def test_prepare_global_analysis_window_data_aggregates_conditions():
     ].iloc[0]
 
     assert ns_row["window_fraction_mean"] == pytest.approx(0.5)
-    assert treated_chr1["window_fraction_mean"] == pytest.approx(0.8)
+    assert treated_chr1["window_fraction_mean"] == pytest.approx(0.6)
+    assert treated_chr1["sample_n"] == 2
 
 
 def test_prepare_region_discovery_hit_context_data_rejects_padding_bp():
