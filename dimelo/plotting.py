@@ -68,6 +68,113 @@ def validate_aggregation_spec(spec: AggregationSpec) -> None:
         raise ValueError("Unsupported layout mode.")
 
 
+def _relative_position(position: float, anchor: float) -> float:
+    return float(position) - float(anchor)
+
+
+def _orient_position(relative_position: float, region_strand: str, orientation: str) -> float:
+    if orientation == "region_5to3" and region_strand == "-":
+        return -relative_position
+    return relative_position
+
+
+def _prepare_fixed_window_plot_data(
+    table: pd.DataFrame,
+    *,
+    axis: AxisSpec,
+    position_column: str,
+    anchor_column: str,
+    region_strand_column: str,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if axis.coordinate_mode != "fixed_window":
+        raise ValueError("fixed_window prep only supports coordinate_mode='fixed_window'.")
+    if axis.upstream_bp is None or axis.downstream_bp is None:
+        raise ValueError("fixed_window prep requires upstream_bp and downstream_bp.")
+
+    _require_columns(
+        table,
+        (position_column, anchor_column, region_strand_column),
+        "plot_table",
+    )
+
+    plot_table = table.copy()
+    relative_position = plot_table[position_column].astype(float) - plot_table[anchor_column].astype(float)
+    plot_table["plot_x"] = [
+        _orient_position(relative_position=rel, region_strand=strand, orientation=axis.orientation)
+        for rel, strand in zip(relative_position, plot_table[region_strand_column], strict=True)
+    ]
+
+    axis_table = pd.DataFrame(
+        [
+            {
+                "segment_id": "window",
+                "axis_min": -axis.upstream_bp,
+                "axis_max": axis.downstream_bp,
+            }
+        ]
+    )
+    return plot_table, axis_table
+
+
+def prepare_single_read_plot_data(
+    table: pd.DataFrame,
+    *,
+    plot_family: str,
+    axis: AxisSpec,
+    position_column: str,
+    anchor_column: str,
+    region_strand_column: str,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    validate_axis_spec(axis, plot_family=plot_family)
+    plot_table, axis_table = _prepare_fixed_window_plot_data(
+        table,
+        axis=axis,
+        position_column=position_column,
+        anchor_column=anchor_column,
+        region_strand_column=region_strand_column,
+    )
+    metadata = {
+        "plot_family": plot_family,
+        "orientation": axis.orientation,
+        "coordinate_mode": axis.coordinate_mode,
+    }
+    return {"plot_table": plot_table, "axis_table": axis_table, "metadata": metadata}
+
+
+def prepare_aggregate_plot_data(
+    table: pd.DataFrame,
+    *,
+    plot_family: str,
+    axis: AxisSpec,
+    aggregation: AggregationSpec,
+    value_column: str,
+    position_column: str,
+    anchor_column: str,
+    region_strand_column: str,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    validate_axis_spec(axis, plot_family=plot_family)
+    validate_aggregation_spec(aggregation)
+    _require_columns(table, (value_column,), "plot_table")
+
+    plot_table, axis_table = _prepare_fixed_window_plot_data(
+        table,
+        axis=axis,
+        position_column=position_column,
+        anchor_column=anchor_column,
+        region_strand_column=region_strand_column,
+    )
+    metadata = {
+        "plot_family": plot_family,
+        "orientation": axis.orientation,
+        "coordinate_mode": axis.coordinate_mode,
+        "weighting": aggregation.weighting,
+        "within_region_summary": aggregation.within_region_summary,
+        "signal_normalization": aggregation.signal_normalization,
+        "layout": aggregation.layout,
+    }
+    return {"plot_table": plot_table, "axis_table": axis_table, "metadata": metadata}
+
+
 def prepare_cluster_distribution_bar_data(cluster_distribution: pd.DataFrame) -> pd.DataFrame:
     _require_columns(
         cluster_distribution,

@@ -111,3 +111,71 @@ def test_prepare_cluster_distribution_heatmap_data_pivots_columns_in_sorted_orde
     assert fifteen_min["C1"] == 0.75
     assert ns_row["C0"] == 0.75
     assert ns_row["C1"] == 0.25
+
+
+def test_prepare_single_read_plot_data_flips_negative_regions_to_5to3():
+    reads = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "region_strand": "-",
+                "event_pos": 110,
+                "anchor": 100,
+                "read_id": "r1",
+            }
+        ]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="fixed_window",
+        anchor="custom",
+        upstream_bp=20,
+        downstream_bp=20,
+    )
+
+    payload = plotting.prepare_single_read_plot_data(
+        reads,
+        plot_family="single_read_raster",
+        axis=axis,
+        position_column="event_pos",
+        anchor_column="anchor",
+        region_strand_column="region_strand",
+    )
+
+    assert payload["plot_table"].loc[0, "plot_x"] == -10
+
+
+def test_prepare_aggregate_plot_data_retains_metadata_for_fixed_window():
+    table = pd.DataFrame(
+        [
+            {"region_id": "reg1", "region_strand": "+", "event_pos": 95, "anchor": 100, "signal": 1.0},
+            {"region_id": "reg1", "region_strand": "+", "event_pos": 105, "anchor": 100, "signal": 3.0},
+        ]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="fixed_window",
+        anchor="center",
+        upstream_bp=10,
+        downstream_bp=10,
+    )
+    aggregation = plotting.AggregationSpec(
+        weighting="equal_region",
+        within_region_summary="mean",
+        signal_normalization="none",
+        layout="faceted",
+    )
+
+    payload = plotting.prepare_aggregate_plot_data(
+        table,
+        plot_family="aggregate_profile",
+        axis=axis,
+        aggregation=aggregation,
+        value_column="signal",
+        position_column="event_pos",
+        anchor_column="anchor",
+        region_strand_column="region_strand",
+    )
+
+    assert {"plot_table", "axis_table", "metadata"} <= set(payload)
+    assert payload["metadata"]["orientation"] == "region_5to3"
