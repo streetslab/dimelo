@@ -330,7 +330,7 @@ def _prepare_region_contrast_position_table(
 ) -> pd.DataFrame:
     _require_columns(
         position_table,
-        ("region_id", grouping_key, "position", "value", "region_strand"),
+        ("region_id", grouping_key, "position", "anchor", "value", "region_strand"),
         "position_table",
     )
     summary_region_ids = result.summary["region_id"].dropna().astype(str)
@@ -357,7 +357,7 @@ def _prepare_region_contrast_value_modes(
     if numerator.empty or denominator.empty:
         raise ValueError("position_table does not contain rows for both contrast sides.")
 
-    join_keys = ["region_id", "position", "region_strand"]
+    join_keys = ["region_id", "position", "anchor", "region_strand"]
     for side_name, side_table in (("numerator", numerator), ("denominator", denominator)):
         duplicate_mask = side_table.duplicated(join_keys, keep=False)
         if duplicate_mask.any():
@@ -367,31 +367,138 @@ def _prepare_region_contrast_value_modes(
                 f"{side_name} side. Duplicate rows: {duplicate_rows.to_dict(orient='records')}."
             )
 
-    numerator["value_mode"] = "numerator"
-    denominator["value_mode"] = "denominator"
-
-    delta = numerator.merge(
-        denominator,
-        on=join_keys,
+    coordinate_columns = ["region_id", "position", "anchor", "region_strand"]
+    numerator_coordinates = numerator.loc[:, coordinate_columns].copy()
+    denominator_coordinates = denominator.loc[:, coordinate_columns].copy()
+    coordinate_match = numerator_coordinates.merge(
+        denominator_coordinates,
+        on="region_id",
         suffixes=("_numerator", "_denominator"),
         how="inner",
     )
-    if delta.empty:
+    if coordinate_match.empty or len(coordinate_match) != len(numerator_coordinates) or len(coordinate_match) != len(denominator_coordinates):
         raise ValueError("Unable to compute delta because numerator and denominator positions do not align.")
 
-    delta["value"] = delta["value_numerator"] - delta["value_denominator"]
-    delta[grouping_key] = "delta"
-    delta["value_mode"] = "delta"
-    delta = delta.loc[:, ["region_id", grouping_key, "position", "value", "region_strand", "value_mode"]]
-
-    return pd.concat(
-        [
-            numerator.loc[:, ["region_id", grouping_key, "position", "value", "region_strand", "value_mode"]],
-            denominator.loc[:, ["region_id", grouping_key, "position", "value", "region_strand", "value_mode"]],
-            delta,
-        ],
-        ignore_index=True,
+    coordinate_mismatch = (
+        (coordinate_match["position_numerator"] != coordinate_match["position_denominator"])
+        | (coordinate_match["anchor_numerator"] != coordinate_match["anchor_denominator"])
+        | (coordinate_match["region_strand_numerator"] != coordinate_match["region_strand_denominator"])
     )
+    if coordinate_mismatch.any():
+        mismatched_rows = coordinate_match.loc[
+            coordinate_mismatch,
+            [
+                "region_id",
+                "position_numerator",
+                "position_denominator",
+                "anchor_numerator",
+                "anchor_denominator",
+                "region_strand_numerator",
+                "region_strand_denominator",
+            ],
+        ].copy()
+        raise ValueError(
+            "position_table contains mismatched coordinates between contrast sides. "
+            f"Mismatched rows: {mismatched_rows.to_dict(orient='records')}."
+        )
+
+    summary_columns = ["region_id", "fraction", "reference_fraction", "delta_fraction"]
+    if "rank" in result.summary.columns:
+        summary_columns.append("rank")
+    _require_columns(result.summary, tuple(summary_columns), "result.summary")
+    summary = result.summary.loc[:, summary_columns].copy()
+
+    plot_table = coordinate_match.loc[
+        :,
+        ["region_id", "position_numerator", "anchor_numerator", "region_strand_numerator"],
+    ].rename(
+        columns={
+            "position_numerator": "position",
+            "anchor_numerator": "anchor",
+            "region_strand_numerator": "region_strand",
+        }
+    )
+    plot_table = plot_table.merge(summary, on="region_id", how="inner")
+
+    if plot_table.empty:
+        raise ValueError("position_table does not contain any region_id values present in the contrast result.")
+
+    side_labels = {
+        "numerator": ", ".join(str(value) for value in (contrast.numerator or [])) or "numerator",
+        "denominator": ", ".join(str(value) for value in (contrast.denominator or [])) or "denominator",
+    }
+    value_frames = []
+    for value_mode, value_column in (
+        ("numerator", "fraction"),
+        ("denominator", "reference_fraction"),
+        ("delta", "delta_fraction"),
+    ):
+        value_frame = plot_table.loc[:, [column for column in plot_table.columns if column != "fraction" and column != "reference_fraction" and column != "delta_fraction"]].copy()
+        value_frame["value"] = plot_table[value_column]
+        value_frame[grouping_key] = side_labels.get(value_mode, value_mode)
+        value_frame["value_mode"] = value_mode
+        value_frames.append(
+            value_frame.loc[
+                :,
+                [
+                    "region_id",
+                    grouping_key,
+                    "position",
+                    "anchor",
+                    "value",
+                    "region_strand",
+                    "value_mode",
+                ]
+                + (["rank"] if "rank" in value_frame.columns else []),
+            ]
+        )
+
+    return pd.concat(value_frames, ignore_index=True)
+
+
+def prepare_region_contrast_profile_data(
+    *,
+    result,
+    position_table: pd.DataFrame,
+    axis: AxisSpec,
+    aggregation: AggregationSpec,
+    value_mode: str = "all",
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    validate_axis_spec(axis, plot_family="region_contrast_profile")
+    validate_aggregation_spec(aggregation)
+
+    grouping_key = _region_contrast_grouping_key(result, position_table)
+    prepared_position_table = _prepare_region_contrast_position_table(
+        result=result,
+        position_table=position_table,
+        grouping_key=grouping_key,
+    )
+    contrast_table = _prepare_region_contrast_value_modes(
+        result=result,
+        position_table=prepared_position_table,
+        grouping_key=grouping_key,
+    )
+
+    if value_mode != "all":
+        if value_mode not in {"numerator", "denominator", "delta"}:
+            raise ValueError("Unsupported region contrast value_mode.")
+        contrast_table = contrast_table.loc[contrast_table["value_mode"] == value_mode].copy()
+
+    prepared = prepare_aggregate_plot_data(
+        contrast_table,
+        plot_family="region_contrast_profile",
+        axis=axis,
+        aggregation=aggregation,
+        value_column="value",
+        position_column="position",
+        anchor_column="anchor",
+        region_strand_column="region_strand",
+    )
+    metadata = dict(prepared["metadata"])
+    metadata.update(_region_contrast_metadata(result))
+    metadata["value_mode"] = value_mode
+    prepared["metadata"] = metadata
+    return prepared
 
 
 def prepare_single_read_plot_data(
