@@ -235,6 +235,8 @@ For an end-to-end discovery-to-clustering run, use `workflows.discovery_cluster_
 
 For discovery-to-clustering-to-contrast follow-up, use `workflows.discovery_cluster_contrast_workflow()`. It keeps discovery output in BED-style `selected_regions`, passes the derived serializable region spec into clustering, normalizes clustering-side `region_id` values to the same `chr:start-end,strand` key used by contrasts, scores the same selected loci by default, honors an explicit `contrasts["regions"]` override when provided, and stores the full discovery scan in `metadata["full_scan_windows"]`.
 
+`region_discovery` also exposes renderer-neutral plotting prep helpers that consume `RegionDiscoveryResult`: `prepare_region_discovery_scan_data(...)` prepares per-contig scan and hit tables by default, and `prepare_region_discovery_hit_context_data(...)` prepares local hit-context tables for small-multiple follow-up views.
+
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
 
 ### Parsing outputs

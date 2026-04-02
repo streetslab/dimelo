@@ -63,6 +63,28 @@ The canonical outputs are data-first:
 
 As with the newer clustering and contrast workflows, these plotting payloads are renderer-neutral tables first. Legacy orientation flags such as `regions_5to3prime` map onto the shared region-alignment model for downstream follow-up plots, while any scaled segment normalization is kept to aggregate views rather than single-read displays.
 
+## Plotting Prep Helpers
+
+Use the shared plotting helpers when you want plot-ready discovery tables without committing to a specific renderer:
+
+```python
+from dimelo import plotting
+
+scan_payload = plotting.prepare_region_discovery_scan_data(
+    result=result,
+    top_n_hits=50,
+)
+
+context_payload = plotting.prepare_region_discovery_hit_context_data(
+    result=result,
+    top_n=12,
+    padding_windows=5,
+)
+```
+
+- `prepare_region_discovery_scan_data(...)` consumes a `RegionDiscoveryResult` and returns renderer-neutral `scan_table`, `hit_table`, and `metadata` payloads. Scan payloads stay per-contig by default rather than projecting windows onto a cumulative genome axis.
+- `prepare_region_discovery_hit_context_data(...)` consumes the same `RegionDiscoveryResult` and returns renderer-neutral `context_table`, `selected_hits`, and `metadata` payloads for small-multiple or local hit-context views.
+
 ## Handoff Guidance
 
 - For formal region testing, convert discovered hits into BED and write them to disk before passing the BED path into `region_contrasts.score_regions(...)`.
