@@ -358,14 +358,8 @@ def _prepare_region_contrast_value_modes(
         raise ValueError("position_table does not contain rows for both contrast sides.")
 
     join_keys = ["region_id", "position", "anchor", "region_strand"]
-    for side_name, side_table in (("numerator", numerator), ("denominator", denominator)):
-        duplicate_mask = side_table.duplicated(join_keys, keep=False)
-        if duplicate_mask.any():
-            duplicate_rows = side_table.loc[duplicate_mask, join_keys + [grouping_key, "value"]].copy()
-            raise ValueError(
-                "position_table contains duplicate rows for the same coordinate on the "
-                f"{side_name} side. Duplicate rows: {duplicate_rows.to_dict(orient='records')}."
-            )
+    numerator = numerator.loc[:, join_keys + ["value"]].groupby(join_keys, as_index=False, sort=False).mean(numeric_only=True)
+    denominator = denominator.loc[:, join_keys + ["value"]].groupby(join_keys, as_index=False, sort=False).mean(numeric_only=True)
 
     coordinate_match = numerator.loc[:, join_keys].merge(
         denominator.loc[:, join_keys],
@@ -386,7 +380,7 @@ def _prepare_region_contrast_value_modes(
         suffixes=("_numerator", "_denominator"),
         how="inner",
     )
-    if paired.empty or len(paired) != len(numerator) or len(paired) != len(denominator):
+    if paired.empty:
         raise ValueError("Unable to compute delta because numerator and denominator positions do not align.")
 
     if "rank" in result.summary.columns:
@@ -400,12 +394,14 @@ def _prepare_region_contrast_value_modes(
             return table
         return table.merge(rank_table, on="region_id", how="left")
 
-    numerator_table = numerator.loc[:, ["region_id", grouping_key, "position", "anchor", "value", "region_strand"]].copy()
+    numerator_table = numerator.loc[:, ["region_id", "position", "anchor", "value", "region_strand"]].copy()
     numerator_table["value_mode"] = "numerator"
+    numerator_table[grouping_key] = "numerator"
     numerator_table = _attach_rank(numerator_table)
 
-    denominator_table = denominator.loc[:, ["region_id", grouping_key, "position", "anchor", "value", "region_strand"]].copy()
+    denominator_table = denominator.loc[:, ["region_id", "position", "anchor", "value", "region_strand"]].copy()
     denominator_table["value_mode"] = "denominator"
+    denominator_table[grouping_key] = "denominator"
     denominator_table = _attach_rank(denominator_table)
 
     delta_table = paired.loc[
