@@ -47,7 +47,7 @@ Expected: a list of tracked historical docs that still contain machine-local abs
 For Markdown links inside tracked superpowers docs, convert forms like:
 
 ```md
-[plotting.py](../../../dimelo/plotting.py)
+[plotting.py](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py)
 ```
 
 to:
@@ -63,7 +63,7 @@ or the correct relative form from the document location.
 For plain path references or shell commands inside tracked superpowers docs, replace machine-local prefixes with repo-relative or repo-root-style paths. For example:
 
 ```text
-docs/superpowers/plans/2026-04-01-region-contrasts-plotting.md
+/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-region-contrasts-plotting.md
 ```
 
 becomes:
