@@ -181,42 +181,52 @@ def _region_contrast_plot_setup(position_rows: list[dict[str, object]]) -> tuple
     )
 
 
+def _region_contrast_position_rows(*, include_grouping_key: bool = True) -> list[dict[str, object]]:
+    base_rows = [
+        {
+            "region_id": "chr1:90-110,+",
+            "condition": "NS",
+            "position": 95,
+            "anchor": 100,
+            "value": 0.1,
+            "region_strand": "+",
+        },
+        {
+            "region_id": "chr1:90-110,+",
+            "condition": "15min",
+            "position": 95,
+            "anchor": 100,
+            "value": 0.6,
+            "region_strand": "+",
+        },
+        {
+            "region_id": "chr1:190-210,-",
+            "condition": "NS",
+            "position": 205,
+            "anchor": 200,
+            "value": 0.2,
+            "region_strand": "-",
+        },
+        {
+            "region_id": "chr1:190-210,-",
+            "condition": "15min",
+            "position": 205,
+            "anchor": 200,
+            "value": 0.8,
+            "region_strand": "-",
+        },
+    ]
+    if include_grouping_key:
+        return base_rows
+    return [
+        {key: value for key, value in row.items() if key != "condition"}
+        for row in base_rows[:1]
+    ]
+
+
 def test_prepare_region_contrast_profile_data_returns_all_value_modes():
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
-        [
-            {
-                "region_id": "chr1:90-110,+",
-                "condition": "NS",
-                "position": 95,
-                "anchor": 100,
-                "value": 0.1,
-                "region_strand": "+",
-            },
-            {
-                "region_id": "chr1:90-110,+",
-                "condition": "15min",
-                "position": 95,
-                "anchor": 100,
-                "value": 0.6,
-                "region_strand": "+",
-            },
-            {
-                "region_id": "chr1:190-210,-",
-                "condition": "NS",
-                "position": 205,
-                "anchor": 200,
-                "value": 0.2,
-                "region_strand": "-",
-            },
-            {
-                "region_id": "chr1:190-210,-",
-                "condition": "15min",
-                "position": 205,
-                "anchor": 200,
-                "value": 0.8,
-                "region_strand": "-",
-            },
-        ]
+        _region_contrast_position_rows()
     )
 
     payload = plotting.prepare_region_contrast_profile_data(
@@ -228,7 +238,7 @@ def test_prepare_region_contrast_profile_data_returns_all_value_modes():
     )
 
     plot_table = payload["plot_table"]
-    assert len(plot_table) == 12
+    assert len(plot_table) == 6
     assert set(payload["plot_table"]["value_mode"]) == {"numerator", "denominator", "delta"}
     assert plot_table.groupby(["region_id", "value_mode"]).size().to_dict() == {
         ("chr1:90-110,+", "numerator"): 1,
@@ -267,40 +277,7 @@ def test_prepare_region_contrast_profile_data_returns_all_value_modes():
 
 def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
-        [
-            {
-                "region_id": "chr1:90-110,+",
-                "condition": "NS",
-                "position": 95,
-                "anchor": 100,
-                "value": 0.1,
-                "region_strand": "+",
-            },
-            {
-                "region_id": "chr1:90-110,+",
-                "condition": "15min",
-                "position": 95,
-                "anchor": 100,
-                "value": 0.6,
-                "region_strand": "+",
-            },
-            {
-                "region_id": "chr1:190-210,-",
-                "condition": "NS",
-                "position": 205,
-                "anchor": 200,
-                "value": 0.2,
-                "region_strand": "-",
-            },
-            {
-                "region_id": "chr1:190-210,-",
-                "condition": "15min",
-                "position": 205,
-                "anchor": 200,
-                "value": 0.8,
-                "region_strand": "-",
-            },
-        ]
+        _region_contrast_position_rows()
     )
 
     payload = plotting.prepare_region_contrast_heatmap_data(
@@ -321,7 +298,7 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
 
 def test_prepare_region_contrast_profile_data_requires_joinable_grouping_key():
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
-        [{"region_id": "chr1:90-110,+", "position": 95, "anchor": 100, "value": 0.1, "region_strand": "+"}]
+        _region_contrast_position_rows(include_grouping_key=False)
     )
 
     with pytest.raises(ValueError, match="sample_id or condition"):
