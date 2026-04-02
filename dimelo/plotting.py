@@ -505,24 +505,29 @@ def prepare_region_contrast_heatmap_data(
         .drop_duplicates()
         .reset_index(drop=True)
     )
-    summary_ranks = (
-        result.summary.loc[:, ["region_id", "rank"]]
-        .dropna(subset=["region_id"])
-        .groupby("region_id", as_index=False, sort=False)
-        .agg(
-            rank=("rank", "first"),
-            rank_count=("rank", lambda values: pd.Series(values).dropna().nunique()),
-        )
+    summary_ranks = plot_region_ids.merge(
+        result.summary.loc[:, ["region_id", "rank"]],
+        on="region_id",
+        how="left",
     )
-    conflicting_rank_ids = sorted(summary_ranks.loc[summary_ranks["rank_count"] != 1, "region_id"].astype(str).unique())
+    summary_ranks = summary_ranks.groupby("region_id", as_index=False, sort=False).agg(
+        rank=(
+            "rank",
+            lambda values: (
+                lambda non_na: non_na.iloc[0] if not non_na.empty else pd.NA
+            )(pd.Series(values).dropna()),
+        ),
+        rank_count=("rank", lambda values: pd.Series(values).dropna().nunique()),
+    )
+    conflicting_rank_ids = sorted(summary_ranks.loc[summary_ranks["rank_count"] > 1, "region_id"].astype(str).unique())
     if conflicting_rank_ids:
         raise ValueError(
             "result.summary must provide exactly one rank value per plotted region. "
             f"Conflicting region_id values: {', '.join(conflicting_rank_ids)}."
         )
 
-    row_order = plot_region_ids.merge(summary_ranks.loc[:, ["region_id", "rank"]], on="region_id", how="left")
-    missing_rank_ids = sorted(row_order.loc[row_order["rank"].isna(), "region_id"].astype(str).unique())
+    row_order = summary_ranks.loc[:, ["region_id", "rank"]].copy()
+    missing_rank_ids = sorted(summary_ranks.loc[summary_ranks["rank_count"] == 0, "region_id"].astype(str).unique())
     if missing_rank_ids:
         raise ValueError(
             "result.summary does not provide rank values for all plotted regions. "

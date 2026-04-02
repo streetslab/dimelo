@@ -520,6 +520,13 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
                         "reference_fraction": 0.05,
                         "delta_fraction": 0.10,
                         "rank": 3,
+                    },
+                    {
+                        "region_id": "chr1:290-310,+",
+                        "fraction": 0.16,
+                        "reference_fraction": 0.05,
+                        "delta_fraction": 0.11,
+                        "rank": 8,
                     }
                 ]
             ),
