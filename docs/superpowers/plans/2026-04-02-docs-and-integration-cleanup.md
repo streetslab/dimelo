@@ -215,7 +215,7 @@ Only include files actually changed.
 Run:
 
 ```bash
-rg -n "/Users/[^/]+/Documents/GitHub/dimelo-toolkit" docs/superpowers/specs docs/superpowers/plans docs/superpowers/README.md
+rg -n "/Users/[^/]+/Documents/GitHub/[^/]+" docs/superpowers/specs docs/superpowers/plans docs/superpowers/README.md
 ```
 
 Expected: no output unless an intentional exception is documented.
