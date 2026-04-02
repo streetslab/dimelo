@@ -7,6 +7,17 @@ import pandas as pd
 
 from dimelo.distribution import _require_columns
 
+_SEGMENT_AXIS_INTERNAL_SEGMENT_ID = "__dimelo_segment_axis_segment_id"
+_SEGMENT_AXIS_INTERNAL_PLOT_START = "__dimelo_segment_axis_plot_start"
+_SEGMENT_AXIS_INTERNAL_PLOT_END = "__dimelo_segment_axis_plot_end"
+_SEGMENT_AXIS_INTERNAL_SEGMENT_SPAN = "__dimelo_segment_axis_segment_span"
+_SEGMENT_AXIS_INTERNAL_COLUMNS = {
+    _SEGMENT_AXIS_INTERNAL_SEGMENT_ID,
+    _SEGMENT_AXIS_INTERNAL_PLOT_START,
+    _SEGMENT_AXIS_INTERNAL_PLOT_END,
+    _SEGMENT_AXIS_INTERNAL_SEGMENT_SPAN,
+}
+
 
 @dataclass(frozen=True)
 class SegmentSpec:
@@ -149,6 +160,17 @@ def _build_segment_axis_table(segments: list[SegmentSpec]) -> pd.DataFrame:
     running_start = 0
 
     for segment in segments:
+        if segment.bins is not None and segment.bins <= 0:
+            raise ValueError(
+                "segment_map axis.segments contains invalid bins values: "
+                f"{segment.segment_id} has bins={segment.bins!r}."
+            )
+        if segment.mode == "raw" and segment.end_ref <= segment.start_ref:
+            raise ValueError(
+                "segment_map axis.segments contains invalid raw span values: "
+                f"{segment.segment_id} has start_ref={segment.start_ref!r} and end_ref={segment.end_ref!r}."
+            )
+
         span = segment.bins if segment.bins is not None else segment.end_ref - segment.start_ref
         rows.append(
             {
@@ -182,20 +204,32 @@ def _prepare_segment_map_plot_data(
         raise ValueError("segment_map requires segments.")
 
     _require_columns(table, (segment_id_column, segment_position_column), "plot_table")
+    reserved_columns = _SEGMENT_AXIS_INTERNAL_COLUMNS.intersection(table.columns)
+    if reserved_columns:
+        raise ValueError(
+            "segment_map plotting received plot_table columns reserved for internal use: "
+            f"{', '.join(sorted(reserved_columns))}."
+        )
 
     axis_table = _build_segment_axis_table(axis.segments)
     plot_table = table.copy()
     axis_lookup = axis_table.loc[:, ["segment_id", "plot_start", "plot_end"]].rename(
-        columns={"segment_id": "_axis_segment_id"}
+        columns={
+            "segment_id": _SEGMENT_AXIS_INTERNAL_SEGMENT_ID,
+            "plot_start": _SEGMENT_AXIS_INTERNAL_PLOT_START,
+            "plot_end": _SEGMENT_AXIS_INTERNAL_PLOT_END,
+        }
     )
-    axis_lookup["segment_span"] = axis_lookup["plot_end"] - axis_lookup["plot_start"]
+    axis_lookup[_SEGMENT_AXIS_INTERNAL_SEGMENT_SPAN] = (
+        axis_lookup[_SEGMENT_AXIS_INTERNAL_PLOT_END] - axis_lookup[_SEGMENT_AXIS_INTERNAL_PLOT_START]
+    )
     plot_table = plot_table.merge(
         axis_lookup,
         left_on=segment_id_column,
-        right_on="_axis_segment_id",
+        right_on=_SEGMENT_AXIS_INTERNAL_SEGMENT_ID,
         how="left",
     )
-    unknown_segment_mask = plot_table["plot_start"].isna()
+    unknown_segment_mask = plot_table[_SEGMENT_AXIS_INTERNAL_PLOT_START].isna()
     if unknown_segment_mask.any():
         unknown_segment_ids = sorted(plot_table.loc[unknown_segment_mask, segment_id_column].astype(str).unique())
         raise ValueError(
@@ -212,17 +246,27 @@ def _prepare_segment_map_plot_data(
             f"Invalid rows: {invalid_rows.to_dict(orient='records')}."
         )
 
-    invalid_position_mask = (segment_positions < 0) | (segment_positions >= plot_table["segment_span"])
+    invalid_position_mask = (
+        (segment_positions < 0) | (segment_positions >= plot_table[_SEGMENT_AXIS_INTERNAL_SEGMENT_SPAN])
+    )
     if invalid_position_mask.any():
-        invalid_rows = plot_table.loc[invalid_position_mask, [segment_id_column, segment_position_column, "segment_span"]]
+        invalid_rows = plot_table.loc[invalid_position_mask, [segment_id_column, segment_position_column]].copy()
+        invalid_rows["segment_span"] = plot_table.loc[invalid_position_mask, _SEGMENT_AXIS_INTERNAL_SEGMENT_SPAN].values
         raise ValueError(
             "segment_position_column values must stay within the declared segment span "
             "for each segment."
             f" Invalid rows: {invalid_rows.to_dict(orient='records')}."
         )
 
-    plot_table["plot_x"] = plot_table["plot_start"] + segment_positions
-    plot_table = plot_table.drop(columns=["_axis_segment_id", "plot_start", "plot_end", "segment_span"])
+    plot_table["plot_x"] = plot_table[_SEGMENT_AXIS_INTERNAL_PLOT_START] + segment_positions
+    plot_table = plot_table.drop(
+        columns=[
+            _SEGMENT_AXIS_INTERNAL_SEGMENT_ID,
+            _SEGMENT_AXIS_INTERNAL_PLOT_START,
+            _SEGMENT_AXIS_INTERNAL_PLOT_END,
+            _SEGMENT_AXIS_INTERNAL_SEGMENT_SPAN,
+        ]
+    )
 
     return plot_table, axis_table
 

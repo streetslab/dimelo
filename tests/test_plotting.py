@@ -546,3 +546,82 @@ def test_prepare_aggregate_plot_data_marks_non_contiguous_segment_breaks():
 
     assert list(payload["axis_table"]["contiguous_with_previous"]) == [True, False]
     assert list(payload["axis_table"]["plot_gap_after"]) == [False, True]
+
+
+@pytest.mark.parametrize(
+    "segment",
+    [
+        plotting.SegmentSpec("bad_bins", "Bad bins", 0, 100, "raw", bins=0),
+        plotting.SegmentSpec("bad_bins_neg", "Bad bins negative", 0, 100, "scaled", bins=-5),
+        plotting.SegmentSpec("bad_raw", "Bad raw", 100, 100, "raw"),
+        plotting.SegmentSpec("bad_raw_reverse", "Bad raw reverse", 200, 100, "raw", bins=20),
+    ],
+)
+def test_prepare_aggregate_plot_data_rejects_malformed_segment_spans(segment):
+    table = pd.DataFrame(
+        [{"region_id": "reg1", "segment_id": "bad_raw", "segment_pos": 1, "signal": 1.0}]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[segment],
+    )
+    aggregation = plotting.AggregationSpec(
+        weighting="equal_region",
+        within_region_summary="mean",
+        signal_normalization="none",
+        layout="concatenated",
+    )
+
+    with pytest.raises(ValueError, match="invalid"):
+        plotting.prepare_aggregate_plot_data(
+            table,
+            plot_family="aggregate_profile",
+            axis=axis,
+            aggregation=aggregation,
+            value_column="signal",
+            segment_id_column="segment_id",
+            segment_position_column="segment_pos",
+        )
+
+
+def test_prepare_aggregate_plot_data_segment_map_keeps_user_plot_columns():
+    table = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "segment_id": "upstream",
+                "segment_pos": 3,
+                "plot_start": "user-start",
+                "plot_end": "user-end",
+                "signal": 1.0,
+            }
+        ]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[
+            plotting.SegmentSpec("upstream", "Upstream", 0, 100, "raw", bins=20),
+        ],
+    )
+    aggregation = plotting.AggregationSpec(
+        weighting="equal_region",
+        within_region_summary="mean",
+        signal_normalization="none",
+        layout="concatenated",
+    )
+
+    payload = plotting.prepare_aggregate_plot_data(
+        table,
+        plot_family="aggregate_profile",
+        axis=axis,
+        aggregation=aggregation,
+        value_column="signal",
+        segment_id_column="segment_id",
+        segment_position_column="segment_pos",
+    )
+
+    assert list(payload["plot_table"]["plot_start"]) == ["user-start"]
+    assert list(payload["plot_table"]["plot_end"]) == ["user-end"]
+    assert list(payload["plot_table"]["plot_x"]) == [3.0]
