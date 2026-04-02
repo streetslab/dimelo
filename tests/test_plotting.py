@@ -472,6 +472,50 @@ def test_prepare_region_discovery_hit_context_data_returns_empty_payload_for_no_
     assert payload["metadata"]["selection_mode"] == "top_n"
 
 
+def test_prepare_region_discovery_hit_context_data_rejects_padding_bp():
+    result = _make_region_discovery_result()
+
+    with pytest.raises(ValueError, match="padding_bp is not supported"):
+        plotting.prepare_region_discovery_hit_context_data(
+            result=result,
+            padding_bp=100,
+        )
+
+
+def test_prepare_region_discovery_hit_context_data_rejects_selected_hits_missing_from_windows():
+    result = _make_region_discovery_result()
+    inconsistent_hit = pd.DataFrame(
+        [
+            {
+                "window_id": "chr1:200-300:+",
+                "chromosome": "chr1",
+                "start": 200,
+                "end": 300,
+                "strand": "+",
+                "score_value": 0.7,
+                "rank": 0,
+            }
+        ]
+    )
+    inconsistent_result = RegionDiscoveryResult(
+        windows=result.windows.copy(),
+        hits=pd.concat([result.hits, inconsistent_hit], ignore_index=True),
+        contrast=result.contrast,
+        plot_data=result.plot_data,
+        metadata=result.metadata,
+        figures=result.figures,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="selected hits contain window_id values not present in result.windows",
+    ):
+        plotting.prepare_region_discovery_hit_context_data(
+            result=inconsistent_result,
+            top_n=1,
+        )
+
+
 def test_prepare_region_contrast_profile_data_returns_all_value_modes():
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
         _region_contrast_position_rows()

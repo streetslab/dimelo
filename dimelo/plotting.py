@@ -746,6 +746,8 @@ def prepare_region_discovery_hit_context_data(
     score_column: str | None = None,
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     _validate_region_discovery_result(result)
+    if padding_bp is not None:
+        raise ValueError("padding_bp is not supported for region discovery hit context prep.")
     if padding_windows is not None and padding_windows < 0:
         raise ValueError("padding_windows must be non-negative.")
 
@@ -813,6 +815,18 @@ def prepare_region_discovery_hit_context_data(
                 "score_column": active_score_column,
             },
         }
+
+    available_window_ids = set(windows["window_id"].dropna().tolist())
+    missing_selected_hit_ids = sorted(
+        str(window_id)
+        for window_id in selected_hits["window_id"].dropna().unique()
+        if window_id not in available_window_ids
+    )
+    if missing_selected_hit_ids:
+        raise ValueError(
+            "selected hits contain window_id values not present in result.windows: "
+            f"{', '.join(missing_selected_hit_ids)}."
+        )
 
     context_frames: list[pd.DataFrame] = []
     padding = int(padding_windows or 0)
