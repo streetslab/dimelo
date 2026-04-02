@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 
 import pandas as pd
@@ -136,6 +137,14 @@ def _prepare_fixed_window_plot_data(
 
 
 def _build_segment_axis_table(segments: list[SegmentSpec]) -> pd.DataFrame:
+    segment_id_counts = Counter(segment.segment_id for segment in segments)
+    duplicate_segment_ids = sorted(segment_id for segment_id, count in segment_id_counts.items() if count > 1)
+    if duplicate_segment_ids:
+        raise ValueError(
+            "segment_map axis.segments contains duplicate segment_id values: "
+            f"{', '.join(duplicate_segment_ids)}."
+        )
+
     rows: list[dict[str, object]] = []
     running_start = 0
 
@@ -195,6 +204,14 @@ def _prepare_segment_map_plot_data(
         )
 
     segment_positions = pd.to_numeric(plot_table[segment_position_column], errors="raise")
+    missing_position_mask = segment_positions.isna()
+    if missing_position_mask.any():
+        invalid_rows = plot_table.loc[missing_position_mask, [segment_id_column, segment_position_column]]
+        raise ValueError(
+            "segment_position_column contains missing or NaN values. "
+            f"Invalid rows: {invalid_rows.to_dict(orient='records')}."
+        )
+
     invalid_position_mask = (segment_positions < 0) | (segment_positions >= plot_table["segment_span"])
     if invalid_position_mask.any():
         invalid_rows = plot_table.loc[invalid_position_mask, [segment_id_column, segment_position_column, "segment_span"]]

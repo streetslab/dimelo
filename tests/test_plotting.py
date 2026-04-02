@@ -384,6 +384,37 @@ def test_prepare_aggregate_plot_data_builds_concatenated_segment_axis():
     assert list(payload["plot_table"]["plot_x"]) == [0.0, 30.0]
 
 
+def test_prepare_aggregate_plot_data_rejects_duplicate_segment_ids_in_axis_segments():
+    table = pd.DataFrame(
+        [{"region_id": "reg1", "segment_id": "upstream", "segment_pos": 1, "signal": 1.0}]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[
+            plotting.SegmentSpec("upstream", "Upstream A", 0, 100, "raw", bins=20),
+            plotting.SegmentSpec("upstream", "Upstream B", 100, 200, "raw", bins=20),
+        ],
+    )
+    aggregation = plotting.AggregationSpec(
+        weighting="equal_region",
+        within_region_summary="mean",
+        signal_normalization="none",
+        layout="concatenated",
+    )
+
+    with pytest.raises(ValueError, match="duplicate segment_id values"):
+        plotting.prepare_aggregate_plot_data(
+            table,
+            plot_family="aggregate_profile",
+            axis=axis,
+            aggregation=aggregation,
+            value_column="signal",
+            segment_id_column="segment_id",
+            segment_position_column="segment_pos",
+        )
+
+
 def test_prepare_aggregate_plot_data_rejects_unknown_segment_ids():
     table = pd.DataFrame(
         [{"region_id": "reg1", "segment_id": "unknown", "segment_pos": 1, "signal": 1.0}]
@@ -403,6 +434,36 @@ def test_prepare_aggregate_plot_data_rejects_unknown_segment_ids():
     )
 
     with pytest.raises(ValueError, match="unknown segment_id values"):
+        plotting.prepare_aggregate_plot_data(
+            table,
+            plot_family="aggregate_profile",
+            axis=axis,
+            aggregation=aggregation,
+            value_column="signal",
+            segment_id_column="segment_id",
+            segment_position_column="segment_pos",
+        )
+
+
+def test_prepare_aggregate_plot_data_rejects_missing_segment_positions():
+    table = pd.DataFrame(
+        [{"region_id": "reg1", "segment_id": "upstream", "segment_pos": float("nan"), "signal": 1.0}]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[
+            plotting.SegmentSpec("upstream", "Upstream", 0, 100, "raw", bins=20),
+        ],
+    )
+    aggregation = plotting.AggregationSpec(
+        weighting="equal_region",
+        within_region_summary="mean",
+        signal_normalization="none",
+        layout="concatenated",
+    )
+
+    with pytest.raises(ValueError, match="missing or NaN values"):
         plotting.prepare_aggregate_plot_data(
             table,
             plot_family="aggregate_profile",
