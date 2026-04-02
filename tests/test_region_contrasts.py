@@ -101,6 +101,128 @@ def _mock_region_summaries():
     )
 
 
+def _mock_cluster_occupancy_evidence():
+    region_summaries = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "ns1",
+                "condition": "NS",
+                "cluster": "C1",
+                "count": 2,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "ns1",
+                "condition": "NS",
+                "cluster": "C2",
+                "count": 8,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "ns2",
+                "condition": "NS",
+                "cluster": "C1",
+                "count": 3,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "ns2",
+                "condition": "NS",
+                "cluster": "C2",
+                "count": 7,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "tx1",
+                "condition": "15min",
+                "cluster": "C1",
+                "count": 8,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "tx1",
+                "condition": "15min",
+                "cluster": "C2",
+                "count": 2,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "tx2",
+                "condition": "15min",
+                "cluster": "C1",
+                "count": 7,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "tx2",
+                "condition": "15min",
+                "cluster": "C2",
+                "count": 3,
+            },
+            {
+                "region_id": "reg2",
+                "sample_id": "ns1",
+                "condition": "NS",
+                "cluster": "C1",
+                "count": 0,
+            },
+            {
+                "region_id": "reg2",
+                "sample_id": "ns1",
+                "condition": "NS",
+                "cluster": "C2",
+                "count": 0,
+            },
+            {
+                "region_id": "reg2",
+                "sample_id": "ns2",
+                "condition": "NS",
+                "cluster": "C1",
+                "count": 0,
+            },
+            {
+                "region_id": "reg2",
+                "sample_id": "ns2",
+                "condition": "NS",
+                "cluster": "C2",
+                "count": 0,
+            },
+            {
+                "region_id": "reg2",
+                "sample_id": "tx1",
+                "condition": "15min",
+                "cluster": "C1",
+                "count": 10,
+            },
+            {
+                "region_id": "reg2",
+                "sample_id": "tx1",
+                "condition": "15min",
+                "cluster": "C2",
+                "count": 0,
+            },
+            {
+                "region_id": "reg2",
+                "sample_id": "tx2",
+                "condition": "15min",
+                "cluster": "C1",
+                "count": 0,
+            },
+            {
+                "region_id": "reg2",
+                "sample_id": "tx2",
+                "condition": "15min",
+                "cluster": "C2",
+                "count": 0,
+            },
+        ]
+    )
+    return region_contrasts.build_cluster_occupancy_evidence_table(
+        region_summaries=region_summaries,
+    )
+
+
 def test_build_cluster_occupancy_evidence_table_summarizes_region_sample_clusters():
     evidence = region_contrasts.build_cluster_occupancy_evidence_table(
         region_summaries=_mock_region_summaries(),
@@ -115,6 +237,32 @@ def test_build_cluster_occupancy_evidence_table_summarizes_region_sample_cluster
         "dominant_cluster",
         "cluster_entropy",
     } <= set(evidence.columns)
+
+
+def test_build_cluster_occupancy_evidence_table_computes_fraction_dominant_and_entropy():
+    evidence = _mock_cluster_occupancy_evidence()
+
+    reg1_ns1_c1 = evidence[
+        (evidence["region_id"] == "reg1")
+        & (evidence["sample_id"] == "ns1")
+        & (evidence["cluster"] == "C1")
+    ].iloc[0]
+    assert reg1_ns1_c1["fraction"] == pytest.approx(0.2)
+    assert reg1_ns1_c1["dominant_cluster"] == "C2"
+    assert reg1_ns1_c1["cluster_entropy"] == pytest.approx(
+        -(0.2 * math.log2(0.2) + 0.8 * math.log2(0.8))
+    )
+
+
+def test_build_cluster_occupancy_evidence_table_zero_count_groups_stay_zero_entropy():
+    evidence = _mock_cluster_occupancy_evidence()
+
+    reg2_ns1 = evidence[
+        (evidence["region_id"] == "reg2") & (evidence["sample_id"] == "ns1")
+    ]
+    assert list(reg2_ns1["fraction"]) == [0.0, 0.0]
+    assert reg2_ns1["dominant_cluster"].tolist() == ["C1", "C1"]
+    assert reg2_ns1["cluster_entropy"].tolist() == [0.0, 0.0]
 
 
 def test_build_region_evidence_table_from_pileup_counts(monkeypatch):
@@ -1144,4 +1292,153 @@ def test_score_regions_effect_size_only_rejects_unsupported_contrast_mode(monkey
             motifs=["A,0"],
             contrast=contrast,
             test="effect_size_only",
+        )
+
+
+def test_score_regions_cluster_fraction_effect_size_only_ranks_largest_fraction_shift_first():
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions=None,
+        motifs=[],
+        contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+        analysis_unit="cluster_occupancy",
+        representation="cluster_fraction",
+        signal_source="cluster_occupancy",
+        test="effect_size_only",
+        occupancy_table=_mock_cluster_occupancy_evidence(),
+    )
+
+    first_row = result.regions.iloc[0]
+    assert first_row["region_id"] == "reg1"
+    assert first_row["cluster"] == "C1"
+    assert first_row["fraction"] == pytest.approx(0.75)
+    assert first_row["reference_fraction"] == pytest.approx(0.25)
+    assert first_row["delta_fraction"] == pytest.approx(0.5)
+    assert first_row["numerator_replicate_n"] == 2
+    assert first_row["denominator_replicate_n"] == 2
+    assert result.summary.iloc[0]["delta_fraction"] == pytest.approx(0.5)
+
+
+def test_score_regions_cluster_fraction_fraction_test_adds_p_values():
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions=None,
+        motifs=[],
+        contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+        analysis_unit="cluster_occupancy",
+        representation="cluster_fraction",
+        signal_source="cluster_occupancy",
+        test="fraction_test",
+        occupancy_table=_mock_cluster_occupancy_evidence(),
+    )
+
+    assert {"p_value", "adjusted_p_value"} <= set(result.regions.columns)
+    assert ((result.regions["p_value"] >= 0) & (result.regions["p_value"] <= 1)).all()
+    assert (
+        (result.regions["adjusted_p_value"] >= 0)
+        & (result.regions["adjusted_p_value"] <= 1)
+    ).all()
+
+
+def test_score_regions_cluster_occupancy_dominant_cluster_returns_descriptive_summary_only():
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions=None,
+        motifs=[],
+        contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+        analysis_unit="cluster_occupancy",
+        representation="dominant_cluster",
+        signal_source="cluster_occupancy",
+        test="effect_size_only",
+        occupancy_table=_mock_cluster_occupancy_evidence(),
+    )
+
+    reg1 = result.summary.loc[result.summary["region_id"] == "reg1"].iloc[0]
+    reg2 = result.summary.loc[result.summary["region_id"] == "reg2"].iloc[0]
+    assert reg1["dominant_cluster"] == "C1"
+    assert reg1["reference_dominant_cluster"] == "C2"
+    assert reg2["dominant_cluster"] == "C1"
+    assert reg2["reference_dominant_cluster"] == "C1"
+    assert "p_value" not in result.regions.columns
+
+
+def test_score_regions_cluster_occupancy_cluster_entropy_returns_descriptive_summary_only():
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions=None,
+        motifs=[],
+        contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+        analysis_unit="cluster_occupancy",
+        representation="cluster_entropy",
+        signal_source="cluster_occupancy",
+        test="effect_size_only",
+        occupancy_table=_mock_cluster_occupancy_evidence(),
+    )
+
+    reg1 = result.summary.loc[result.summary["region_id"] == "reg1"].iloc[0]
+    reg2 = result.summary.loc[result.summary["region_id"] == "reg2"].iloc[0]
+    expected_entropy = (
+        -(
+            0.8 * math.log2(0.8)
+            + 0.2 * math.log2(0.2)
+            + 0.7 * math.log2(0.7)
+            + 0.3 * math.log2(0.3)
+        )
+        / 2.0
+    )
+    assert reg1["cluster_entropy"] == pytest.approx(expected_entropy)
+    assert reg1["reference_cluster_entropy"] == pytest.approx(expected_entropy)
+    assert reg1["delta_cluster_entropy"] == pytest.approx(0.0)
+    assert reg2["cluster_entropy"] == pytest.approx(0.0)
+    assert reg2["reference_cluster_entropy"] == pytest.approx(0.0)
+    assert "p_value" not in result.regions.columns
+
+
+def test_score_regions_cluster_occupancy_rejects_matched_pairwise():
+    with pytest.raises(NotImplementedError, match="matched_pairwise"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=ContrastSpec(
+                mode="matched_pairwise",
+                numerator=["15min"],
+                denominator=["NS"],
+                pairing_key="donor_id",
+            ),
+            analysis_unit="cluster_occupancy",
+            representation="cluster_fraction",
+            signal_source="cluster_occupancy",
+            test="effect_size_only",
+            occupancy_table=_mock_cluster_occupancy_evidence(),
+        )
+
+
+def test_score_regions_cluster_occupancy_rejects_fraction_test_for_dominant_cluster():
+    with pytest.raises(ValueError, match="cluster_fraction"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+            analysis_unit="cluster_occupancy",
+            representation="dominant_cluster",
+            signal_source="cluster_occupancy",
+            test="fraction_test",
+            occupancy_table=_mock_cluster_occupancy_evidence(),
+        )
+
+
+def test_score_regions_cluster_occupancy_rejects_missing_occupancy_columns():
+    with pytest.raises(ValueError, match="occupancy_table requires columns"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+            analysis_unit="cluster_occupancy",
+            representation="cluster_fraction",
+            signal_source="cluster_occupancy",
+            test="effect_size_only",
+            occupancy_table=pd.DataFrame({"region_id": ["reg1"]}),
         )

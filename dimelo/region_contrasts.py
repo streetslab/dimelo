@@ -5,6 +5,7 @@ import math
 from typing import Iterable
 
 import pandas as pd
+from scipy import stats
 
 from . import load_processed, utils
 from .models import ContrastSpec, RegionContrastResult
@@ -48,16 +49,28 @@ def validate_region_contrast_request(
                 "V1 region_contrasts inference requires representation to be "
                 "'cluster_fraction', 'dominant_cluster', or 'cluster_entropy'."
             )
-        if test not in {"effect_size_only", "fraction_test"}:
+        if representation == "cluster_fraction" and test not in {
+            "effect_size_only",
+            "fraction_test",
+        }:
             raise ValueError(
-                "Current cluster_occupancy scoring support requires test in "
+                "Current cluster_occupancy cluster_fraction scoring support requires "
+                "test in "
                 "{'effect_size_only', 'fraction_test'}."
+            )
+        if representation in {"dominant_cluster", "cluster_entropy"} and test != (
+            "effect_size_only"
+        ):
+            raise ValueError(
+                "Current cluster_occupancy descriptive scoring requires "
+                "representation='cluster_fraction' for inferential tests."
             )
         return
 
-    if analysis_unit != "ensemble_region":
+    if analysis_unit not in {"ensemble_region", "cluster_occupancy"}:
         raise ValueError(
-            "V1 region_contrasts inference requires analysis_unit='ensemble_region'."
+            "V1 region_contrasts inference requires analysis_unit='ensemble_region' "
+            "or analysis_unit='cluster_occupancy'."
         )
 
 
@@ -336,6 +349,343 @@ def _pool_region_groups(evidence: pd.DataFrame, contrast: ContrastSpec) -> pd.Da
     return pd.concat(pooled_frames, ignore_index=True)
 
 
+def _require_occupancy_columns(
+    occupancy_table: pd.DataFrame,
+    *,
+    required_columns: set[str],
+) -> None:
+    missing_columns = required_columns - set(occupancy_table.columns)
+    if missing_columns:
+        missing_display = ", ".join(sorted(missing_columns))
+        raise ValueError(f"occupancy_table requires columns: {missing_display}.")
+
+
+def _pool_cluster_occupancy_groups(
+    evidence: pd.DataFrame,
+    contrast: ContrastSpec,
+    *,
+    value_column: str,
+    group_columns: list[str],
+) -> pd.DataFrame:
+    if contrast.mode not in {"pairwise", "group_vs_group"}:
+        raise NotImplementedError(
+            f"Cluster occupancy scoring is not implemented for contrast mode '{contrast.mode}'."
+        )
+
+    pooled_frames = []
+    side_specs = {
+        "numerator": contrast.numerator or [],
+        "denominator": contrast.denominator or [],
+    }
+
+    for side, conditions in side_specs.items():
+        side_evidence = evidence.loc[evidence["condition"].isin(conditions)].copy()
+        available_conditions = set(side_evidence["condition"].dropna().unique())
+        missing_conditions = sorted(set(conditions) - available_conditions)
+        if missing_conditions:
+            missing_display = ", ".join(missing_conditions)
+            raise ValueError(
+                f"Missing {side} evidence for requested condition(s): {missing_display}."
+            )
+
+        pooled = (
+            side_evidence.groupby(group_columns, dropna=False, sort=False)
+            .agg(
+                value=(value_column, "mean"),
+                replicate_n=("sample_id", "nunique"),
+                sample_values=(value_column, lambda values: tuple(float(v) for v in values)),
+            )
+            .reset_index()
+            .assign(contrast_side=side)
+        )
+        pooled_frames.append(pooled)
+
+    return pd.concat(pooled_frames, ignore_index=True)
+
+
+def _add_fraction_test_scores(
+    regions_table: pd.DataFrame,
+    *,
+    multiple_testing: str,
+) -> pd.DataFrame:
+    if multiple_testing != "fdr_bh":
+        raise ValueError(
+            "Current fraction_test region contrast scoring requires "
+            "multiple_testing='fdr_bh'."
+        )
+
+    def _welch_p_value(row: pd.Series) -> float:
+        numerator_values = list(row["numerator_sample_values"])
+        denominator_values = list(row["denominator_sample_values"])
+        if len(numerator_values) < 2 or len(denominator_values) < 2:
+            return 1.0
+
+        test_result = stats.ttest_ind(
+            numerator_values,
+            denominator_values,
+            equal_var=False,
+        )
+        p_value = float(test_result.pvalue)
+        if math.isnan(p_value):
+            return 1.0
+        return min(max(p_value, 0.0), 1.0)
+
+    scored = regions_table.copy()
+    scored["p_value"] = scored.apply(_welch_p_value, axis=1)
+    scored["adjusted_p_value"] = _adjust_p_values_bh(scored["p_value"])
+    return scored
+
+
+def _dominant_label(values: pd.Series) -> str | None:
+    non_null = values.dropna()
+    if non_null.empty:
+        return None
+    counts = non_null.value_counts()
+    max_count = counts.max()
+    return sorted(counts[counts == max_count].index.tolist())[0]
+
+
+def _score_cluster_occupancy(
+    *,
+    evidence: pd.DataFrame,
+    contrast: ContrastSpec,
+    representation: str,
+    test: str,
+    multiple_testing: str,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    pseudocount = 1e-6
+
+    if representation == "cluster_fraction":
+        _require_occupancy_columns(
+            evidence,
+            required_columns={"region_id", "sample_id", "condition", "cluster", "fraction"},
+        )
+        pooled = _pool_cluster_occupancy_groups(
+            evidence,
+            contrast,
+            value_column="fraction",
+            group_columns=["region_id", "cluster"],
+        )
+        numerator = (
+            pooled.loc[pooled["contrast_side"] == "numerator"]
+            .drop(columns=["contrast_side"])
+            .rename(
+                columns={
+                    "value": "fraction",
+                    "replicate_n": "numerator_replicate_n",
+                    "sample_values": "numerator_sample_values",
+                }
+            )
+        )
+        denominator = (
+            pooled.loc[pooled["contrast_side"] == "denominator"]
+            .drop(columns=["contrast_side"])
+            .rename(
+                columns={
+                    "value": "reference_fraction",
+                    "replicate_n": "denominator_replicate_n",
+                    "sample_values": "denominator_sample_values",
+                }
+            )
+        )
+        regions_table = numerator.merge(
+            denominator,
+            on=["region_id", "cluster"],
+            how="outer",
+            sort=False,
+        )
+        regions_table["fraction"] = regions_table["fraction"].fillna(0.0)
+        regions_table["reference_fraction"] = regions_table["reference_fraction"].fillna(0.0)
+        regions_table["numerator_replicate_n"] = (
+            regions_table["numerator_replicate_n"].fillna(0).astype(int)
+        )
+        regions_table["denominator_replicate_n"] = (
+            regions_table["denominator_replicate_n"].fillna(0).astype(int)
+        )
+        regions_table["numerator_sample_values"] = regions_table[
+            "numerator_sample_values"
+        ].apply(lambda values: values if isinstance(values, tuple) else tuple())
+        regions_table["denominator_sample_values"] = regions_table[
+            "denominator_sample_values"
+        ].apply(lambda values: values if isinstance(values, tuple) else tuple())
+        regions_table["delta_fraction"] = (
+            regions_table["fraction"] - regions_table["reference_fraction"]
+        )
+        regions_table["log2_fc"] = (
+            (regions_table["fraction"] + pseudocount)
+            / (regions_table["reference_fraction"] + pseudocount)
+        ).map(math.log2)
+        regions_table["effect_size"] = regions_table["delta_fraction"].abs()
+
+        if test == "fraction_test":
+            regions_table = _add_fraction_test_scores(
+                regions_table,
+                multiple_testing=multiple_testing,
+            )
+            regions_table = regions_table.sort_values(
+                by=["adjusted_p_value", "p_value", "effect_size", "region_id", "cluster"],
+                ascending=[True, True, False, True, True],
+                kind="mergesort",
+            ).reset_index(drop=True)
+        else:
+            regions_table = regions_table.sort_values(
+                by=["effect_size", "delta_fraction", "region_id", "cluster"],
+                ascending=[False, False, True, True],
+                kind="mergesort",
+            ).reset_index(drop=True)
+        regions_table["rank"] = range(1, len(regions_table) + 1)
+
+        summary_columns = [
+            "region_id",
+            "cluster",
+            "fraction",
+            "reference_fraction",
+            "delta_fraction",
+            "log2_fc",
+            "rank",
+            "numerator_replicate_n",
+            "denominator_replicate_n",
+        ]
+        if test == "fraction_test":
+            summary_columns.extend(["p_value", "adjusted_p_value"])
+        summary = regions_table.loc[:, summary_columns].copy()
+        return regions_table, summary
+
+    if representation == "dominant_cluster":
+        _require_occupancy_columns(
+            evidence,
+            required_columns={"region_id", "sample_id", "condition", "dominant_cluster"},
+        )
+        pooled = (
+            evidence.loc[:, ["region_id", "sample_id", "condition", "dominant_cluster"]]
+            .drop_duplicates()
+            .groupby(["region_id", "condition"], dropna=False, sort=False)
+            .agg(
+                dominant_cluster=("dominant_cluster", _dominant_label),
+                replicate_n=("sample_id", "nunique"),
+            )
+            .reset_index()
+        )
+        numerator = (
+            pooled.loc[pooled["condition"].isin(contrast.numerator or [])]
+            .groupby("region_id", dropna=False, sort=False)
+            .agg(
+                dominant_cluster=("dominant_cluster", _dominant_label),
+                numerator_replicate_n=("replicate_n", "sum"),
+            )
+            .reset_index()
+        )
+        denominator = (
+            pooled.loc[pooled["condition"].isin(contrast.denominator or [])]
+            .groupby("region_id", dropna=False, sort=False)
+            .agg(
+                reference_dominant_cluster=("dominant_cluster", _dominant_label),
+                denominator_replicate_n=("replicate_n", "sum"),
+            )
+            .reset_index()
+        )
+        regions_table = numerator.merge(
+            denominator,
+            on="region_id",
+            how="outer",
+            sort=False,
+        )
+        regions_table["dominant_cluster_changed"] = (
+            regions_table["dominant_cluster"] != regions_table["reference_dominant_cluster"]
+        )
+        regions_table["effect_size"] = regions_table["dominant_cluster_changed"].astype(int)
+        regions_table = regions_table.sort_values(
+            by=["effect_size", "region_id"],
+            ascending=[False, True],
+            kind="mergesort",
+        ).reset_index(drop=True)
+        regions_table["rank"] = range(1, len(regions_table) + 1)
+        summary = regions_table.loc[
+            :,
+            [
+                "region_id",
+                "dominant_cluster",
+                "reference_dominant_cluster",
+                "dominant_cluster_changed",
+                "rank",
+                "numerator_replicate_n",
+                "denominator_replicate_n",
+            ],
+        ].copy()
+        return regions_table, summary
+
+    _require_occupancy_columns(
+        evidence,
+        required_columns={"region_id", "sample_id", "condition", "cluster_entropy"},
+    )
+    pooled = _pool_cluster_occupancy_groups(
+        evidence.loc[:, ["region_id", "sample_id", "condition", "cluster_entropy"]]
+        .drop_duplicates(),
+        contrast,
+        value_column="cluster_entropy",
+        group_columns=["region_id"],
+    )
+    numerator = (
+        pooled.loc[pooled["contrast_side"] == "numerator"]
+        .drop(columns=["contrast_side", "sample_values"])
+        .rename(
+            columns={
+                "value": "cluster_entropy",
+                "replicate_n": "numerator_replicate_n",
+            }
+        )
+    )
+    denominator = (
+        pooled.loc[pooled["contrast_side"] == "denominator"]
+        .drop(columns=["contrast_side", "sample_values"])
+        .rename(
+            columns={
+                "value": "reference_cluster_entropy",
+                "replicate_n": "denominator_replicate_n",
+            }
+        )
+    )
+    regions_table = numerator.merge(
+        denominator,
+        on="region_id",
+        how="outer",
+        sort=False,
+    )
+    regions_table["cluster_entropy"] = regions_table["cluster_entropy"].fillna(0.0)
+    regions_table["reference_cluster_entropy"] = regions_table[
+        "reference_cluster_entropy"
+    ].fillna(0.0)
+    regions_table["numerator_replicate_n"] = (
+        regions_table["numerator_replicate_n"].fillna(0).astype(int)
+    )
+    regions_table["denominator_replicate_n"] = (
+        regions_table["denominator_replicate_n"].fillna(0).astype(int)
+    )
+    regions_table["delta_cluster_entropy"] = (
+        regions_table["cluster_entropy"] - regions_table["reference_cluster_entropy"]
+    )
+    regions_table["effect_size"] = regions_table["delta_cluster_entropy"].abs()
+    regions_table = regions_table.sort_values(
+        by=["effect_size", "region_id"],
+        ascending=[False, True],
+        kind="mergesort",
+    ).reset_index(drop=True)
+    regions_table["rank"] = range(1, len(regions_table) + 1)
+    summary = regions_table.loc[
+        :,
+        [
+            "region_id",
+            "cluster_entropy",
+            "reference_cluster_entropy",
+            "delta_cluster_entropy",
+            "rank",
+            "numerator_replicate_n",
+            "denominator_replicate_n",
+        ],
+    ].copy()
+    return regions_table, summary
+
+
 def score_regions(
     *,
     samples,
@@ -347,6 +697,7 @@ def score_regions(
     signal_source: str = "pileup_counts",
     test: str = "effect_size_only",
     multiple_testing: str = "fdr_bh",
+    occupancy_table: pd.DataFrame | None = None,
 ) -> RegionContrastResult:
     validate_region_contrast_request(
         analysis_unit=analysis_unit,
@@ -354,6 +705,43 @@ def score_regions(
         signal_source=signal_source,
         test=test,
     )
+    contrast_metadata = contrast.metadata or {}
+
+    if analysis_unit == "cluster_occupancy":
+        if occupancy_table is None:
+            raise ValueError(
+                "cluster_occupancy scoring currently requires occupancy_table."
+            )
+        regions_table, summary = _score_cluster_occupancy(
+            evidence=occupancy_table.copy(),
+            contrast=contrast,
+            representation=representation,
+            test=test,
+            multiple_testing=multiple_testing,
+        )
+        metadata = {
+            "contrast_mode": contrast.mode,
+            "analysis_unit": analysis_unit,
+            "representation": representation,
+            "signal_source": signal_source,
+            "test": test,
+            "multiple_testing": multiple_testing,
+            "normalization_mode": contrast_metadata.get("normalization_mode", "none"),
+            "biological_interpretation": contrast_metadata.get(
+                "biological_interpretation",
+                "region-level difference in sample-level cluster occupancy",
+            ),
+            "renderer": contrast_metadata.get("renderer", "region_effect_sizes"),
+        }
+        return RegionContrastResult(
+            regions=regions_table,
+            summary=summary,
+            contrast=contrast,
+            plot_data={"region_effect_sizes": summary.copy()},
+            metadata=metadata,
+            figures={},
+        )
+
     evidence = build_region_evidence_table(
         samples=samples,
         regions=regions,
@@ -470,7 +858,6 @@ def score_regions(
         summary_columns.extend(["count", "reference_count", "delta_count", "log2_fc_count"])
     summary = regions_table.loc[:, summary_columns].copy()
 
-    contrast_metadata = contrast.metadata or {}
     metadata = {
         "contrast_mode": contrast.mode,
         "analysis_unit": analysis_unit,
