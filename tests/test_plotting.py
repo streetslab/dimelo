@@ -382,6 +382,47 @@ def test_prepare_region_discovery_scan_data_limits_hit_overlay():
     assert payload["scan_table"]["is_hit"].tolist() == [False, True, False]
 
 
+def test_prepare_region_discovery_scan_data_rejects_negative_top_n_hits():
+    result = _make_region_discovery_result()
+
+    with pytest.raises(ValueError, match="top_n_hits must be non-negative"):
+        plotting.prepare_region_discovery_scan_data(
+            result=result,
+            top_n_hits=-1,
+        )
+
+
+def test_prepare_region_discovery_scan_data_rejects_hits_missing_from_filtered_windows():
+    result = _make_region_discovery_result()
+    inconsistent_hit = pd.DataFrame(
+        [
+            {
+                "window_id": "chr2:100-200:+",
+                "chromosome": "chr2",
+                "start": 100,
+                "end": 200,
+                "strand": "+",
+                "score_value": 0.8,
+                "rank": 1,
+            }
+        ]
+    )
+    inconsistent_result = RegionDiscoveryResult(
+        windows=result.windows.copy(),
+        hits=pd.concat([result.hits, inconsistent_hit], ignore_index=True),
+        contrast=result.contrast,
+        plot_data=result.plot_data,
+        metadata=result.metadata,
+        figures=result.figures,
+    )
+
+    with pytest.raises(ValueError, match="result.hits contains window_id values not present in the filtered windows table"):
+        plotting.prepare_region_discovery_scan_data(
+            result=inconsistent_result,
+            contigs=["chr2"],
+        )
+
+
 def test_prepare_region_contrast_profile_data_returns_all_value_modes():
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
         _region_contrast_position_rows()

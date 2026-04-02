@@ -623,6 +623,8 @@ def prepare_region_discovery_scan_data(
     include_all_windows: bool = True,
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     _validate_region_discovery_result(result)
+    if top_n_hits is not None and top_n_hits < 0:
+        raise ValueError("top_n_hits must be non-negative.")
 
     windows = result.windows.copy()
     hits = result.hits.copy()
@@ -666,8 +668,20 @@ def prepare_region_discovery_scan_data(
     else:
         contig_order = windows["contig"].drop_duplicates().tolist()
 
-    if top_n_hits is not None and top_n_hits >= 0 and not hits.empty and "rank" in hits.columns:
+    if top_n_hits is not None and not hits.empty and "rank" in hits.columns:
         hits = hits.sort_values(["rank"], kind="stable").head(top_n_hits).copy()
+
+    filtered_window_ids = set(windows["window_id"].tolist())
+    missing_hit_window_ids = sorted(
+        str(window_id)
+        for window_id in hits["window_id"].dropna().unique()
+        if window_id not in filtered_window_ids
+    )
+    if missing_hit_window_ids:
+        raise ValueError(
+            "result.hits contains window_id values not present in the filtered windows table: "
+            f"{', '.join(missing_hit_window_ids)}."
+        )
 
     hit_window_ids = set(hits.get("window_id", pd.Series(dtype="object")).tolist())
     windows["window_midpoint"] = (windows["start"] + windows["end"]) / 2.0
