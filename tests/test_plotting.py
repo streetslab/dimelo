@@ -749,14 +749,14 @@ def test_prepare_global_analysis_window_data_aggregates_conditions():
     assert treated_chr1["sample_n"] == 2
 
 
-def test_prepare_global_analysis_window_data_aggregates_per_sample_windows_with_chrom_alias():
+def test_prepare_global_analysis_window_data_aggregates_per_sample_windows_across_replicates_with_chrom_alias():
     result = _make_global_window_result()
     duplicate_sample_window = pd.DataFrame(
         [
             {
                 "sample_id": "s2",
                 "condition": "treated",
-                "replicate": 1,
+                "replicate": 2,
                 "motif": "A,0",
                 "window_id": "chr1:0-100",
                 "chromosome": "chr1",

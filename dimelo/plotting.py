@@ -836,7 +836,6 @@ def prepare_global_analysis_window_data(
                 [
                     "sample_id",
                     "condition",
-                    "replicate",
                     "motif",
                     "window_id",
                     "contig",
