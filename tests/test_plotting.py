@@ -161,9 +161,28 @@ def _minimal_region_contrast_result() -> RegionContrastResult:
     )
 
 
+def _region_contrast_plot_setup(position_rows: list[dict[str, object]]) -> tuple[
+    RegionContrastResult,
+    pd.DataFrame,
+    plotting.AxisSpec,
+    plotting.AggregationSpec,
+]:
+    return (
+        _minimal_region_contrast_result(),
+        pd.DataFrame(position_rows),
+        plotting.AxisSpec(
+            orientation="region_5to3",
+            coordinate_mode="fixed_window",
+            anchor="center",
+            upstream_bp=20,
+            downstream_bp=20,
+        ),
+        plotting.AggregationSpec(),
+    )
+
+
 def test_prepare_region_contrast_profile_data_returns_all_value_modes():
-    result = _minimal_region_contrast_result()
-    position_table = pd.DataFrame(
+    result, position_table, axis, aggregation = _region_contrast_plot_setup(
         [
             {
                 "region_id": "chr1:90-110,+",
@@ -199,14 +218,6 @@ def test_prepare_region_contrast_profile_data_returns_all_value_modes():
             },
         ]
     )
-    axis = plotting.AxisSpec(
-        orientation="region_5to3",
-        coordinate_mode="fixed_window",
-        anchor="center",
-        upstream_bp=20,
-        downstream_bp=20,
-    )
-    aggregation = plotting.AggregationSpec()
 
     payload = plotting.prepare_region_contrast_profile_data(
         result=result,
@@ -216,13 +227,46 @@ def test_prepare_region_contrast_profile_data_returns_all_value_modes():
         value_mode="all",
     )
 
+    plot_table = payload["plot_table"]
+    assert len(plot_table) == 12
     assert set(payload["plot_table"]["value_mode"]) == {"numerator", "denominator", "delta"}
+    assert plot_table.groupby(["region_id", "value_mode"]).size().to_dict() == {
+        ("chr1:90-110,+", "numerator"): 1,
+        ("chr1:90-110,+", "denominator"): 1,
+        ("chr1:90-110,+", "delta"): 1,
+        ("chr1:190-210,-", "numerator"): 1,
+        ("chr1:190-210,-", "denominator"): 1,
+        ("chr1:190-210,-", "delta"): 1,
+    }
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:90-110,+") & (plot_table["value_mode"] == "numerator"),
+        "value",
+    ].iloc[0] == 0.55
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:90-110,+") & (plot_table["value_mode"] == "denominator"),
+        "value",
+    ].iloc[0] == 0.20
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:90-110,+") & (plot_table["value_mode"] == "delta"),
+        "value",
+    ].iloc[0] == 0.35
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:190-210,-") & (plot_table["value_mode"] == "numerator"),
+        "value",
+    ].iloc[0] == 0.70
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:190-210,-") & (plot_table["value_mode"] == "denominator"),
+        "value",
+    ].iloc[0] == 0.30
+    assert plot_table.loc[
+        (plot_table["region_id"] == "chr1:190-210,-") & (plot_table["value_mode"] == "delta"),
+        "value",
+    ].iloc[0] == 0.40
     assert payload["metadata"]["plot_family"] == "region_contrast_profile"
 
 
 def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
-    result = _minimal_region_contrast_result()
-    position_table = pd.DataFrame(
+    result, position_table, axis, aggregation = _region_contrast_plot_setup(
         [
             {
                 "region_id": "chr1:90-110,+",
@@ -258,14 +302,6 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
             },
         ]
     )
-    axis = plotting.AxisSpec(
-        orientation="region_5to3",
-        coordinate_mode="fixed_window",
-        anchor="center",
-        upstream_bp=20,
-        downstream_bp=20,
-    )
-    aggregation = plotting.AggregationSpec()
 
     payload = plotting.prepare_region_contrast_heatmap_data(
         result=result,
@@ -284,18 +320,9 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
 
 
 def test_prepare_region_contrast_profile_data_requires_joinable_grouping_key():
-    result = _minimal_region_contrast_result()
-    position_table = pd.DataFrame(
+    result, position_table, axis, aggregation = _region_contrast_plot_setup(
         [{"region_id": "chr1:90-110,+", "position": 95, "anchor": 100, "value": 0.1, "region_strand": "+"}]
     )
-    axis = plotting.AxisSpec(
-        orientation="region_5to3",
-        coordinate_mode="fixed_window",
-        anchor="center",
-        upstream_bp=20,
-        downstream_bp=20,
-    )
-    aggregation = plotting.AggregationSpec()
 
     with pytest.raises(ValueError, match="sample_id or condition"):
         plotting.prepare_region_contrast_profile_data(
