@@ -33,6 +33,7 @@ This directory tracks internal design and implementation work for the current br
 ### Cleanup And Docs
 
 - [2026-04-02-superpowers-docs-cleanup-design.md](specs/2026-04-02-superpowers-docs-cleanup-design.md) - central index and status-map cleanup for internal planning docs. Status: `implemented`
+- [2026-04-02-docs-and-integration-cleanup-design.md](specs/2026-04-02-docs-and-integration-cleanup-design.md) - path portability and discoverability cleanup for tracked superpowers docs and related integration surfaces. Status: `partially implemented`
 
 ## Plans
 
@@ -61,6 +62,7 @@ This directory tracks internal design and implementation work for the current br
 ### Cleanup And Docs
 
 - [2026-04-02-superpowers-docs-cleanup.md](plans/2026-04-02-superpowers-docs-cleanup.md) - central docs index and tracked-plan cleanup. Status: `implemented`
+- [2026-04-02-docs-and-integration-cleanup.md](plans/2026-04-02-docs-and-integration-cleanup.md) - historical path normalization plus narrow discoverability cleanup around completed analysis and plotting work. Status: `partially implemented`
 
 ## Current Themes
 
@@ -69,4 +71,4 @@ This directory tracks internal design and implementation work for the current br
 - Region discovery: use the region analysis architecture spec, the paired discovery spec, and the discovery workflow plans together.
 - Global analysis: use the region analysis architecture spec first, then the global analysis foundations plan.
 - Plotting: start with the plotting-axis spec, then the plotting-axis implementation plan and the region-contrasts plotting plan.
-- Docs cleanup: use the docs cleanup design and plan for the central status map and tracked historical plans.
+- Docs cleanup: use the docs cleanup design and plan for the central status map and tracked historical plans, then the docs-and-integration cleanup design and plan for portability and discoverability follow-on work.
