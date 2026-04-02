@@ -509,6 +509,23 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
         _region_contrast_position_rows()
     )
+    result.summary = pd.concat(
+        [
+            result.summary,
+            pd.DataFrame(
+                [
+                    {
+                        "region_id": "chr1:290-310,+",
+                        "fraction": 0.15,
+                        "reference_fraction": 0.05,
+                        "delta_fraction": 0.10,
+                        "rank": 3,
+                    }
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
 
     payload = plotting.prepare_region_contrast_heatmap_data(
         result=result,
@@ -523,7 +540,43 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
         "chr1:190-210,-",
         "chr1:90-110,+",
     ]
+    assert list(payload["summary_table"]["region_id"]) == [
+        "chr1:190-210,-",
+        "chr1:90-110,+",
+    ]
     assert payload["metadata"]["plot_family"] == "region_contrast_heatmap"
+
+
+def test_prepare_region_contrast_heatmap_data_rejects_conflicting_ranks_for_same_region():
+    result, position_table, axis, aggregation = _region_contrast_plot_setup(
+        _region_contrast_position_rows()
+    )
+    result.summary = pd.concat(
+        [
+            result.summary,
+            pd.DataFrame(
+                [
+                    {
+                        "region_id": "chr1:90-110,+",
+                        "fraction": 0.55,
+                        "reference_fraction": 0.20,
+                        "delta_fraction": 0.35,
+                        "rank": 7,
+                    }
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
+
+    with pytest.raises(ValueError, match="exactly one rank value per plotted region"):
+        plotting.prepare_region_contrast_heatmap_data(
+            result=result,
+            position_table=position_table,
+            axis=axis,
+            aggregation=aggregation,
+            value_mode="all",
+        )
 
 
 def test_prepare_region_contrast_heatmap_data_requires_both_contrast_sides():

@@ -500,13 +500,35 @@ def prepare_region_contrast_heatmap_data(
     )
 
     _require_columns(result.summary, ("region_id", "rank"), "result.summary")
-    row_order = (
-        result.summary.loc[:, ["region_id", "rank"]]
-        .dropna(subset=["region_id", "rank"])
-        .drop_duplicates(subset=["region_id"], keep="first")
-        .sort_values(["rank", "region_id"], kind="stable")
+    plot_region_ids = (
+        profile_payload["plot_table"].loc[:, ["region_id"]]
+        .drop_duplicates()
         .reset_index(drop=True)
     )
+    summary_ranks = (
+        result.summary.loc[:, ["region_id", "rank"]]
+        .dropna(subset=["region_id"])
+        .groupby("region_id", as_index=False, sort=False)
+        .agg(
+            rank=("rank", "first"),
+            rank_count=("rank", lambda values: pd.Series(values).dropna().nunique()),
+        )
+    )
+    conflicting_rank_ids = sorted(summary_ranks.loc[summary_ranks["rank_count"] != 1, "region_id"].astype(str).unique())
+    if conflicting_rank_ids:
+        raise ValueError(
+            "result.summary must provide exactly one rank value per plotted region. "
+            f"Conflicting region_id values: {', '.join(conflicting_rank_ids)}."
+        )
+
+    row_order = plot_region_ids.merge(summary_ranks.loc[:, ["region_id", "rank"]], on="region_id", how="left")
+    missing_rank_ids = sorted(row_order.loc[row_order["rank"].isna(), "region_id"].astype(str).unique())
+    if missing_rank_ids:
+        raise ValueError(
+            "result.summary does not provide rank values for all plotted regions. "
+            f"Missing region_id values: {', '.join(missing_rank_ids)}."
+        )
+    row_order = row_order.sort_values(["rank", "region_id"], kind="stable").reset_index(drop=True)
     row_order["row_order"] = range(len(row_order))
 
     plot_table = profile_payload["plot_table"].merge(
@@ -514,12 +536,6 @@ def prepare_region_contrast_heatmap_data(
         on="region_id",
         how="left",
     )
-    if plot_table["row_order"].isna().any():
-        missing_region_ids = sorted(plot_table.loc[plot_table["row_order"].isna(), "region_id"].astype(str).unique())
-        raise ValueError(
-            "result.summary does not provide rank values for all plotted regions. "
-            f"Missing region_id values: {', '.join(missing_region_ids)}."
-        )
     plot_table = plot_table.sort_values(["row_order", "value_mode", "position"], kind="stable").reset_index(drop=True)
 
     profile_payload["plot_table"] = plot_table
