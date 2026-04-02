@@ -7,7 +7,7 @@
 - Use this when you already have a BED or matched region set.
 - Use `parse_bam.pileup()` first when you want locus-level motif abundance testing.
 - Use `cluster` first when you want read-state or cluster-occupancy follow-up rather than average motif abundance alone.
-- Use `region_discovery` later for de novo locus finding once that module is implemented.
+- Use `region_discovery` when you do not yet know the loci and want de novo locus finding before follow-up contrasts.
 
 ## V1 Supported Paths
 
