@@ -160,10 +160,20 @@ def _build_segment_axis_table(segments: list[SegmentSpec]) -> pd.DataFrame:
     running_start = 0
 
     for segment in segments:
+        if segment.mode not in {"raw", "scaled"}:
+            raise ValueError(
+                "segment_map axis.segments contains invalid mode values: "
+                f"{segment.segment_id} has mode={segment.mode!r}; mode must be 'raw' or 'scaled'."
+            )
         if segment.bins is not None and segment.bins <= 0:
             raise ValueError(
                 "segment_map axis.segments contains invalid bins values: "
                 f"{segment.segment_id} has bins={segment.bins!r}."
+            )
+        if segment.mode == "scaled" and segment.bins is None and segment.end_ref <= segment.start_ref:
+            raise ValueError(
+                "segment_map axis.segments contains invalid scaled span values: "
+                f"{segment.segment_id} has start_ref={segment.start_ref!r} and end_ref={segment.end_ref!r}."
             )
         if segment.mode == "raw" and segment.end_ref <= segment.start_ref:
             raise ValueError(

@@ -585,6 +585,69 @@ def test_prepare_aggregate_plot_data_rejects_malformed_segment_spans(segment):
         )
 
 
+def test_prepare_aggregate_plot_data_rejects_invalid_segment_mode():
+    table = pd.DataFrame(
+        [{"region_id": "reg1", "segment_id": "upstream", "segment_pos": 1, "signal": 1.0}]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[
+            plotting.SegmentSpec("upstream", "Upstream", 0, 100, "bogus", bins=20),
+        ],
+    )
+    aggregation = plotting.AggregationSpec(
+        weighting="equal_region",
+        within_region_summary="mean",
+        signal_normalization="none",
+        layout="concatenated",
+    )
+
+    with pytest.raises(ValueError, match="mode must be 'raw' or 'scaled'"):
+        plotting.prepare_aggregate_plot_data(
+            table,
+            plot_family="aggregate_profile",
+            axis=axis,
+            aggregation=aggregation,
+            value_column="signal",
+            segment_id_column="segment_id",
+            segment_position_column="segment_pos",
+        )
+
+
+@pytest.mark.parametrize("start_ref, end_ref", [(100, 100), (200, 100)])
+def test_prepare_aggregate_plot_data_rejects_zero_or_negative_width_scaled_segment_without_bins(
+    start_ref, end_ref
+):
+    table = pd.DataFrame(
+        [{"region_id": "reg1", "segment_id": "body", "segment_pos": 1, "signal": 1.0}]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[
+            plotting.SegmentSpec("body", "Body", start_ref, end_ref, "scaled"),
+        ],
+    )
+    aggregation = plotting.AggregationSpec(
+        weighting="equal_region",
+        within_region_summary="mean",
+        signal_normalization="none",
+        layout="concatenated",
+    )
+
+    with pytest.raises(ValueError, match="invalid scaled span"):
+        plotting.prepare_aggregate_plot_data(
+            table,
+            plot_family="aggregate_profile",
+            axis=axis,
+            aggregation=aggregation,
+            value_column="signal",
+            segment_id_column="segment_id",
+            segment_position_column="segment_pos",
+        )
+
+
 def test_prepare_aggregate_plot_data_segment_map_keeps_user_plot_columns():
     table = pd.DataFrame(
         [
