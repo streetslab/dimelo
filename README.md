@@ -227,9 +227,9 @@ Three higher-level analysis guides now sit on top of the existing parsing layer:
 - [docs/global-analysis.md](docs/global-analysis.md) for pileup-backed global summaries and normalization factors
 - [docs/region-discovery.md](docs/region-discovery.md) for de novo and paired locus discovery from tiled pileup scans
 - [docs/shared-clustering.md](docs/shared-clustering.md) for shared-boundary clustering workflows
-- [docs/region-contrasts.md](docs/region-contrasts.md) for known-region motif-abundance contrasts
+- [docs/region-contrasts.md](docs/region-contrasts.md) for known-region motif-abundance and cluster-occupancy contrasts
 
-Use `parse_bam.pileup()` when you want defined-region abundance testing, and use `parse_bam.extract()` when you want read-level clustering or single-read follow-up.
+Use `parse_bam.pileup()` when you want defined-region abundance testing, and use `parse_bam.extract()` when you want read-level clustering or single-read follow-up. When you want occupancy-backed region contrasts, run clustering first and pass `SharedClusterResult.region_summaries` into `region_contrasts.score_regions(..., analysis_unit="cluster_occupancy")`.
 
 For an end-to-end discovery-to-clustering run, use `workflows.discovery_cluster_workflow()`. It keeps discovery output in BED-style `selected_regions`, then derives the serializable region spec that `shared_cluster_distribution(..., matched_regions=...)` consumes.
 

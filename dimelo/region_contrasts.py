@@ -168,6 +168,7 @@ def build_cluster_occupancy_evidence_table(
 
     grouped_keys = ["region_id", "sample_id", "condition"]
     totals = evidence.groupby(grouped_keys, dropna=False)["count"].transform("sum")
+    evidence["_group_total_count"] = totals
     evidence["fraction"] = (
         evidence["count"].div(totals.where(totals != 0), fill_value=0).fillna(0.0)
     )
@@ -179,9 +180,11 @@ def build_cluster_occupancy_evidence_table(
             kind="mergesort",
         )
         .drop_duplicates(subset=grouped_keys, keep="first")
-        .loc[:, grouped_keys + ["cluster"]]
+        .loc[:, grouped_keys + ["cluster", "_group_total_count"]]
         .rename(columns={"cluster": "dominant_cluster"})
     )
+    summary.loc[summary["_group_total_count"] == 0, "dominant_cluster"] = None
+    summary = summary.drop(columns="_group_total_count")
 
     def _cluster_entropy(values: pd.Series) -> float:
         probabilities = values.astype(float)
@@ -198,10 +201,14 @@ def build_cluster_occupancy_evidence_table(
         .reset_index(name="cluster_entropy")
     )
 
-    return evidence.merge(summary, on=grouped_keys, how="left").merge(
-        entropy,
-        on=grouped_keys,
-        how="left",
+    return (
+        evidence.merge(summary, on=grouped_keys, how="left")
+        .merge(
+            entropy,
+            on=grouped_keys,
+            how="left",
+        )
+        .drop(columns="_group_total_count")
     )
 
 
@@ -374,6 +381,22 @@ def _require_supported_cluster_occupancy_mode(contrast: ContrastSpec) -> None:
         )
 
 
+def _require_requested_conditions_present(
+    evidence: pd.DataFrame,
+    *,
+    side_specs: dict[str, list[str]],
+) -> None:
+    for side, conditions in side_specs.items():
+        side_evidence = evidence.loc[evidence["condition"].isin(conditions)].copy()
+        available_conditions = set(side_evidence["condition"].dropna().unique())
+        missing_conditions = sorted(set(conditions) - available_conditions)
+        if missing_conditions:
+            missing_display = ", ".join(missing_conditions)
+            raise ValueError(
+                f"Missing {side} evidence for requested condition(s): {missing_display}."
+            )
+
+
 def _validate_occupancy_table_numeric_columns(occupancy_table: pd.DataFrame) -> None:
     numeric_specs = [
         (
@@ -437,19 +460,16 @@ def _pool_cluster_occupancy_groups(
         "numerator": contrast.numerator or [],
         "denominator": contrast.denominator or [],
     }
+    _require_requested_conditions_present(
+        evidence,
+        side_specs=side_specs,
+    )
     cluster_universe = None
     if value_column == "fraction":
         cluster_universe = evidence.loc[:, ["region_id", "cluster"]].drop_duplicates()
 
     for side, conditions in side_specs.items():
         side_evidence = evidence.loc[evidence["condition"].isin(conditions)].copy()
-        available_conditions = set(side_evidence["condition"].dropna().unique())
-        missing_conditions = sorted(set(conditions) - available_conditions)
-        if missing_conditions:
-            missing_display = ", ".join(missing_conditions)
-            raise ValueError(
-                f"Missing {side} evidence for requested condition(s): {missing_display}."
-            )
         if value_column == "fraction":
             side_evidence = _zero_fill_missing_cluster_fraction_rows(
                 side_evidence,
@@ -511,6 +531,19 @@ def _dominant_label(values: pd.Series) -> str | None:
     counts = non_null.value_counts()
     max_count = counts.max()
     return sorted(counts[counts == max_count].index.tolist())[0]
+
+
+def _dominant_clusters_differ(
+    dominant_cluster: str | None,
+    reference_dominant_cluster: str | None,
+) -> bool:
+    dominant_missing = pd.isna(dominant_cluster)
+    reference_missing = pd.isna(reference_dominant_cluster)
+    if dominant_missing and reference_missing:
+        return False
+    if dominant_missing or reference_missing:
+        return True
+    return bool(dominant_cluster != reference_dominant_cluster)
 
 
 def _score_cluster_occupancy(
@@ -625,11 +658,19 @@ def _score_cluster_occupancy(
             evidence,
             required_columns={"region_id", "sample_id", "condition", "dominant_cluster"},
         )
+        side_specs = {
+            "numerator": contrast.numerator or [],
+            "denominator": contrast.denominator or [],
+        }
+        _require_requested_conditions_present(
+            evidence,
+            side_specs=side_specs,
+        )
         sample_level = evidence.loc[
             :, ["region_id", "sample_id", "condition", "dominant_cluster"]
         ].drop_duplicates()
         numerator = (
-            sample_level.loc[sample_level["condition"].isin(contrast.numerator or [])]
+            sample_level.loc[sample_level["condition"].isin(side_specs["numerator"])]
             .groupby("region_id", dropna=False, sort=False)
             .agg(
                 dominant_cluster=("dominant_cluster", _dominant_label),
@@ -638,7 +679,7 @@ def _score_cluster_occupancy(
             .reset_index()
         )
         denominator = (
-            sample_level.loc[sample_level["condition"].isin(contrast.denominator or [])]
+            sample_level.loc[sample_level["condition"].isin(side_specs["denominator"])]
             .groupby("region_id", dropna=False, sort=False)
             .agg(
                 reference_dominant_cluster=("dominant_cluster", _dominant_label),
@@ -652,8 +693,26 @@ def _score_cluster_occupancy(
             how="outer",
             sort=False,
         )
-        regions_table["dominant_cluster_changed"] = (
-            regions_table["dominant_cluster"] != regions_table["reference_dominant_cluster"]
+        missing_region_side = regions_table["numerator_replicate_n"].isna() ^ regions_table[
+            "denominator_replicate_n"
+        ].isna()
+        if missing_region_side.any():
+            raise ValueError(
+                "Missing dominant_cluster evidence for one or more requested contrast "
+                "sides at some regions."
+            )
+        regions_table["numerator_replicate_n"] = (
+            regions_table["numerator_replicate_n"].fillna(0).astype(int)
+        )
+        regions_table["denominator_replicate_n"] = (
+            regions_table["denominator_replicate_n"].fillna(0).astype(int)
+        )
+        regions_table["dominant_cluster_changed"] = regions_table.apply(
+            lambda row: _dominant_clusters_differ(
+                row["dominant_cluster"],
+                row["reference_dominant_cluster"],
+            ),
+            axis=1,
         )
         regions_table["effect_size"] = regions_table["dominant_cluster_changed"].astype(int)
         regions_table = regions_table.sort_values(

@@ -324,7 +324,7 @@ def test_build_cluster_occupancy_evidence_table_zero_count_groups_stay_zero_entr
         (evidence["region_id"] == "reg2") & (evidence["sample_id"] == "ns1")
     ]
     assert list(reg2_ns1["fraction"]) == [0.0, 0.0]
-    assert reg2_ns1["dominant_cluster"].tolist() == ["C1", "C1"]
+    assert reg2_ns1["dominant_cluster"].isna().all()
     assert reg2_ns1["cluster_entropy"].tolist() == [0.0, 0.0]
 
 
@@ -1439,8 +1439,67 @@ def test_score_regions_cluster_occupancy_dominant_cluster_returns_descriptive_su
     assert reg1["dominant_cluster"] == "C1"
     assert reg1["reference_dominant_cluster"] == "C2"
     assert reg2["dominant_cluster"] == "C1"
-    assert reg2["reference_dominant_cluster"] == "C1"
+    assert pd.isna(reg2["reference_dominant_cluster"])
+    assert reg2["dominant_cluster_changed"]
     assert "p_value" not in result.regions.columns
+
+
+def test_score_regions_cluster_occupancy_dominant_cluster_rejects_missing_requested_conditions():
+    occupancy_table = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "tx1",
+                "condition": "15min",
+                "dominant_cluster": "C1",
+            }
+        ]
+    )
+
+    with pytest.raises(ValueError, match="Missing denominator evidence"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+            analysis_unit="cluster_occupancy",
+            representation="dominant_cluster",
+            signal_source="cluster_occupancy",
+            test="effect_size_only",
+            occupancy_table=occupancy_table,
+        )
+
+
+def test_score_regions_cluster_occupancy_dominant_cluster_rejects_region_specific_missing_side():
+    occupancy_table = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "tx1",
+                "condition": "15min",
+                "dominant_cluster": "C1",
+            },
+            {
+                "region_id": "reg2",
+                "sample_id": "ns1",
+                "condition": "NS",
+                "dominant_cluster": "C2",
+            },
+        ]
+    )
+
+    with pytest.raises(ValueError, match="Missing dominant_cluster evidence"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+            analysis_unit="cluster_occupancy",
+            representation="dominant_cluster",
+            signal_source="cluster_occupancy",
+            test="effect_size_only",
+            occupancy_table=occupancy_table,
+        )
 
 
 def test_score_regions_cluster_occupancy_cluster_entropy_returns_descriptive_summary_only():

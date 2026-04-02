@@ -61,6 +61,8 @@ result = workflows.shared_cluster_distribution(
 
 `discovery_cluster_contrast_workflow()` extends the same handoff one step further: it derives the serializable region spec from the BED-style discovery rows, passes that into clustering, normalizes clustering-side `region_id` values to the same `chr:start-end,strand` format used by contrasts, and uses the same selected loci as the default follow-up region set for contrasts unless `contrasts["regions"]` overrides it.
 
+For defined-region occupancy follow-up, pass `result.region_summaries` into `region_contrasts.score_regions(..., analysis_unit="cluster_occupancy", signal_source="cluster_occupancy", occupancy_table=...)`. That keeps the clustering output as the reusable source of truth for per-region read-state mixtures.
+
 ## Canonical Outputs
 
 The workflow returns a `SharedClusterResult` with canonical tables:
@@ -71,6 +73,8 @@ The workflow returns a `SharedClusterResult` with canonical tables:
 - `result.cluster_profiles`
 - `result.region_summaries` for `region_anchored`
 - `result.plot_data`
+
+`result.region_summaries` is also the standard occupancy handoff into `dimelo.region_contrasts` when you want per-region `cluster_fraction`, `dominant_cluster`, or `cluster_entropy` follow-up instead of only global cluster distributions.
 
 Built-in plotting remains intentionally thin. `result.plot_data["cluster_distribution_bar"]` and `result.plot_data["cluster_distribution_heatmap"]` are plot-ready DataFrames, not renderer-specific figure objects.
 
@@ -95,5 +99,6 @@ heatmap = result.plot_data["cluster_distribution_heatmap"].set_index("condition"
 - `mode="region_anchored"` supports matched-region clustering from pileup-derived region vectors.
 - `discovery_cluster_workflow()` composes discovery and `region_anchored` clustering by passing derived matched regions into this workflow.
 - `discovery_cluster_contrast_workflow()` composes discovery, `region_anchored` clustering, and defined-region contrasts on the selected loci by default, with an explicit custom contrast-region override.
+- `result.region_summaries` is the v1 handoff table for `cluster_occupancy` region contrasts.
 - The default supported clusterer is `minibatch_kmeans`.
 - Results are data-first: tables are the stable contract, while plotting is optional.

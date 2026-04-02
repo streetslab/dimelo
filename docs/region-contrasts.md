@@ -1,6 +1,6 @@
 # Region Contrasts
 
-`dimelo.region_contrasts` scores known regions from pileup-backed inputs. It is the defined-region comparison layer for cases where you already know the loci you want to test.
+`dimelo.region_contrasts` scores known regions from pileup-backed inputs or clustering-derived occupancy tables. It is the defined-region comparison layer for cases where you already know the loci you want to test.
 
 ## When To Use It
 
@@ -9,12 +9,17 @@
 - Use `cluster` first when you want read-state or cluster-occupancy follow-up rather than average motif abundance alone.
 - Use `region_discovery` later for de novo locus finding once that module is implemented.
 
-## V1 Supported Path
+## V1 Supported Paths
 
 - `analysis_unit="ensemble_region"`
 - `representation="modified_fraction"` or `"modified_count"`
 - `signal_source="pileup_counts"`
 - `test="effect_size_only"` or `"beta_binomial"`
+
+- `analysis_unit="cluster_occupancy"`
+- `signal_source="cluster_occupancy"`
+- `representation="cluster_fraction"` with `test="effect_size_only"` or `"fraction_test"`
+- `representation="dominant_cluster"` or `"cluster_entropy"` with `test="effect_size_only"`
 
 Current v1 behavior:
 
@@ -22,6 +27,10 @@ Current v1 behavior:
 - `beta_binomial` supports the same pooled comparison modes and adds `p_value` / `adjusted_p_value`.
 - `multiple_testing="fdr_bh"` is the only supported correction mode for `beta_binomial`.
 - The current beta-binomial path is intentionally simple: pooled region counts with a first-pass per-region predictive test, not replicate-aware hierarchical modeling.
+- `cluster_occupancy` currently supports `pairwise` and `group_vs_group` only.
+- `fraction_test` is only implemented for `representation="cluster_fraction"` and uses sample-level region occupancy fractions rather than pooled reads.
+- `dominant_cluster` and `cluster_entropy` are descriptive in v1. They return ranked summaries without p-values.
+- Zero-read sample-region groups keep `fraction=0.0`, `cluster_entropy=0.0`, and `dominant_cluster=None` rather than inventing a winning cluster.
 
 ## Example
 
@@ -59,6 +68,40 @@ result = region_contrasts.score_regions(
 )
 ```
 
+## Cluster Occupancy Example
+
+Use this path after shared clustering when you want to test whether per-region read-state mixtures shift between conditions.
+
+```python
+from dimelo import region_contrasts, workflows
+from dimelo.models import ContrastSpec
+
+cluster_result = workflows.shared_cluster_distribution(
+    samples=samples,
+    mode="region_anchored",
+    motifs=["A,0"],
+    matched_regions="matched_regions.bed",
+    n_clusters=6,
+)
+
+occupancy_result = region_contrasts.score_regions(
+    samples=[],
+    regions=None,
+    motifs=[],
+    contrast=ContrastSpec(
+        mode="pairwise",
+        numerator=["15min"],
+        denominator=["NS"],
+        reference_condition="NS",
+    ),
+    analysis_unit="cluster_occupancy",
+    representation="cluster_fraction",
+    signal_source="cluster_occupancy",
+    test="fraction_test",
+    occupancy_table=cluster_result.region_summaries,
+)
+```
+
 ## Canonical Outputs
 
 The workflow returns a `RegionContrastResult` with canonical tables:
@@ -87,6 +130,30 @@ For `beta_binomial`, statistical columns are included in both `result.regions` a
 - `p_value`
 - `adjusted_p_value`
 
+For `analysis_unit="cluster_occupancy"`, the main fields depend on representation:
+
+- `cluster_fraction`
+  - `cluster`
+  - `fraction`
+  - `reference_fraction`
+  - `delta_fraction`
+  - `log2_fc`
+  - `numerator_replicate_n`
+  - `denominator_replicate_n`
+  - optional `p_value` / `adjusted_p_value` for `fraction_test`
+- `dominant_cluster`
+  - `dominant_cluster`
+  - `reference_dominant_cluster`
+  - `dominant_cluster_changed`
+  - `numerator_replicate_n`
+  - `denominator_replicate_n`
+- `cluster_entropy`
+  - `cluster_entropy`
+  - `reference_cluster_entropy`
+  - `delta_cluster_entropy`
+  - `numerator_replicate_n`
+  - `denominator_replicate_n`
+
 ## Custom Plotting
 
 The results are data-first. You can use the built-in `plot_data` payloads or ignore them and plot the returned tables directly.
@@ -106,6 +173,7 @@ sns.scatterplot(
 - Run `parse_bam.pileup()` when you care about motif abundance, defined-region contrasts, or later de novo discovery.
 - Run `parse_bam.extract()` when you care about single-read analysis or clustering.
 - Run both when you want formal region-level abundance testing plus downstream read-level follow-up on the same samples.
+- Run clustering first when you want occupancy-backed contrasts; then pass `SharedClusterResult.region_summaries` as `occupancy_table`.
 
 ## Discovery-Driven Follow-Up
 
