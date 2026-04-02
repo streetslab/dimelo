@@ -41,3 +41,24 @@ result = global_analysis.run_global_analysis(
 - `result.plot_data["window_fraction_table"]`
 
 The wrapper does not couple the workflow to a plotting backend. If you want to render the results yourself, use the returned tables directly.
+
+## Plotting Prep Helpers
+
+Use the shared plotting helpers when you want plot-ready global-analysis tables without committing to a specific renderer:
+
+```python
+from dimelo import plotting
+
+summary_payload = plotting.prepare_global_analysis_summary_data(
+    result=result,
+    aggregate_conditions=True,
+)
+
+window_payload = plotting.prepare_global_analysis_window_data(
+    result=result,
+    aggregate_conditions=True,
+)
+```
+
+- `prepare_global_analysis_summary_data(...)` consumes a `GlobalAnalysisResult` and returns renderer-neutral `sample_summary`, `condition_summary`, `normalization_table`, and `metadata` payloads. The summary payload exposes both sample-level rows and optional condition-level views, while normalization values stay available through `normalization_table`.
+- `prepare_global_analysis_window_data(...)` consumes the same `GlobalAnalysisResult` and returns renderer-neutral `window_table`, `condition_window_table`, and `metadata` payloads. Broad-window payloads stay per-contig by default rather than flattening onto a cumulative genome axis.

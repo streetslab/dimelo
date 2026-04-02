@@ -237,6 +237,8 @@ For discovery-to-clustering-to-contrast follow-up, use `workflows.discovery_clus
 
 `region_discovery` also exposes renderer-neutral plotting prep helpers that consume `RegionDiscoveryResult`: `prepare_region_discovery_scan_data(...)` prepares per-contig scan and hit tables by default, and `prepare_region_discovery_hit_context_data(...)` prepares local hit-context tables for small-multiple follow-up views.
 
+`global_analysis` now exposes renderer-neutral plotting prep helpers that consume `GlobalAnalysisResult`: `prepare_global_analysis_summary_data(...)` prepares sample-level summaries, optional condition-level views, and normalization tables, while `prepare_global_analysis_window_data(...)` prepares broad-window payloads that stay per-contig by default.
+
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
 
 ### Parsing outputs
