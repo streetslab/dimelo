@@ -305,6 +305,53 @@ def test_prepare_region_contrast_profile_data_requires_joinable_grouping_key():
         plotting._region_contrast_grouping_key(result, position_table)
 
 
+@pytest.mark.parametrize(
+    "position_rows",
+    [
+        [
+            {
+                "region_id": "chr1:90-110,+",
+                "sample_id": "NS",
+                "condition": "NS",
+                "position": 95,
+                "anchor": 100,
+                "value": 0.1,
+                "region_strand": "+",
+            }
+        ],
+        [
+            {
+                "region_id": "chr1:90-110,+",
+                "sample_id": "sample-a",
+                "condition": "condition-a",
+                "position": 95,
+                "anchor": 100,
+                "value": 0.1,
+                "region_strand": "+",
+            }
+        ],
+    ],
+)
+def test_prepare_region_contrast_profile_data_rejects_ambiguous_grouping_key(position_rows):
+    result, _, _, _ = _region_contrast_plot_setup(_region_contrast_position_rows())
+    position_table = pd.DataFrame(position_rows)
+
+    with pytest.raises(ValueError, match="could not resolve a unique grouping key"):
+        plotting._region_contrast_grouping_key(result, position_table)
+
+
+def test_prepare_region_contrast_value_modes_rejects_duplicate_coordinate_rows():
+    result, position_table, _, _ = _region_contrast_plot_setup(_region_contrast_position_rows())
+    duplicated = pd.concat([position_table, position_table.iloc[[0]]], ignore_index=True)
+
+    with pytest.raises(ValueError, match="duplicate rows for the same coordinate"):
+        plotting._prepare_region_contrast_value_modes(
+            result=result,
+            position_table=duplicated,
+            grouping_key="condition",
+        )
+
+
 def test_prepare_single_read_plot_data_flips_negative_regions_to_5to3():
     reads = pd.DataFrame(
         [

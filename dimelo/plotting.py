@@ -104,17 +104,20 @@ def _region_contrast_grouping_key(result, position_table: pd.DataFrame) -> str:
         contrast_values.update(str(value) for value in (contrast.numerator or []))
         contrast_values.update(str(value) for value in (contrast.denominator or []))
 
-    if contrast_values:
-        sample_ids = {str(value) for value in position_table["sample_id"].dropna().unique()}
-        conditions = {str(value) for value in position_table["condition"].dropna().unique()}
-        sample_match = contrast_values.issubset(sample_ids)
-        condition_match = contrast_values.issubset(conditions)
-        if sample_match and not condition_match:
-            return "sample_id"
-        if condition_match and not sample_match:
-            return "condition"
+    sample_ids = {str(value) for value in position_table["sample_id"].dropna().unique()}
+    conditions = {str(value) for value in position_table["condition"].dropna().unique()}
+    sample_match = bool(contrast_values) and contrast_values.issubset(sample_ids)
+    condition_match = bool(contrast_values) and contrast_values.issubset(conditions)
 
-    return "condition"
+    if sample_match and not condition_match:
+        return "sample_id"
+    if condition_match and not sample_match:
+        return "condition"
+
+    raise ValueError(
+        "region contrast plotting could not resolve a unique grouping key from "
+        "position_table columns sample_id and condition."
+    )
 
 
 def _region_contrast_metadata(result) -> dict[str, object]:
@@ -354,12 +357,22 @@ def _prepare_region_contrast_value_modes(
     if numerator.empty or denominator.empty:
         raise ValueError("position_table does not contain rows for both contrast sides.")
 
+    join_keys = ["region_id", "position", "region_strand"]
+    for side_name, side_table in (("numerator", numerator), ("denominator", denominator)):
+        duplicate_mask = side_table.duplicated(join_keys, keep=False)
+        if duplicate_mask.any():
+            duplicate_rows = side_table.loc[duplicate_mask, join_keys + [grouping_key, "value"]].copy()
+            raise ValueError(
+                "position_table contains duplicate rows for the same coordinate on the "
+                f"{side_name} side. Duplicate rows: {duplicate_rows.to_dict(orient='records')}."
+            )
+
     numerator["value_mode"] = "numerator"
     denominator["value_mode"] = "denominator"
 
     delta = numerator.merge(
         denominator,
-        on=["region_id", "position", "region_strand"],
+        on=join_keys,
         suffixes=("_numerator", "_denominator"),
         how="inner",
     )
