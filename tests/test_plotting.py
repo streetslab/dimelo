@@ -433,7 +433,10 @@ def test_prepare_region_discovery_hit_context_data_uses_top_ranked_hits():
     )
 
     assert set(payload) == {"context_table", "selected_hits", "metadata"}
+    assert payload["selected_hits"]["window_id"].tolist() == ["chr1:100-200:+"]
     assert payload["selected_hits"]["rank"].tolist() == [1]
+    assert payload["context_table"]["selected_hit_id"].tolist() == ["chr1:100-200:+", "chr1:100-200:+"]
+    assert payload["context_table"]["window_id"].tolist() == ["chr1:0-100:+", "chr1:100-200:+"]
     assert payload["context_table"]["selected_hit_rank"].nunique() == 1
     assert payload["context_table"]["selected_hit_rank"].iloc[0] == 1
     assert payload["context_table"]["is_selected_hit"].sum() == 1
@@ -448,7 +451,8 @@ def test_prepare_region_discovery_hit_context_data_adds_relative_window_offsets(
         padding_windows=1,
     )
 
-    assert sorted(payload["context_table"]["relative_window_offset"].tolist()) == [-1, 0]
+    assert payload["context_table"]["window_id"].tolist() == ["chr1:0-100:+", "chr1:100-200:+"]
+    assert payload["context_table"]["relative_window_offset"].tolist() == [-1, 0]
 
 
 def test_prepare_region_discovery_hit_context_data_returns_empty_payload_for_no_hits():
