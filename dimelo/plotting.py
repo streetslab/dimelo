@@ -130,6 +130,68 @@ def _region_contrast_metadata(result) -> dict[str, object]:
     }
 
 
+def _validate_region_discovery_result(result) -> None:
+    if result is None:
+        raise ValueError("plotting helpers require a RegionDiscoveryResult.")
+    if not hasattr(result, "windows") or not hasattr(result, "hits") or not hasattr(result, "metadata"):
+        raise TypeError("plotting helpers require a RegionDiscoveryResult-like object.")
+
+
+def _select_discovery_score_column(windows: pd.DataFrame, score_column: str | None) -> str:
+    if score_column is not None:
+        if score_column not in windows.columns:
+            raise ValueError(f"Unknown discovery score column: {score_column}")
+        return score_column
+    if "score_value" in windows.columns or windows.empty:
+        return "score_value"
+    raise ValueError("Could not infer a discovery score column from RegionDiscoveryResult.windows.")
+
+
+def _empty_discovery_scan_table(score_column: str) -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "window_id",
+            "contig",
+            "start",
+            "end",
+            "strand",
+            score_column,
+            "window_midpoint",
+            "is_hit",
+        ]
+    )
+
+
+def _discovery_contig_column(table: pd.DataFrame, *, owner: str) -> str:
+    if "chromosome" in table.columns:
+        return "chromosome"
+    if "chrom" in table.columns:
+        return "chrom"
+    raise ValueError(f"{owner} must include either 'chromosome' or 'chrom'.")
+
+
+def _sort_discovery_table(
+    table: pd.DataFrame,
+    *,
+    contig_order: list[str],
+    sort_columns: list[str],
+) -> pd.DataFrame:
+    if table.empty:
+        return table.reset_index(drop=True)
+
+    sorted_table = table.copy()
+    sorted_table["__dimelo_contig_order"] = pd.Categorical(
+        sorted_table["contig"],
+        categories=contig_order,
+        ordered=True,
+    )
+    sorted_table = sorted_table.sort_values(
+        ["__dimelo_contig_order", *sort_columns],
+        kind="stable",
+    ).drop(columns="__dimelo_contig_order")
+    return sorted_table.reset_index(drop=True)
+
+
 def _relative_position(position: float, anchor: float) -> float:
     return float(position) - float(anchor)
 
@@ -550,6 +612,95 @@ def prepare_region_contrast_heatmap_data(
     }
     profile_payload["summary_table"] = row_order
     return profile_payload
+
+
+def prepare_region_discovery_scan_data(
+    *,
+    result,
+    contigs: list[str] | None = None,
+    top_n_hits: int | None = 100,
+    score_column: str | None = None,
+    include_all_windows: bool = True,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    _validate_region_discovery_result(result)
+
+    windows = result.windows.copy()
+    hits = result.hits.copy()
+    active_score_column = _select_discovery_score_column(windows, score_column)
+
+    if windows.empty:
+        empty_scan = _empty_discovery_scan_table(active_score_column)
+        empty_hits = pd.DataFrame(
+            columns=["window_id", "contig", "start", "end", "strand", active_score_column]
+        )
+        return {
+            "scan_table": empty_scan,
+            "hit_table": empty_hits,
+            "metadata": {
+                "contig_order": [],
+                "score_column": active_score_column,
+                "score_mode": result.metadata.get("score"),
+                "contrast_mode": result.metadata.get("contrast_mode"),
+                "merge_hits": result.metadata.get("merge_hits"),
+                "top_n_hits": top_n_hits,
+            },
+        }
+
+    _require_columns(windows, ("window_id", "start", "end", "strand"), "result.windows")
+    windows_contig_column = _discovery_contig_column(windows, owner="result.windows")
+    windows["contig"] = windows[windows_contig_column]
+
+    if hits.empty:
+        hits = pd.DataFrame(columns=windows.columns)
+    else:
+        _require_columns(hits, ("window_id", "start", "end", "strand"), "result.hits")
+        hits_contig_column = _discovery_contig_column(hits, owner="result.hits")
+        hits["contig"] = hits[hits_contig_column]
+
+    if contigs is not None:
+        windows = windows.loc[windows["contig"].isin(contigs)].copy()
+        hits = hits.loc[hits["contig"].isin(contigs)].copy()
+        if windows.empty:
+            raise ValueError("Requested contigs are not present in RegionDiscoveryResult.windows.")
+        contig_order = list(contigs)
+    else:
+        contig_order = windows["contig"].drop_duplicates().tolist()
+
+    if top_n_hits is not None and top_n_hits >= 0 and not hits.empty and "rank" in hits.columns:
+        hits = hits.sort_values(["rank"], kind="stable").head(top_n_hits).copy()
+
+    hit_window_ids = set(hits.get("window_id", pd.Series(dtype="object")).tolist())
+    windows["window_midpoint"] = (windows["start"] + windows["end"]) / 2.0
+    windows["is_hit"] = windows["window_id"].isin(hit_window_ids)
+
+    scan_table = windows if include_all_windows else windows.loc[windows["is_hit"]].copy()
+    scan_table = _sort_discovery_table(
+        scan_table,
+        contig_order=contig_order,
+        sort_columns=["start", "end"],
+    )
+
+    hit_sort_columns = ["start", "end"]
+    if "rank" in hits.columns:
+        hit_sort_columns = ["rank", *hit_sort_columns]
+    hit_table = _sort_discovery_table(
+        hits,
+        contig_order=contig_order,
+        sort_columns=hit_sort_columns,
+    )
+
+    return {
+        "scan_table": scan_table,
+        "hit_table": hit_table,
+        "metadata": {
+            "contig_order": contig_order,
+            "score_column": active_score_column,
+            "score_mode": result.metadata.get("score"),
+            "contrast_mode": result.metadata.get("contrast_mode"),
+            "merge_hits": result.metadata.get("merge_hits"),
+            "top_n_hits": top_n_hits,
+        },
+    }
 
 
 def prepare_single_read_plot_data(
