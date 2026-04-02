@@ -10,13 +10,71 @@ I'm beginning to lose the thread of where we check for regions making sense.
 Maybe this is an argument for an internal region class that makes checking easy? I don't know.
 """
 
+from collections.abc import Sequence
+import math
 from pathlib import Path
 
 import pandas as pd
 import seaborn as sns
 from matplotlib.axes import Axes
 
-from . import load_processed, utils
+from . import load_processed, plotting, utils
+
+
+def _legacy_single_read_axis_spec(
+    *,
+    relative: bool,
+    regions_5to3prime: bool,
+    window_size: int | None,
+    reads: Sequence[Sequence[object]],
+    regions_dict: dict | None,
+) -> plotting.AxisSpec:
+    if relative:
+        if window_size is not None:
+            half_window = window_size
+        elif regions_dict is not None and len(regions_dict) > 0:
+            region_start, region_end, _ = next(iter(regions_dict.values()))[0]
+            half_window = (region_end - region_start) // 2
+        else:
+            half_window = 0
+        return plotting.AxisSpec(
+            orientation="region_5to3" if regions_5to3prime else "genomic",
+            coordinate_mode="fixed_window",
+            anchor="center",
+            upstream_bp=half_window,
+            downstream_bp=half_window,
+        )
+
+    absolute_bound = 0.0
+    for read_positions in reads:
+        for position in read_positions:
+            absolute_bound = max(absolute_bound, abs(float(position)))
+
+    return plotting.AxisSpec(
+        orientation="genomic",
+        coordinate_mode="fixed_window",
+        anchor="absolute",
+        upstream_bp=math.ceil(absolute_bound),
+        downstream_bp=math.ceil(absolute_bound),
+    )
+
+
+def _legacy_single_read_plot_table(
+    reads: Sequence[Sequence[object]],
+    read_names: Sequence[object],
+    mods: Sequence[object],
+    *,
+    relative: bool,
+    regions_5to3prime: bool,
+) -> pd.DataFrame:
+    plot_table = pd.DataFrame({"read_name": read_names, "mod": mods, "pos": reads}).explode(
+        "pos"
+    )
+    plot_table = plot_table.reset_index(drop=True)
+    plot_table["anchor"] = 0.0
+    if relative and regions_5to3prime:
+        plot_table["region_strand"] = "+"
+    return plot_table
 
 
 def plot_reads(
@@ -87,13 +145,36 @@ def plot_reads(
                 )
             )
 
-    # Convert data frame where each row represents a read to a data frame where each row represents a single modified position in a read
-    df = pd.DataFrame({"read_name": read_names, "mod": mods, "pos": reads}).explode(
-        "pos"
+    plot_table = _legacy_single_read_plot_table(
+        reads,
+        read_names,
+        mods,
+        relative=relative,
+        regions_5to3prime=regions_5to3prime,
+    )
+    axis = _legacy_single_read_axis_spec(
+        relative=relative,
+        regions_5to3prime=regions_5to3prime,
+        window_size=window_size,
+        reads=reads,
+        regions_dict=regions_dict,
+    )
+    prep_kwargs: dict[str, str] = {
+        "position_column": "pos",
+        "anchor_column": "anchor",
+    }
+    if axis.orientation == "region_5to3":
+        prep_kwargs["region_strand_column"] = "region_strand"
+
+    prepared = plotting.prepare_single_read_plot_data(
+        plot_table,
+        plot_family="single_read_raster",
+        axis=axis,
+        **prep_kwargs,
     )
     axes = sns.scatterplot(
-        data=df,
-        x="pos",
+        data=prepared["plot_table"],
+        x="plot_x",
         y="read_name",
         hue="mod",
         # palette=colors,

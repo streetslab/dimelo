@@ -1,8 +1,8 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
 
-from dimelo import plot_enrichment_profile, plotting
+from dimelo import plot_enrichment_profile, plot_reads, plotting
 
 
 def test_axis_spec_accepts_fixed_window_region_5to3():
@@ -423,6 +423,69 @@ def test_prepare_single_read_plot_data_rejects_segment_map_axes():
             anchor_column="anchor",
             region_strand_column="region_strand",
         )
+
+
+def test_plot_reads_routes_region_5to3prime_into_shared_single_read_prep(monkeypatch):
+    captured = {}
+
+    def fake_loader(**kwargs):
+        return (
+            [np.array([110.0])],
+            np.array(["read-1"]),
+            np.array(["A,0"]),
+            {"chr1": [(100, 120, "-")]},
+        )
+
+    real_prepare = plotting.prepare_single_read_plot_data
+
+    def spy_prepare(table, *, plot_family, axis, **kwargs):
+        captured["table"] = table
+        captured["plot_family"] = plot_family
+        captured["axis"] = axis
+        captured["kwargs"] = kwargs
+        return real_prepare(table, plot_family=plot_family, axis=axis, **kwargs)
+
+    class FakeAxes:
+        def __init__(self):
+            self.legend_ = None
+            self.xlim = None
+
+        def legend(self, *args, **kwargs):
+            self.legend_args = (args, kwargs)
+
+        def get_legend_handles_labels(self):
+            return ([], [])
+
+        def set_xlim(self, limits):
+            self.xlim = limits
+
+    monkeypatch.setattr(
+        "dimelo.plot_reads.load_processed.readwise_binary_modification_arrays",
+        fake_loader,
+    )
+    monkeypatch.setattr(
+        "dimelo.plot_reads.plotting.prepare_single_read_plot_data",
+        spy_prepare,
+    )
+    monkeypatch.setattr("dimelo.plot_reads.sns.scatterplot", lambda **kwargs: FakeAxes())
+
+    axes = plot_reads.plot_reads(
+        mod_file_name="sample.h5",
+        regions="regions.bed",
+        motifs=["A,0"],
+        window_size=20,
+        relative=True,
+        regions_5to3prime=True,
+    )
+
+    assert isinstance(axes, FakeAxes)
+    assert captured["plot_family"] == "single_read_raster"
+    assert captured["axis"].orientation == "region_5to3"
+    assert captured["axis"].coordinate_mode == "fixed_window"
+    assert captured["axis"].anchor == "center"
+    assert captured["axis"].upstream_bp == 20
+    assert captured["axis"].downstream_bp == 20
+    assert list(captured["table"]["region_strand"]) == ["+"]
 
 
 def test_prepare_aggregate_plot_data_builds_concatenated_segment_axis():
