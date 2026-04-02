@@ -474,13 +474,13 @@ This is consistent with the current direction of `plot_data` in newer workflow r
 
 Recommended direction:
 
-- expand [plotting.py](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py)
+- expand [plotting.py](../../../dimelo/plotting.py)
   to hold the shared plot-data preparation core
 
 - keep existing modules such as:
-  - [plot_enrichment_profile.py](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plot_enrichment_profile.py)
-  - [plot_depth_profile.py](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plot_depth_profile.py)
-  - [plot_reads.py](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plot_reads.py)
+  - [plot_enrichment_profile.py](../../../dimelo/plot_enrichment_profile.py)
+  - [plot_depth_profile.py](../../../dimelo/plot_depth_profile.py)
+  - [plot_reads.py](../../../dimelo/plot_reads.py)
   as wrappers or adapters during the transition
 
 - route newer workflow `plot_data` preparation through the shared plotting core where it makes sense

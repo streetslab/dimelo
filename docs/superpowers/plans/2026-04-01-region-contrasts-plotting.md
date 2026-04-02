@@ -4,7 +4,7 @@
 
 **Goal:** Add fixed-window, data-first plotting helpers for `dimelo.region_contrasts` that prepare profile and heatmap payloads from a `RegionContrastResult` plus an explicit positional source table.
 
-**Architecture:** Extend [plotting.py](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py) with a small internal join/validation layer for contrast results and positional source tables, then expose two public helpers: one for aggregate profiles and one for heatmaps. Keep `region_contrasts` unchanged; plotting prep consumes existing `RegionContrastResult` tables and parse/load-derived positional summaries, uses the shared `AxisSpec` / `AggregationSpec` fixed-window path, and returns renderer-neutral payloads.
+**Architecture:** Extend [plotting.py](../../../dimelo/plotting.py) with a small internal join/validation layer for contrast results and positional source tables, then expose two public helpers: one for aggregate profiles and one for heatmaps. Keep `region_contrasts` unchanged; plotting prep consumes existing `RegionContrastResult` tables and parse/load-derived positional summaries, uses the shared `AxisSpec` / `AggregationSpec` fixed-window path, and returns renderer-neutral payloads.
 
 **Tech Stack:** Python 3.11, pandas, pytest, existing `dimelo.plotting` shared axis helpers, existing `RegionContrastResult` models
 
@@ -12,28 +12,28 @@
 
 ## File Structure
 
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py`
+- Modify: `dimelo/plotting.py`
   - Add internal helpers for validating/joining `RegionContrastResult` against a positional source table.
   - Add `prepare_region_contrast_profile_data(...)`.
   - Add `prepare_region_contrast_heatmap_data(...)`.
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
+- Modify: `tests/test_plotting.py`
   - Add regression tests for the new plot-prep helpers.
   - Cover both numerator/denominator/delta payload generation and failure modes.
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-contrasts.md`
+- Modify: `docs/region-contrasts.md`
   - Document the new helper APIs and the required `position_table` contract.
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md`
+- Modify: `README.md`
   - Add a short compatibility note pointing users from `region_contrasts` into the new plotting helpers.
 
 ### Task 1: Add minimal failing tests for contrast-to-position joins
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
-- Reference: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/models.py`
-- Reference: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py`
+- Modify: `tests/test_plotting.py`
+- Reference: `dimelo/models.py`
+- Reference: `dimelo/plotting.py`
 
 - [ ] **Step 1: Write the failing tests for a minimal profile payload**
 
-Add these tests near the other plotting helper tests in `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`:
+Add these tests near the other plotting helper tests in `tests/test_plotting.py`:
 
 ```python
 from dimelo.models import ContrastSpec, RegionContrastResult
@@ -187,7 +187,7 @@ def test_prepare_region_contrast_profile_data_requires_joinable_grouping_key():
 Run:
 
 ```bash
-MPLCONFIGDIR=/tmp/mpl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -k "region_contrast_profile_data or region_contrast_heatmap_data" -q
+MPLCONFIGDIR=/tmp/mpl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -k "region_contrast_profile_data or region_contrast_heatmap_data" -q
 ```
 
 Expected: FAIL with `AttributeError` or `NameError` because the new plotting helpers do not exist yet.
@@ -195,19 +195,19 @@ Expected: FAIL with `AttributeError` or `NameError` because the new plotting hel
 - [ ] **Step 4: Commit the failing-test scaffold**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py
+git add tests/test_plotting.py
 git commit -m "test: add region contrast plotting coverage"
 ```
 
 ### Task 2: Implement shared join and normalization helpers
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py`
-- Test: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
+- Modify: `dimelo/plotting.py`
+- Test: `tests/test_plotting.py`
 
 - [ ] **Step 1: Add a contrast-result metadata reader and join-key validator**
 
-Insert small internal helpers in `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py` below the existing validation helpers:
+Insert small internal helpers in `dimelo/plotting.py` below the existing validation helpers:
 
 ```python
 def _region_contrast_grouping_key(result, position_table: pd.DataFrame) -> str:
@@ -310,7 +310,7 @@ def _prepare_region_contrast_value_modes(
 Run:
 
 ```bash
-MPLCONFIGDIR=/tmp/mpl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -k "region_contrast_profile_data_requires_joinable_grouping_key" -q
+MPLCONFIGDIR=/tmp/mpl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -k "region_contrast_profile_data_requires_joinable_grouping_key" -q
 ```
 
 Expected: PASS for the validation test, while the helper-existence tests still fail.
@@ -318,19 +318,19 @@ Expected: PASS for the validation test, while the helper-existence tests still f
 - [ ] **Step 5: Commit the join/validation layer**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py
+git add dimelo/plotting.py tests/test_plotting.py
 git commit -m "feat: add region contrast plotting join helpers"
 ```
 
 ### Task 3: Implement `prepare_region_contrast_profile_data(...)`
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py`
-- Test: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
+- Modify: `dimelo/plotting.py`
+- Test: `tests/test_plotting.py`
 
 - [ ] **Step 1: Add the public helper using the shared fixed-window prep**
 
-Add this function in `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py` near the other public plotting helpers:
+Add this function in `dimelo/plotting.py` near the other public plotting helpers:
 
 ```python
 def prepare_region_contrast_profile_data(
@@ -402,7 +402,7 @@ This keeps the helper aligned with the actual fixed-window substrate instead of 
 Run:
 
 ```bash
-MPLCONFIGDIR=/tmp/mpl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -k "prepare_region_contrast_profile_data" -q
+MPLCONFIGDIR=/tmp/mpl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -k "prepare_region_contrast_profile_data" -q
 ```
 
 Expected: PASS for the profile tests.
@@ -410,19 +410,19 @@ Expected: PASS for the profile tests.
 - [ ] **Step 4: Commit the profile helper**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py
+git add dimelo/plotting.py tests/test_plotting.py
 git commit -m "feat: add region contrast profile plotting prep"
 ```
 
 ### Task 4: Implement `prepare_region_contrast_heatmap_data(...)`
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py`
-- Test: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
+- Modify: `dimelo/plotting.py`
+- Test: `tests/test_plotting.py`
 
 - [ ] **Step 1: Add the heatmap helper on top of the same substrate**
 
-Add this function in `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py`:
+Add this function in `dimelo/plotting.py`:
 
 ```python
 def prepare_region_contrast_heatmap_data(
@@ -459,7 +459,7 @@ def prepare_region_contrast_heatmap_data(
 
 - [ ] **Step 2: Add a failure-mode test for missing contrast-side rows**
 
-Extend `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py` with:
+Extend `tests/test_plotting.py` with:
 
 ```python
 def test_prepare_region_contrast_heatmap_data_requires_both_contrast_sides():
@@ -493,7 +493,7 @@ def test_prepare_region_contrast_heatmap_data_requires_both_contrast_sides():
 Run:
 
 ```bash
-MPLCONFIGDIR=/tmp/mpl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -q
+MPLCONFIGDIR=/tmp/mpl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -q
 ```
 
 Expected: PASS, including the new heatmap coverage.
@@ -501,22 +501,22 @@ Expected: PASS, including the new heatmap coverage.
 - [ ] **Step 4: Commit the heatmap helper**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py
+git add dimelo/plotting.py tests/test_plotting.py
 git commit -m "feat: add region contrast heatmap plotting prep"
 ```
 
 ### Task 5: Document the new plotting helpers and verify the slice
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-contrasts.md`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md`
-- Verify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
-- Verify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_region_contrasts.py`
-- Verify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_workflows.py`
+- Modify: `docs/region-contrasts.md`
+- Modify: `README.md`
+- Verify: `tests/test_plotting.py`
+- Verify: `tests/test_region_contrasts.py`
+- Verify: `tests/test_workflows.py`
 
 - [ ] **Step 1: Add a region-contrasts plotting example**
 
-Append a short section to `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-contrasts.md`:
+Append a short section to `docs/region-contrasts.md`:
 
 ```python
 profile_payload = plotting.prepare_region_contrast_profile_data(
@@ -538,7 +538,7 @@ Add one sentence clarifying that `position_table` must already be an aggregated 
 
 - [ ] **Step 2: Add a short README compatibility note**
 
-Add one short paragraph to `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md` under the plotting section explaining:
+Add one short paragraph to `README.md` under the plotting section explaining:
 
 ```text
 Newer region-contrast plotting helpers accept a RegionContrastResult plus an explicit position_table from the parsing/loading layer. This keeps region scoring and positional extraction separate while still using the shared plotting-axis system.
@@ -549,7 +549,7 @@ Newer region-contrast plotting helpers accept a RegionContrastResult plus an exp
 Run:
 
 ```bash
-MPLCONFIGDIR=/tmp/mpl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_region_contrasts.py /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_workflows.py -q
+MPLCONFIGDIR=/tmp/mpl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py tests/test_region_contrasts.py tests/test_workflows.py -q
 ```
 
 Expected: PASS. If warnings appear, note them in the summary only if they are new or blocking.
@@ -557,7 +557,7 @@ Expected: PASS. If warnings appear, note them in the summary only if they are ne
 - [ ] **Step 4: Commit the docs and final verification slice**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-contrasts.md /Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md /Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py
+git add docs/region-contrasts.md README.md dimelo/plotting.py tests/test_plotting.py
 git commit -m "docs: add region contrast plotting guide"
 ```
 

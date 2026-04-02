@@ -12,28 +12,28 @@
 
 ## File Map
 
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py`
+- Modify: `dimelo/plotting.py`
   - Add shared plotting spec dataclasses, validation, and plot-data prep helpers.
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plot_enrichment_profile.py`
+- Modify: `dimelo/plot_enrichment_profile.py`
   - Route one aggregate legacy plotter through the shared plotting core without changing public defaults.
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plot_reads.py`
+- Modify: `dimelo/plot_reads.py`
   - Route one single-read legacy plotter through the shared plotting core without allowing scaled continuous axes.
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-contrasts.md`
+- Modify: `docs/region-contrasts.md`
   - Document aggregate positional plotting semantics and compatibility notes.
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/shared-clustering.md`
+- Modify: `docs/shared-clustering.md`
   - Document how the shared plotting layer applies to workflow `plot_data`.
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md`
+- Modify: `README.md`
   - Add compatibility mapping between old plotting flags and new axis concepts.
-- Create: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
+- Create: `tests/test_plotting.py`
   - Add focused tests for spec validation and plot-data preparation.
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/test/dimelo_test.py`
+- Modify: `dimelo/test/dimelo_test.py`
   - Preserve regression coverage for existing plotter entry points where needed.
 
 ### Task 1: Add Shared Plotting Specs And Validation
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py`
-- Create: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
+- Modify: `dimelo/plotting.py`
+- Create: `tests/test_plotting.py`
 
 - [ ] **Step 1: Write the failing tests for axis and aggregation spec validation**
 
@@ -101,7 +101,7 @@ def test_aggregation_spec_accepts_equal_region_default():
 
 - [ ] **Step 2: Run the new tests to verify they fail**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -q`
 
 Expected: FAIL with import or attribute errors for `AxisSpec`, `SegmentSpec`, `AggregationSpec`, or validation helpers not yet existing.
 
@@ -168,23 +168,23 @@ def validate_aggregation_spec(spec: AggregationSpec) -> None:
 
 - [ ] **Step 4: Run the spec-validation tests to verify they pass**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -q`
 
 Expected: PASS for the new validation tests.
 
 - [ ] **Step 5: Commit the shared plotting spec scaffolding**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py \
-        /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py
+git add dimelo/plotting.py \
+        tests/test_plotting.py
 git commit -m "feat: add plotting axis spec validation"
 ```
 
 ### Task 2: Implement Fixed-Window Plot Data Prep
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
+- Modify: `dimelo/plotting.py`
+- Modify: `tests/test_plotting.py`
 
 - [ ] **Step 1: Write failing tests for fixed-window orientation prep**
 
@@ -264,7 +264,7 @@ def test_prepare_aggregate_plot_data_retains_metadata_for_fixed_window():
 
 - [ ] **Step 2: Run the fixed-window tests to verify they fail**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -k fixed_window -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -k fixed_window -q`
 
 Expected: FAIL because `prepare_single_read_plot_data()` and `prepare_aggregate_plot_data()` do not yet exist.
 
@@ -347,23 +347,23 @@ def prepare_aggregate_plot_data(
 
 - [ ] **Step 4: Run the fixed-window tests to verify they pass**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -k fixed_window -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -k fixed_window -q`
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit the fixed-window prep slice**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py \
-        /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py
+git add dimelo/plotting.py \
+        tests/test_plotting.py
 git commit -m "feat: add fixed-window plotting prep"
 ```
 
 ### Task 3: Implement Aggregate Segment-Map Prep
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
+- Modify: `dimelo/plotting.py`
+- Modify: `tests/test_plotting.py`
 
 - [ ] **Step 1: Write failing tests for contiguous and non-contiguous aggregate segment maps**
 
@@ -452,7 +452,7 @@ def test_prepare_aggregate_plot_data_marks_non_contiguous_segment_breaks():
 
 - [ ] **Step 2: Run the segment-map tests to verify they fail**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -k segment -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -k segment -q`
 
 Expected: FAIL because segment-map prep is not yet implemented.
 
@@ -507,24 +507,24 @@ def prepare_aggregate_plot_data(..., segment_id_column: str | None = None, segme
 
 - [ ] **Step 4: Run the segment-map tests to verify they pass**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -k segment -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -k segment -q`
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit the aggregate segment-map slice**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py \
-        /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py
+git add dimelo/plotting.py \
+        tests/test_plotting.py
 git commit -m "feat: add aggregate segment-map plotting prep"
 ```
 
 ### Task 4: Route One Aggregate Legacy Plotter Through The Shared Core
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plot_enrichment_profile.py`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/test/dimelo_test.py`
+- Modify: `dimelo/plot_enrichment_profile.py`
+- Modify: `tests/test_plotting.py`
+- Modify: `dimelo/test/dimelo_test.py`
 
 - [ ] **Step 1: Write a regression test that legacy `regions_5to3prime` maps through the new axis logic**
 
@@ -547,7 +547,7 @@ def test_legacy_enrichment_profile_retains_regions_5to3prime_behavior(monkeypatc
 
 - [ ] **Step 2: Run the regression test to verify it fails**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -k enrichment_profile -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -k enrichment_profile -q`
 
 Expected: FAIL because the legacy plotter does not yet call the shared prep layer.
 
@@ -581,25 +581,25 @@ payload = plotting.prepare_aggregate_plot_data(
 
 - [ ] **Step 4: Run the aggregate wrapper tests**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -k enrichment_profile -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -k enrichment_profile -q`
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit the aggregate wrapper integration**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plot_enrichment_profile.py \
-        /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py \
-        /Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/test/dimelo_test.py
+git add dimelo/plot_enrichment_profile.py \
+        tests/test_plotting.py \
+        dimelo/test/dimelo_test.py
 git commit -m "refactor: route aggregate plotter through plotting core"
 ```
 
 ### Task 5: Route One Single-Read Legacy Plotter Through The Shared Core
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plot_reads.py`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/test/dimelo_test.py`
+- Modify: `dimelo/plot_reads.py`
+- Modify: `tests/test_plotting.py`
+- Modify: `dimelo/test/dimelo_test.py`
 
 - [ ] **Step 1: Write a failing regression test for single-read compatibility**
 
@@ -637,7 +637,7 @@ def test_prepare_single_read_plot_data_rejects_scaled_segment_axes():
 
 - [ ] **Step 2: Run the single-read tests to verify they fail**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -k single_read -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -k single_read -q`
 
 Expected: FAIL because the legacy single-read plotter is not yet routed through the shared prep helper.
 
@@ -663,26 +663,26 @@ payload = plotting.prepare_single_read_plot_data(
 
 - [ ] **Step 4: Run the single-read compatibility tests**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -k single_read -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -k single_read -q`
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit the single-read wrapper integration**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plot_reads.py \
-        /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py \
-        /Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/test/dimelo_test.py
+git add dimelo/plot_reads.py \
+        tests/test_plotting.py \
+        dimelo/test/dimelo_test.py
 git commit -m "refactor: route single-read plotter through plotting core"
 ```
 
 ### Task 6: Update User-Facing Plotting Documentation And Run Final Verification
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-contrasts.md`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/shared-clustering.md`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py`
+- Modify: `docs/region-contrasts.md`
+- Modify: `docs/shared-clustering.md`
+- Modify: `README.md`
+- Modify: `tests/test_plotting.py`
 
 - [ ] **Step 1: Write a failing documentation-backed test for compatibility mapping if needed**
 
@@ -695,7 +695,7 @@ def test_plotting_core_exports_shared_specs():
 
 - [ ] **Step 2: Run the focused plotting suite before doc edits**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py -q`
 
 Expected: PASS before final docs, confirming the plotting core is stable.
 
@@ -711,17 +711,17 @@ Expected: PASS before final docs, confirming the plotting core is stable.
 
 - [ ] **Step 4: Run the branch verification slice**
 
-Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_region_contrasts.py /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_workflows.py -q`
+Run: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest tests/test_plotting.py tests/test_region_contrasts.py tests/test_workflows.py -q`
 
 Expected: PASS with no new failures. Existing non-blocking warnings are acceptable if unchanged and understood.
 
 - [ ] **Step 5: Commit docs and final verification state**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_plotting.py \
-        /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-contrasts.md \
-        /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/shared-clustering.md \
-        /Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md
+git add tests/test_plotting.py \
+        docs/region-contrasts.md \
+        docs/shared-clustering.md \
+        README.md
 git commit -m "docs: add shared plotting axis guidance"
 ```
 

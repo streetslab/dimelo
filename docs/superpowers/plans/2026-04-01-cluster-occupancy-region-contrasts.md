@@ -13,8 +13,8 @@
 ### Task 1: Extend Validation And Occupancy Evidence Builders
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/region_contrasts.py`
-- Test: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_region_contrasts.py`
+- Modify: `dimelo/region_contrasts.py`
+- Test: `tests/test_region_contrasts.py`
 
 - [ ] **Step 1: Write the failing validation and evidence-table tests**
 
@@ -112,8 +112,8 @@ git commit -m "feat: add cluster occupancy contrast evidence builders"
 ### Task 2: Add Sample-Level Occupancy Scoring
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/region_contrasts.py`
-- Test: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_region_contrasts.py`
+- Modify: `dimelo/region_contrasts.py`
+- Test: `tests/test_region_contrasts.py`
 
 - [ ] **Step 1: Write the failing scoring tests**
 
@@ -232,10 +232,10 @@ git commit -m "feat: add cluster occupancy region scoring"
 ### Task 3: Document Occupancy Contrasts And Verify The Slice
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-contrasts.md`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/shared-clustering.md`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md`
-- Test: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_region_contrasts.py`
+- Modify: `docs/region-contrasts.md`
+- Modify: `docs/shared-clustering.md`
+- Modify: `README.md`
+- Test: `tests/test_region_contrasts.py`
 
 - [ ] **Step 1: Add one occupancy-driven example**
 

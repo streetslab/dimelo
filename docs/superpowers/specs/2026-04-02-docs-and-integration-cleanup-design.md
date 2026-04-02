@@ -117,13 +117,13 @@ The implementation plan should likely touch or inspect:
 
 - `docs/superpowers/specs/`
 - `docs/superpowers/plans/`
-- [README.md](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md)
-- [docs/region-contrasts.md](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-contrasts.md)
-- [docs/shared-clustering.md](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/shared-clustering.md)
-- [docs/region-discovery.md](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-discovery.md)
-- [docs/global-analysis.md](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/global-analysis.md)
-- [dimelo/__init__.py](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/__init__.py)
-- [dimelo/plotting.py](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py)
+- [README.md](../../../README.md)
+- [docs/region-contrasts.md](../../region-contrasts.md)
+- [docs/shared-clustering.md](../../shared-clustering.md)
+- [docs/region-discovery.md](../../region-discovery.md)
+- [docs/global-analysis.md](../../global-analysis.md)
+- [dimelo/__init__.py](../../../dimelo/__init__.py)
+- [dimelo/plotting.py](../../../dimelo/plotting.py)
 
 The implementation plan does not need to modify all of them. This list exists to constrain where the integration cleanup should look.
 

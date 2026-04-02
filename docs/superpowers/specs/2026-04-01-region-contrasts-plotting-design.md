@@ -37,7 +37,7 @@ This keeps responsibilities clean:
 
 ## Public API
 
-Add two public helpers in [plotting.py](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/plotting.py):
+Add two public helpers in [plotting.py](../../../dimelo/plotting.py):
 
 - `prepare_region_contrast_profile_data(...)`
 - `prepare_region_contrast_heatmap_data(...)`
@@ -127,7 +127,7 @@ This keeps occupancy plotting opt-in and data-driven rather than pretending all 
 
 ## Axis Rules
 
-These helpers must use the shared plotting-axis model already established in [2026-04-01-plotting-axis-architecture-design.md](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/specs/2026-04-01-plotting-axis-architecture-design.md).
+These helpers must use the shared plotting-axis model already established in [2026-04-01-plotting-axis-architecture-design.md](2026-04-01-plotting-axis-architecture-design.md).
 
 ### V1 axis support
 

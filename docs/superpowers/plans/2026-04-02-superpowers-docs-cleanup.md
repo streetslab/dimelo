@@ -4,7 +4,7 @@
 
 **Goal:** Track the existing internal plan docs in git and add a central `docs/superpowers` index that maps specs and plans to their current implementation status.
 
-**Architecture:** Keep the existing `docs/superpowers/specs` and `docs/superpowers/plans` directories unchanged, then add one central [README.md](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/README.md) that explains the layout, groups the existing work by theme, and labels status centrally. This is a docs-only cleanup slice; it should not rewrite historical spec/plan content or touch runtime code.
+**Architecture:** Keep the existing `docs/superpowers/specs` and `docs/superpowers/plans` directories unchanged, then add one central [README.md](../README.md) that explains the layout, groups the existing work by theme, and labels status centrally. This is a docs-only cleanup slice; it should not rewrite historical spec/plan content or touch runtime code.
 
 **Tech Stack:** Markdown docs, git, existing `docs/superpowers/specs` and `docs/superpowers/plans` content
 
@@ -12,24 +12,24 @@
 
 ## File Structure
 
-- Create: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/README.md`
+- Create: `docs/superpowers/README.md`
   - Central index for specs, plans, themes, and status labels.
-- Stage existing untracked files under `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/`
+- Stage existing untracked files under `docs/superpowers/plans/`
   - No content edits required unless a broken filename/path is discovered.
-- Verify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/specs/`
-- Verify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/`
+- Verify: `docs/superpowers/specs/`
+- Verify: `docs/superpowers/plans/`
 
 ### Task 1: Create the central `docs/superpowers` index
 
 **Files:**
-- Create: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/README.md`
-- Reference: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/specs/2026-04-02-superpowers-docs-cleanup-design.md`
-- Reference: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/specs/`
-- Reference: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/`
+- Create: `docs/superpowers/README.md`
+- Reference: `docs/superpowers/specs/2026-04-02-superpowers-docs-cleanup-design.md`
+- Reference: `docs/superpowers/specs/`
+- Reference: `docs/superpowers/plans/`
 
 - [ ] **Step 1: Write the new index file**
 
-Create `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/README.md` with this exact starter structure:
+Create `docs/superpowers/README.md` with this exact starter structure:
 
 ```md
 # Superpowers Docs Index
@@ -68,7 +68,7 @@ Use this style:
 ```md
 ### Shared Clustering
 
-- [2026-03-31-shared-cluster-distribution-design.md](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/specs/2026-03-31-shared-cluster-distribution-design.md) - shared-boundary clustering architecture and artifact model. Status: `partially implemented`
+- [2026-03-31-shared-cluster-distribution-design.md](../specs/2026-03-31-shared-cluster-distribution-design.md) - shared-boundary clustering architecture and artifact model. Status: `partially implemented`
 ```
 
 Include at least these specs:
@@ -88,7 +88,7 @@ Populate `## Plans` with grouped bullets for all current plan files in `docs/sup
 ```md
 ### Plotting
 
-- [2026-04-01-plotting-axis-architecture.md](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-plotting-axis-architecture.md) - shared plotting-axis implementation slice. Status: `implemented`
+- [2026-04-01-plotting-axis-architecture.md](2026-04-01-plotting-axis-architecture.md) - shared plotting-axis implementation slice. Status: `implemented`
 ```
 
 List all current plan files:
@@ -121,29 +121,29 @@ Add a short theme map that points readers to the most relevant spec/plan chains,
 - [ ] **Step 5: Commit the new index**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/README.md
+git add docs/superpowers/README.md
 git commit -m "docs: add superpowers docs index"
 ```
 
 ### Task 2: Stage and track the existing untracked plan files
 
 **Files:**
-- Stage: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-03-31-global-analysis-foundations.md`
-- Stage: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-03-31-region-contrasts-foundations.md`
-- Stage: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-03-31-region-discovery-foundations.md`
-- Stage: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-cluster-occupancy-region-contrasts.md`
-- Stage: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-discovery-cluster-contrast-workflow.md`
-- Stage: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-paired-region-discovery.md`
-- Stage: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-plotting-axis-architecture.md`
-- Stage: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-region-contrasts-plotting.md`
-- Stage: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-region-discovery-cluster-workflow.md`
+- Stage: `docs/superpowers/plans/2026-03-31-global-analysis-foundations.md`
+- Stage: `docs/superpowers/plans/2026-03-31-region-contrasts-foundations.md`
+- Stage: `docs/superpowers/plans/2026-03-31-region-discovery-foundations.md`
+- Stage: `docs/superpowers/plans/2026-04-01-cluster-occupancy-region-contrasts.md`
+- Stage: `docs/superpowers/plans/2026-04-01-discovery-cluster-contrast-workflow.md`
+- Stage: `docs/superpowers/plans/2026-04-01-paired-region-discovery.md`
+- Stage: `docs/superpowers/plans/2026-04-01-plotting-axis-architecture.md`
+- Stage: `docs/superpowers/plans/2026-04-01-region-contrasts-plotting.md`
+- Stage: `docs/superpowers/plans/2026-04-01-region-discovery-cluster-workflow.md`
 
 - [ ] **Step 1: Confirm the currently untracked plan set**
 
 Run:
 
 ```bash
-git status --short /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans
+git status --short docs/superpowers/plans
 ```
 
 Expected: the plan files above appear as untracked (`??`).
@@ -154,44 +154,44 @@ Run:
 
 ```bash
 git add \
-  /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-03-31-global-analysis-foundations.md \
-  /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-03-31-region-contrasts-foundations.md \
-  /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-03-31-region-discovery-foundations.md \
-  /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-cluster-occupancy-region-contrasts.md \
-  /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-discovery-cluster-contrast-workflow.md \
-  /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-paired-region-discovery.md \
-  /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-plotting-axis-architecture.md \
-  /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-region-contrasts-plotting.md \
-  /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-01-region-discovery-cluster-workflow.md \
-  /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/2026-04-02-superpowers-docs-cleanup.md
+  docs/superpowers/plans/2026-03-31-global-analysis-foundations.md \
+  docs/superpowers/plans/2026-03-31-region-contrasts-foundations.md \
+  docs/superpowers/plans/2026-03-31-region-discovery-foundations.md \
+  docs/superpowers/plans/2026-04-01-cluster-occupancy-region-contrasts.md \
+  docs/superpowers/plans/2026-04-01-discovery-cluster-contrast-workflow.md \
+  docs/superpowers/plans/2026-04-01-paired-region-discovery.md \
+  docs/superpowers/plans/2026-04-01-plotting-axis-architecture.md \
+  docs/superpowers/plans/2026-04-01-region-contrasts-plotting.md \
+  docs/superpowers/plans/2026-04-01-region-discovery-cluster-workflow.md \
+  docs/superpowers/plans/2026-04-02-superpowers-docs-cleanup.md
 ```
 
 - [ ] **Step 3: Commit the tracked plan artifacts**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans
+git add docs/superpowers/plans
 git commit -m "docs: track superpowers implementation plans"
 ```
 
 ### Task 3: Verify the index and status map against the repo
 
 **Files:**
-- Verify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/README.md`
-- Verify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/specs/`
-- Verify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/plans/`
+- Verify: `docs/superpowers/README.md`
+- Verify: `docs/superpowers/specs/`
+- Verify: `docs/superpowers/plans/`
 
 - [ ] **Step 1: Check that every linked file in the index exists**
 
 Run:
 
 ```bash
-rg -o '/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/[^)]+' /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/README.md
+rg -o 'docs/superpowers/[^)]+' docs/superpowers/README.md
 ```
 
 Then verify those paths exist with:
 
 ```bash
-test -f /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/README.md
+test -f docs/superpowers/README.md
 ```
 
 Expected: every file referenced by the index exists on disk.
@@ -201,7 +201,7 @@ Expected: every file referenced by the index exists on disk.
 Run:
 
 ```bash
-git status --short /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers
+git status --short docs/superpowers
 ```
 
 Expected: no `??` entries remain for the tracked plan docs.
@@ -217,7 +217,7 @@ Manually confirm the index does not mark unfinished families as fully complete. 
 - [ ] **Step 4: Commit any index corrections from verification**
 
 ```bash
-git add /Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/README.md
+git add docs/superpowers/README.md
 git commit -m "docs: verify superpowers docs status index"
 ```
 

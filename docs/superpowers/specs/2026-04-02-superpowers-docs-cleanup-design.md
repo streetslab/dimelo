@@ -59,7 +59,7 @@ It should not:
 
 Add one central index file:
 
-- [README.md](/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/superpowers/README.md)
+- [README.md](../README.md)
 
 Keep the existing layout:
 

@@ -12,13 +12,13 @@
 
 ## File Map
 
-- `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/region_discovery.py`
+- `dimelo/region_discovery.py`
   Add pairing-resolution helpers, paired-window table helpers, `matched_pairwise` scoring, paired `time_course` scoring, and paired metadata emission.
-- `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_region_discovery.py`
+- `tests/test_region_discovery.py`
   Add regression tests for complete-pair filtering, strict missing-pair errors, paired ranking columns, paired metadata, time-order validation, and downstream handoff.
-- `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-discovery.md`
+- `docs/region-discovery.md`
   Document when to use pooled discovery vs paired discovery, required sample metadata, and paired examples.
-- `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md`
+- `README.md`
   Update the discovery guide link text to mention paired discovery support.
 
 Scope note:
@@ -31,8 +31,8 @@ Scope note:
 ### Task 1: Add Pair Resolution And Paired-Window Helpers
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/region_discovery.py`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_region_discovery.py`
+- Modify: `dimelo/region_discovery.py`
+- Modify: `tests/test_region_discovery.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -175,8 +175,8 @@ git commit -m "feat: add paired region discovery pair resolution"
 ### Task 2: Add `matched_pairwise` Scoring And Paired Metadata
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/region_discovery.py`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_region_discovery.py`
+- Modify: `dimelo/region_discovery.py`
+- Modify: `tests/test_region_discovery.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -337,8 +337,8 @@ git commit -m "feat: add matched pairwise region discovery scoring"
 ### Task 3: Add Paired Ordered `time_course` Discovery
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/region_discovery.py`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_region_discovery.py`
+- Modify: `dimelo/region_discovery.py`
+- Modify: `tests/test_region_discovery.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -466,9 +466,9 @@ git commit -m "feat: add paired time-course region discovery"
 ### Task 4: Add Downstream Handoff Coverage And User Docs
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_region_discovery.py`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-discovery.md`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md`
+- Modify: `tests/test_region_discovery.py`
+- Modify: `docs/region-discovery.md`
+- Modify: `README.md`
 
 - [ ] **Step 1: Write the failing tests**
 

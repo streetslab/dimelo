@@ -13,9 +13,9 @@
 ### Task 1: Add The Combined Result Model
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/models.py`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/__init__.py`
-- Test: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_models.py`
+- Modify: `dimelo/models.py`
+- Modify: `dimelo/__init__.py`
+- Test: `tests/test_models.py`
 
 - [ ] **Step 1: Write the failing model tests**
 
@@ -125,8 +125,8 @@ git commit -m "feat: add discovery cluster contrast result"
 ### Task 2: Add The End-To-End Workflow
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/dimelo/workflows.py`
-- Test: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_workflows.py`
+- Modify: `dimelo/workflows.py`
+- Test: `tests/test_workflows.py`
 
 - [ ] **Step 1: Write the failing workflow tests**
 
@@ -276,11 +276,11 @@ git commit -m "feat: add discovery cluster contrast workflow"
 ### Task 3: Document The New Handoff And Run The Broader Slice
 
 **Files:**
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-contrasts.md`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/region-discovery.md`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/docs/shared-clustering.md`
-- Modify: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/README.md`
-- Test: `/Users/ngamarra/Documents/GitHub/dimelo-toolkit/tests/test_workflows.py`
+- Modify: `docs/region-contrasts.md`
+- Modify: `docs/region-discovery.md`
+- Modify: `docs/shared-clustering.md`
+- Modify: `README.md`
+- Test: `tests/test_workflows.py`
 
 - [ ] **Step 1: Add one end-to-end doc example**
 
