@@ -25,6 +25,25 @@ def test_validate_accepts_beta_binomial_for_supported_v1_combination():
     )
 
 
+def test_validate_region_contrast_request_accepts_cluster_occupancy_fraction_mode():
+    region_contrasts.validate_region_contrast_request(
+        analysis_unit="cluster_occupancy",
+        representation="cluster_fraction",
+        signal_source="cluster_occupancy",
+        test="effect_size_only",
+    )
+
+
+def test_validate_region_contrast_request_rejects_beta_binomial_for_cluster_occupancy():
+    with pytest.raises(ValueError, match="cluster_occupancy"):
+        region_contrasts.validate_region_contrast_request(
+            analysis_unit="cluster_occupancy",
+            representation="cluster_fraction",
+            signal_source="cluster_occupancy",
+            test="beta_binomial",
+        )
+
+
 def test_validate_rejects_unsupported_single_read_beta_binomial():
     with pytest.raises(ValueError, match="analysis_unit='ensemble_region'"):
         region_contrasts.validate_region_contrast_request(
@@ -33,6 +52,69 @@ def test_validate_rejects_unsupported_single_read_beta_binomial():
             signal_source="pileup_counts",
             test="beta_binomial",
         )
+
+
+def _mock_region_summaries():
+    return pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "cluster": "C1",
+                "count": 6,
+                "fraction": 0.6,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "cluster": "C2",
+                "count": 4,
+                "fraction": 0.4,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "15min",
+                "cluster": "C1",
+                "count": 1,
+                "fraction": 0.2,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "15min",
+                "cluster": "C2",
+                "count": 4,
+                "fraction": 0.8,
+            },
+            {
+                "region_id": "reg2",
+                "sample_id": "s1",
+                "condition": "NS",
+                "cluster": "C3",
+                "count": 5,
+                "fraction": 1.0,
+            },
+        ]
+    )
+
+
+def test_build_cluster_occupancy_evidence_table_summarizes_region_sample_clusters():
+    evidence = region_contrasts.build_cluster_occupancy_evidence_table(
+        region_summaries=_mock_region_summaries(),
+    )
+
+    assert {
+        "region_id",
+        "sample_id",
+        "condition",
+        "cluster",
+        "fraction",
+        "dominant_cluster",
+        "cluster_entropy",
+    } <= set(evidence.columns)
 
 
 def test_build_region_evidence_table_from_pileup_counts(monkeypatch):

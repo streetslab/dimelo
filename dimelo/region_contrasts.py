@@ -17,23 +17,47 @@ def validate_region_contrast_request(
     signal_source: str,
     test: str,
 ) -> None:
+    if analysis_unit == "ensemble_region":
+        if signal_source != "pileup_counts":
+            raise ValueError(
+                "V1 region_contrasts inference requires signal_source='pileup_counts'."
+            )
+        if representation not in {"modified_fraction", "modified_count"}:
+            raise ValueError(
+                "V1 region_contrasts inference requires representation to be "
+                "'modified_fraction' or 'modified_count'."
+            )
+        if test not in {"effect_size_only", "beta_binomial"}:
+            raise ValueError(
+                "Current region_contrasts scoring support requires test in "
+                "{'effect_size_only', 'beta_binomial'}."
+            )
+        return
+
+    if analysis_unit == "cluster_occupancy":
+        if signal_source != "cluster_occupancy":
+            raise ValueError(
+                "V1 region_contrasts inference requires signal_source='cluster_occupancy'."
+            )
+        if representation not in {
+            "cluster_fraction",
+            "dominant_cluster",
+            "cluster_entropy",
+        }:
+            raise ValueError(
+                "V1 region_contrasts inference requires representation to be "
+                "'cluster_fraction', 'dominant_cluster', or 'cluster_entropy'."
+            )
+        if test not in {"effect_size_only", "fraction_test"}:
+            raise ValueError(
+                "Current cluster_occupancy scoring support requires test in "
+                "{'effect_size_only', 'fraction_test'}."
+            )
+        return
+
     if analysis_unit != "ensemble_region":
         raise ValueError(
             "V1 region_contrasts inference requires analysis_unit='ensemble_region'."
-        )
-    if signal_source != "pileup_counts":
-        raise ValueError(
-            "V1 region_contrasts inference requires signal_source='pileup_counts'."
-        )
-    if representation not in {"modified_fraction", "modified_count"}:
-        raise ValueError(
-            "V1 region_contrasts inference requires representation to be "
-            "'modified_fraction' or 'modified_count'."
-        )
-    if test not in {"effect_size_only", "beta_binomial"}:
-        raise ValueError(
-            "Current region_contrasts scoring support requires test in "
-            "{'effect_size_only', 'beta_binomial'}."
         )
 
 
@@ -106,6 +130,59 @@ def build_region_evidence_table(
             )
 
     return pd.DataFrame(rows)
+
+
+def build_cluster_occupancy_evidence_table(
+    *,
+    region_summaries: pd.DataFrame,
+) -> pd.DataFrame:
+    required_columns = {"region_id", "sample_id", "condition", "cluster", "count"}
+    missing_columns = required_columns - set(region_summaries.columns)
+    if missing_columns:
+        missing_display = ", ".join(sorted(missing_columns))
+        raise ValueError(
+            "build_cluster_occupancy_evidence_table requires columns: "
+            f"{missing_display}."
+        )
+
+    evidence = region_summaries.copy()
+    grouped_keys = ["region_id", "sample_id", "condition"]
+    totals = evidence.groupby(grouped_keys, dropna=False)["count"].transform("sum")
+    evidence["fraction"] = (
+        evidence["count"].div(totals.where(totals != 0), fill_value=0).fillna(0.0)
+    )
+
+    summary = (
+        evidence.sort_values(
+            by=grouped_keys + ["fraction", "cluster"],
+            ascending=[True, True, True, False, True],
+            kind="mergesort",
+        )
+        .drop_duplicates(subset=grouped_keys, keep="first")
+        .loc[:, grouped_keys + ["cluster"]]
+        .rename(columns={"cluster": "dominant_cluster"})
+    )
+
+    def _cluster_entropy(values: pd.Series) -> float:
+        probabilities = values.astype(float)
+        if probabilities.empty:
+            return 0.0
+        probabilities = probabilities[probabilities > 0]
+        if probabilities.empty:
+            return 0.0
+        return float(-(probabilities * probabilities.map(math.log2)).sum())
+
+    entropy = (
+        evidence.groupby(grouped_keys, dropna=False)["fraction"]
+        .apply(_cluster_entropy)
+        .reset_index(name="cluster_entropy")
+    )
+
+    return evidence.merge(summary, on=grouped_keys, how="left").merge(
+        entropy,
+        on=grouped_keys,
+        how="left",
+    )
 
 
 def _zero_safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
