@@ -425,6 +425,44 @@ def test_prepare_single_read_plot_data_rejects_segment_map_axes():
         )
 
 
+def test_prepare_single_read_plot_data_rejects_scaled_segment_axes():
+    reads = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "region_strand": "+",
+                "event_pos": 110,
+                "anchor": 100,
+                "read_id": "r1",
+            }
+        ]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[
+            plotting.SegmentSpec(
+                segment_id="body",
+                label="Body",
+                start_ref=100,
+                end_ref=200,
+                mode="scaled",
+                bins=25,
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="segment_map is aggregate-only"):
+        plotting.prepare_single_read_plot_data(
+            reads,
+            plot_family="single_read_raster",
+            axis=axis,
+            position_column="event_pos",
+            anchor_column="anchor",
+            region_strand_column="region_strand",
+        )
+
+
 def test_plot_reads_routes_region_5to3prime_into_shared_single_read_prep(monkeypatch):
     captured = {}
 

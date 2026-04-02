@@ -61,6 +61,8 @@ The canonical outputs are data-first:
 - `result.plot_data["window_score_table"]`
 - `result.plot_data["top_hits_table"]`
 
+As with the newer clustering and contrast workflows, these plotting payloads are renderer-neutral tables first. Legacy orientation flags such as `regions_5to3prime` map onto the shared region-alignment model for downstream follow-up plots, while any scaled segment normalization is kept to aggregate views rather than single-read displays.
+
 ## Handoff Guidance
 
 - For formal region testing, convert discovered hits into BED and write them to disk before passing the BED path into `region_contrasts.score_regions(...)`.

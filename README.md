@@ -256,6 +256,14 @@ You should see no outputs at all if `quiet=True`.
 
 ## Plotting
 
+Legacy plotting entry points remain supported, but they now share a common plotting-axis layer under the hood. The compatibility rules are:
+
+- `regions_5to3prime=True` maps to a shared 5'->3' orientation mode for region-aligned plots.
+- `relative=True` continues to mean fixed-window plotting around a common anchor or region center.
+- Aggregate profile-style plots may opt into normalized segment layouts later, but that behavior is additive rather than a changed default.
+- Single-read plots remain coordinate-preserving. They can use fixed-window coordinates and 5'->3' orientation, but they do not stretch variable-length regions onto a synthetic continuous axis.
+- Built-in Matplotlib plotting is still available, while plot-ready tables remain the stable contract for users who prefer seaborn, Plotly, Altair, or custom renderers.
+
 `plot_enrichment_profile` module for pileup line plot profiles across one or more region
 ```
 def plot_enrichment_profile(
@@ -974,7 +982,7 @@ Many of the parsing, loading, and plotting functions share parameters. The commo
 
 `regions` and `regions_list` are used for specifying subsets of the genome to parse, load, or plot. A `region` is defined as a range of genomic coordinates, and `regions` can refer to any number of `region` specifications. Thus for the `regions` parameter one can pass a single region specified as a string, `chrX:XXX-XXX`, many regions defined in a .bed tab-separated-value file with each line containing at miniimum chromosome, start, and end coordinates (plus optionally a strand, + or -), or a list of strings specifiers or bed files. The entire list will be rolled into a single `regions` set to be passed down for subsequent processing. In the case of regions-wise comparisons in plotting functions, `regions_list` is a *list of regions objects*, where each element of the list is a string, Path, or list of strings or Paths.
 
-`regions_5to3prime` is used by loader/plotter functions that align data from many loci. It ensures that all loaded data is oriented in the right way with respect to functional elements by flipping region data to all orient 5' to 3' based on the strand specified in the region str or bed file line.
+`regions_5to3prime` is used by loader/plotter functions that align data from many loci. It ensures that all loaded data is oriented in the right way with respect to functional elements by flipping region data to all orient 5' to 3' based on the strand specified in the region str or bed file line. In the newer shared plotting layer, this is the compatibility wrapper for the canonical `orientation="region_5to3"` axis mode.
 
 `single_strand` limits loaded/plotted data to only the strand specified in the region str or bed file line. Any modification on a given nucleotide has a different set of possible locations on the forward vs reverse strand which can be relevant for many biological phenomena.
 
@@ -984,7 +992,7 @@ Many of the parsing, loading, and plotting functions share parameters. The commo
 
 `window_size` for parsing and most loading and plotting functions is a *modification to your regions* that will redefine them to be all the same size, i.e. 2 x window_size, centered around the centers of your original regions. This is important for the parsing and plotting applications that show many genomic regions at once, but should be left blank if you don't want your regions modified. The default is `None` for functions where the parameter is optional. 
 
-`relative` is a boolean input that specifies whether loading and plotting operations adjust coordinates to be relative to some center point or simple plot in absolute genomic coordinates. This is not currently implemented for some methods, but exists as an interface to allow future implementation.
+`relative` is a boolean input that specifies whether loading and plotting operations adjust coordinates to be relative to some center point or simple plot in absolute genomic coordinates. In the newer shared plotting layer, `relative=True` maps to fixed-window plotting around a common anchor. Aggregate plots may grow into richer segment-based normalization later, but single-read plotting still preserves coordinate geometry rather than stretching variable-length features.
 
 `sort_by` for plot_reads will sort reads by any of `region_start`, `region_end`, `read_name`, `read_start`, `read_end`, `chromosome`, `strand`, and `MOTIF_mod_fraction` for any extracted motif. New sorting options are planned in the future. The default is `shuffle`, which will put the reads in a random order. `sort_by` can be passed as one string or as a list of strings. If a list is passed, the reads will be sorted hierarchically i.e. first by the first list element, then the second, and so on. The exception is that if any of the list elements are `shuffle`, the reads will *first* be shuffled and then sorted by the rest of the elements in order of priority.
 

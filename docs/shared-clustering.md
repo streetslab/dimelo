@@ -78,6 +78,14 @@ The workflow returns a `SharedClusterResult` with canonical tables:
 
 Built-in plotting remains intentionally thin. `result.plot_data["cluster_distribution_bar"]` and `result.plot_data["cluster_distribution_heatmap"]` are plot-ready DataFrames, not renderer-specific figure objects.
 
+The plotting contract stays compatibility-safe with older package versions:
+
+- legacy Matplotlib wrappers still work
+- tables in `result.plot_data` are the stable plotting substrate
+- `regions_5to3prime` now maps onto the shared `orientation="region_5to3"` axis concept for region-aligned plots
+- fixed-window plotting is available for both aggregate and single-read views
+- scaled or segmented metaregion axes are aggregate-only and are not used for single-read plots
+
 ## Custom Plotting
 
 ```python

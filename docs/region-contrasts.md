@@ -158,6 +158,13 @@ For `analysis_unit="cluster_occupancy"`, the main fields depend on representatio
 
 The results are data-first. You can use the built-in `plot_data` payloads or ignore them and plot the returned tables directly.
 
+When you move from legacy plotters into the newer plotting-axis layer, the intended mapping is:
+
+- `regions_5to3prime=True` -> `orientation="region_5to3"`
+- `relative=True` -> fixed-window plotting around a shared anchor
+- single-read views remain coordinate-preserving
+- normalized segment maps are reserved for aggregate plots rather than stretched single-read canvases
+
 ```python
 import seaborn as sns
 
