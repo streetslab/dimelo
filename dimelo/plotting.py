@@ -176,17 +176,36 @@ def _prepare_segment_map_plot_data(
 
     axis_table = _build_segment_axis_table(axis.segments)
     plot_table = table.copy()
-    axis_lookup = axis_table.loc[:, ["segment_id", "plot_start"]].rename(
+    axis_lookup = axis_table.loc[:, ["segment_id", "plot_start", "plot_end"]].rename(
         columns={"segment_id": "_axis_segment_id"}
     )
+    axis_lookup["segment_span"] = axis_lookup["plot_end"] - axis_lookup["plot_start"]
     plot_table = plot_table.merge(
         axis_lookup,
         left_on=segment_id_column,
         right_on="_axis_segment_id",
         how="left",
     )
-    plot_table["plot_x"] = plot_table["plot_start"] + plot_table[segment_position_column].astype(float)
-    plot_table = plot_table.drop(columns=["_axis_segment_id", "plot_start"])
+    unknown_segment_mask = plot_table["plot_start"].isna()
+    if unknown_segment_mask.any():
+        unknown_segment_ids = sorted(plot_table.loc[unknown_segment_mask, segment_id_column].astype(str).unique())
+        raise ValueError(
+            "segment_map plotting received unknown segment_id values: "
+            f"{', '.join(unknown_segment_ids)}."
+        )
+
+    segment_positions = pd.to_numeric(plot_table[segment_position_column], errors="raise")
+    invalid_position_mask = (segment_positions < 0) | (segment_positions >= plot_table["segment_span"])
+    if invalid_position_mask.any():
+        invalid_rows = plot_table.loc[invalid_position_mask, [segment_id_column, segment_position_column, "segment_span"]]
+        raise ValueError(
+            "segment_position_column values must stay within the declared segment span "
+            "for each segment."
+            f" Invalid rows: {invalid_rows.to_dict(orient='records')}."
+        )
+
+    plot_table["plot_x"] = plot_table["plot_start"] + segment_positions
+    plot_table = plot_table.drop(columns=["_axis_segment_id", "plot_start", "plot_end", "segment_span"])
 
     return plot_table, axis_table
 

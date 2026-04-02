@@ -384,6 +384,67 @@ def test_prepare_aggregate_plot_data_builds_concatenated_segment_axis():
     assert list(payload["plot_table"]["plot_x"]) == [0.0, 30.0]
 
 
+def test_prepare_aggregate_plot_data_rejects_unknown_segment_ids():
+    table = pd.DataFrame(
+        [{"region_id": "reg1", "segment_id": "unknown", "segment_pos": 1, "signal": 1.0}]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[
+            plotting.SegmentSpec("upstream", "Upstream", 0, 100, "raw", bins=20),
+        ],
+    )
+    aggregation = plotting.AggregationSpec(
+        weighting="equal_region",
+        within_region_summary="mean",
+        signal_normalization="none",
+        layout="concatenated",
+    )
+
+    with pytest.raises(ValueError, match="unknown segment_id values"):
+        plotting.prepare_aggregate_plot_data(
+            table,
+            plot_family="aggregate_profile",
+            axis=axis,
+            aggregation=aggregation,
+            value_column="signal",
+            segment_id_column="segment_id",
+            segment_position_column="segment_pos",
+        )
+
+
+@pytest.mark.parametrize("segment_pos", [-1, 20])
+def test_prepare_aggregate_plot_data_rejects_segment_positions_outside_declared_span(segment_pos):
+    table = pd.DataFrame(
+        [{"region_id": "reg1", "segment_id": "upstream", "segment_pos": segment_pos, "signal": 1.0}]
+    )
+    axis = plotting.AxisSpec(
+        orientation="region_5to3",
+        coordinate_mode="segment_map",
+        segments=[
+            plotting.SegmentSpec("upstream", "Upstream", 0, 100, "raw", bins=20),
+        ],
+    )
+    aggregation = plotting.AggregationSpec(
+        weighting="equal_region",
+        within_region_summary="mean",
+        signal_normalization="none",
+        layout="concatenated",
+    )
+
+    with pytest.raises(ValueError, match="declared segment span"):
+        plotting.prepare_aggregate_plot_data(
+            table,
+            plot_family="aggregate_profile",
+            axis=axis,
+            aggregation=aggregation,
+            value_column="signal",
+            segment_id_column="segment_id",
+            segment_position_column="segment_pos",
+        )
+
+
 def test_prepare_aggregate_plot_data_marks_non_contiguous_segment_breaks():
     table = pd.DataFrame(
         [{"region_id": "reg1", "segment_id": "exon1", "segment_pos": 5, "signal": 1.0}]
