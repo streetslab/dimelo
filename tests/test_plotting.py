@@ -749,6 +749,46 @@ def test_prepare_global_analysis_window_data_aggregates_conditions():
     assert treated_chr1["sample_n"] == 2
 
 
+def test_prepare_global_analysis_window_data_aggregates_per_sample_windows_with_chrom_alias():
+    result = _make_global_window_result()
+    duplicate_sample_window = pd.DataFrame(
+        [
+            {
+                "sample_id": "s2",
+                "condition": "treated",
+                "replicate": 1,
+                "motif": "A,0",
+                "window_id": "chr1:0-100",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 100,
+                "strand": ".",
+                "modified_count": 2,
+                "valid_count": 10,
+                "window_fraction": 0.2,
+            }
+        ]
+    )
+    result.windows = pd.concat([result.windows, duplicate_sample_window], ignore_index=True).rename(
+        columns={"chromosome": "chrom"}
+    )
+    result.plot_data["window_fraction_table"] = result.windows.copy()
+
+    payload = plotting.prepare_global_analysis_window_data(
+        result=result,
+        aggregate_conditions=True,
+    )
+
+    treated_chr1 = payload["condition_window_table"].loc[
+        (payload["condition_window_table"]["condition"] == "treated")
+        & (payload["condition_window_table"]["contig"] == "chr1")
+    ].iloc[0]
+
+    assert treated_chr1["window_fraction_mean"] == pytest.approx(0.45)
+    assert treated_chr1["window_fraction_median"] == pytest.approx(0.45)
+    assert treated_chr1["sample_n"] == 2
+
+
 def test_prepare_region_discovery_hit_context_data_rejects_padding_bp():
     result = _make_region_discovery_result()
 

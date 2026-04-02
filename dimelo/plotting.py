@@ -791,7 +791,6 @@ def prepare_global_analysis_window_data(
             "replicate",
             "motif",
             "window_id",
-            "chromosome",
             "start",
             "end",
             "strand",
@@ -813,7 +812,8 @@ def prepare_global_analysis_window_data(
         }
 
     window_table = window_table.copy()
-    window_table["contig"] = window_table["chromosome"]
+    windows_contig_column = _discovery_contig_column(window_table, owner="result.windows")
+    window_table["contig"] = window_table[windows_contig_column]
 
     if contigs is not None:
         window_table = window_table.loc[window_table["contig"].isin(contigs)].copy()
@@ -831,8 +831,27 @@ def prepare_global_analysis_window_data(
     )
 
     if aggregate_conditions:
-        condition_window_table = (
+        sample_window_table = (
             window_table.groupby(
+                [
+                    "sample_id",
+                    "condition",
+                    "replicate",
+                    "motif",
+                    "window_id",
+                    "contig",
+                    "start",
+                    "end",
+                    "window_midpoint",
+                ],
+                as_index=False,
+                sort=False,
+            )
+            .agg(window_fraction=("window_fraction", "mean"))
+            .copy()
+        )
+        condition_window_table = (
+            sample_window_table.groupby(
                 ["condition", "motif", "contig", "start", "end", "window_midpoint"],
                 as_index=False,
                 sort=False,
