@@ -2,7 +2,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dimelo.models import ContrastSpec, RegionContrastResult, RegionDiscoveryResult
+from dimelo.models import (
+    ContrastSpec,
+    GlobalAnalysisResult,
+    RegionContrastResult,
+    RegionDiscoveryResult,
+)
 from dimelo import plot_enrichment_profile, plot_reads, plotting
 
 
@@ -342,6 +347,97 @@ def _make_region_discovery_result() -> RegionDiscoveryResult:
     )
 
 
+def _make_global_analysis_result() -> GlobalAnalysisResult:
+    summary = pd.DataFrame(
+        [
+            {
+                "sample_id": "s1",
+                "condition": "NS",
+                "replicate": 1,
+                "motif": "A,0",
+                "modified_count": 10,
+                "valid_count": 20,
+                "global_fraction": 0.5,
+            },
+            {
+                "sample_id": "s2",
+                "condition": "treated",
+                "replicate": 1,
+                "motif": "A,0",
+                "modified_count": 16,
+                "valid_count": 20,
+                "global_fraction": 0.8,
+            },
+            {
+                "sample_id": "s3",
+                "condition": "treated",
+                "replicate": 2,
+                "motif": "A,0",
+                "modified_count": 12,
+                "valid_count": 20,
+                "global_fraction": 0.6,
+            },
+        ]
+    )
+    normalization_factors = pd.DataFrame(
+        [
+            {
+                "sample_id": "s1",
+                "condition": "NS",
+                "replicate": 1,
+                "motif": "A,0",
+                "global_fraction": 0.5,
+                "reference_fraction": 0.6333333333,
+                "global_offset": -0.1333333333,
+            },
+            {
+                "sample_id": "s2",
+                "condition": "treated",
+                "replicate": 1,
+                "motif": "A,0",
+                "global_fraction": 0.8,
+                "reference_fraction": 0.6333333333,
+                "global_offset": 0.1666666667,
+            },
+            {
+                "sample_id": "s3",
+                "condition": "treated",
+                "replicate": 2,
+                "motif": "A,0",
+                "global_fraction": 0.6,
+                "reference_fraction": 0.6333333333,
+                "global_offset": -0.0333333333,
+            },
+        ]
+    )
+    windows = pd.DataFrame(
+        columns=[
+            "sample_id",
+            "condition",
+            "replicate",
+            "motif",
+            "window_id",
+            "chromosome",
+            "start",
+            "end",
+            "strand",
+            "modified_count",
+            "valid_count",
+            "window_fraction",
+        ]
+    )
+    return GlobalAnalysisResult(
+        summary=summary,
+        windows=windows,
+        normalization_factors=normalization_factors,
+        plot_data={
+            "global_fraction_bar": summary.copy(),
+            "window_fraction_table": windows.copy(),
+        },
+        metadata={"window_size": 100000, "step_size": 50000},
+    )
+
+
 def test_prepare_region_discovery_scan_data_returns_expected_tables():
     result = _make_region_discovery_result()
 
@@ -470,6 +566,42 @@ def test_prepare_region_discovery_hit_context_data_returns_empty_payload_for_no_
     assert payload["context_table"].empty
     assert payload["selected_hits"].empty
     assert payload["metadata"]["selection_mode"] == "top_n"
+
+
+def test_prepare_global_analysis_summary_data_returns_expected_tables():
+    result = _make_global_analysis_result()
+
+    payload = plotting.prepare_global_analysis_summary_data(result=result)
+
+    assert set(payload) == {"sample_summary", "condition_summary", "normalization_table", "metadata"}
+    assert payload["sample_summary"]["sample_id"].tolist() == ["s1", "s2", "s3"]
+    assert payload["normalization_table"]["sample_id"].tolist() == ["s1", "s2", "s3"]
+    assert payload["condition_summary"]["condition"].tolist() == ["NS", "treated"]
+    assert payload["condition_summary"]["sample_n"].tolist() == [1, 2]
+    assert payload["metadata"]["motifs"] == ["A,0"]
+
+
+def test_prepare_global_analysis_summary_data_computes_condition_means():
+    result = _make_global_analysis_result()
+
+    payload = plotting.prepare_global_analysis_summary_data(result=result)
+    condition_summary = payload["condition_summary"].set_index("condition")
+
+    assert condition_summary.loc["NS", "global_fraction_mean"] == pytest.approx(0.5)
+    assert condition_summary.loc["treated", "global_fraction_mean"] == pytest.approx(0.7)
+    assert condition_summary.loc["treated", "global_fraction_median"] == pytest.approx(0.7)
+
+
+def test_prepare_global_analysis_summary_data_filters_motifs():
+    result = _make_global_analysis_result()
+
+    payload = plotting.prepare_global_analysis_summary_data(
+        result=result,
+        motifs=["A,0"],
+    )
+
+    assert payload["sample_summary"]["motif"].unique().tolist() == ["A,0"]
+    assert payload["normalization_table"]["motif"].unique().tolist() == ["A,0"]
 
 
 def test_prepare_region_discovery_hit_context_data_rejects_padding_bp():
