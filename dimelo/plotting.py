@@ -659,6 +659,30 @@ def prepare_global_analysis_summary_data(
     aggregate_conditions: bool = True,
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     _validate_global_analysis_result(result)
+    _require_columns(
+        result.summary,
+        (
+            "sample_id",
+            "condition",
+            "motif",
+            "modified_count",
+            "valid_count",
+            "global_fraction",
+        ),
+        "result.summary",
+    )
+    _require_columns(
+        result.normalization_factors,
+        (
+            "sample_id",
+            "condition",
+            "motif",
+            "global_fraction",
+            "reference_fraction",
+            "global_offset",
+        ),
+        "result.normalization_factors",
+    )
 
     sample_summary = _filter_motif_table(result.summary, motifs, owner="result.summary")
     normalization_table = _filter_motif_table(

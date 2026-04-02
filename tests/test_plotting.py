@@ -627,6 +627,18 @@ def test_prepare_global_analysis_summary_data_filters_motifs():
     assert "CG,0" not in payload["normalization_table"]["motif"].tolist()
 
 
+def test_prepare_global_analysis_summary_data_skips_condition_aggregation_when_disabled():
+    result = _make_global_analysis_result()
+
+    payload = plotting.prepare_global_analysis_summary_data(
+        result=result,
+        aggregate_conditions=False,
+    )
+
+    assert payload["condition_summary"].empty
+    assert payload["metadata"]["aggregate_conditions"] is False
+
+
 def test_prepare_region_discovery_hit_context_data_rejects_padding_bp():
     result = _make_region_discovery_result()
 
