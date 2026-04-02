@@ -192,6 +192,25 @@ def _sort_discovery_table(
     return sorted_table.reset_index(drop=True)
 
 
+def _select_region_discovery_hits(
+    hits: pd.DataFrame,
+    *,
+    top_n: int | None,
+) -> tuple[pd.DataFrame, str]:
+    if top_n is not None and top_n < 0:
+        raise ValueError("top_n must be non-negative.")
+    if hits.empty:
+        return hits.copy(), "top_n"
+
+    if "rank" in hits.columns:
+        selected = hits.sort_values(["rank"], kind="stable")
+    else:
+        selected = hits.copy()
+    if top_n is not None:
+        selected = selected.head(top_n)
+    return selected.copy().reset_index(drop=True), "top_n"
+
+
 def _relative_position(position: float, anchor: float) -> float:
     return float(position) - float(anchor)
 
@@ -713,6 +732,121 @@ def prepare_region_discovery_scan_data(
             "contrast_mode": result.metadata.get("contrast_mode"),
             "merge_hits": result.metadata.get("merge_hits"),
             "top_n_hits": top_n_hits,
+        },
+    }
+
+
+def prepare_region_discovery_hit_context_data(
+    *,
+    result,
+    top_n: int | None = 12,
+    hit_ids: list[str] | None = None,
+    padding_windows: int | None = 5,
+    padding_bp: int | None = None,
+    score_column: str | None = None,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    _validate_region_discovery_result(result)
+    if padding_windows is not None and padding_windows < 0:
+        raise ValueError("padding_windows must be non-negative.")
+
+    windows = result.windows.copy()
+    hits = result.hits.copy()
+    active_score_column = _select_discovery_score_column(windows, score_column)
+
+    context_columns = [
+        "window_id",
+        "contig",
+        "start",
+        "end",
+        "strand",
+        active_score_column,
+        "window_midpoint",
+        "selected_hit_id",
+        "selected_hit_rank",
+        "relative_window_offset",
+        "is_selected_hit",
+    ]
+    selection_mode = "top_n" if hit_ids is None else "explicit_ids"
+
+    if hits.empty or windows.empty:
+        return {
+            "context_table": pd.DataFrame(columns=context_columns),
+            "selected_hits": hits.copy().reset_index(drop=True),
+            "metadata": {
+                "selection_mode": selection_mode,
+                "top_n": top_n,
+                "padding_windows": padding_windows,
+                "padding_bp": padding_bp,
+                "score_column": active_score_column,
+            },
+        }
+
+    _require_columns(windows, ("window_id", "start", "end", "strand"), "result.windows")
+    _require_columns(hits, ("window_id", "start", "end", "strand"), "result.hits")
+    windows_contig_column = _discovery_contig_column(windows, owner="result.windows")
+    hits_contig_column = _discovery_contig_column(hits, owner="result.hits")
+    windows["contig"] = windows[windows_contig_column]
+    hits["contig"] = hits[hits_contig_column]
+    windows["window_midpoint"] = (windows["start"] + windows["end"]) / 2.0
+
+    contig_order = windows["contig"].drop_duplicates().tolist()
+    windows = _sort_discovery_table(
+        windows,
+        contig_order=contig_order,
+        sort_columns=["start", "end"],
+    )
+
+    if hit_ids is not None:
+        selected_hits = hits.loc[hits["window_id"].isin(hit_ids)].copy().reset_index(drop=True)
+    else:
+        selected_hits, selection_mode = _select_region_discovery_hits(hits, top_n=top_n)
+
+    if selected_hits.empty:
+        return {
+            "context_table": pd.DataFrame(columns=context_columns),
+            "selected_hits": selected_hits,
+            "metadata": {
+                "selection_mode": selection_mode,
+                "top_n": top_n,
+                "padding_windows": padding_windows,
+                "padding_bp": padding_bp,
+                "score_column": active_score_column,
+            },
+        }
+
+    context_frames: list[pd.DataFrame] = []
+    padding = int(padding_windows or 0)
+
+    for _, hit in selected_hits.iterrows():
+        same_contig = windows.loc[windows["contig"] == hit["contig"]].reset_index(drop=True)
+        hit_positions = same_contig.index[same_contig["window_id"] == hit["window_id"]].tolist()
+        if not hit_positions:
+            continue
+
+        hit_position = hit_positions[0]
+        start_index = max(0, hit_position - padding)
+        end_index = min(len(same_contig), hit_position + padding + 1)
+        context = same_contig.iloc[start_index:end_index].copy()
+        context["selected_hit_id"] = hit["window_id"]
+        context["selected_hit_rank"] = hit.get("rank")
+        context["relative_window_offset"] = list(range(start_index - hit_position, end_index - hit_position))
+        context["is_selected_hit"] = context["window_id"] == hit["window_id"]
+        context_frames.append(context)
+
+    if context_frames:
+        context_table = pd.concat(context_frames, ignore_index=True)
+    else:
+        context_table = pd.DataFrame(columns=context_columns)
+
+    return {
+        "context_table": context_table,
+        "selected_hits": selected_hits,
+        "metadata": {
+            "selection_mode": selection_mode,
+            "top_n": top_n,
+            "padding_windows": padding_windows,
+            "padding_bp": padding_bp,
+            "score_column": active_score_column,
         },
     }
 
