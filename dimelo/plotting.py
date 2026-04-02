@@ -89,6 +89,44 @@ def validate_aggregation_spec(spec: AggregationSpec) -> None:
         raise ValueError("Unsupported layout mode.")
 
 
+def _region_contrast_grouping_key(result, position_table: pd.DataFrame) -> str:
+    available_keys = [column for column in ("sample_id", "condition") if column in position_table.columns]
+    if not available_keys:
+        raise ValueError(
+            "region contrast plotting requires position_table to include sample_id or condition."
+        )
+    if len(available_keys) == 1:
+        return available_keys[0]
+
+    contrast_values: set[str] = set()
+    contrast = getattr(result, "contrast", None)
+    if contrast is not None:
+        contrast_values.update(str(value) for value in (contrast.numerator or []))
+        contrast_values.update(str(value) for value in (contrast.denominator or []))
+
+    if contrast_values:
+        sample_ids = {str(value) for value in position_table["sample_id"].dropna().unique()}
+        conditions = {str(value) for value in position_table["condition"].dropna().unique()}
+        sample_match = contrast_values.issubset(sample_ids)
+        condition_match = contrast_values.issubset(conditions)
+        if sample_match and not condition_match:
+            return "sample_id"
+        if condition_match and not sample_match:
+            return "condition"
+
+    return "condition"
+
+
+def _region_contrast_metadata(result) -> dict[str, object]:
+    metadata = getattr(result, "metadata", {}) or {}
+    return {
+        "analysis_unit": metadata.get("analysis_unit"),
+        "representation": metadata.get("representation"),
+        "signal_source": metadata.get("signal_source"),
+        "test": metadata.get("test"),
+    }
+
+
 def _relative_position(position: float, anchor: float) -> float:
     return float(position) - float(anchor)
 
@@ -279,6 +317,68 @@ def _prepare_segment_map_plot_data(
     )
 
     return plot_table, axis_table
+
+
+def _prepare_region_contrast_position_table(
+    *,
+    result,
+    position_table: pd.DataFrame,
+    grouping_key: str,
+) -> pd.DataFrame:
+    _require_columns(
+        position_table,
+        ("region_id", grouping_key, "position", "value", "region_strand"),
+        "position_table",
+    )
+    summary_region_ids = result.summary["region_id"].dropna().astype(str)
+    filtered = position_table[position_table["region_id"].astype(str).isin(summary_region_ids)].copy()
+    if filtered.empty:
+        raise ValueError(
+            "position_table does not contain any region_id values present in the contrast result."
+        )
+    return filtered.reset_index(drop=True)
+
+
+def _prepare_region_contrast_value_modes(
+    *,
+    result,
+    position_table: pd.DataFrame,
+    grouping_key: str,
+) -> pd.DataFrame:
+    contrast = result.contrast
+    numerator_mask = position_table[grouping_key].isin(contrast.numerator or [])
+    denominator_mask = position_table[grouping_key].isin(contrast.denominator or [])
+
+    numerator = position_table.loc[numerator_mask].copy()
+    denominator = position_table.loc[denominator_mask].copy()
+    if numerator.empty or denominator.empty:
+        raise ValueError("position_table does not contain rows for both contrast sides.")
+
+    numerator["value_mode"] = "numerator"
+    denominator["value_mode"] = "denominator"
+
+    delta = numerator.merge(
+        denominator,
+        on=["region_id", "position", "region_strand"],
+        suffixes=("_numerator", "_denominator"),
+        how="inner",
+    )
+    if delta.empty:
+        raise ValueError("Unable to compute delta because numerator and denominator positions do not align.")
+
+    delta["value"] = delta["value_numerator"] - delta["value_denominator"]
+    delta[grouping_key] = "delta"
+    delta["value_mode"] = "delta"
+    delta = delta.loc[:, ["region_id", grouping_key, "position", "value", "region_strand", "value_mode"]]
+
+    return pd.concat(
+        [
+            numerator.loc[:, ["region_id", grouping_key, "position", "value", "region_strand", "value_mode"]],
+            denominator.loc[:, ["region_id", grouping_key, "position", "value", "region_strand", "value_mode"]],
+            delta,
+        ],
+        ignore_index=True,
+    )
 
 
 def prepare_single_read_plot_data(

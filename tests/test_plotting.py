@@ -302,13 +302,7 @@ def test_prepare_region_contrast_profile_data_requires_joinable_grouping_key():
     )
 
     with pytest.raises(ValueError, match="sample_id or condition"):
-        plotting.prepare_region_contrast_profile_data(
-            result=result,
-            position_table=position_table,
-            axis=axis,
-            aggregation=aggregation,
-            value_mode="all",
-        )
+        plotting._region_contrast_grouping_key(result, position_table)
 
 
 def test_prepare_single_read_plot_data_flips_negative_regions_to_5to3():
