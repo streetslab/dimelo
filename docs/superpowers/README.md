@@ -29,11 +29,14 @@ This directory tracks internal design and implementation work for the current br
 
 - [2026-04-01-plotting-axis-architecture-design.md](specs/2026-04-01-plotting-axis-architecture-design.md) - shared plotting-axis and renderer-neutral payload architecture. Status: `implemented`
 - [2026-04-01-region-contrasts-plotting-design.md](specs/2026-04-01-region-contrasts-plotting-design.md) - plotting prep for region contrast profiles and heatmaps. Status: `implemented`
+- [2026-04-02-region-discovery-plotting-design.md](specs/2026-04-02-region-discovery-plotting-design.md) - plotting prep for discovery scan-overview and hit-context payloads. Status: `implemented`
+- [2026-04-02-global-analysis-plotting-design.md](specs/2026-04-02-global-analysis-plotting-design.md) - plotting prep for global summary and broad-window payloads. Status: `implemented`
 
 ### Cleanup And Docs
 
 - [2026-04-02-superpowers-docs-cleanup-design.md](specs/2026-04-02-superpowers-docs-cleanup-design.md) - central index and status-map cleanup for internal planning docs. Status: `implemented`
-- [2026-04-02-docs-and-integration-cleanup-design.md](specs/2026-04-02-docs-and-integration-cleanup-design.md) - path portability and discoverability cleanup for tracked superpowers docs and related integration surfaces. Status: `partially implemented`
+- [2026-04-02-docs-and-integration-cleanup-design.md](specs/2026-04-02-docs-and-integration-cleanup-design.md) - path portability and discoverability cleanup for tracked superpowers docs and related integration surfaces. Status: `implemented`
+- [2026-04-02-docs-coherence-and-discoverability-design.md](specs/2026-04-02-docs-coherence-and-discoverability-design.md) - coherence pass across internal and user-facing docs plus narrow discoverability cleanup. Status: `partially implemented`
 
 ## Plans
 
@@ -43,7 +46,7 @@ This directory tracks internal design and implementation work for the current br
 
 ### Region Analysis
 
-- [2026-03-31-global-analysis-foundations.md](plans/2026-03-31-global-analysis-foundations.md) - global analysis models, workflows, and artifact plumbing. Status: `partially implemented`
+- [2026-03-31-global-analysis-foundations.md](plans/2026-03-31-global-analysis-foundations.md) - global analysis models, workflows, and artifact plumbing. Status: `implemented`
 - [2026-03-31-region-contrasts-foundations.md](plans/2026-03-31-region-contrasts-foundations.md) - defined-region contrast foundations and scoring paths. Status: `implemented`
 - [2026-04-01-cluster-occupancy-region-contrasts.md](plans/2026-04-01-cluster-occupancy-region-contrasts.md) - cluster-occupancy evidence and scoring for region contrasts. Status: `implemented`
 
@@ -58,11 +61,14 @@ This directory tracks internal design and implementation work for the current br
 
 - [2026-04-01-plotting-axis-architecture.md](plans/2026-04-01-plotting-axis-architecture.md) - shared plotting-axis implementation slice. Status: `implemented`
 - [2026-04-01-region-contrasts-plotting.md](plans/2026-04-01-region-contrasts-plotting.md) - region contrast plotting prep for profiles and heatmaps. Status: `implemented`
+- [2026-04-02-region-discovery-plotting.md](plans/2026-04-02-region-discovery-plotting.md) - region discovery plotting prep for per-contig scans and local hit-context views. Status: `implemented`
+- [2026-04-02-global-analysis-plotting.md](plans/2026-04-02-global-analysis-plotting.md) - global analysis plotting prep for summary and broad-window payloads. Status: `implemented`
 
 ### Cleanup And Docs
 
 - [2026-04-02-superpowers-docs-cleanup.md](plans/2026-04-02-superpowers-docs-cleanup.md) - central docs index and tracked-plan cleanup. Status: `implemented`
-- [2026-04-02-docs-and-integration-cleanup.md](plans/2026-04-02-docs-and-integration-cleanup.md) - historical path normalization plus narrow discoverability cleanup around completed analysis and plotting work. Status: `partially implemented`
+- [2026-04-02-docs-and-integration-cleanup.md](plans/2026-04-02-docs-and-integration-cleanup.md) - historical path normalization plus narrow discoverability cleanup around completed analysis and plotting work. Status: `implemented`
+- [2026-04-02-docs-coherence-and-discoverability.md](plans/2026-04-02-docs-coherence-and-discoverability.md) - coherence pass across internal and user-facing docs plus narrow package-surface cleanup if needed. Status: `partially implemented`
 
 ## Current Themes
 
@@ -70,5 +76,5 @@ This directory tracks internal design and implementation work for the current br
 - Region contrasts: start with the region analysis architecture spec, then the contrasts foundations plan, cluster-occupancy follow-on work, and the region-contrasts plotting plan.
 - Region discovery: use the region analysis architecture spec, the paired discovery spec, and the discovery workflow plans together.
 - Global analysis: use the region analysis architecture spec first, then the global analysis foundations plan.
-- Plotting: start with the plotting-axis spec, then the plotting-axis implementation plan and the region-contrasts plotting plan.
-- Docs cleanup: use the docs cleanup design and plan for the central status map and tracked historical plans, then the docs-and-integration cleanup design and plan for portability and discoverability follow-on work.
+- Plotting: start with the plotting-axis spec, then the plotting-axis implementation plan, then the region-contrasts, region-discovery, and global-analysis plotting plans for helper-level coverage.
+- Docs cleanup: use the docs cleanup design and plan for the central status map and tracked historical plans, then the docs-and-integration and docs-coherence follow-on docs passes for portability and discoverability cleanup.
