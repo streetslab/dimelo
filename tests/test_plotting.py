@@ -132,13 +132,6 @@ def _make_shared_cluster_result() -> SharedClusterResult:
         cluster_labels=["C0", "C1"],
         fit_metadata={"clusterer": "minibatch_kmeans", "n_clusters": 2},
     )
-    assignments = pd.DataFrame(
-        [
-            {"sample_id": "s1", "condition": "NS", "cluster": "C0"},
-            {"sample_id": "s1", "condition": "NS", "cluster": "C1"},
-            {"sample_id": "s2", "condition": "treated", "cluster": "C1"},
-        ]
-    )
     cluster_distribution = pd.DataFrame(
         [
             {
@@ -227,65 +220,15 @@ def _make_shared_cluster_result() -> SharedClusterResult:
             },
         ]
     )
-    cluster_profiles = pd.DataFrame(
-        [
-            {"cluster": "C0", "count": 3, "f0": 0.1, "f1": 0.2},
-            {"cluster": "C1", "count": 4, "f0": 0.8, "f1": 0.9},
-        ]
-    )
-    region_summaries = pd.DataFrame(
-        [
-            {
-                "region_id": "reg1",
-                "sample_id": "s1",
-                "condition": "NS",
-                "cluster": "C0",
-                "count": 2,
-                "fraction": 2 / 3,
-            },
-            {
-                "region_id": "reg1",
-                "sample_id": "s1",
-                "condition": "NS",
-                "cluster": "C1",
-                "count": 1,
-                "fraction": 1 / 3,
-            },
-            {
-                "region_id": "reg1",
-                "sample_id": "s2",
-                "condition": "treated",
-                "cluster": "C0",
-                "count": 1,
-                "fraction": 1 / 4,
-            },
-            {
-                "region_id": "reg1",
-                "sample_id": "s2",
-                "condition": "treated",
-                "cluster": "C1",
-                "count": 3,
-                "fraction": 3 / 4,
-            },
-        ]
-    )
     return SharedClusterResult(
         model=model,
-        assignments=assignments,
+        assignments=pd.DataFrame(columns=["sample_id", "condition", "cluster"]),
         cluster_distribution=cluster_distribution,
         condition_distribution=condition_distribution,
         distribution_change=distribution_change,
-        cluster_profiles=cluster_profiles,
-        region_summaries=region_summaries,
-        plot_data={
-            "cluster_distribution_bar": cluster_distribution.copy(),
-            "cluster_distribution_heatmap": pd.DataFrame(
-                [
-                    {"condition": "NS", "C0": 2 / 3, "C1": 1 / 3},
-                    {"condition": "treated", "C0": 1 / 4, "C1": 3 / 4},
-                ]
-            ),
-        },
+        cluster_profiles=pd.DataFrame(columns=["cluster", "count", "f0", "f1"]),
+        region_summaries=None,
+        plot_data={},
         metadata={"mode": "region_anchored"},
     )
 
@@ -294,6 +237,9 @@ def test_prepare_shared_cluster_distribution_data_returns_distribution_payload()
     result = _make_shared_cluster_result()
 
     payload = plotting.prepare_shared_cluster_distribution_data(result=result)
+    sample_distribution = payload["sample_distribution"]
+    condition_distribution = payload["condition_distribution"]
+    distribution_change = payload["distribution_change"]
 
     assert set(payload) == {
         "sample_distribution",
@@ -301,14 +247,29 @@ def test_prepare_shared_cluster_distribution_data_returns_distribution_payload()
         "distribution_change",
         "metadata",
     }
-    assert payload["sample_distribution"]["sample_id"].tolist() == ["s1", "s1", "s2", "s2"]
-    assert payload["condition_distribution"]["condition"].tolist() == [
-        "NS",
-        "NS",
-        "treated",
-        "treated",
-    ]
-    assert payload["distribution_change"]["condition"].tolist() == ["treated", "treated"]
+    assert sample_distribution["sample_id"].tolist() == ["s1", "s1", "s2", "s2"]
+    assert sample_distribution["condition"].tolist() == ["NS", "NS", "treated", "treated"]
+    assert sample_distribution["cluster"].tolist() == ["C0", "C1", "C0", "C1"]
+    assert sample_distribution["count"].tolist() == [2, 1, 1, 3]
+    assert sample_distribution["fraction"].tolist() == pytest.approx(
+        [2 / 3, 1 / 3, 1 / 4, 3 / 4]
+    )
+    assert condition_distribution["condition"].tolist() == ["NS", "NS", "treated", "treated"]
+    assert condition_distribution["cluster"].tolist() == ["C0", "C1", "C0", "C1"]
+    assert condition_distribution["count"].tolist() == [2, 1, 1, 3]
+    assert condition_distribution["fraction"].tolist() == pytest.approx(
+        [2 / 3, 1 / 3, 1 / 4, 3 / 4]
+    )
+    assert condition_distribution["replicate_n"].tolist() == [1, 1, 1, 1]
+    assert distribution_change["condition"].tolist() == ["treated", "treated"]
+    assert distribution_change["cluster"].tolist() == ["C0", "C1"]
+    assert distribution_change["count"].tolist() == [1, 3]
+    assert distribution_change["fraction"].tolist() == pytest.approx([1 / 4, 3 / 4])
+    assert distribution_change["reference_fraction"].tolist() == pytest.approx([2 / 3, 1 / 3])
+    assert distribution_change["delta_fraction"].tolist() == pytest.approx([-5 / 12, 5 / 12])
+    assert distribution_change["log2_fc"].tolist() == pytest.approx(
+        [-1.415037499278844, 1.1699250014423124]
+    )
     assert payload["metadata"]["mode"] == "region_anchored"
 
 
@@ -317,6 +278,8 @@ def test_prepare_shared_cluster_distribution_data_handles_missing_change_table()
     result.distribution_change = None
 
     payload = plotting.prepare_shared_cluster_distribution_data(result=result)
+    sample_distribution = payload["sample_distribution"]
+    condition_distribution = payload["condition_distribution"]
 
     assert list(payload["distribution_change"].columns) == [
         "condition",
@@ -329,6 +292,19 @@ def test_prepare_shared_cluster_distribution_data_handles_missing_change_table()
         "log2_fc",
     ]
     assert payload["distribution_change"].empty
+    assert sample_distribution["sample_id"].tolist() == ["s1", "s1", "s2", "s2"]
+    assert sample_distribution["cluster"].tolist() == ["C0", "C1", "C0", "C1"]
+    assert sample_distribution["count"].tolist() == [2, 1, 1, 3]
+    assert sample_distribution["fraction"].tolist() == pytest.approx(
+        [2 / 3, 1 / 3, 1 / 4, 3 / 4]
+    )
+    assert condition_distribution["condition"].tolist() == ["NS", "NS", "treated", "treated"]
+    assert condition_distribution["cluster"].tolist() == ["C0", "C1", "C0", "C1"]
+    assert condition_distribution["count"].tolist() == [2, 1, 1, 3]
+    assert condition_distribution["fraction"].tolist() == pytest.approx(
+        [2 / 3, 1 / 3, 1 / 4, 3 / 4]
+    )
+    assert condition_distribution["replicate_n"].tolist() == [1, 1, 1, 1]
 
 
 def _minimal_region_contrast_result() -> RegionContrastResult:
