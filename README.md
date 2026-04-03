@@ -241,6 +241,8 @@ For discovery-to-clustering-to-contrast follow-up, use `workflows.discovery_clus
 
 `region_contrasts` uses the same data-prep-first plotting layer: `prepare_region_contrast_profile_data(...)` and `prepare_region_contrast_heatmap_data(...)` consume a `RegionContrastResult` plus an explicit positional table, while shared clustering currently keeps lighter plotting coverage through plot-ready tables in `result.plot_data`.
 
+Shared clustering also has renderer-neutral plotting prep in `dimelo.plotting`. Use `prepare_shared_cluster_distribution_data(...)` for sample/condition cluster fractions, `prepare_shared_cluster_profile_data(...)` for cluster feature summaries, and `prepare_shared_cluster_region_data(...)` for region-level occupancy tables. The older lightweight `result.plot_data["cluster_distribution_bar"]` and `result.plot_data["cluster_distribution_heatmap"]` payloads remain supported.
+
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
 
 ### Parsing outputs

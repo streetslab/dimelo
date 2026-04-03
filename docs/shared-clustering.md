@@ -80,6 +80,25 @@ Built-in plotting remains intentionally thin. `result.plot_data["cluster_distrib
 
 This is lighter plotting coverage than the newer analysis-specific helpers in `region_contrasts`, `region_discovery`, and `global_analysis`, which now expose dedicated renderer-neutral plotting-prep functions around their result objects.
 
+## Plotting Prep Helpers
+
+`SharedClusterResult` now has three renderer-neutral plotting helpers in `dimelo.plotting`:
+
+- `prepare_shared_cluster_distribution_data(result=...)`
+- `prepare_shared_cluster_profile_data(result=...)`
+- `prepare_shared_cluster_region_data(result=...)`
+
+These helpers sit on top of the canonical result tables:
+
+- `result.cluster_distribution`
+- `result.condition_distribution`
+- `result.distribution_change`
+- `result.cluster_profiles`
+- `result.region_summaries`
+
+The older lightweight payloads in `result.plot_data["cluster_distribution_bar"]` and
+`result.plot_data["cluster_distribution_heatmap"]` remain supported for backward familiarity.
+
 The plotting contract stays compatibility-safe with older package versions:
 
 - legacy Matplotlib wrappers still work
