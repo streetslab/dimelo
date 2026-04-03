@@ -138,6 +138,35 @@ def _validate_global_analysis_result(result) -> None:
         raise TypeError("plotting helpers require a GlobalAnalysisResult-like object.")
 
 
+def _validate_shared_cluster_result(result) -> None:
+    if result is None:
+        raise ValueError("plotting helpers require a SharedClusterResult.")
+    required_attrs = (
+        "cluster_distribution",
+        "condition_distribution",
+        "cluster_profiles",
+        "plot_data",
+        "metadata",
+    )
+    if not all(hasattr(result, attr) for attr in required_attrs):
+        raise TypeError("plotting helpers require a SharedClusterResult-like object.")
+
+
+def _empty_distribution_change_table() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "condition",
+            "cluster",
+            "count",
+            "fraction",
+            "replicate_n",
+            "reference_fraction",
+            "delta_fraction",
+            "log2_fc",
+        ]
+    )
+
+
 def _filter_motif_table(table: pd.DataFrame, motifs: list[str] | None, *, owner: str) -> pd.DataFrame:
     _require_columns(table, ("motif",), owner)
     if motifs is None:
@@ -1228,3 +1257,72 @@ def prepare_cluster_distribution_heatmap_data(condition_distribution: pd.DataFra
     )
     heatmap.columns.name = None
     return heatmap
+
+
+def prepare_shared_cluster_distribution_data(
+    *,
+    result,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    _validate_shared_cluster_result(result)
+
+    sample_distribution = prepare_cluster_distribution_bar_data(result.cluster_distribution)
+
+    _require_columns(
+        result.condition_distribution,
+        ("condition", "cluster", "count", "fraction", "replicate_n"),
+        "result.condition_distribution",
+    )
+    condition_distribution = (
+        result.condition_distribution.loc[
+            :, ["condition", "cluster", "count", "fraction", "replicate_n"]
+        ]
+        .sort_values(["condition", "cluster"], kind="stable")
+        .reset_index(drop=True)
+    )
+
+    if result.distribution_change is None:
+        distribution_change = _empty_distribution_change_table()
+    else:
+        _require_columns(
+            result.distribution_change,
+            (
+                "condition",
+                "cluster",
+                "count",
+                "fraction",
+                "replicate_n",
+                "reference_fraction",
+                "delta_fraction",
+                "log2_fc",
+            ),
+            "result.distribution_change",
+        )
+        distribution_change = (
+            result.distribution_change.loc[
+                :,
+                [
+                    "condition",
+                    "cluster",
+                    "count",
+                    "fraction",
+                    "replicate_n",
+                    "reference_fraction",
+                    "delta_fraction",
+                    "log2_fc",
+                ],
+            ]
+            .sort_values(["condition", "cluster"], kind="stable")
+            .reset_index(drop=True)
+        )
+
+    metadata = {
+        "mode": result.model.mode,
+        "cluster_labels": list(result.model.cluster_labels),
+        "has_distribution_change": not distribution_change.empty,
+    }
+    return {
+        "sample_distribution": sample_distribution,
+        "condition_distribution": condition_distribution,
+        "distribution_change": distribution_change,
+        "metadata": metadata,
+    }
