@@ -7,6 +7,8 @@ from dimelo.models import (
     GlobalAnalysisResult,
     RegionContrastResult,
     RegionDiscoveryResult,
+    SharedClusterModel,
+    SharedClusterResult,
 )
 from dimelo import plot_enrichment_profile, plot_reads, plotting
 
@@ -118,6 +120,215 @@ def test_prepare_cluster_distribution_heatmap_data_pivots_columns_in_sorted_orde
     assert fifteen_min["C1"] == 0.75
     assert ns_row["C0"] == 0.75
     assert ns_row["C1"] == 0.25
+
+
+def _make_shared_cluster_result() -> SharedClusterResult:
+    model = SharedClusterModel(
+        mode="region_anchored",
+        motifs=["A,0"],
+        feature_names=["f0", "f1"],
+        preprocessing={"signal_normalization": "none"},
+        estimator=object(),
+        cluster_labels=["C0", "C1"],
+        fit_metadata={"clusterer": "minibatch_kmeans", "n_clusters": 2},
+    )
+    assignments = pd.DataFrame(
+        [
+            {"sample_id": "s1", "condition": "NS", "cluster": "C0"},
+            {"sample_id": "s1", "condition": "NS", "cluster": "C1"},
+            {"sample_id": "s2", "condition": "treated", "cluster": "C1"},
+        ]
+    )
+    cluster_distribution = pd.DataFrame(
+        [
+            {
+                "sample_id": "s1",
+                "condition": "NS",
+                "cluster": "C0",
+                "count": 2,
+                "fraction": 2 / 3,
+            },
+            {
+                "sample_id": "s1",
+                "condition": "NS",
+                "cluster": "C1",
+                "count": 1,
+                "fraction": 1 / 3,
+            },
+            {
+                "sample_id": "s2",
+                "condition": "treated",
+                "cluster": "C0",
+                "count": 1,
+                "fraction": 1 / 4,
+            },
+            {
+                "sample_id": "s2",
+                "condition": "treated",
+                "cluster": "C1",
+                "count": 3,
+                "fraction": 3 / 4,
+            },
+        ]
+    )
+    condition_distribution = pd.DataFrame(
+        [
+            {
+                "condition": "NS",
+                "cluster": "C0",
+                "count": 2,
+                "fraction": 2 / 3,
+                "replicate_n": 1,
+            },
+            {
+                "condition": "NS",
+                "cluster": "C1",
+                "count": 1,
+                "fraction": 1 / 3,
+                "replicate_n": 1,
+            },
+            {
+                "condition": "treated",
+                "cluster": "C0",
+                "count": 1,
+                "fraction": 1 / 4,
+                "replicate_n": 1,
+            },
+            {
+                "condition": "treated",
+                "cluster": "C1",
+                "count": 3,
+                "fraction": 3 / 4,
+                "replicate_n": 1,
+            },
+        ]
+    )
+    distribution_change = pd.DataFrame(
+        [
+            {
+                "condition": "treated",
+                "cluster": "C0",
+                "count": 1,
+                "fraction": 1 / 4,
+                "replicate_n": 1,
+                "reference_fraction": 2 / 3,
+                "delta_fraction": -5 / 12,
+                "log2_fc": -1.415037499278844,
+            },
+            {
+                "condition": "treated",
+                "cluster": "C1",
+                "count": 3,
+                "fraction": 3 / 4,
+                "replicate_n": 1,
+                "reference_fraction": 1 / 3,
+                "delta_fraction": 5 / 12,
+                "log2_fc": 1.1699250014423124,
+            },
+        ]
+    )
+    cluster_profiles = pd.DataFrame(
+        [
+            {"cluster": "C0", "count": 3, "f0": 0.1, "f1": 0.2},
+            {"cluster": "C1", "count": 4, "f0": 0.8, "f1": 0.9},
+        ]
+    )
+    region_summaries = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "cluster": "C0",
+                "count": 2,
+                "fraction": 2 / 3,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "cluster": "C1",
+                "count": 1,
+                "fraction": 1 / 3,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "treated",
+                "cluster": "C0",
+                "count": 1,
+                "fraction": 1 / 4,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "treated",
+                "cluster": "C1",
+                "count": 3,
+                "fraction": 3 / 4,
+            },
+        ]
+    )
+    return SharedClusterResult(
+        model=model,
+        assignments=assignments,
+        cluster_distribution=cluster_distribution,
+        condition_distribution=condition_distribution,
+        distribution_change=distribution_change,
+        cluster_profiles=cluster_profiles,
+        region_summaries=region_summaries,
+        plot_data={
+            "cluster_distribution_bar": cluster_distribution.copy(),
+            "cluster_distribution_heatmap": pd.DataFrame(
+                [
+                    {"condition": "NS", "C0": 2 / 3, "C1": 1 / 3},
+                    {"condition": "treated", "C0": 1 / 4, "C1": 3 / 4},
+                ]
+            ),
+        },
+        metadata={"mode": "region_anchored"},
+    )
+
+
+def test_prepare_shared_cluster_distribution_data_returns_distribution_payload():
+    result = _make_shared_cluster_result()
+
+    payload = plotting.prepare_shared_cluster_distribution_data(result=result)
+
+    assert set(payload) == {
+        "sample_distribution",
+        "condition_distribution",
+        "distribution_change",
+        "metadata",
+    }
+    assert payload["sample_distribution"]["sample_id"].tolist() == ["s1", "s1", "s2", "s2"]
+    assert payload["condition_distribution"]["condition"].tolist() == [
+        "NS",
+        "NS",
+        "treated",
+        "treated",
+    ]
+    assert payload["distribution_change"]["condition"].tolist() == ["treated", "treated"]
+    assert payload["metadata"]["mode"] == "region_anchored"
+
+
+def test_prepare_shared_cluster_distribution_data_handles_missing_change_table():
+    result = _make_shared_cluster_result()
+    result.distribution_change = None
+
+    payload = plotting.prepare_shared_cluster_distribution_data(result=result)
+
+    assert list(payload["distribution_change"].columns) == [
+        "condition",
+        "cluster",
+        "count",
+        "fraction",
+        "replicate_n",
+        "reference_fraction",
+        "delta_fraction",
+        "log2_fc",
+    ]
+    assert payload["distribution_change"].empty
 
 
 def _minimal_region_contrast_result() -> RegionContrastResult:
