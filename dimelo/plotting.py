@@ -1337,22 +1337,13 @@ def prepare_shared_cluster_profile_data(
     features: list[str] | None = None,
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     _validate_shared_cluster_result(result)
+    if not hasattr(result.model, "feature_names"):
+        raise TypeError("plotting helpers require a SharedClusterResult-like object.")
 
     cluster_profiles = result.cluster_profiles.copy()
-    if cluster_profiles.empty:
-        return {
-            "profile_table": pd.DataFrame(columns=["cluster", "feature", "value", "count"]),
-            "metadata": {
-                "feature_names": [],
-                "cluster_labels": list(result.model.cluster_labels),
-            },
-        }
+    feature_names = list(result.model.feature_names)
 
-    _require_columns(cluster_profiles, ("cluster", "count"), "result.cluster_profiles")
-
-    feature_names = [
-        column for column in cluster_profiles.columns if column not in {"cluster", "count"}
-    ]
+    requested_features = feature_names
     if features is not None:
         missing = [feature for feature in features if feature not in feature_names]
         if missing:
@@ -1360,10 +1351,21 @@ def prepare_shared_cluster_profile_data(
                 "Requested features are not present in cluster_profiles: "
                 f"{', '.join(missing)}"
             )
-        feature_names = [feature for feature in feature_names if feature in features]
+        requested_features = [feature for feature in feature_names if feature in features]
+
+    _require_columns(cluster_profiles, ("cluster", "count", *feature_names), "result.cluster_profiles")
+
+    if cluster_profiles.empty:
+        return {
+            "profile_table": pd.DataFrame(columns=["cluster", "feature", "value", "count"]),
+            "metadata": {
+                "feature_names": requested_features,
+                "cluster_labels": list(result.model.cluster_labels),
+            },
+        }
 
     profile_table = (
-        cluster_profiles.loc[:, ["cluster", "count", *feature_names]]
+        cluster_profiles.loc[:, ["cluster", "count", *requested_features]]
         .melt(id_vars=["cluster", "count"], var_name="feature", value_name="value")
         .sort_values(["cluster", "feature"], kind="stable")
         .reset_index(drop=True)
@@ -1371,7 +1373,7 @@ def prepare_shared_cluster_profile_data(
     return {
         "profile_table": profile_table,
         "metadata": {
-            "feature_names": feature_names,
+            "feature_names": requested_features,
             "cluster_labels": list(result.model.cluster_labels),
         },
     }
