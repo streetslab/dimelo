@@ -920,8 +920,23 @@ def test_shared_cluster_region_data_region_anchored_region_summaries_feed_region
 
     payload = plotting.prepare_shared_cluster_region_data(result=result)
 
-    assert not payload["region_table"].empty
-    assert list(payload["condition_region_table"]["condition"].unique()) == ["NS", "treated"]
+    assert payload["region_table"].iloc[0].to_dict() == {
+        "region_id": "reg1",
+        "sample_id": "s1",
+        "condition": "NS",
+        "cluster": "C0",
+        "count": 1,
+        "fraction": pytest.approx(1.0),
+    }
+    assert payload["condition_region_table"].iloc[0].to_dict() == {
+        "region_id": "reg1",
+        "condition": "NS",
+        "cluster": "C0",
+        "count": 1,
+        "fraction_mean": pytest.approx(1.0),
+        "fraction_median": pytest.approx(1.0),
+        "sample_n": 1,
+    }
 
 
 def test_shared_cluster_distribution_region_anchored_requires_matched_regions():

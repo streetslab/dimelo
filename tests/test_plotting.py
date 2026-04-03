@@ -434,12 +434,79 @@ def test_prepare_shared_cluster_region_data_returns_sample_and_condition_tables(
     payload = plotting.prepare_shared_cluster_region_data(result=result)
 
     assert set(payload) == {"region_table", "condition_region_table", "metadata"}
-    assert payload["region_table"]["sample_id"].tolist() == ["s1", "s1", "s2", "s2"]
-    assert payload["condition_region_table"]["condition"].tolist() == [
-        "NS",
-        "NS",
-        "treated",
-        "treated",
+    region_table = payload["region_table"]
+    condition_region_table = payload["condition_region_table"]
+    assert region_table.to_dict("records") == [
+        {
+            "region_id": "reg1",
+            "sample_id": "s1",
+            "condition": "NS",
+            "cluster": "C0",
+            "count": 2,
+            "fraction": pytest.approx(2 / 3),
+        },
+        {
+            "region_id": "reg1",
+            "sample_id": "s1",
+            "condition": "NS",
+            "cluster": "C1",
+            "count": 1,
+            "fraction": pytest.approx(1 / 3),
+        },
+        {
+            "region_id": "reg1",
+            "sample_id": "s2",
+            "condition": "treated",
+            "cluster": "C0",
+            "count": 1,
+            "fraction": pytest.approx(1 / 4),
+        },
+        {
+            "region_id": "reg1",
+            "sample_id": "s2",
+            "condition": "treated",
+            "cluster": "C1",
+            "count": 3,
+            "fraction": pytest.approx(3 / 4),
+        },
+    ]
+    assert condition_region_table.to_dict("records") == [
+        {
+            "region_id": "reg1",
+            "condition": "NS",
+            "cluster": "C0",
+            "count": 2,
+            "fraction_mean": pytest.approx(2 / 3),
+            "fraction_median": pytest.approx(2 / 3),
+            "sample_n": 1,
+        },
+        {
+            "region_id": "reg1",
+            "condition": "NS",
+            "cluster": "C1",
+            "count": 1,
+            "fraction_mean": pytest.approx(1 / 3),
+            "fraction_median": pytest.approx(1 / 3),
+            "sample_n": 1,
+        },
+        {
+            "region_id": "reg1",
+            "condition": "treated",
+            "cluster": "C0",
+            "count": 1,
+            "fraction_mean": pytest.approx(1 / 4),
+            "fraction_median": pytest.approx(1 / 4),
+            "sample_n": 1,
+        },
+        {
+            "region_id": "reg1",
+            "condition": "treated",
+            "cluster": "C1",
+            "count": 3,
+            "fraction_mean": pytest.approx(3 / 4),
+            "fraction_median": pytest.approx(3 / 4),
+            "sample_n": 1,
+        },
     ]
     assert payload["metadata"]["mode"] == "region_anchored"
 
