@@ -1329,3 +1329,49 @@ def prepare_shared_cluster_distribution_data(
         "distribution_change": distribution_change,
         "metadata": metadata,
     }
+
+
+def prepare_shared_cluster_profile_data(
+    *,
+    result,
+    features: list[str] | None = None,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    _validate_shared_cluster_result(result)
+
+    cluster_profiles = result.cluster_profiles.copy()
+    if cluster_profiles.empty:
+        return {
+            "profile_table": pd.DataFrame(columns=["cluster", "feature", "value", "count"]),
+            "metadata": {
+                "feature_names": [],
+                "cluster_labels": list(result.model.cluster_labels),
+            },
+        }
+
+    _require_columns(cluster_profiles, ("cluster", "count"), "result.cluster_profiles")
+
+    feature_names = [
+        column for column in cluster_profiles.columns if column not in {"cluster", "count"}
+    ]
+    if features is not None:
+        missing = [feature for feature in features if feature not in feature_names]
+        if missing:
+            raise ValueError(
+                "Requested features are not present in cluster_profiles: "
+                f"{', '.join(missing)}"
+            )
+        feature_names = [feature for feature in feature_names if feature in features]
+
+    profile_table = (
+        cluster_profiles.loc[:, ["cluster", "count", *feature_names]]
+        .melt(id_vars=["cluster", "count"], var_name="feature", value_name="value")
+        .sort_values(["cluster", "feature"], kind="stable")
+        .reset_index(drop=True)
+    )
+    return {
+        "profile_table": profile_table,
+        "metadata": {
+            "feature_names": feature_names,
+            "cluster_labels": list(result.model.cluster_labels),
+        },
+    }
