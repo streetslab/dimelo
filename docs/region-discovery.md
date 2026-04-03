@@ -85,6 +85,8 @@ context_payload = plotting.prepare_region_discovery_hit_context_data(
 - `prepare_region_discovery_scan_data(...)` consumes a `RegionDiscoveryResult` and returns renderer-neutral `scan_table`, `hit_table`, and `metadata` payloads. Scan payloads stay per-contig by default rather than projecting windows onto a cumulative genome axis.
 - `prepare_region_discovery_hit_context_data(...)` consumes the same `RegionDiscoveryResult` and returns renderer-neutral `context_table`, `selected_hits`, and `metadata` payloads for small-multiple or local hit-context views.
 
+For broad whole-sample summaries instead of locus discovery, use [global analysis](global-analysis.md). For defined-region testing after discovery, use [region contrasts](region-contrasts.md).
+
 ## Handoff Guidance
 
 - For formal region testing, convert discovered hits into BED and write them to disk before passing the BED path into `region_contrasts.score_regions(...)`.

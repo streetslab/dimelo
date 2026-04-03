@@ -218,6 +218,8 @@ heatmap_payload = plotting.prepare_region_contrast_heatmap_data(
 
 For `prepare_region_contrast_heatmap_data(...)`, `result.summary` must also provide one unambiguous `rank` value per plotted region.
 
+For de novo locus finding before this stage, use [region discovery](region-discovery.md). For broad whole-sample summaries and normalization factors, use [global analysis](global-analysis.md).
+
 ## Preprocessing Reminder
 
 - Run `parse_bam.pileup()` when you care about motif abundance, defined-region contrasts, or later de novo discovery.

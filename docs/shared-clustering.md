@@ -78,6 +78,8 @@ The workflow returns a `SharedClusterResult` with canonical tables:
 
 Built-in plotting remains intentionally thin. `result.plot_data["cluster_distribution_bar"]` and `result.plot_data["cluster_distribution_heatmap"]` are plot-ready DataFrames, not renderer-specific figure objects.
 
+This is lighter plotting coverage than the newer analysis-specific helpers in `region_contrasts`, `region_discovery`, and `global_analysis`, which now expose dedicated renderer-neutral plotting-prep functions around their result objects.
+
 The plotting contract stays compatibility-safe with older package versions:
 
 - legacy Matplotlib wrappers still work

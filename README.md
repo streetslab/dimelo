@@ -239,6 +239,8 @@ For discovery-to-clustering-to-contrast follow-up, use `workflows.discovery_clus
 
 `global_analysis` now exposes renderer-neutral plotting prep helpers that consume `GlobalAnalysisResult`: `prepare_global_analysis_summary_data(...)` prepares sample-level summaries, optional condition-level views, and normalization tables, while `prepare_global_analysis_window_data(...)` prepares broad-window payloads that stay per-contig by default.
 
+`region_contrasts` uses the same data-prep-first plotting layer: `prepare_region_contrast_profile_data(...)` and `prepare_region_contrast_heatmap_data(...)` consume a `RegionContrastResult` plus an explicit positional table, while shared clustering currently keeps lighter plotting coverage through plot-ready tables in `result.plot_data`.
+
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
 
 ### Parsing outputs

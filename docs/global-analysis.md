@@ -62,3 +62,5 @@ window_payload = plotting.prepare_global_analysis_window_data(
 
 - `prepare_global_analysis_summary_data(...)` consumes a `GlobalAnalysisResult` and returns renderer-neutral `sample_summary`, `condition_summary`, `normalization_table`, and `metadata` payloads. The summary payload exposes both sample-level rows and optional condition-level views, while normalization values stay available through `normalization_table`.
 - `prepare_global_analysis_window_data(...)` consumes the same `GlobalAnalysisResult` and returns renderer-neutral `window_table`, `condition_window_table`, and `metadata` payloads. Broad-window payloads stay per-contig by default rather than flattening onto a cumulative genome axis.
+
+For defined-region follow-up, pair these global summaries with [region contrasts](region-contrasts.md). For de novo locus finding first, use [region discovery](region-discovery.md).
