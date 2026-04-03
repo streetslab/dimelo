@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dimelo import workflows
+from dimelo import plotting, workflows
 from dimelo.models import ContrastSpec, DatasetArtifact
 from dimelo.models import (
     RegionContrastResult,
@@ -861,6 +861,67 @@ def test_shared_cluster_distribution_region_anchored(monkeypatch):
     assert {"region_id", "sample_id", "condition", "cluster", "count", "fraction"} <= set(
         result.region_summaries.columns
     )
+
+
+def test_shared_cluster_region_data_region_anchored_region_summaries_feed_region_plotting(
+    monkeypatch,
+):
+    fake_samples = [
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            regions_bed="r1.bed",
+            metadata={"pileup_path": "s1.bed.gz"},
+        ),
+        SampleSpec(
+            sample_id="s2",
+            condition="treated",
+            extract_h5="s2.h5",
+            regions_bed="r2.bed",
+            metadata={"pileup_path": "s2.bed.gz"},
+        ),
+    ]
+
+    def fake_region_table(*args, **kwargs):
+        return np.array([[0.1, 0.9], [0.9, 0.1]]), [
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "replicate": None,
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 2,
+                "strand": "+",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "treated",
+                "replicate": None,
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 2,
+                "strand": "+",
+            },
+        ]
+
+    monkeypatch.setattr(workflows.region_analysis, "build_region_feature_table", fake_region_table)
+
+    result = workflows.shared_cluster_distribution(
+        samples=fake_samples,
+        mode="region_anchored",
+        motifs=["A,0"],
+        matched_regions="matched.bed",
+        n_clusters=2,
+        make_plots=False,
+    )
+
+    payload = plotting.prepare_shared_cluster_region_data(result=result)
+
+    assert not payload["region_table"].empty
+    assert list(payload["condition_region_table"]["condition"].unique()) == ["NS", "treated"]
 
 
 def test_shared_cluster_distribution_region_anchored_requires_matched_regions():

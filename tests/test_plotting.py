@@ -367,6 +367,102 @@ def test_prepare_shared_cluster_profile_data_respects_feature_subset():
     ]
 
 
+def _make_shared_cluster_region_result() -> SharedClusterResult:
+    return SharedClusterResult(
+        model=SharedClusterModel(
+            mode="region_anchored",
+            motifs=["A,0"],
+            feature_names=["f0", "f1"],
+            preprocessing={"signal_normalization": "none"},
+            estimator=object(),
+            cluster_labels=["C0", "C1"],
+            fit_metadata={"clusterer": "minibatch_kmeans", "n_clusters": 2},
+        ),
+        assignments=pd.DataFrame(columns=["sample_id", "condition", "cluster"]),
+        cluster_distribution=pd.DataFrame(
+            columns=["sample_id", "condition", "cluster", "count", "fraction"]
+        ),
+        condition_distribution=pd.DataFrame(
+            columns=["condition", "cluster", "count", "fraction", "replicate_n"]
+        ),
+        distribution_change=None,
+        cluster_profiles=pd.DataFrame(columns=["cluster", "count", "f0", "f1"]),
+        region_summaries=pd.DataFrame(
+            [
+                {
+                    "region_id": "reg1",
+                    "sample_id": "s1",
+                    "condition": "NS",
+                    "cluster": "C0",
+                    "count": 2,
+                    "fraction": 2 / 3,
+                },
+                {
+                    "region_id": "reg1",
+                    "sample_id": "s1",
+                    "condition": "NS",
+                    "cluster": "C1",
+                    "count": 1,
+                    "fraction": 1 / 3,
+                },
+                {
+                    "region_id": "reg1",
+                    "sample_id": "s2",
+                    "condition": "treated",
+                    "cluster": "C0",
+                    "count": 1,
+                    "fraction": 1 / 4,
+                },
+                {
+                    "region_id": "reg1",
+                    "sample_id": "s2",
+                    "condition": "treated",
+                    "cluster": "C1",
+                    "count": 3,
+                    "fraction": 3 / 4,
+                },
+            ]
+        ),
+        plot_data={},
+        metadata={"mode": "region_anchored"},
+    )
+
+
+def test_prepare_shared_cluster_region_data_returns_sample_and_condition_tables():
+    result = _make_shared_cluster_region_result()
+
+    payload = plotting.prepare_shared_cluster_region_data(result=result)
+
+    assert set(payload) == {"region_table", "condition_region_table", "metadata"}
+    assert payload["region_table"]["sample_id"].tolist() == ["s1", "s1", "s2", "s2"]
+    assert payload["condition_region_table"]["condition"].tolist() == [
+        "NS",
+        "NS",
+        "treated",
+        "treated",
+    ]
+    assert payload["metadata"]["mode"] == "region_anchored"
+
+
+def test_prepare_shared_cluster_region_data_can_disable_condition_aggregation():
+    result = _make_shared_cluster_region_result()
+
+    payload = plotting.prepare_shared_cluster_region_data(
+        result=result,
+        aggregate_conditions=False,
+    )
+
+    assert payload["condition_region_table"].empty
+
+
+def test_prepare_shared_cluster_region_data_rejects_missing_region_summaries():
+    result = _make_shared_cluster_region_result()
+    result.region_summaries = None
+
+    with pytest.raises(ValueError, match="region_summaries"):
+        plotting.prepare_shared_cluster_region_data(result=result)
+
+
 def _minimal_region_contrast_result() -> RegionContrastResult:
     regions = pd.DataFrame(
         [
