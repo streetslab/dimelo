@@ -1377,3 +1377,61 @@ def prepare_shared_cluster_profile_data(
             "cluster_labels": list(result.model.cluster_labels),
         },
     }
+
+
+def prepare_shared_cluster_region_data(
+    *,
+    result,
+    aggregate_conditions: bool = True,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    _validate_shared_cluster_result(result)
+    if result.region_summaries is None:
+        raise ValueError("SharedClusterResult.region_summaries is required for region plotting.")
+
+    _require_columns(
+        result.region_summaries,
+        ("region_id", "sample_id", "condition", "cluster", "count", "fraction"),
+        "result.region_summaries",
+    )
+    region_table = (
+        result.region_summaries.loc[
+            :, ["region_id", "sample_id", "condition", "cluster", "count", "fraction"]
+        ]
+        .sort_values(["region_id", "sample_id", "cluster"], kind="stable")
+        .reset_index(drop=True)
+    )
+
+    if aggregate_conditions and not region_table.empty:
+        condition_region_table = (
+            region_table.groupby(["region_id", "condition", "cluster"], as_index=False, sort=False)
+            .agg(
+                count=("count", "sum"),
+                fraction_mean=("fraction", "mean"),
+                fraction_median=("fraction", "median"),
+                sample_n=("sample_id", "nunique"),
+            )
+            .sort_values(["region_id", "condition", "cluster"], kind="stable")
+            .reset_index(drop=True)
+        )
+    else:
+        condition_region_table = pd.DataFrame(
+            columns=[
+                "region_id",
+                "condition",
+                "cluster",
+                "count",
+                "fraction_mean",
+                "fraction_median",
+                "sample_n",
+            ]
+        )
+
+    return {
+        "region_table": region_table,
+        "condition_region_table": condition_region_table,
+        "metadata": {
+            "mode": result.model.mode,
+            "cluster_labels": list(result.model.cluster_labels),
+            "has_condition_aggregation": aggregate_conditions,
+        },
+    }
