@@ -307,6 +307,38 @@ def test_prepare_shared_cluster_distribution_data_handles_missing_change_table()
     assert condition_distribution["replicate_n"].tolist() == [1, 1, 1, 1]
 
 
+def _make_shared_cluster_profile_result() -> SharedClusterResult:
+    result = _make_shared_cluster_result()
+    result.cluster_profiles = pd.DataFrame(
+        [
+            {"cluster": "C0", "count": 3, "f0": 0.1, "f1": 0.2},
+            {"cluster": "C1", "count": 4, "f0": 0.8, "f1": 0.9},
+        ]
+    )
+    return result
+
+
+def test_prepare_shared_cluster_profile_data_returns_long_form_profiles():
+    result = _make_shared_cluster_profile_result()
+
+    payload = plotting.prepare_shared_cluster_profile_data(result=result)
+
+    assert set(payload) == {"profile_table", "metadata"}
+    assert set(payload["profile_table"].columns) == {"cluster", "feature", "value", "count"}
+    assert payload["profile_table"]["cluster"].tolist() == ["C0", "C0", "C1", "C1"]
+    assert payload["profile_table"]["feature"].tolist() == ["f0", "f1", "f0", "f1"]
+    assert payload["metadata"]["feature_names"] == ["f0", "f1"]
+
+
+def test_prepare_shared_cluster_profile_data_respects_feature_subset():
+    result = _make_shared_cluster_profile_result()
+
+    payload = plotting.prepare_shared_cluster_profile_data(result=result, features=["f1"])
+
+    assert payload["profile_table"]["feature"].unique().tolist() == ["f1"]
+    assert payload["profile_table"]["cluster"].tolist() == ["C0", "C1"]
+
+
 def _minimal_region_contrast_result() -> RegionContrastResult:
     regions = pd.DataFrame(
         [
