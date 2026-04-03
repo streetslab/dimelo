@@ -142,6 +142,7 @@ def _validate_shared_cluster_result(result) -> None:
     if result is None:
         raise ValueError("plotting helpers require a SharedClusterResult.")
     required_attrs = (
+        "model",
         "cluster_distribution",
         "condition_distribution",
         "cluster_profiles",
@@ -149,6 +150,8 @@ def _validate_shared_cluster_result(result) -> None:
         "metadata",
     )
     if not all(hasattr(result, attr) for attr in required_attrs):
+        raise TypeError("plotting helpers require a SharedClusterResult-like object.")
+    if not hasattr(result.model, "mode") or not hasattr(result.model, "cluster_labels"):
         raise TypeError("plotting helpers require a SharedClusterResult-like object.")
 
 
