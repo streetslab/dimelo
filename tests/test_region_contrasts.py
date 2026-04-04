@@ -44,6 +44,54 @@ def test_validate_region_contrast_request_rejects_beta_binomial_for_cluster_occu
         )
 
 
+def test_validate_region_contrast_request_accepts_single_read_mod_fraction():
+    region_contrasts.validate_region_contrast_request(
+        analysis_unit="single_read",
+        representation="read_mod_fraction",
+        signal_source="extract_reads",
+        test="sample_distribution_shift",
+    )
+
+
+def test_validate_region_contrast_request_accepts_single_read_window_features():
+    region_contrasts.validate_region_contrast_request(
+        analysis_unit="single_read",
+        representation="read_window_features",
+        signal_source="extract_features",
+        test="feature_summary_shift",
+    )
+
+
+def test_validate_region_contrast_request_rejects_single_read_wrong_signal_source():
+    with pytest.raises(ValueError, match="extract_reads"):
+        region_contrasts.validate_region_contrast_request(
+            analysis_unit="single_read",
+            representation="read_mod_fraction",
+            signal_source="pileup_counts",
+            test="sample_distribution_shift",
+        )
+
+
+def test_validate_region_contrast_request_rejects_single_read_unknown_representation():
+    with pytest.raises(ValueError, match="read_mod_fraction"):
+        region_contrasts.validate_region_contrast_request(
+            analysis_unit="single_read",
+            representation="read_shape",
+            signal_source="extract_reads",
+            test="sample_distribution_shift",
+        )
+
+
+def test_validate_region_contrast_request_rejects_single_read_unknown_test():
+    with pytest.raises(ValueError, match="sample_distribution_shift"):
+        region_contrasts.validate_region_contrast_request(
+            analysis_unit="single_read",
+            representation="read_mod_fraction",
+            signal_source="extract_reads",
+            test="beta_binomial",
+        )
+
+
 def test_validate_rejects_unsupported_single_read_beta_binomial():
     with pytest.raises(ValueError, match="analysis_unit='ensemble_region'"):
         region_contrasts.validate_region_contrast_request(
