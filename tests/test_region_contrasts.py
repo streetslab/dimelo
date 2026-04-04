@@ -562,6 +562,100 @@ def test_score_regions_single_read_mod_fraction_effect_size_only():
     assert row["delta_summary_mean"] == pytest.approx(0.5)
 
 
+def test_build_single_read_feature_evidence_table_accepts_user_features():
+    feature_table = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "read_id": "r1",
+                "f0": 0.1,
+                "f1": 0.2,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "treated",
+                "read_id": "r2",
+                "f0": 0.8,
+                "f1": 0.9,
+            },
+        ]
+    )
+
+    result = region_contrasts.build_single_read_feature_evidence_table(
+        feature_table=feature_table
+    )
+
+    assert result.to_dict("records") == feature_table.to_dict("records")
+
+
+def test_build_single_read_feature_evidence_table_rejects_missing_read_id():
+    with pytest.raises(ValueError, match="read_id"):
+        region_contrasts.build_single_read_feature_evidence_table(
+            feature_table=pd.DataFrame(
+                [{"region_id": "reg1", "sample_id": "s1", "condition": "NS", "f0": 0.1}]
+            )
+        )
+
+
+def test_score_regions_single_read_window_features_effect_size_only():
+    feature_table = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "read_id": "r1",
+                "f0": 0.1,
+                "f1": 0.2,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "read_id": "r2",
+                "f0": 0.2,
+                "f1": 0.3,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "treated",
+                "read_id": "r3",
+                "f0": 0.8,
+                "f1": 0.9,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s3",
+                "condition": "treated",
+                "read_id": "r4",
+                "f0": 0.7,
+                "f1": 0.8,
+            },
+        ]
+    )
+
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions=None,
+        motifs=[],
+        contrast=ContrastSpec(mode="group_vs_group", numerator=["treated"], denominator=["NS"]),
+        analysis_unit="single_read",
+        representation="read_window_features",
+        signal_source="extract_features",
+        test="effect_size_only",
+        feature_table=feature_table,
+    )
+
+    row = result.summary.iloc[0]
+    assert row["region_id"] == "reg1"
+    assert row["f0_delta_mean"] == pytest.approx(0.6)
+    assert row["f1_delta_mean"] == pytest.approx(0.6)
+
+
 def test_build_region_evidence_table_from_pileup_counts(monkeypatch):
     samples = [
         SampleSpec(
