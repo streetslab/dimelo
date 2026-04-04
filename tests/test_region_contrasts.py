@@ -466,6 +466,39 @@ def test_build_single_read_mod_fraction_evidence_table_rejects_missing_columns()
         )
 
 
+@pytest.mark.parametrize(
+    ("modified_count", "valid_count"),
+    [
+        (-1, 4),
+        (1, -1),
+        (float("nan"), 4),
+        (1, float("nan")),
+        (float("inf"), 4),
+        (1, float("inf")),
+        (5, 4),
+    ],
+)
+def test_build_single_read_mod_fraction_evidence_table_rejects_invalid_counts(
+    modified_count,
+    valid_count,
+):
+    with pytest.raises(ValueError, match="modified_count and valid_count"):
+        region_contrasts.build_single_read_mod_fraction_evidence_table(
+            extract_table=pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1",
+                        "condition": "NS",
+                        "read_id": "r1",
+                        "modified_count": modified_count,
+                        "valid_count": valid_count,
+                    }
+                ]
+            )
+        )
+
+
 def test_score_regions_single_read_mod_fraction_effect_size_only():
     evidence = pd.DataFrame(
         [

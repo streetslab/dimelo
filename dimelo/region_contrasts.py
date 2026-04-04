@@ -209,6 +209,24 @@ def build_single_read_mod_fraction_evidence_table(
             "valid_count",
         ],
     ].copy()
+    evidence["modified_count"] = pd.to_numeric(evidence["modified_count"], errors="coerce")
+    evidence["valid_count"] = pd.to_numeric(evidence["valid_count"], errors="coerce")
+    invalid_counts = (
+        evidence["modified_count"].isna()
+        | evidence["valid_count"].isna()
+        | ~evidence["modified_count"].map(math.isfinite)
+        | ~evidence["valid_count"].map(math.isfinite)
+        | (evidence["modified_count"] < 0)
+        | (evidence["valid_count"] < 0)
+        | (evidence["modified_count"] > evidence["valid_count"])
+    )
+    if invalid_counts.any():
+        raise ValueError(
+            "build_single_read_mod_fraction_evidence_table modified_count and "
+            "valid_count must be finite, >= 0, and modified_count <= valid_count."
+        )
+    evidence["modified_count"] = evidence["modified_count"].astype(int)
+    evidence["valid_count"] = evidence["valid_count"].astype(int)
     evidence["read_mod_fraction"] = evidence["modified_count"].div(
         evidence["valid_count"].where(evidence["valid_count"] != 0),
         fill_value=0,
@@ -568,10 +586,7 @@ def _summarize_single_read_mod_fraction_by_sample(evidence: pd.DataFrame) -> pd.
         .agg(
             read_n=("read_id", "nunique"),
             sample_summary_mean=("read_mod_fraction", "mean"),
-            sample_summary_median=("read_mod_fraction", "median"),
-            sample_summary_var=("read_mod_fraction", "var"),
         )
-        .fillna({"sample_summary_var": 0.0})
     )
 
 
@@ -579,7 +594,6 @@ def _score_single_read_mod_fraction(
     *,
     evidence: pd.DataFrame,
     contrast: ContrastSpec,
-    test: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     if contrast.mode not in {"pairwise", "group_vs_group"}:
         raise NotImplementedError(
@@ -1045,7 +1059,6 @@ def score_regions(
         regions_table, summary = _score_single_read_mod_fraction(
             evidence=evidence,
             contrast=contrast,
-            test=test,
         )
         metadata = {
             "contrast_mode": contrast.mode,
