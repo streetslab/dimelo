@@ -102,7 +102,8 @@ def validate_region_contrast_request(
     if analysis_unit not in {"ensemble_region", "cluster_occupancy", "single_read"}:
         raise ValueError(
             "V1 region_contrasts inference requires analysis_unit='ensemble_region' "
-            "'cluster_occupancy', or 'single_read'."
+            "or analysis_unit='cluster_occupancy' "
+            "or analysis_unit='single_read'."
         )
 
 
