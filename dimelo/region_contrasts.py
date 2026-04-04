@@ -67,10 +67,42 @@ def validate_region_contrast_request(
             )
         return
 
-    if analysis_unit not in {"ensemble_region", "cluster_occupancy"}:
+    if analysis_unit == "single_read":
+        if representation == "read_mod_fraction":
+            if signal_source != "extract_reads":
+                raise ValueError(
+                    "Current single_read read_mod_fraction support requires "
+                    "signal_source='extract_reads'."
+                )
+            if test not in {"effect_size_only", "sample_distribution_shift"}:
+                raise ValueError(
+                    "Current single_read read_mod_fraction scoring support requires "
+                    "test in {'effect_size_only', 'sample_distribution_shift'}."
+                )
+            return
+
+        if representation == "read_window_features":
+            if signal_source != "extract_features":
+                raise ValueError(
+                    "Current single_read read_window_features support requires "
+                    "signal_source='extract_features'."
+                )
+            if test not in {"effect_size_only", "feature_summary_shift"}:
+                raise ValueError(
+                    "Current single_read read_window_features support requires "
+                    "test in {'effect_size_only', 'feature_summary_shift'}."
+                )
+            return
+
+        raise ValueError(
+            "Current single_read support requires representation='read_mod_fraction' "
+            "or 'read_window_features'."
+        )
+
+    if analysis_unit not in {"ensemble_region", "cluster_occupancy", "single_read"}:
         raise ValueError(
             "V1 region_contrasts inference requires analysis_unit='ensemble_region' "
-            "or analysis_unit='cluster_occupancy'."
+            "'cluster_occupancy', or 'single_read'."
         )
 
 
