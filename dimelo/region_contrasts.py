@@ -216,6 +216,8 @@ def build_single_read_mod_fraction_evidence_table(
         | evidence["valid_count"].isna()
         | ~evidence["modified_count"].map(math.isfinite)
         | ~evidence["valid_count"].map(math.isfinite)
+        | (evidence["modified_count"] % 1 != 0)
+        | (evidence["valid_count"] % 1 != 0)
         | (evidence["modified_count"] < 0)
         | (evidence["valid_count"] < 0)
         | (evidence["modified_count"] > evidence["valid_count"])
@@ -223,7 +225,7 @@ def build_single_read_mod_fraction_evidence_table(
     if invalid_counts.any():
         raise ValueError(
             "build_single_read_mod_fraction_evidence_table modified_count and "
-            "valid_count must be finite, >= 0, and modified_count <= valid_count."
+            "valid_count must be finite integers, >= 0, and modified_count <= valid_count."
         )
     evidence["modified_count"] = evidence["modified_count"].astype(int)
     evidence["valid_count"] = evidence["valid_count"].astype(int)

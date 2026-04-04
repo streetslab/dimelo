@@ -471,6 +471,8 @@ def test_build_single_read_mod_fraction_evidence_table_rejects_missing_columns()
     [
         (-1, 4),
         (1, -1),
+        (1.5, 4),
+        (1, 4.5),
         (float("nan"), 4),
         (1, float("nan")),
         (float("inf"), 4),
