@@ -236,6 +236,38 @@ def build_single_read_mod_fraction_evidence_table(
     return evidence
 
 
+def build_single_read_feature_evidence_table(
+    *,
+    feature_table: pd.DataFrame,
+) -> pd.DataFrame:
+    required_columns = {"region_id", "sample_id", "condition", "read_id"}
+    missing_columns = required_columns - set(feature_table.columns)
+    if missing_columns:
+        missing_display = ", ".join(sorted(missing_columns))
+        raise ValueError(
+            "build_single_read_feature_evidence_table requires columns: "
+            f"{missing_display}."
+        )
+
+    feature_columns = [
+        column for column in feature_table.columns if column not in required_columns
+    ]
+    if not feature_columns:
+        raise ValueError(
+            "build_single_read_feature_evidence_table requires at least one feature column."
+        )
+    return feature_table.loc[
+        :,
+        ["region_id", "sample_id", "condition", "read_id", *feature_columns],
+    ].copy()
+
+
+def _load_builtin_single_read_feature_table(*, samples, regions, motifs):
+    raise NotImplementedError(
+        "Built-in single_read feature loading is not implemented yet."
+    )
+
+
 def build_cluster_occupancy_evidence_table(
     *,
     region_summaries: pd.DataFrame,
@@ -710,6 +742,72 @@ def _score_single_read_mod_fraction(
     return regions_table, summary
 
 
+def _summarize_single_read_features_by_sample(evidence: pd.DataFrame) -> pd.DataFrame:
+    group_columns = ["region_id", "sample_id", "condition"]
+    feature_columns = [
+        column
+        for column in evidence.columns
+        if column not in {"region_id", "sample_id", "condition", "read_id"}
+    ]
+    return evidence.groupby(group_columns, as_index=False, sort=False)[feature_columns].mean()
+
+
+def _score_single_read_features(
+    *,
+    evidence: pd.DataFrame,
+    contrast: ContrastSpec,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if contrast.mode not in {"pairwise", "group_vs_group"}:
+        raise NotImplementedError(
+            "Single-read feature scoring is not implemented for contrast mode "
+            f"'{contrast.mode}'."
+        )
+
+    sample_summary = _summarize_single_read_features_by_sample(evidence)
+    side_specs = {
+        "numerator": contrast.numerator or [],
+        "denominator": contrast.denominator or [],
+    }
+    _require_requested_conditions_present(
+        sample_summary,
+        side_specs=side_specs,
+    )
+
+    feature_columns = [
+        column
+        for column in sample_summary.columns
+        if column not in {"region_id", "sample_id", "condition"}
+    ]
+    summary_rows = []
+    for region_id, region_table in sample_summary.groupby("region_id", sort=False):
+        numerator_table = region_table[region_table["condition"].isin(contrast.numerator)]
+        denominator_table = region_table[region_table["condition"].isin(contrast.denominator)]
+        row = {"region_id": region_id}
+        effect_sizes = []
+        for feature_name in feature_columns:
+            numerator_mean = float(numerator_table[feature_name].mean())
+            denominator_mean = float(denominator_table[feature_name].mean())
+            delta_mean = numerator_mean - denominator_mean
+            row[f"{feature_name}_numerator_mean"] = numerator_mean
+            row[f"{feature_name}_denominator_mean"] = denominator_mean
+            row[f"{feature_name}_delta_mean"] = delta_mean
+            effect_sizes.append(abs(delta_mean))
+        row["effect_size"] = max(effect_sizes, default=0.0)
+        summary_rows.append(row)
+
+    summary = pd.DataFrame(summary_rows)
+    if summary.empty:
+        summary = pd.DataFrame(columns=["region_id", "effect_size"])
+    else:
+        summary = summary.sort_values(
+            by=["effect_size", "region_id"],
+            ascending=[False, True],
+            kind="mergesort",
+        ).reset_index(drop=True)
+    summary["rank"] = range(1, len(summary) + 1)
+    return evidence, summary.drop(columns="effect_size", errors="ignore")
+
+
 def _add_fraction_test_scores(
     regions_table: pd.DataFrame,
     *,
@@ -1039,6 +1137,7 @@ def score_regions(
     multiple_testing: str = "fdr_bh",
     occupancy_table: pd.DataFrame | None = None,
     read_table: pd.DataFrame | None = None,
+    feature_table: pd.DataFrame | None = None,
 ) -> RegionContrastResult:
     validate_region_contrast_request(
         analysis_unit=analysis_unit,
@@ -1049,40 +1148,78 @@ def score_regions(
     contrast_metadata = contrast.metadata or {}
 
     if analysis_unit == "single_read":
-        if representation != "read_mod_fraction":
-            raise NotImplementedError(
-                f"Single-read representation '{representation}' is not implemented yet."
+        if representation == "read_mod_fraction":
+            if read_table is None:
+                raise ValueError(
+                    "single_read read_mod_fraction scoring currently requires read_table."
+                )
+            evidence = build_single_read_mod_fraction_evidence_table(extract_table=read_table)
+            regions_table, summary = _score_single_read_mod_fraction(
+                evidence=evidence,
+                contrast=contrast,
             )
-        if read_table is None:
-            raise ValueError(
-                "single_read read_mod_fraction scoring currently requires read_table."
+            metadata = {
+                "contrast_mode": contrast.mode,
+                "analysis_unit": analysis_unit,
+                "representation": representation,
+                "signal_source": signal_source,
+                "test": test,
+                "multiple_testing": multiple_testing,
+                "normalization_mode": contrast_metadata.get("normalization_mode", "none"),
+                "biological_interpretation": contrast_metadata.get(
+                    "biological_interpretation",
+                    "region-level difference in sample-level read modification fraction",
+                ),
+                "renderer": contrast_metadata.get("renderer", "region_effect_sizes"),
+            }
+            return RegionContrastResult(
+                regions=regions_table,
+                summary=summary,
+                contrast=contrast,
+                plot_data={"region_effect_sizes": summary.copy()},
+                metadata=metadata,
+                figures={},
             )
-        evidence = build_single_read_mod_fraction_evidence_table(extract_table=read_table)
-        regions_table, summary = _score_single_read_mod_fraction(
-            evidence=evidence,
-            contrast=contrast,
-        )
-        metadata = {
-            "contrast_mode": contrast.mode,
-            "analysis_unit": analysis_unit,
-            "representation": representation,
-            "signal_source": signal_source,
-            "test": test,
-            "multiple_testing": multiple_testing,
-            "normalization_mode": contrast_metadata.get("normalization_mode", "none"),
-            "biological_interpretation": contrast_metadata.get(
-                "biological_interpretation",
-                "region-level difference in sample-level read modification fraction",
-            ),
-            "renderer": contrast_metadata.get("renderer", "region_effect_sizes"),
-        }
-        return RegionContrastResult(
-            regions=regions_table,
-            summary=summary,
-            contrast=contrast,
-            plot_data={"region_effect_sizes": summary.copy()},
-            metadata=metadata,
-            figures={},
+
+        if representation == "read_window_features":
+            if feature_table is None:
+                feature_table = _load_builtin_single_read_feature_table(
+                    samples=samples,
+                    regions=regions,
+                    motifs=motifs,
+                )
+            evidence = build_single_read_feature_evidence_table(
+                feature_table=feature_table
+            )
+            regions_table, summary = _score_single_read_features(
+                evidence=evidence,
+                contrast=contrast,
+            )
+            metadata = {
+                "contrast_mode": contrast.mode,
+                "analysis_unit": analysis_unit,
+                "representation": representation,
+                "signal_source": signal_source,
+                "test": test,
+                "multiple_testing": multiple_testing,
+                "normalization_mode": contrast_metadata.get("normalization_mode", "none"),
+                "biological_interpretation": contrast_metadata.get(
+                    "biological_interpretation",
+                    "region-level difference in sample-level read feature summaries",
+                ),
+                "renderer": contrast_metadata.get("renderer", "region_effect_sizes"),
+            }
+            return RegionContrastResult(
+                regions=regions_table,
+                summary=summary,
+                contrast=contrast,
+                plot_data={"region_effect_sizes": summary.copy()},
+                metadata=metadata,
+                figures={},
+            )
+
+        raise NotImplementedError(
+            f"Single-read representation '{representation}' is not implemented yet."
         )
 
     if analysis_unit == "cluster_occupancy":

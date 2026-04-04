@@ -656,6 +656,46 @@ def test_score_regions_single_read_window_features_effect_size_only():
     assert row["f1_delta_mean"] == pytest.approx(0.6)
 
 
+def test_score_regions_single_read_window_features_uses_builtin_loader(monkeypatch):
+    feature_table = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "read_id": "r1",
+                "f0": 0.1,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "treated",
+                "read_id": "r2",
+                "f0": 0.9,
+            },
+        ]
+    )
+
+    monkeypatch.setattr(
+        region_contrasts,
+        "_load_builtin_single_read_feature_table",
+        lambda **kwargs: feature_table,
+    )
+
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions="regions.bed",
+        motifs=["A,0"],
+        contrast=ContrastSpec(mode="pairwise", numerator=["treated"], denominator=["NS"]),
+        analysis_unit="single_read",
+        representation="read_window_features",
+        signal_source="extract_features",
+        test="feature_summary_shift",
+    )
+
+    assert result.summary.iloc[0]["f0_delta_mean"] == pytest.approx(0.8)
+
+
 def test_build_region_evidence_table_from_pileup_counts(monkeypatch):
     samples = [
         SampleSpec(
