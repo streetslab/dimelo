@@ -394,6 +394,78 @@ def test_build_cluster_occupancy_evidence_table_rejects_invalid_counts(count):
         )
 
 
+def test_build_single_read_mod_fraction_evidence_table():
+    extract_table = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "read_id": "r1",
+                "modified_count": 2,
+                "valid_count": 4,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "read_id": "r2",
+                "modified_count": 1,
+                "valid_count": 4,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "treated",
+                "read_id": "r3",
+                "modified_count": 4,
+                "valid_count": 4,
+            },
+        ]
+    )
+
+    result = region_contrasts.build_single_read_mod_fraction_evidence_table(
+        extract_table=extract_table
+    )
+
+    assert result.to_dict("records") == [
+        {
+            "region_id": "reg1",
+            "sample_id": "s1",
+            "condition": "NS",
+            "read_id": "r1",
+            "modified_count": 2,
+            "valid_count": 4,
+            "read_mod_fraction": pytest.approx(0.5),
+        },
+        {
+            "region_id": "reg1",
+            "sample_id": "s1",
+            "condition": "NS",
+            "read_id": "r2",
+            "modified_count": 1,
+            "valid_count": 4,
+            "read_mod_fraction": pytest.approx(0.25),
+        },
+        {
+            "region_id": "reg1",
+            "sample_id": "s2",
+            "condition": "treated",
+            "read_id": "r3",
+            "modified_count": 4,
+            "valid_count": 4,
+            "read_mod_fraction": pytest.approx(1.0),
+        },
+    ]
+
+
+def test_build_single_read_mod_fraction_evidence_table_rejects_missing_columns():
+    with pytest.raises(ValueError, match="modified_count"):
+        region_contrasts.build_single_read_mod_fraction_evidence_table(
+            extract_table=pd.DataFrame([{"region_id": "reg1", "sample_id": "s1"}])
+        )
+
+
 def test_build_region_evidence_table_from_pileup_counts(monkeypatch):
     samples = [
         SampleSpec(
