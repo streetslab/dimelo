@@ -1,4 +1,5 @@
 import math
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -600,6 +601,23 @@ def test_build_single_read_feature_evidence_table_rejects_missing_read_id():
         )
 
 
+def test_build_single_read_feature_evidence_table_rejects_non_numeric_features():
+    with pytest.raises(ValueError, match="numeric"):
+        region_contrasts.build_single_read_feature_evidence_table(
+            feature_table=pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1",
+                        "condition": "NS",
+                        "read_id": "r1",
+                        "f0": "high",
+                    }
+                ]
+            )
+        )
+
+
 def test_score_regions_single_read_window_features_effect_size_only():
     feature_table = pd.DataFrame(
         [
@@ -657,33 +675,53 @@ def test_score_regions_single_read_window_features_effect_size_only():
 
 
 def test_score_regions_single_read_window_features_uses_builtin_loader(monkeypatch):
-    feature_table = pd.DataFrame(
-        [
-            {
-                "region_id": "reg1",
-                "sample_id": "s1",
-                "condition": "NS",
-                "read_id": "r1",
-                "f0": 0.1,
-            },
-            {
-                "region_id": "reg1",
-                "sample_id": "s2",
-                "condition": "treated",
-                "read_id": "r2",
-                "f0": 0.9,
-            },
-        ]
-    )
+    extracted_by_path = {
+        "ns.h5": SimpleNamespace(
+            metadata=[
+                {
+                    "read_name": "r1",
+                    "chromosome": "chr1",
+                    "region_start": 0,
+                    "region_end": 10,
+                    "region_strand": "+",
+                }
+            ]
+        ),
+        "treated.h5": SimpleNamespace(
+            metadata=[
+                {
+                    "read_name": "r2",
+                    "chromosome": "chr1",
+                    "region_start": 0,
+                    "region_end": 10,
+                    "region_strand": "+",
+                }
+            ]
+        ),
+    }
+
+    feature_rows_by_path = {
+        "ns.h5": ([[0.1]], ["f0"]),
+        "treated.h5": ([[0.9]], ["f0"]),
+    }
 
     monkeypatch.setattr(
         region_contrasts,
-        "_load_builtin_single_read_feature_table",
-        lambda **kwargs: feature_table,
+        "cluster",
+        SimpleNamespace(
+            extract_read_windows=lambda **kwargs: extracted_by_path[kwargs["hdf5_file"]],
+            read_window_feature_matrix=lambda extracted: feature_rows_by_path[
+                "ns.h5" if extracted is extracted_by_path["ns.h5"] else "treated.h5"
+            ],
+        ),
+        raising=False,
     )
 
     result = region_contrasts.score_regions(
-        samples=[],
+        samples=[
+            SampleSpec(sample_id="s1", condition="NS", extract_h5="ns.h5"),
+            SampleSpec(sample_id="s2", condition="treated", extract_h5="treated.h5"),
+        ],
         regions="regions.bed",
         motifs=["A,0"],
         contrast=ContrastSpec(mode="pairwise", numerator=["treated"], denominator=["NS"]),

@@ -7,7 +7,7 @@ from typing import Iterable
 import pandas as pd
 from scipy import stats
 
-from . import load_processed, utils
+from . import cluster, load_processed, utils
 from .models import ContrastSpec, RegionContrastResult
 
 
@@ -256,16 +256,93 @@ def build_single_read_feature_evidence_table(
         raise ValueError(
             "build_single_read_feature_evidence_table requires at least one feature column."
         )
-    return feature_table.loc[
+    evidence = feature_table.loc[
         :,
         ["region_id", "sample_id", "condition", "read_id", *feature_columns],
     ].copy()
+    evidence.loc[:, feature_columns] = evidence.loc[:, feature_columns].apply(
+        pd.to_numeric,
+        errors="coerce",
+    )
+    finite_feature_values = evidence.loc[:, feature_columns].apply(
+        lambda column: column.map(math.isfinite)
+    )
+    invalid_feature_values = evidence.loc[:, feature_columns].isna() | ~finite_feature_values
+    if invalid_feature_values.to_numpy().any():
+        raise ValueError(
+            "build_single_read_feature_evidence_table feature columns must be numeric "
+            "and finite."
+        )
+    return evidence
 
 
 def _load_builtin_single_read_feature_table(*, samples, regions, motifs):
-    raise NotImplementedError(
-        "Built-in single_read feature loading is not implemented yet."
-    )
+    if not samples:
+        raise ValueError(
+            "Built-in single_read feature loading requires at least one sample."
+        )
+
+    selected_feature_names: list[str] | None = None
+    sample_frames: list[pd.DataFrame] = []
+    for sample in samples:
+        extracted = cluster.extract_read_windows(
+            hdf5_file=sample.extract_h5,
+            motifs=motifs,
+            regions=regions,
+        )
+        feature_matrix, feature_names = cluster.read_window_feature_matrix(extracted)
+        feature_rows = list(feature_matrix)
+        feature_names = list(feature_names)
+        if selected_feature_names is None:
+            selected_feature_names = feature_names
+        elif selected_feature_names != feature_names:
+            raise ValueError(
+                "Built-in single_read feature loading requires matching feature names "
+                "across samples."
+            )
+
+        if len(extracted.metadata) != len(feature_rows):
+            raise ValueError(
+                "Built-in single_read feature loading requires one metadata row per "
+                "feature row."
+            )
+
+        rows = []
+        for metadata, feature_values in zip(extracted.metadata, feature_rows):
+            chromosome = metadata.get("chromosome")
+            start = metadata.get("region_start")
+            end = metadata.get("region_end")
+            read_id = metadata.get("read_name")
+            if chromosome is None or start is None or end is None:
+                raise ValueError(
+                    "Built-in single_read feature loading requires metadata with "
+                    "chromosome, region_start, and region_end."
+                )
+            if read_id is None:
+                raise ValueError(
+                    "Built-in single_read feature loading requires metadata with read_name."
+                )
+            strand = metadata.get("region_strand") or "+"
+            row = {
+                "region_id": f"{chromosome}:{int(start)}-{int(end)},{strand}",
+                "sample_id": sample.sample_id,
+                "condition": sample.condition,
+                "read_id": read_id,
+            }
+            row.update(
+                {
+                    feature_name: float(feature_value)
+                    for feature_name, feature_value in zip(feature_names, feature_values)
+                }
+            )
+            rows.append(row)
+        sample_frames.append(pd.DataFrame(rows))
+
+    if not sample_frames:
+        return pd.DataFrame(
+            columns=["region_id", "sample_id", "condition", "read_id", *(selected_feature_names or [])]
+        )
+    return pd.concat(sample_frames, ignore_index=True)
 
 
 def build_cluster_occupancy_evidence_table(
