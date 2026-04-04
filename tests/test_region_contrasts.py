@@ -466,6 +466,67 @@ def test_build_single_read_mod_fraction_evidence_table_rejects_missing_columns()
         )
 
 
+def test_score_regions_single_read_mod_fraction_effect_size_only():
+    evidence = pd.DataFrame(
+        [
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "read_id": "r1",
+                "modified_count": 1,
+                "valid_count": 4,
+                "read_mod_fraction": 0.25,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s1",
+                "condition": "NS",
+                "read_id": "r2",
+                "modified_count": 2,
+                "valid_count": 4,
+                "read_mod_fraction": 0.50,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2",
+                "condition": "treated",
+                "read_id": "r3",
+                "modified_count": 4,
+                "valid_count": 4,
+                "read_mod_fraction": 1.00,
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s3",
+                "condition": "treated",
+                "read_id": "r4",
+                "modified_count": 3,
+                "valid_count": 4,
+                "read_mod_fraction": 0.75,
+            },
+        ]
+    )
+
+    result = region_contrasts.score_regions(
+        samples=[],
+        regions=None,
+        motifs=[],
+        contrast=ContrastSpec(mode="group_vs_group", numerator=["treated"], denominator=["NS"]),
+        analysis_unit="single_read",
+        representation="read_mod_fraction",
+        signal_source="extract_reads",
+        test="effect_size_only",
+        read_table=evidence,
+    )
+
+    row = result.summary.iloc[0]
+    assert row["region_id"] == "reg1"
+    assert row["sample_summary_numerator_mean"] == pytest.approx(0.875)
+    assert row["sample_summary_denominator_mean"] == pytest.approx(0.375)
+    assert row["delta_summary_mean"] == pytest.approx(0.5)
+
+
 def test_build_region_evidence_table_from_pileup_counts(monkeypatch):
     samples = [
         SampleSpec(

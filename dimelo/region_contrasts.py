@@ -178,6 +178,44 @@ def build_region_evidence_table(
     return pd.DataFrame(rows)
 
 
+def build_single_read_mod_fraction_evidence_table(
+    *,
+    extract_table: pd.DataFrame,
+) -> pd.DataFrame:
+    required_columns = {
+        "region_id",
+        "sample_id",
+        "condition",
+        "read_id",
+        "modified_count",
+        "valid_count",
+    }
+    missing_columns = required_columns - set(extract_table.columns)
+    if missing_columns:
+        missing_display = ", ".join(sorted(missing_columns))
+        raise ValueError(
+            "build_single_read_mod_fraction_evidence_table requires columns: "
+            f"{missing_display}."
+        )
+
+    evidence = extract_table.loc[
+        :,
+        [
+            "region_id",
+            "sample_id",
+            "condition",
+            "read_id",
+            "modified_count",
+            "valid_count",
+        ],
+    ].copy()
+    evidence["read_mod_fraction"] = evidence["modified_count"].div(
+        evidence["valid_count"].where(evidence["valid_count"] != 0),
+        fill_value=0,
+    ).fillna(0.0)
+    return evidence
+
+
 def build_cluster_occupancy_evidence_table(
     *,
     region_summaries: pd.DataFrame,
@@ -524,6 +562,138 @@ def _pool_cluster_occupancy_groups(
     return pd.concat(pooled_frames, ignore_index=True)
 
 
+def _summarize_single_read_mod_fraction_by_sample(evidence: pd.DataFrame) -> pd.DataFrame:
+    return (
+        evidence.groupby(["region_id", "sample_id", "condition"], as_index=False, sort=False)
+        .agg(
+            read_n=("read_id", "nunique"),
+            sample_summary_mean=("read_mod_fraction", "mean"),
+            sample_summary_median=("read_mod_fraction", "median"),
+            sample_summary_var=("read_mod_fraction", "var"),
+        )
+        .fillna({"sample_summary_var": 0.0})
+    )
+
+
+def _score_single_read_mod_fraction(
+    *,
+    evidence: pd.DataFrame,
+    contrast: ContrastSpec,
+    test: str,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if contrast.mode not in {"pairwise", "group_vs_group"}:
+        raise NotImplementedError(
+            "Single-read mod-fraction scoring is not implemented for contrast mode "
+            f"'{contrast.mode}'."
+        )
+
+    sample_summary = _summarize_single_read_mod_fraction_by_sample(evidence)
+    side_specs = {
+        "numerator": contrast.numerator or [],
+        "denominator": contrast.denominator or [],
+    }
+    _require_requested_conditions_present(
+        sample_summary,
+        side_specs=side_specs,
+    )
+
+    pooled_frames = []
+    for side, conditions in side_specs.items():
+        side_evidence = sample_summary.loc[sample_summary["condition"].isin(conditions)].copy()
+        pooled = (
+            side_evidence.groupby("region_id", dropna=False, sort=False)
+            .agg(
+                sample_summary_mean=("sample_summary_mean", "mean"),
+                read_n=("read_n", "sum"),
+                replicate_n=("sample_id", "nunique"),
+                sample_values=("sample_summary_mean", lambda values: tuple(float(v) for v in values)),
+            )
+            .reset_index()
+            .assign(contrast_side=side)
+        )
+        pooled_frames.append(pooled)
+
+    pooled = pd.concat(pooled_frames, ignore_index=True)
+    numerator = (
+        pooled.loc[pooled["contrast_side"] == "numerator"]
+        .drop(columns=["contrast_side", "sample_values"])
+        .rename(
+            columns={
+                "sample_summary_mean": "sample_summary_numerator_mean",
+                "read_n": "numerator_read_n",
+                "replicate_n": "numerator_replicate_n",
+            }
+        )
+    )
+    denominator = (
+        pooled.loc[pooled["contrast_side"] == "denominator"]
+        .drop(columns=["contrast_side", "sample_values"])
+        .rename(
+            columns={
+                "sample_summary_mean": "sample_summary_denominator_mean",
+                "read_n": "denominator_read_n",
+                "replicate_n": "denominator_replicate_n",
+            }
+        )
+    )
+
+    regions_table = numerator.merge(
+        denominator,
+        on="region_id",
+        how="outer",
+        sort=False,
+    )
+    regions_table["sample_summary_numerator_mean"] = regions_table[
+        "sample_summary_numerator_mean"
+    ].fillna(0.0)
+    regions_table["sample_summary_denominator_mean"] = regions_table[
+        "sample_summary_denominator_mean"
+    ].fillna(0.0)
+    regions_table["numerator_read_n"] = regions_table["numerator_read_n"].fillna(0).astype(int)
+    regions_table["denominator_read_n"] = (
+        regions_table["denominator_read_n"].fillna(0).astype(int)
+    )
+    regions_table["numerator_replicate_n"] = (
+        regions_table["numerator_replicate_n"].fillna(0).astype(int)
+    )
+    regions_table["denominator_replicate_n"] = (
+        regions_table["denominator_replicate_n"].fillna(0).astype(int)
+    )
+    regions_table["delta_summary_mean"] = (
+        regions_table["sample_summary_numerator_mean"]
+        - regions_table["sample_summary_denominator_mean"]
+    )
+    pseudocount = 1e-6
+    regions_table["log2_fc"] = (
+        (regions_table["sample_summary_numerator_mean"] + pseudocount)
+        / (regions_table["sample_summary_denominator_mean"] + pseudocount)
+    ).map(math.log2)
+    regions_table["effect_size"] = regions_table["delta_summary_mean"].abs()
+    regions_table = regions_table.sort_values(
+        by=["effect_size", "delta_summary_mean", "region_id"],
+        ascending=[False, False, True],
+        kind="mergesort",
+    ).reset_index(drop=True)
+    regions_table["rank"] = range(1, len(regions_table) + 1)
+
+    summary = regions_table.loc[
+        :,
+        [
+            "region_id",
+            "sample_summary_numerator_mean",
+            "sample_summary_denominator_mean",
+            "delta_summary_mean",
+            "log2_fc",
+            "rank",
+            "numerator_read_n",
+            "denominator_read_n",
+            "numerator_replicate_n",
+            "denominator_replicate_n",
+        ],
+    ].copy()
+    return regions_table, summary
+
+
 def _add_fraction_test_scores(
     regions_table: pd.DataFrame,
     *,
@@ -852,6 +1022,7 @@ def score_regions(
     test: str = "effect_size_only",
     multiple_testing: str = "fdr_bh",
     occupancy_table: pd.DataFrame | None = None,
+    read_table: pd.DataFrame | None = None,
 ) -> RegionContrastResult:
     validate_region_contrast_request(
         analysis_unit=analysis_unit,
@@ -860,6 +1031,44 @@ def score_regions(
         test=test,
     )
     contrast_metadata = contrast.metadata or {}
+
+    if analysis_unit == "single_read":
+        if representation != "read_mod_fraction":
+            raise NotImplementedError(
+                f"Single-read representation '{representation}' is not implemented yet."
+            )
+        if read_table is None:
+            raise ValueError(
+                "single_read read_mod_fraction scoring currently requires read_table."
+            )
+        evidence = build_single_read_mod_fraction_evidence_table(extract_table=read_table)
+        regions_table, summary = _score_single_read_mod_fraction(
+            evidence=evidence,
+            contrast=contrast,
+            test=test,
+        )
+        metadata = {
+            "contrast_mode": contrast.mode,
+            "analysis_unit": analysis_unit,
+            "representation": representation,
+            "signal_source": signal_source,
+            "test": test,
+            "multiple_testing": multiple_testing,
+            "normalization_mode": contrast_metadata.get("normalization_mode", "none"),
+            "biological_interpretation": contrast_metadata.get(
+                "biological_interpretation",
+                "region-level difference in sample-level read modification fraction",
+            ),
+            "renderer": contrast_metadata.get("renderer", "region_effect_sizes"),
+        }
+        return RegionContrastResult(
+            regions=regions_table,
+            summary=summary,
+            contrast=contrast,
+            plot_data={"region_effect_sizes": summary.copy()},
+            metadata=metadata,
+            figures={},
+        )
 
     if analysis_unit == "cluster_occupancy":
         if occupancy_table is None:
