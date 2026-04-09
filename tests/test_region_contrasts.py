@@ -94,7 +94,7 @@ def test_validate_region_contrast_request_rejects_single_read_unknown_test():
 
 
 def test_validate_rejects_unsupported_single_read_beta_binomial():
-    with pytest.raises(ValueError, match="analysis_unit='ensemble_region'"):
+    with pytest.raises(ValueError, match="extract_reads"):
         region_contrasts.validate_region_contrast_request(
             analysis_unit="single_read",
             representation="read_mod_fraction",
