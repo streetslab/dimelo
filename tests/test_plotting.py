@@ -1082,6 +1082,31 @@ def test_prepare_region_discovery_hit_context_data_returns_empty_payload_for_no_
     assert payload["metadata"]["selection_mode"] == "top_n"
 
 
+def test_plot_region_discovery_scan_matplotlib_returns_figure_and_axes():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_region_discovery_scan_data(result=_make_region_discovery_result())
+
+    fig, axes = plotting_matplotlib.plot_region_discovery_scan_matplotlib(payload)
+
+    assert fig is not None
+    assert axes is not None
+
+
+def test_plot_region_discovery_hit_context_matplotlib_returns_figure_and_axes():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_region_discovery_hit_context_data(
+        result=_make_region_discovery_result(),
+        top_n=2,
+    )
+
+    fig, axes = plotting_matplotlib.plot_region_discovery_hit_context_matplotlib(payload)
+
+    assert fig is not None
+    assert axes is not None
+
+
 def test_prepare_global_analysis_summary_data_returns_expected_tables():
     result = _make_global_analysis_result()
 
@@ -1135,6 +1160,17 @@ def test_prepare_global_analysis_summary_data_skips_condition_aggregation_when_d
     assert payload["metadata"]["aggregate_conditions"] is False
 
 
+def test_plot_global_analysis_summary_matplotlib_returns_figure_and_axis():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_global_analysis_summary_data(result=_make_global_analysis_result())
+
+    fig, ax = plotting_matplotlib.plot_global_analysis_summary_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+
+
 def test_prepare_global_analysis_window_data_returns_expected_tables():
     result = _make_global_window_result()
 
@@ -1145,6 +1181,17 @@ def test_prepare_global_analysis_window_data_returns_expected_tables():
     assert payload["window_table"]["window_midpoint"].tolist() == [50.0, 50.0, 50.0, 50.0]
     assert payload["condition_window_table"].empty
     assert payload["metadata"]["contig_order"] == ["chr1", "chr2"]
+
+
+def test_plot_global_analysis_window_matplotlib_returns_figure_and_axes():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_global_analysis_window_data(result=_make_global_window_result())
+
+    fig, axes = plotting_matplotlib.plot_global_analysis_window_matplotlib(payload)
+
+    assert fig is not None
+    assert axes is not None
 
 
 def test_prepare_global_analysis_window_data_filters_contigs_in_requested_order():
