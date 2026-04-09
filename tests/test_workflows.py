@@ -706,7 +706,7 @@ def test_discovery_cluster_contrast_workflow_fast_fails_invalid_contrast_config_
     monkeypatch.setattr(workflows.region_discovery, "scan_genome", fake_scan_genome)
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
 
-    with pytest.raises(ValueError, match="analysis_unit='ensemble_region'"):
+    with pytest.raises(ValueError, match="read_mod_fraction"):
         workflows.discovery_cluster_contrast_workflow(
             samples=_workflow_samples(),
             motifs=["A,0"],

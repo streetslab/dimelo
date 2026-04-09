@@ -24,6 +24,7 @@ This directory tracks internal design and implementation work for the current br
 - [2026-03-31-region-analysis-architecture-design.md](specs/2026-03-31-region-analysis-architecture-design.md) - common architecture for region discovery, global analysis, and contrasts. Status: `partially implemented`
 - [2026-03-31-pre-plan-decisions-addendum.md](specs/2026-03-31-pre-plan-decisions-addendum.md) - cross-cutting policy decisions for shared clustering and region analysis follow-on work. Status: `partially implemented`
 - [2026-04-01-paired-region-discovery-design.md](specs/2026-04-01-paired-region-discovery-design.md) - paired discovery support for matched and ordered comparisons. Status: `implemented`
+- [2026-04-03-single-read-region-contrasts-design.md](specs/2026-04-03-single-read-region-contrasts-design.md) - first `single_read` contrast family for defined-region read-level summaries. Status: `implemented`
 
 ### Plotting
 
@@ -49,6 +50,7 @@ This directory tracks internal design and implementation work for the current br
 - [2026-03-31-global-analysis-foundations.md](plans/2026-03-31-global-analysis-foundations.md) - global analysis models, workflows, and artifact plumbing. Status: `implemented`
 - [2026-03-31-region-contrasts-foundations.md](plans/2026-03-31-region-contrasts-foundations.md) - defined-region contrast foundations and scoring paths. Status: `implemented`
 - [2026-04-01-cluster-occupancy-region-contrasts.md](plans/2026-04-01-cluster-occupancy-region-contrasts.md) - cluster-occupancy evidence and scoring for region contrasts. Status: `implemented`
+- [2026-04-03-single-read-region-contrasts.md](plans/2026-04-03-single-read-region-contrasts.md) - `single_read` evidence builders and sample-aware scoring for read-level region contrasts. Status: `implemented`
 
 ### Region Discovery
 
@@ -74,6 +76,7 @@ This directory tracks internal design and implementation work for the current br
 
 - Shared clustering: start with the shared clustering design spec, then the foundations plan, then the discovery-to-clustering workflows.
 - Region contrasts: start with the region analysis architecture spec, then the contrasts foundations plan, cluster-occupancy follow-on work, and the region-contrasts plotting plan.
+- Single-read contrasts: use the single-read region-contrasts design and plan after the region-contrasts foundations work when you need extract-backed defined-region comparison.
 - Region discovery: use the region analysis architecture spec, the paired discovery spec, and the discovery workflow plans together.
 - Global analysis: use the region analysis architecture spec first, then the global analysis foundations plan.
 - Plotting: start with the plotting-axis spec, then the plotting-axis implementation plan, then the region-contrasts, region-discovery, and global-analysis plotting plans for helper-level coverage.
