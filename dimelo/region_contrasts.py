@@ -307,6 +307,38 @@ def _require_single_read_matched_binary_sides(contrast: ContrastSpec) -> None:
         )
 
 
+def _validate_single_read_matched_sample_summary(
+    sample_summary: pd.DataFrame,
+    *,
+    pairing_key: str,
+) -> None:
+    sample_pair_counts = (
+        sample_summary.loc[:, ["sample_id", pairing_key]]
+        .drop_duplicates()
+        .groupby("sample_id", dropna=False)[pairing_key]
+        .nunique(dropna=False)
+    )
+    if (sample_pair_counts > 1).any():
+        raise ValueError(
+            "single_read matched_pairwise scoring requires each sample_id to map "
+            "to exactly one pairing key."
+        )
+
+    side_counts = (
+        sample_summary.groupby(
+            ["region_id", pairing_key, "condition"],
+            dropna=False,
+            sort=False,
+        )["sample_id"]
+        .nunique()
+    )
+    if (side_counts > 1).any():
+        raise ValueError(
+            "single_read matched_pairwise scoring requires exactly one sample "
+            "per region, pair, and condition."
+        )
+
+
 def _load_builtin_single_read_feature_table(*, samples, regions, motifs):
     if not samples:
         raise ValueError(
@@ -813,6 +845,10 @@ def _score_single_read_mod_fraction(
     )
 
     if contrast.mode == "matched_pairwise":
+        _validate_single_read_matched_sample_summary(
+            sample_summary,
+            pairing_key=pairing_key or "",
+        )
         pair_summary = _summarize_single_read_mod_fraction_by_pair(
             sample_summary,
             pairing_key=pairing_key or "",
@@ -1052,6 +1088,10 @@ def _score_single_read_features(
         if column not in {"region_id", "sample_id", "condition", pairing_key}
     ]
     if contrast.mode == "matched_pairwise":
+        _validate_single_read_matched_sample_summary(
+            sample_summary,
+            pairing_key=pairing_key or "",
+        )
         pair_columns = ["region_id", pairing_key, "condition"]
         pair_summary = sample_summary.groupby(pair_columns, as_index=False, sort=False)[
             feature_columns

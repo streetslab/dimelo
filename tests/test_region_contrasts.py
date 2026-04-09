@@ -1164,6 +1164,210 @@ def test_score_regions_single_read_matched_pairwise_rejects_multi_condition_side
         )
 
 
+@pytest.mark.parametrize(
+    "representation,table_factory,signal_source,test_name",
+    [
+        ("read_mod_fraction", "read_table", "extract_reads", "sample_distribution_shift"),
+        ("read_window_features", "feature_table", "extract_features", "feature_summary_shift"),
+    ],
+)
+def test_score_regions_single_read_matched_pairwise_rejects_multiple_samples_on_one_side(
+    representation,
+    table_factory,
+    signal_source,
+    test_name,
+):
+    contrast = ContrastSpec(
+        mode="matched_pairwise",
+        numerator=["after"],
+        denominator=["before"],
+        pairing_key="pair_id",
+    )
+    if table_factory == "read_table":
+        evidence_kwargs = {
+            "read_table": pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_before",
+                        "condition": "before",
+                        "read_id": "r1",
+                        "modified_count": 1,
+                        "valid_count": 4,
+                        "read_mod_fraction": 0.25,
+                        "pair_id": "p1",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after_a",
+                        "condition": "after",
+                        "read_id": "r2",
+                        "modified_count": 4,
+                        "valid_count": 4,
+                        "read_mod_fraction": 1.0,
+                        "pair_id": "p1",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after_b",
+                        "condition": "after",
+                        "read_id": "r3",
+                        "modified_count": 3,
+                        "valid_count": 4,
+                        "read_mod_fraction": 0.75,
+                        "pair_id": "p1",
+                    },
+                ]
+            )
+        }
+    else:
+        evidence_kwargs = {
+            "feature_table": pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_before",
+                        "condition": "before",
+                        "read_id": "r1",
+                        "f0": 0.1,
+                        "pair_id": "p1",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after_a",
+                        "condition": "after",
+                        "read_id": "r2",
+                        "f0": 0.9,
+                        "pair_id": "p1",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after_b",
+                        "condition": "after",
+                        "read_id": "r3",
+                        "f0": 0.7,
+                        "pair_id": "p1",
+                    },
+                ]
+            )
+        }
+
+    with pytest.raises(ValueError, match="exactly one sample per region, pair, and condition"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=contrast,
+            analysis_unit="single_read",
+            representation=representation,
+            signal_source=signal_source,
+            test=test_name,
+            **evidence_kwargs,
+        )
+
+
+@pytest.mark.parametrize(
+    "representation,table_factory,signal_source,test_name",
+    [
+        ("read_mod_fraction", "read_table", "extract_reads", "sample_distribution_shift"),
+        ("read_window_features", "feature_table", "extract_features", "feature_summary_shift"),
+    ],
+)
+def test_score_regions_single_read_matched_pairwise_rejects_sample_ids_mapped_to_multiple_pairs(
+    representation,
+    table_factory,
+    signal_source,
+    test_name,
+):
+    contrast = ContrastSpec(
+        mode="matched_pairwise",
+        numerator=["after"],
+        denominator=["before"],
+        pairing_key="pair_id",
+    )
+    if table_factory == "read_table":
+        evidence_kwargs = {
+            "read_table": pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "shared_sample",
+                        "condition": "before",
+                        "read_id": "r1",
+                        "modified_count": 1,
+                        "valid_count": 4,
+                        "read_mod_fraction": 0.25,
+                        "pair_id": "p1",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "shared_sample",
+                        "condition": "before",
+                        "read_id": "r2",
+                        "modified_count": 2,
+                        "valid_count": 4,
+                        "read_mod_fraction": 0.5,
+                        "pair_id": "p2",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after",
+                        "condition": "after",
+                        "read_id": "r3",
+                        "modified_count": 4,
+                        "valid_count": 4,
+                        "read_mod_fraction": 1.0,
+                        "pair_id": "p1",
+                    },
+                ]
+            )
+        }
+    else:
+        evidence_kwargs = {
+            "feature_table": pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "shared_sample",
+                        "condition": "before",
+                        "read_id": "r1",
+                        "f0": 0.1,
+                        "pair_id": "p1",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "shared_sample",
+                        "condition": "before",
+                        "read_id": "r2",
+                        "f0": 0.2,
+                        "pair_id": "p2",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after",
+                        "condition": "after",
+                        "read_id": "r3",
+                        "f0": 0.9,
+                        "pair_id": "p1",
+                    },
+                ]
+            )
+        }
+
+    with pytest.raises(ValueError, match="sample_id to map to exactly one pairing key"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=contrast,
+            analysis_unit="single_read",
+            representation=representation,
+            signal_source=signal_source,
+            test=test_name,
+            **evidence_kwargs,
+        )
+
+
 def test_score_regions_single_read_window_features_uses_builtin_loader(monkeypatch):
     extracted_by_path = {
         "ns.h5": SimpleNamespace(
