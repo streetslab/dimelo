@@ -293,6 +293,18 @@ def _require_single_read_pairing_key(frame: pd.DataFrame, pairing_key: str) -> N
         raise ValueError(
             f"single_read matched_pairwise scoring requires column {pairing_key!r}."
         )
+    if frame[pairing_key].isna().any():
+        raise ValueError(
+            f"single_read matched_pairwise scoring requires non-null values in column {pairing_key!r}."
+        )
+
+
+def _require_single_read_matched_binary_sides(contrast: ContrastSpec) -> None:
+    if len(contrast.numerator or []) != 1 or len(contrast.denominator or []) != 1:
+        raise ValueError(
+            "single_read matched_pairwise scoring currently requires exactly one "
+            "numerator and one denominator condition."
+        )
 
 
 def _load_builtin_single_read_feature_table(*, samples, regions, motifs):
@@ -785,6 +797,8 @@ def _score_single_read_mod_fraction(
         )
 
     pairing_key = contrast.pairing_key if contrast.mode == "matched_pairwise" else None
+    if contrast.mode == "matched_pairwise":
+        _require_single_read_matched_binary_sides(contrast)
     sample_summary = _summarize_single_read_mod_fraction_by_sample(
         evidence,
         pairing_key=pairing_key,
@@ -1017,6 +1031,8 @@ def _score_single_read_features(
         )
 
     pairing_key = contrast.pairing_key if contrast.mode == "matched_pairwise" else None
+    if contrast.mode == "matched_pairwise":
+        _require_single_read_matched_binary_sides(contrast)
     sample_summary = _summarize_single_read_features_by_sample(
         evidence,
         pairing_key=pairing_key,

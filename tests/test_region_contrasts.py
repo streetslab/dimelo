@@ -571,9 +571,9 @@ def test_score_regions_single_read_mod_fraction_supports_matched_pairwise():
                 "sample_id": "s1_before",
                 "condition": "before",
                 "read_id": "r1",
-                "modified_count": 1,
+                "modified_count": 0,
                 "valid_count": 4,
-                "read_mod_fraction": 0.25,
+                "read_mod_fraction": 0.0,
                 "pair_id": "p1",
             },
             {
@@ -591,9 +591,9 @@ def test_score_regions_single_read_mod_fraction_supports_matched_pairwise():
                 "sample_id": "s2_before",
                 "condition": "before",
                 "read_id": "r3",
-                "modified_count": 2,
+                "modified_count": 4,
                 "valid_count": 4,
-                "read_mod_fraction": 0.5,
+                "read_mod_fraction": 1.0,
                 "pair_id": "p2",
             },
             {
@@ -601,6 +601,46 @@ def test_score_regions_single_read_mod_fraction_supports_matched_pairwise():
                 "sample_id": "s2_after",
                 "condition": "after",
                 "read_id": "r4",
+                "modified_count": 4,
+                "valid_count": 4,
+                "read_mod_fraction": 1.0,
+                "pair_id": "p2",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s1_before",
+                "condition": "before",
+                "read_id": "r5",
+                "modified_count": 0,
+                "valid_count": 4,
+                "read_mod_fraction": 0.0,
+                "pair_id": "p1",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s1_before",
+                "condition": "before",
+                "read_id": "r6",
+                "modified_count": 0,
+                "valid_count": 4,
+                "read_mod_fraction": 0.0,
+                "pair_id": "p1",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2_after",
+                "condition": "after",
+                "read_id": "r7",
+                "modified_count": 4,
+                "valid_count": 4,
+                "read_mod_fraction": 1.0,
+                "pair_id": "p2",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2_after",
+                "condition": "after",
+                "read_id": "r8",
                 "modified_count": 3,
                 "valid_count": 4,
                 "read_mod_fraction": 0.75,
@@ -637,9 +677,9 @@ def test_score_regions_single_read_mod_fraction_supports_matched_pairwise():
     )
 
     row = result.summary.iloc[0]
-    assert row["sample_summary_numerator_mean"] == pytest.approx(0.875)
-    assert row["sample_summary_denominator_mean"] == pytest.approx(0.375)
-    assert row["delta_summary_mean"] == pytest.approx(0.5)
+    assert row["sample_summary_numerator_mean"] == pytest.approx(0.9583333333333333)
+    assert row["sample_summary_denominator_mean"] == pytest.approx(0.5)
+    assert row["delta_summary_mean"] == pytest.approx(0.45833333333333326)
     assert row["numerator_replicate_n"] == 2
     assert row["denominator_replicate_n"] == 2
 
@@ -763,7 +803,7 @@ def test_score_regions_single_read_window_features_supports_matched_pairwise():
                 "sample_id": "s1_before",
                 "condition": "before",
                 "read_id": "r1",
-                "f0": 0.1,
+                "f0": 0.0,
                 "pair_id": "p1",
             },
             {
@@ -771,7 +811,7 @@ def test_score_regions_single_read_window_features_supports_matched_pairwise():
                 "sample_id": "s1_after",
                 "condition": "after",
                 "read_id": "r2",
-                "f0": 0.9,
+                "f0": 1.0,
                 "pair_id": "p1",
             },
             {
@@ -779,7 +819,7 @@ def test_score_regions_single_read_window_features_supports_matched_pairwise():
                 "sample_id": "s2_before",
                 "condition": "before",
                 "read_id": "r3",
-                "f0": 0.2,
+                "f0": 1.0,
                 "pair_id": "p2",
             },
             {
@@ -787,14 +827,46 @@ def test_score_regions_single_read_window_features_supports_matched_pairwise():
                 "sample_id": "s2_after",
                 "condition": "after",
                 "read_id": "r4",
-                "f0": 0.8,
+                "f0": 0.6,
+                "pair_id": "p2",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s1_before",
+                "condition": "before",
+                "read_id": "r5",
+                "f0": 0.0,
+                "pair_id": "p1",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s1_before",
+                "condition": "before",
+                "read_id": "r6",
+                "f0": 0.0,
+                "pair_id": "p1",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2_after",
+                "condition": "after",
+                "read_id": "r7",
+                "f0": 0.6,
+                "pair_id": "p2",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s2_after",
+                "condition": "after",
+                "read_id": "r8",
+                "f0": 0.6,
                 "pair_id": "p2",
             },
             {
                 "region_id": "reg1",
                 "sample_id": "s3_after",
                 "condition": "after",
-                "read_id": "r5",
+                "read_id": "r9",
                 "f0": 0.5,
                 "pair_id": "p3",
             },
@@ -819,9 +891,9 @@ def test_score_regions_single_read_window_features_supports_matched_pairwise():
     )
 
     row = result.summary.iloc[0]
-    assert row["f0_numerator_mean"] == pytest.approx(0.85)
-    assert row["f0_denominator_mean"] == pytest.approx(0.15)
-    assert row["f0_delta_mean"] == pytest.approx(0.7)
+    assert row["f0_numerator_mean"] == pytest.approx(0.8)
+    assert row["f0_denominator_mean"] == pytest.approx(0.5)
+    assert row["f0_delta_mean"] == pytest.approx(0.3)
 
 
 @pytest.mark.parametrize(
@@ -893,6 +965,192 @@ def test_score_regions_single_read_matched_pairwise_requires_pairing_key_column(
         test_name = "feature_summary_shift"
 
     with pytest.raises(ValueError, match="pair_id"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=contrast,
+            analysis_unit="single_read",
+            representation=representation,
+            signal_source=signal_source,
+            test=test_name,
+            **evidence_kwargs,
+        )
+
+
+@pytest.mark.parametrize(
+    "representation,table_factory,signal_source,test_name",
+    [
+        ("read_mod_fraction", "read_table", "extract_reads", "sample_distribution_shift"),
+        ("read_window_features", "feature_table", "extract_features", "feature_summary_shift"),
+    ],
+)
+def test_score_regions_single_read_matched_pairwise_requires_non_null_pairing_keys(
+    representation,
+    table_factory,
+    signal_source,
+    test_name,
+):
+    contrast = ContrastSpec(
+        mode="matched_pairwise",
+        numerator=["after"],
+        denominator=["before"],
+        pairing_key="pair_id",
+    )
+    if table_factory == "read_table":
+        evidence_kwargs = {
+            "read_table": pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_before",
+                        "condition": "before",
+                        "read_id": "r1",
+                        "modified_count": 1,
+                        "valid_count": 4,
+                        "read_mod_fraction": 0.25,
+                        "pair_id": None,
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after",
+                        "condition": "after",
+                        "read_id": "r2",
+                        "modified_count": 4,
+                        "valid_count": 4,
+                        "read_mod_fraction": 1.0,
+                        "pair_id": "p1",
+                    },
+                ]
+            )
+        }
+    else:
+        evidence_kwargs = {
+            "feature_table": pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_before",
+                        "condition": "before",
+                        "read_id": "r1",
+                        "f0": 0.1,
+                        "pair_id": None,
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after",
+                        "condition": "after",
+                        "read_id": "r2",
+                        "f0": 0.9,
+                        "pair_id": "p1",
+                    },
+                ]
+            )
+        }
+
+    with pytest.raises(ValueError, match="non-null"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=contrast,
+            analysis_unit="single_read",
+            representation=representation,
+            signal_source=signal_source,
+            test=test_name,
+            **evidence_kwargs,
+        )
+
+
+@pytest.mark.parametrize(
+    "representation,table_factory,signal_source,test_name",
+    [
+        ("read_mod_fraction", "read_table", "extract_reads", "sample_distribution_shift"),
+        ("read_window_features", "feature_table", "extract_features", "feature_summary_shift"),
+    ],
+)
+def test_score_regions_single_read_matched_pairwise_rejects_multi_condition_sides(
+    representation,
+    table_factory,
+    signal_source,
+    test_name,
+):
+    contrast = ContrastSpec(
+        mode="matched_pairwise",
+        numerator=["after", "later"],
+        denominator=["before"],
+        pairing_key="pair_id",
+    )
+    if table_factory == "read_table":
+        evidence_kwargs = {
+            "read_table": pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_before",
+                        "condition": "before",
+                        "read_id": "r1",
+                        "modified_count": 1,
+                        "valid_count": 4,
+                        "read_mod_fraction": 0.25,
+                        "pair_id": "p1",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after",
+                        "condition": "after",
+                        "read_id": "r2",
+                        "modified_count": 4,
+                        "valid_count": 4,
+                        "read_mod_fraction": 1.0,
+                        "pair_id": "p1",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_later",
+                        "condition": "later",
+                        "read_id": "r3",
+                        "modified_count": 3,
+                        "valid_count": 4,
+                        "read_mod_fraction": 0.75,
+                        "pair_id": "p1",
+                    },
+                ]
+            )
+        }
+    else:
+        evidence_kwargs = {
+            "feature_table": pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_before",
+                        "condition": "before",
+                        "read_id": "r1",
+                        "f0": 0.1,
+                        "pair_id": "p1",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after",
+                        "condition": "after",
+                        "read_id": "r2",
+                        "f0": 0.9,
+                        "pair_id": "p1",
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_later",
+                        "condition": "later",
+                        "read_id": "r3",
+                        "f0": 0.7,
+                        "pair_id": "p1",
+                    },
+                ]
+            )
+        }
+
+    with pytest.raises(ValueError, match="exactly one numerator and one denominator"):
         region_contrasts.score_regions(
             samples=[],
             regions=None,
