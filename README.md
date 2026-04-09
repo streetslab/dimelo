@@ -241,6 +241,8 @@ For discovery-to-clustering-to-contrast follow-up, use `workflows.discovery_clus
 
 `region_contrasts` uses the same data-prep-first plotting layer: `prepare_region_contrast_profile_data(...)` and `prepare_region_contrast_heatmap_data(...)` consume a `RegionContrastResult` plus an explicit positional table, while shared clustering currently keeps lighter plotting coverage through plot-ready tables in `result.plot_data`.
 
+For users who want built-in figures instead of only payload tables, `dimelo.plotting_matplotlib` provides an optional Matplotlib renderer layer on top of those prepared payloads, plus `save_figure(...)` for PNG/PDF export.
+
 `region_contrasts` also now supports `analysis_unit="single_read"` for
 extract-backed defined-region comparison. Use `representation="read_mod_fraction"`
 for per-read motif fractions or `representation="read_window_features"` for

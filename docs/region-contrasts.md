@@ -228,6 +228,18 @@ heatmap_payload = plotting.prepare_region_contrast_heatmap_data(
 )
 ```
 
+If you want a built-in Matplotlib figure after preparing the payload, pass it through `dimelo.plotting_matplotlib`:
+
+```python
+from dimelo import plotting_matplotlib
+
+fig, ax = plotting_matplotlib.plot_region_contrast_profile_matplotlib(
+    profile_payload,
+    value_mode="delta",
+)
+plotting_matplotlib.save_figure(fig, "region-contrast-profile.png")
+```
+
 `position_table` must already be an aggregated positional substrate from the parsing/loading layer, not raw per-read events. The current helper contract expects at minimum:
 
 - `region_id`

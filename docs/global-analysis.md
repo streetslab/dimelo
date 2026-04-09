@@ -60,6 +60,15 @@ window_payload = plotting.prepare_global_analysis_window_data(
 )
 ```
 
+If you want a built-in Matplotlib figure after preparing the payload, pass it through `dimelo.plotting_matplotlib`:
+
+```python
+from dimelo import plotting_matplotlib
+
+fig, ax = plotting_matplotlib.plot_global_analysis_summary_matplotlib(summary_payload)
+plotting_matplotlib.save_figure(fig, "global-analysis-summary.png")
+```
+
 - `prepare_global_analysis_summary_data(...)` consumes a `GlobalAnalysisResult` and returns renderer-neutral `sample_summary`, `condition_summary`, `normalization_table`, and `metadata` payloads. The summary payload exposes both sample-level rows and optional condition-level views, while normalization values stay available through `normalization_table`.
 - `prepare_global_analysis_window_data(...)` consumes the same `GlobalAnalysisResult` and returns renderer-neutral `window_table`, `condition_window_table`, and `metadata` payloads. Broad-window payloads stay per-contig by default rather than flattening onto a cumulative genome axis.
 

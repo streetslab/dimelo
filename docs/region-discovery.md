@@ -82,6 +82,15 @@ context_payload = plotting.prepare_region_discovery_hit_context_data(
 )
 ```
 
+If you want a built-in Matplotlib figure after preparing the payload, pass it through `dimelo.plotting_matplotlib`:
+
+```python
+from dimelo import plotting_matplotlib
+
+fig, axes = plotting_matplotlib.plot_region_discovery_scan_matplotlib(scan_payload)
+plotting_matplotlib.save_figure(fig, "region-discovery-scan.png")
+```
+
 - `prepare_region_discovery_scan_data(...)` consumes a `RegionDiscoveryResult` and returns renderer-neutral `scan_table`, `hit_table`, and `metadata` payloads. Scan payloads stay per-contig by default rather than projecting windows onto a cumulative genome axis.
 - `prepare_region_discovery_hit_context_data(...)` consumes the same `RegionDiscoveryResult` and returns renderer-neutral `context_table`, `selected_hits`, and `metadata` payloads for small-multiple or local hit-context views.
 
