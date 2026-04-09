@@ -25,6 +25,12 @@ def save_figure(
     return output_path
 
 
+def _require_payload_keys(payload: Mapping[str, object], keys: tuple[str, ...], *, owner: str) -> None:
+    missing = [key for key in keys if key not in payload]
+    if missing:
+        raise ValueError(f"{owner} payload is missing required keys: {', '.join(missing)}")
+
+
 def _require_payload_table(payload: Mapping[str, object], key: str) -> pd.DataFrame:
     if key not in payload:
         raise ValueError(f"plot payload is missing required key: {key}")
@@ -40,38 +46,70 @@ def _import_pyplot():
     return plt
 
 
-def plot_region_contrast_profile_matplotlib(payload: Mapping[str, object]):
+def _make_axis(*, ax=None, figsize=(8, 4)):
+    plt = _import_pyplot()
+    if ax is not None:
+        return ax.figure, ax
+    fig, created_ax = plt.subplots(figsize=figsize)
+    return fig, created_ax
+
+
+def _prepare_region_contrast_value_mode_table(
+    plot_table: pd.DataFrame,
+    *,
+    value_mode: str,
+) -> pd.DataFrame:
+    if value_mode not in {"numerator", "denominator", "delta"}:
+        raise ValueError("Unsupported region contrast value_mode.")
+
+    if "value_mode" not in plot_table.columns:
+        return plot_table.copy()
+
+    filtered = plot_table.loc[plot_table["value_mode"] == value_mode].copy()
+    if filtered.empty:
+        raise ValueError(f"plot payload does not contain rows for value_mode={value_mode!r}.")
+    return filtered
+
+
+def plot_region_contrast_profile_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    value_mode: str = "delta",
+    ax=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("plot_table", "metadata"),
+        owner="plot_region_contrast_profile_matplotlib",
+    )
     plot_table = _require_payload_table(payload, "plot_table")
     metadata = payload.get("metadata", {}) if isinstance(payload.get("metadata", {}), Mapping) else {}
+    plot_table = _prepare_region_contrast_value_mode_table(plot_table, value_mode=value_mode)
 
-    plt = _import_pyplot()
-    fig, ax = plt.subplots(figsize=(8, 4))
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
 
     if plot_table.empty:
-        ax.set_title("Region contrast profile")
+        ax.set_title(title or "Region contrast profile")
         ax.set_xlabel("position")
-        ax.set_ylabel("value")
+        ax.set_ylabel(value_mode.replace("_", " ").title())
         return fig, ax
 
     x_column = "plot_x" if "plot_x" in plot_table.columns else "position"
-    y_column = "value"
-
-    if "value_mode" in plot_table.columns:
-        for value_mode, subset in plot_table.groupby("value_mode", sort=False):
-            subset = subset.sort_values([x_column, "region_id"], kind="stable")
-            ax.plot(subset[x_column], subset[y_column], marker="o", linewidth=1.5, label=str(value_mode))
-        ax.legend(title="value_mode")
-    else:
-        plot_table = plot_table.sort_values([x_column, "region_id"], kind="stable")
-        ax.plot(plot_table[x_column], plot_table[y_column], marker="o", linewidth=1.5)
+    grouped = (
+        plot_table.loc[:, [x_column, "value"]]
+        .groupby(x_column, as_index=False, sort=True)
+        .mean(numeric_only=True)
+    )
+    ax.plot(grouped[x_column], grouped["value"], marker="o", linewidth=1.5)
 
     axis_table = payload.get("axis_table")
     if isinstance(axis_table, pd.DataFrame) and not axis_table.empty and {"axis_min", "axis_max"}.issubset(axis_table.columns):
         ax.set_xlim(axis_table["axis_min"].min(), axis_table["axis_max"].max())
 
-    ax.set_title("Region contrast profile")
+    ax.set_title(title or "Region contrast profile")
     ax.set_xlabel("position" if x_column == "position" else x_column)
-    ax.set_ylabel("value")
+    ax.set_ylabel(value_mode.replace("_", " ").title())
 
     if metadata.get("orientation") == "region_5to3":
         ax.set_xlabel("oriented position")
@@ -79,15 +117,28 @@ def plot_region_contrast_profile_matplotlib(payload: Mapping[str, object]):
     return fig, ax
 
 
-def plot_region_contrast_heatmap_matplotlib(payload: Mapping[str, object]):
+def plot_region_contrast_heatmap_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    value_mode: str = "delta",
+    ax=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("plot_table", "metadata"),
+        owner="plot_region_contrast_heatmap_matplotlib",
+    )
     plot_table = _require_payload_table(payload, "plot_table")
-    summary_table = _require_payload_table(payload, "summary_table")
+    summary_table = payload.get("summary_table")
+    if summary_table is not None and not isinstance(summary_table, pd.DataFrame):
+        raise TypeError("plot payload key 'summary_table' must be a pandas DataFrame.")
+    plot_table = _prepare_region_contrast_value_mode_table(plot_table, value_mode=value_mode)
 
-    plt = _import_pyplot()
-    fig, ax = plt.subplots(figsize=(8, 4))
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
 
     if plot_table.empty:
-        ax.set_title("Region contrast heatmap")
+        ax.set_title(title or "Region contrast heatmap")
         ax.set_xlabel("position")
         ax.set_ylabel("region")
         return fig, ax
@@ -111,20 +162,32 @@ def plot_region_contrast_heatmap_matplotlib(payload: Mapping[str, object]):
     )
     ax.figure.colorbar(image, ax=ax, label="value")
 
-    if y_column == "row_order" and "region_id" in summary_table.columns:
-        summary_lookup = (
-            summary_table.loc[:, ["region_id", "row_order"]]
-            .drop_duplicates()
-            .sort_values("row_order", kind="stable")
-        )
-        ax.set_yticks(range(len(summary_lookup)))
-        ax.set_yticklabels(summary_lookup["region_id"].astype(str).tolist())
+    if y_column == "row_order":
+        if isinstance(summary_table, pd.DataFrame) and {"region_id", "row_order"}.issubset(summary_table.columns):
+            summary_lookup = (
+                summary_table.loc[:, ["region_id", "row_order"]]
+                .drop_duplicates()
+                .sort_values("row_order", kind="stable")
+            )
+        elif "region_id" in plot_table.columns:
+            summary_lookup = (
+                plot_table.loc[:, ["region_id", "row_order"]]
+                .drop_duplicates()
+                .sort_values("row_order", kind="stable")
+            )
+        else:
+            summary_lookup = None
+        if summary_lookup is not None:
+            ax.set_yticks(range(len(summary_lookup)))
+            ax.set_yticklabels(summary_lookup["region_id"].astype(str).tolist())
+        else:
+            ax.set_ylabel("region")
     else:
         ax.set_ylabel("region")
 
     ax.set_xticks(range(len(heatmap.columns)))
     ax.set_xticklabels([str(value) for value in heatmap.columns.tolist()], rotation=45, ha="right")
-    ax.set_title("Region contrast heatmap")
+    ax.set_title(title or "Region contrast heatmap")
     ax.set_xlabel("position" if x_column == "position" else x_column)
 
     return fig, ax

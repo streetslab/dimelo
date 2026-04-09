@@ -1368,8 +1368,9 @@ def test_prepare_region_contrast_profile_data_returns_all_value_modes():
     assert payload["metadata"]["plot_family"] == "region_contrast_profile"
 
 
-def test_plot_region_contrast_profile_matplotlib_returns_figure_and_axis():
+def test_plot_region_contrast_profile_matplotlib_defaults_to_delta_and_honors_ax_title():
     from dimelo import plotting_matplotlib
+    from matplotlib import pyplot as plt
 
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
         _region_contrast_position_rows()
@@ -1380,12 +1381,31 @@ def test_plot_region_contrast_profile_matplotlib_returns_figure_and_axis():
         position_table=position_table,
         axis=axis,
         aggregation=aggregation,
+        value_mode="all",
     )
 
-    fig, ax = plotting_matplotlib.plot_region_contrast_profile_matplotlib(payload)
+    x_column = "plot_x" if "plot_x" in payload["plot_table"].columns else "position"
+    expected = (
+        payload["plot_table"]
+        .loc[lambda table: table["value_mode"] == "delta", [x_column, "value"]]
+        .groupby(x_column, as_index=False, sort=True)
+        .mean(numeric_only=True)
+    )
 
-    assert fig is not None
-    assert ax is not None
+    fig, provided_ax = plt.subplots()
+    fig, ax = plotting_matplotlib.plot_region_contrast_profile_matplotlib(
+        payload,
+        ax=provided_ax,
+        title="Custom region contrast profile",
+    )
+
+    assert fig is provided_ax.figure
+    assert ax is provided_ax
+    assert ax.get_title() == "Custom region contrast profile"
+    assert len(ax.lines) == 1
+    np.testing.assert_allclose(np.asarray(ax.lines[0].get_xdata()), expected[x_column].to_numpy())
+    np.testing.assert_allclose(np.asarray(ax.lines[0].get_ydata()), expected["value"].to_numpy())
+    plt.close(fig)
 
 
 def test_prepare_region_contrast_profile_data_collapses_same_coordinate_labels_within_each_side():
@@ -1544,8 +1564,9 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
     assert payload["metadata"]["plot_family"] == "region_contrast_heatmap"
 
 
-def test_plot_region_contrast_heatmap_matplotlib_returns_figure_and_axis():
+def test_plot_region_contrast_heatmap_matplotlib_defaults_to_delta_and_honors_ax_title():
     from dimelo import plotting_matplotlib
+    from matplotlib import pyplot as plt
 
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
         _region_contrast_position_rows()
@@ -1556,12 +1577,64 @@ def test_plot_region_contrast_heatmap_matplotlib_returns_figure_and_axis():
         position_table=position_table,
         axis=axis,
         aggregation=aggregation,
+        value_mode="all",
     )
+
+    x_column = "plot_x" if "plot_x" in payload["plot_table"].columns else "position"
+    expected = (
+        payload["plot_table"]
+        .loc[lambda table: table["value_mode"] == "delta", [x_column, "row_order", "value"]]
+        .pivot_table(index="row_order", columns=x_column, values="value", aggfunc="mean")
+        .sort_index(axis=0)
+        .sort_index(axis=1)
+        .to_numpy()
+    )
+
+    fig, provided_ax = plt.subplots()
+    fig, ax = plotting_matplotlib.plot_region_contrast_heatmap_matplotlib(
+        payload,
+        ax=provided_ax,
+        title="Custom region contrast heatmap",
+    )
+
+    assert fig is provided_ax.figure
+    assert ax is provided_ax
+    assert ax.get_title() == "Custom region contrast heatmap"
+    assert len(ax.images) == 1
+    np.testing.assert_allclose(np.asarray(ax.images[0].get_array()), expected)
+    plt.close(fig)
+
+
+def test_plot_region_contrast_heatmap_matplotlib_accepts_minimal_payload_without_summary_table():
+    from dimelo import plotting_matplotlib
+    from matplotlib import pyplot as plt
+
+    result, position_table, axis, aggregation = _region_contrast_plot_setup(
+        _region_contrast_position_rows()
+    )
+
+    payload = plotting.prepare_region_contrast_heatmap_data(
+        result=result,
+        position_table=position_table,
+        axis=axis,
+        aggregation=aggregation,
+        value_mode="all",
+    )
+    payload = {
+        "plot_table": payload["plot_table"].copy(),
+        "metadata": dict(payload["metadata"]),
+    }
 
     fig, ax = plotting_matplotlib.plot_region_contrast_heatmap_matplotlib(payload)
 
     assert fig is not None
     assert ax is not None
+    assert len(ax.images) == 1
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == [
+        "chr1:190-210,-",
+        "chr1:90-110,+",
+    ]
+    plt.close(fig)
 
 
 def test_prepare_region_contrast_heatmap_data_rejects_conflicting_ranks_for_same_region():
