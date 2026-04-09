@@ -273,6 +273,26 @@ def test_prepare_shared_cluster_distribution_data_returns_distribution_payload()
     assert payload["metadata"]["mode"] == "region_anchored"
 
 
+def test_plotting_matplotlib_module_exports_save_figure():
+    from dimelo import plotting_matplotlib
+
+    assert hasattr(plotting_matplotlib, "save_figure")
+
+
+def test_save_figure_writes_png(tmp_path):
+    from matplotlib import pyplot as plt
+    from dimelo import plotting_matplotlib
+
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1])
+
+    output_path = tmp_path / "figure.png"
+    plotting_matplotlib.save_figure(fig, output_path)
+
+    assert output_path.exists()
+    assert output_path.stat().st_size > 0
+
+
 def test_prepare_shared_cluster_distribution_data_handles_missing_change_table():
     result = _make_shared_cluster_result()
     result.distribution_change = None
