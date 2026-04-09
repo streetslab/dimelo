@@ -1368,6 +1368,26 @@ def test_prepare_region_contrast_profile_data_returns_all_value_modes():
     assert payload["metadata"]["plot_family"] == "region_contrast_profile"
 
 
+def test_plot_region_contrast_profile_matplotlib_returns_figure_and_axis():
+    from dimelo import plotting_matplotlib
+
+    result, position_table, axis, aggregation = _region_contrast_plot_setup(
+        _region_contrast_position_rows()
+    )
+
+    payload = plotting.prepare_region_contrast_profile_data(
+        result=result,
+        position_table=position_table,
+        axis=axis,
+        aggregation=aggregation,
+    )
+
+    fig, ax = plotting_matplotlib.plot_region_contrast_profile_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+
+
 def test_prepare_region_contrast_profile_data_collapses_same_coordinate_labels_within_each_side():
     result = _group_vs_group_region_contrast_result()
     position_table = pd.DataFrame(
@@ -1522,6 +1542,26 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
         "chr1:90-110,+",
     ]
     assert payload["metadata"]["plot_family"] == "region_contrast_heatmap"
+
+
+def test_plot_region_contrast_heatmap_matplotlib_returns_figure_and_axis():
+    from dimelo import plotting_matplotlib
+
+    result, position_table, axis, aggregation = _region_contrast_plot_setup(
+        _region_contrast_position_rows()
+    )
+
+    payload = plotting.prepare_region_contrast_heatmap_data(
+        result=result,
+        position_table=position_table,
+        axis=axis,
+        aggregation=aggregation,
+    )
+
+    fig, ax = plotting_matplotlib.plot_region_contrast_heatmap_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
 
 
 def test_prepare_region_contrast_heatmap_data_rejects_conflicting_ranks_for_same_region():
