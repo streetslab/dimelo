@@ -181,6 +181,7 @@ def build_region_evidence_table(
 def build_single_read_mod_fraction_evidence_table(
     *,
     extract_table: pd.DataFrame,
+    pairing_key: str | None = None,
 ) -> pd.DataFrame:
     required_columns = {
         "region_id",
@@ -190,6 +191,8 @@ def build_single_read_mod_fraction_evidence_table(
         "modified_count",
         "valid_count",
     }
+    if pairing_key:
+        required_columns.add(pairing_key)
     missing_columns = required_columns - set(extract_table.columns)
     if missing_columns:
         missing_display = ", ".join(sorted(missing_columns))
@@ -198,16 +201,19 @@ def build_single_read_mod_fraction_evidence_table(
             f"{missing_display}."
         )
 
+    selected_columns = [
+        "region_id",
+        "sample_id",
+        "condition",
+        "read_id",
+        "modified_count",
+        "valid_count",
+    ]
+    if pairing_key:
+        selected_columns.append(pairing_key)
     evidence = extract_table.loc[
         :,
-        [
-            "region_id",
-            "sample_id",
-            "condition",
-            "read_id",
-            "modified_count",
-            "valid_count",
-        ],
+        selected_columns,
     ].copy()
     evidence["modified_count"] = pd.to_numeric(evidence["modified_count"], errors="coerce")
     evidence["valid_count"] = pd.to_numeric(evidence["valid_count"], errors="coerce")
@@ -239,8 +245,11 @@ def build_single_read_mod_fraction_evidence_table(
 def build_single_read_feature_evidence_table(
     *,
     feature_table: pd.DataFrame,
+    pairing_key: str | None = None,
 ) -> pd.DataFrame:
     required_columns = {"region_id", "sample_id", "condition", "read_id"}
+    if pairing_key:
+        required_columns.add(pairing_key)
     missing_columns = required_columns - set(feature_table.columns)
     if missing_columns:
         missing_display = ", ".join(sorted(missing_columns))
@@ -250,16 +259,19 @@ def build_single_read_feature_evidence_table(
         )
 
     feature_columns = [
-        column for column in feature_table.columns if column not in required_columns
+        column
+        for column in feature_table.columns
+        if column not in required_columns
     ]
     if not feature_columns:
         raise ValueError(
             "build_single_read_feature_evidence_table requires at least one feature column."
         )
-    evidence = feature_table.loc[
-        :,
-        ["region_id", "sample_id", "condition", "read_id", *feature_columns],
-    ].copy()
+    selected_columns = ["region_id", "sample_id", "condition", "read_id"]
+    if pairing_key:
+        selected_columns.append(pairing_key)
+    selected_columns.extend(feature_columns)
+    evidence = feature_table.loc[:, selected_columns].copy()
     evidence.loc[:, feature_columns] = evidence.loc[:, feature_columns].apply(
         pd.to_numeric,
         errors="coerce",
@@ -274,6 +286,13 @@ def build_single_read_feature_evidence_table(
             "and finite."
         )
     return evidence
+
+
+def _require_single_read_pairing_key(frame: pd.DataFrame, pairing_key: str) -> None:
+    if pairing_key not in frame.columns:
+        raise ValueError(
+            f"single_read matched_pairwise scoring requires column {pairing_key!r}."
+        )
 
 
 def _load_builtin_single_read_feature_table(*, samples, regions, motifs):
@@ -691,14 +710,67 @@ def _pool_cluster_occupancy_groups(
     return pd.concat(pooled_frames, ignore_index=True)
 
 
-def _summarize_single_read_mod_fraction_by_sample(evidence: pd.DataFrame) -> pd.DataFrame:
-    return (
-        evidence.groupby(["region_id", "sample_id", "condition"], as_index=False, sort=False)
-        .agg(
-            read_n=("read_id", "nunique"),
-            sample_summary_mean=("read_mod_fraction", "mean"),
-        )
+def _summarize_single_read_mod_fraction_by_sample(
+    evidence: pd.DataFrame,
+    *,
+    pairing_key: str | None = None,
+) -> pd.DataFrame:
+    group_columns = ["region_id", "sample_id", "condition"]
+    if pairing_key:
+        _require_single_read_pairing_key(evidence, pairing_key)
+        group_columns.append(pairing_key)
+
+    return evidence.groupby(group_columns, as_index=False, sort=False).agg(
+        read_n=("read_id", "nunique"),
+        sample_summary_mean=("read_mod_fraction", "mean"),
     )
+
+
+def _summarize_single_read_mod_fraction_by_pair(
+    sample_summary: pd.DataFrame,
+    *,
+    pairing_key: str,
+) -> pd.DataFrame:
+    pair_columns = ["region_id", pairing_key, "condition"]
+    return sample_summary.groupby(pair_columns, as_index=False, sort=False).agg(
+        sample_summary_mean=("sample_summary_mean", "mean"),
+        read_n=("read_n", "sum"),
+        sample_n=("sample_id", "nunique"),
+    )
+
+
+def _select_complete_matched_pairs(
+    pair_summary: pd.DataFrame,
+    *,
+    pairing_key: str,
+    contrast: ContrastSpec,
+) -> pd.DataFrame:
+    required_conditions = list(
+        dict.fromkeys((contrast.numerator or []) + (contrast.denominator or []))
+    )
+    required_condition_set = set(required_conditions)
+    pair_conditions = (
+        pair_summary.loc[:, ["region_id", pairing_key, "condition"]]
+        .drop_duplicates()
+        .groupby(["region_id", pairing_key])["condition"]
+        .agg(lambda values: set(values))
+    )
+    complete_pair_index = [
+        pair_index
+        for pair_index, conditions in pair_conditions.items()
+        if required_condition_set.issubset(conditions)
+    ]
+    if not complete_pair_index:
+        raise ValueError(
+            "single_read matched_pairwise scoring found no complete matched pairs."
+        )
+
+    complete_pairs = pd.MultiIndex.from_tuples(
+        complete_pair_index,
+        names=["region_id", pairing_key],
+    )
+    paired_index = pd.MultiIndex.from_frame(pair_summary.loc[:, ["region_id", pairing_key]])
+    return pair_summary.loc[paired_index.isin(complete_pairs)].copy()
 
 
 def _score_single_read_mod_fraction(
@@ -706,13 +778,17 @@ def _score_single_read_mod_fraction(
     evidence: pd.DataFrame,
     contrast: ContrastSpec,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    if contrast.mode not in {"pairwise", "group_vs_group"}:
+    if contrast.mode not in {"pairwise", "group_vs_group", "matched_pairwise"}:
         raise NotImplementedError(
             "Single-read mod-fraction scoring is not implemented for contrast mode "
             f"'{contrast.mode}'."
         )
 
-    sample_summary = _summarize_single_read_mod_fraction_by_sample(evidence)
+    pairing_key = contrast.pairing_key if contrast.mode == "matched_pairwise" else None
+    sample_summary = _summarize_single_read_mod_fraction_by_sample(
+        evidence,
+        pairing_key=pairing_key,
+    )
     side_specs = {
         "numerator": contrast.numerator or [],
         "denominator": contrast.denominator or [],
@@ -721,6 +797,97 @@ def _score_single_read_mod_fraction(
         sample_summary,
         side_specs=side_specs,
     )
+
+    if contrast.mode == "matched_pairwise":
+        pair_summary = _summarize_single_read_mod_fraction_by_pair(
+            sample_summary,
+            pairing_key=pairing_key or "",
+        )
+        pair_summary = _select_complete_matched_pairs(
+            pair_summary,
+            pairing_key=pairing_key or "",
+            contrast=contrast,
+        )
+
+        numerator = (
+            pair_summary.loc[pair_summary["condition"].isin(side_specs["numerator"])]
+            .drop(columns=["condition"])
+            .rename(
+                columns={
+                    "sample_summary_mean": "sample_summary_numerator_mean",
+                    "read_n": "numerator_read_n",
+                    "sample_n": "numerator_sample_n",
+                }
+            )
+        )
+        denominator = (
+            pair_summary.loc[pair_summary["condition"].isin(side_specs["denominator"])]
+            .drop(columns=["condition"])
+            .rename(
+                columns={
+                    "sample_summary_mean": "sample_summary_denominator_mean",
+                    "read_n": "denominator_read_n",
+                    "sample_n": "denominator_sample_n",
+                }
+            )
+        )
+        regions_table = numerator.merge(
+            denominator,
+            on=["region_id", pairing_key],
+            how="inner",
+            sort=False,
+        )
+        if regions_table.empty:
+            raise ValueError(
+                "single_read matched_pairwise scoring found no complete matched pairs."
+            )
+        regions_table["delta_summary_mean"] = (
+            regions_table["sample_summary_numerator_mean"]
+            - regions_table["sample_summary_denominator_mean"]
+        )
+        regions_table["log2_fc"] = (
+            (regions_table["sample_summary_numerator_mean"] + 1e-6)
+            / (regions_table["sample_summary_denominator_mean"] + 1e-6)
+        ).map(math.log2)
+        regions_table = (
+            regions_table.groupby("region_id", as_index=False, sort=False)
+            .agg(
+                sample_summary_numerator_mean=("sample_summary_numerator_mean", "mean"),
+                sample_summary_denominator_mean=("sample_summary_denominator_mean", "mean"),
+                delta_summary_mean=("delta_summary_mean", "mean"),
+                numerator_read_n=("numerator_read_n", "sum"),
+                denominator_read_n=("denominator_read_n", "sum"),
+                numerator_replicate_n=("numerator_sample_n", "size"),
+                denominator_replicate_n=("denominator_sample_n", "size"),
+            )
+        )
+        regions_table["log2_fc"] = (
+            (regions_table["sample_summary_numerator_mean"] + 1e-6)
+            / (regions_table["sample_summary_denominator_mean"] + 1e-6)
+        ).map(math.log2)
+        regions_table["effect_size"] = regions_table["delta_summary_mean"].abs()
+        regions_table = regions_table.sort_values(
+            by=["effect_size", "delta_summary_mean", "region_id"],
+            ascending=[False, False, True],
+            kind="mergesort",
+        ).reset_index(drop=True)
+        regions_table["rank"] = range(1, len(regions_table) + 1)
+        summary = regions_table.loc[
+            :,
+            [
+                "region_id",
+                "sample_summary_numerator_mean",
+                "sample_summary_denominator_mean",
+                "delta_summary_mean",
+                "log2_fc",
+                "rank",
+                "numerator_read_n",
+                "denominator_read_n",
+                "numerator_replicate_n",
+                "denominator_replicate_n",
+            ],
+        ].copy()
+        return regions_table, summary
 
     pooled_frames = []
     for side, conditions in side_specs.items():
@@ -819,12 +986,21 @@ def _score_single_read_mod_fraction(
     return regions_table, summary
 
 
-def _summarize_single_read_features_by_sample(evidence: pd.DataFrame) -> pd.DataFrame:
+def _summarize_single_read_features_by_sample(
+    evidence: pd.DataFrame,
+    *,
+    pairing_key: str | None = None,
+) -> pd.DataFrame:
     group_columns = ["region_id", "sample_id", "condition"]
+    excluded_columns = {"region_id", "sample_id", "condition", "read_id"}
+    if pairing_key:
+        _require_single_read_pairing_key(evidence, pairing_key)
+        group_columns.append(pairing_key)
+        excluded_columns.add(pairing_key)
     feature_columns = [
         column
         for column in evidence.columns
-        if column not in {"region_id", "sample_id", "condition", "read_id"}
+        if column not in excluded_columns
     ]
     return evidence.groupby(group_columns, as_index=False, sort=False)[feature_columns].mean()
 
@@ -834,13 +1010,17 @@ def _score_single_read_features(
     evidence: pd.DataFrame,
     contrast: ContrastSpec,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    if contrast.mode not in {"pairwise", "group_vs_group"}:
+    if contrast.mode not in {"pairwise", "group_vs_group", "matched_pairwise"}:
         raise NotImplementedError(
             "Single-read feature scoring is not implemented for contrast mode "
             f"'{contrast.mode}'."
         )
 
-    sample_summary = _summarize_single_read_features_by_sample(evidence)
+    pairing_key = contrast.pairing_key if contrast.mode == "matched_pairwise" else None
+    sample_summary = _summarize_single_read_features_by_sample(
+        evidence,
+        pairing_key=pairing_key,
+    )
     side_specs = {
         "numerator": contrast.numerator or [],
         "denominator": contrast.denominator or [],
@@ -853,8 +1033,77 @@ def _score_single_read_features(
     feature_columns = [
         column
         for column in sample_summary.columns
-        if column not in {"region_id", "sample_id", "condition"}
+        if column not in {"region_id", "sample_id", "condition", pairing_key}
     ]
+    if contrast.mode == "matched_pairwise":
+        pair_columns = ["region_id", pairing_key, "condition"]
+        pair_summary = sample_summary.groupby(pair_columns, as_index=False, sort=False)[
+            feature_columns
+        ].mean()
+        pair_summary = _select_complete_matched_pairs(
+            pair_summary,
+            pairing_key=pairing_key or "",
+            contrast=contrast,
+        )
+
+        numerator = (
+            pair_summary.loc[pair_summary["condition"].isin(side_specs["numerator"])]
+            .drop(columns=["condition"])
+            .rename(
+                columns={
+                    feature_name: f"{feature_name}_numerator_mean"
+                    for feature_name in feature_columns
+                }
+            )
+        )
+        denominator = (
+            pair_summary.loc[pair_summary["condition"].isin(side_specs["denominator"])]
+            .drop(columns=["condition"])
+            .rename(
+                columns={
+                    feature_name: f"{feature_name}_denominator_mean"
+                    for feature_name in feature_columns
+                }
+            )
+        )
+        regions_table = numerator.merge(
+            denominator,
+            on=["region_id", pairing_key],
+            how="inner",
+            sort=False,
+        )
+        if regions_table.empty:
+            raise ValueError(
+                "single_read matched_pairwise scoring found no complete matched pairs."
+            )
+
+        summary_rows = []
+        for region_id, region_table in regions_table.groupby("region_id", sort=False):
+            row = {"region_id": region_id}
+            effect_sizes = []
+            for feature_name in feature_columns:
+                numerator_mean = float(region_table[f"{feature_name}_numerator_mean"].mean())
+                denominator_mean = float(region_table[f"{feature_name}_denominator_mean"].mean())
+                delta_mean = numerator_mean - denominator_mean
+                row[f"{feature_name}_numerator_mean"] = numerator_mean
+                row[f"{feature_name}_denominator_mean"] = denominator_mean
+                row[f"{feature_name}_delta_mean"] = delta_mean
+                effect_sizes.append(abs(delta_mean))
+            row["effect_size"] = max(effect_sizes, default=0.0)
+            summary_rows.append(row)
+
+        summary = pd.DataFrame(summary_rows)
+        if summary.empty:
+            summary = pd.DataFrame(columns=["region_id", "effect_size"])
+        else:
+            summary = summary.sort_values(
+                by=["effect_size", "region_id"],
+                ascending=[False, True],
+                kind="mergesort",
+            ).reset_index(drop=True)
+        summary["rank"] = range(1, len(summary) + 1)
+        return evidence, summary.drop(columns="effect_size", errors="ignore")
+
     summary_rows = []
     for region_id, region_table in sample_summary.groupby("region_id", sort=False):
         numerator_table = region_table[region_table["condition"].isin(contrast.numerator)]
@@ -1230,7 +1479,10 @@ def score_regions(
                 raise ValueError(
                     "single_read read_mod_fraction scoring currently requires read_table."
                 )
-            evidence = build_single_read_mod_fraction_evidence_table(extract_table=read_table)
+            evidence = build_single_read_mod_fraction_evidence_table(
+                extract_table=read_table,
+                pairing_key=contrast.pairing_key if contrast.mode == "matched_pairwise" else None,
+            )
             regions_table, summary = _score_single_read_mod_fraction(
                 evidence=evidence,
                 contrast=contrast,
@@ -1266,7 +1518,8 @@ def score_regions(
                     motifs=motifs,
                 )
             evidence = build_single_read_feature_evidence_table(
-                feature_table=feature_table
+                feature_table=feature_table,
+                pairing_key=contrast.pairing_key if contrast.mode == "matched_pairwise" else None,
             )
             regions_table, summary = _score_single_read_features(
                 evidence=evidence,

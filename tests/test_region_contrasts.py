@@ -606,6 +606,16 @@ def test_score_regions_single_read_mod_fraction_supports_matched_pairwise():
                 "read_mod_fraction": 0.75,
                 "pair_id": "p2",
             },
+            {
+                "region_id": "reg1",
+                "sample_id": "s3_after",
+                "condition": "after",
+                "read_id": "r5",
+                "modified_count": 4,
+                "valid_count": 4,
+                "read_mod_fraction": 1.0,
+                "pair_id": "p3",
+            },
         ]
     )
 
@@ -626,7 +636,12 @@ def test_score_regions_single_read_mod_fraction_supports_matched_pairwise():
         read_table=evidence,
     )
 
-    assert result.summary.iloc[0]["delta_summary_mean"] > 0
+    row = result.summary.iloc[0]
+    assert row["sample_summary_numerator_mean"] == pytest.approx(0.875)
+    assert row["sample_summary_denominator_mean"] == pytest.approx(0.375)
+    assert row["delta_summary_mean"] == pytest.approx(0.5)
+    assert row["numerator_replicate_n"] == 2
+    assert row["denominator_replicate_n"] == 2
 
 
 def test_build_single_read_feature_evidence_table_accepts_user_features():
@@ -749,6 +764,7 @@ def test_score_regions_single_read_window_features_supports_matched_pairwise():
                 "condition": "before",
                 "read_id": "r1",
                 "f0": 0.1,
+                "pair_id": "p1",
             },
             {
                 "region_id": "reg1",
@@ -756,6 +772,7 @@ def test_score_regions_single_read_window_features_supports_matched_pairwise():
                 "condition": "after",
                 "read_id": "r2",
                 "f0": 0.9,
+                "pair_id": "p1",
             },
             {
                 "region_id": "reg1",
@@ -763,6 +780,7 @@ def test_score_regions_single_read_window_features_supports_matched_pairwise():
                 "condition": "before",
                 "read_id": "r3",
                 "f0": 0.2,
+                "pair_id": "p2",
             },
             {
                 "region_id": "reg1",
@@ -770,6 +788,15 @@ def test_score_regions_single_read_window_features_supports_matched_pairwise():
                 "condition": "after",
                 "read_id": "r4",
                 "f0": 0.8,
+                "pair_id": "p2",
+            },
+            {
+                "region_id": "reg1",
+                "sample_id": "s3_after",
+                "condition": "after",
+                "read_id": "r5",
+                "f0": 0.5,
+                "pair_id": "p3",
             },
         ]
     )
@@ -791,7 +818,92 @@ def test_score_regions_single_read_window_features_supports_matched_pairwise():
         feature_table=feature_table,
     )
 
-    assert result.summary.iloc[0]["f0_delta_mean"] > 0
+    row = result.summary.iloc[0]
+    assert row["f0_numerator_mean"] == pytest.approx(0.85)
+    assert row["f0_denominator_mean"] == pytest.approx(0.15)
+    assert row["f0_delta_mean"] == pytest.approx(0.7)
+
+
+@pytest.mark.parametrize(
+    "representation,table_factory",
+    [
+        ("read_mod_fraction", "read_table"),
+        ("read_window_features", "feature_table"),
+    ],
+)
+def test_score_regions_single_read_matched_pairwise_requires_pairing_key_column(
+    representation,
+    table_factory,
+):
+    contrast = ContrastSpec(
+        mode="matched_pairwise",
+        numerator=["after"],
+        denominator=["before"],
+        pairing_key="pair_id",
+    )
+    if table_factory == "read_table":
+        evidence_kwargs = {
+            "read_table": pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_before",
+                        "condition": "before",
+                        "read_id": "r1",
+                        "modified_count": 1,
+                        "valid_count": 4,
+                        "read_mod_fraction": 0.25,
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after",
+                        "condition": "after",
+                        "read_id": "r2",
+                        "modified_count": 4,
+                        "valid_count": 4,
+                        "read_mod_fraction": 1.0,
+                    },
+                ]
+            )
+        }
+        signal_source = "extract_reads"
+        test_name = "sample_distribution_shift"
+    else:
+        evidence_kwargs = {
+            "feature_table": pd.DataFrame(
+                [
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_before",
+                        "condition": "before",
+                        "read_id": "r1",
+                        "f0": 0.1,
+                    },
+                    {
+                        "region_id": "reg1",
+                        "sample_id": "s1_after",
+                        "condition": "after",
+                        "read_id": "r2",
+                        "f0": 0.9,
+                    },
+                ]
+            )
+        }
+        signal_source = "extract_features"
+        test_name = "feature_summary_shift"
+
+    with pytest.raises(ValueError, match="pair_id"):
+        region_contrasts.score_regions(
+            samples=[],
+            regions=None,
+            motifs=[],
+            contrast=contrast,
+            analysis_unit="single_read",
+            representation=representation,
+            signal_source=signal_source,
+            test=test_name,
+            **evidence_kwargs,
+        )
 
 
 def test_score_regions_single_read_window_features_uses_builtin_loader(monkeypatch):
