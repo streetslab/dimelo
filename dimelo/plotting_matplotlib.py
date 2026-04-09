@@ -54,6 +54,30 @@ def _make_axis(*, ax=None, figsize=(8, 4)):
     return fig, created_ax
 
 
+def _make_axes(*, axes=None, n_axes: int, figsize=(8, 4)):
+    plt = _import_pyplot()
+    n_axes = max(int(n_axes), 1)
+    if axes is not None:
+        if isinstance(axes, (list, tuple)):
+            normalized_axes = list(axes)
+        else:
+            try:
+                normalized_axes = list(axes.ravel())
+            except AttributeError:
+                normalized_axes = [axes]
+        if not normalized_axes:
+            raise ValueError("axes must contain at least one Matplotlib axis.")
+        return normalized_axes[0].figure, normalized_axes
+
+    fig, created_axes = plt.subplots(
+        n_axes,
+        1,
+        figsize=(figsize[0], max(figsize[1], 2.5 * n_axes)),
+        squeeze=False,
+    )
+    return fig, list(created_axes.ravel())
+
+
 def _prepare_region_contrast_value_mode_table(
     plot_table: pd.DataFrame,
     *,
@@ -191,3 +215,190 @@ def plot_region_contrast_heatmap_matplotlib(
     ax.set_xlabel("position" if x_column == "position" else x_column)
 
     return fig, ax
+
+
+def plot_region_discovery_scan_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    axes=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("scan_table", "hit_table", "metadata"),
+        owner="plot_region_discovery_scan_matplotlib",
+    )
+    scan_table = _require_payload_table(payload, "scan_table")
+    hit_table = _require_payload_table(payload, "hit_table")
+    metadata = payload.get("metadata", {}) if isinstance(payload.get("metadata", {}), Mapping) else {}
+    score_column = str(metadata.get("score_column") or "score_value")
+    contigs = list(metadata.get("contig_order") or scan_table.get("contig", pd.Series(dtype="object")).dropna().unique())
+
+    fig, axes = _make_axes(axes=axes, n_axes=len(contigs) or 1, figsize=(8, 3))
+
+    if not contigs:
+        axes[0].set_title(title or "Region discovery scan")
+        axes[0].set_xlabel("Window midpoint")
+        axes[0].set_ylabel(score_column.replace("_", " ").title())
+        return fig, axes
+
+    for index, contig in enumerate(contigs):
+        ax = axes[index]
+        contig_table = scan_table.loc[scan_table["contig"] == contig]
+        if not contig_table.empty:
+            ax.plot(
+                contig_table["window_midpoint"],
+                contig_table[score_column],
+                marker="o",
+                linewidth=1.5,
+            )
+        contig_hits = hit_table.loc[hit_table["contig"] == contig] if not hit_table.empty else hit_table
+        if not contig_hits.empty and {"start", "end"}.issubset(contig_hits.columns):
+            for _, hit in contig_hits.iterrows():
+                ax.axvspan(float(hit["start"]), float(hit["end"]), color="tab:red", alpha=0.15)
+        ax.set_title(str(contig))
+        ax.set_xlabel("Window midpoint")
+        ax.set_ylabel(score_column.replace("_", " ").title())
+
+    for ax in axes[len(contigs):]:
+        ax.set_visible(False)
+
+    if title:
+        fig.suptitle(title)
+    return fig, axes
+
+
+def plot_region_discovery_hit_context_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    axes=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("context_table", "selected_hits", "metadata"),
+        owner="plot_region_discovery_hit_context_matplotlib",
+    )
+    context_table = _require_payload_table(payload, "context_table")
+    selected_hits = _require_payload_table(payload, "selected_hits")
+    metadata = payload.get("metadata", {}) if isinstance(payload.get("metadata", {}), Mapping) else {}
+    score_column = str(metadata.get("score_column") or "score_value")
+    hit_ids = list(
+        selected_hits.get("window_id", pd.Series(dtype="object")).dropna().astype(str).tolist()
+    )
+
+    fig, axes = _make_axes(axes=axes, n_axes=len(hit_ids) or 1, figsize=(8, 3))
+
+    if not hit_ids:
+        axes[0].set_title(title or "Region discovery hit context")
+        axes[0].set_xlabel("Window midpoint")
+        axes[0].set_ylabel(score_column.replace("_", " ").title())
+        return fig, axes
+
+    for index, hit_id in enumerate(hit_ids):
+        ax = axes[index]
+        hit_context = context_table.loc[context_table["selected_hit_id"].astype(str) == hit_id]
+        if not hit_context.empty:
+            ax.plot(
+                hit_context["window_midpoint"],
+                hit_context[score_column],
+                marker="o",
+                linewidth=1.5,
+            )
+            selected_rows = hit_context.loc[hit_context["is_selected_hit"]]
+            if not selected_rows.empty:
+                ax.scatter(
+                    selected_rows["window_midpoint"],
+                    selected_rows[score_column],
+                    color="tab:red",
+                    zorder=3,
+                )
+        ax.set_title(hit_id)
+        ax.set_xlabel("Window midpoint")
+        ax.set_ylabel(score_column.replace("_", " ").title())
+
+    for ax in axes[len(hit_ids):]:
+        ax.set_visible(False)
+
+    if title:
+        fig.suptitle(title)
+    return fig, axes
+
+
+def plot_global_analysis_summary_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    level: str = "condition",
+    ax=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("sample_summary", "condition_summary", "normalization_table", "metadata"),
+        owner="plot_global_analysis_summary_matplotlib",
+    )
+    if level not in {"sample", "condition"}:
+        raise ValueError("level must be 'sample' or 'condition'.")
+
+    table = _require_payload_table(payload, "sample_summary" if level == "sample" else "condition_summary")
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
+
+    if not table.empty:
+        if level == "sample":
+            x_values = table["sample_id"].astype(str)
+            y_values = table["global_fraction"]
+        else:
+            x_values = table["condition"].astype(str)
+            y_values = table["global_fraction_mean"]
+        ax.bar(x_values, y_values)
+        ax.tick_params(axis="x", rotation=45)
+
+    ax.set_ylabel("Global Fraction")
+    ax.set_xlabel("Sample" if level == "sample" else "Condition")
+    ax.set_title(title or "Global analysis summary")
+    return fig, ax
+
+
+def plot_global_analysis_window_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    axes=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("window_table", "metadata"),
+        owner="plot_global_analysis_window_matplotlib",
+    )
+    window_table = _require_payload_table(payload, "window_table")
+    metadata = payload.get("metadata", {}) if isinstance(payload.get("metadata", {}), Mapping) else {}
+    contigs = list(metadata.get("contig_order") or window_table.get("contig", pd.Series(dtype="object")).dropna().unique())
+
+    fig, axes = _make_axes(axes=axes, n_axes=len(contigs) or 1, figsize=(8, 3))
+
+    if not contigs:
+        axes[0].set_title(title or "Global analysis window")
+        axes[0].set_xlabel("Window midpoint")
+        axes[0].set_ylabel("Window Fraction")
+        return fig, axes
+
+    for index, contig in enumerate(contigs):
+        ax = axes[index]
+        contig_table = window_table.loc[window_table["contig"] == contig]
+        if not contig_table.empty:
+            grouped = (
+                contig_table.loc[:, ["window_midpoint", "window_fraction"]]
+                .groupby("window_midpoint", as_index=False, sort=True)
+                .mean(numeric_only=True)
+            )
+            ax.plot(grouped["window_midpoint"], grouped["window_fraction"], marker="o", linewidth=1.5)
+        ax.set_title(str(contig))
+        ax.set_xlabel("Window midpoint")
+        ax.set_ylabel("Window Fraction")
+
+    for ax in axes[len(contigs):]:
+        ax.set_visible(False)
+
+    if title:
+        fig.suptitle(title)
+    return fig, axes
