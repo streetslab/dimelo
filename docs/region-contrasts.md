@@ -102,6 +102,27 @@ occupancy_result = region_contrasts.score_regions(
 )
 ```
 
+## Single-Read Contrasts
+
+`region_contrasts` now also supports `analysis_unit="single_read"` for
+defined-region comparison on extract-backed read data.
+
+First-version representations:
+
+- `representation="read_mod_fraction"` with `signal_source="extract_reads"`
+- `representation="read_window_features"` with `signal_source="extract_features"`
+
+Supported contrast modes in v1:
+
+- `pairwise`
+- `group_vs_group`
+- `matched_pairwise`
+
+Important: reads remain observational units, but samples remain the inferential
+units. The current single-read paths summarize reads within each `region x sample`
+before comparing conditions, and `matched_pairwise` keeps that same boundary while
+requiring explicit, non-null pairing metadata and complete pairs only.
+
 ## Canonical Outputs
 
 The workflow returns a `RegionContrastResult` with canonical tables:
