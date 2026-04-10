@@ -327,6 +327,28 @@ def test_prepare_shared_cluster_distribution_data_handles_missing_change_table()
     assert condition_distribution["replicate_n"].tolist() == [1, 1, 1, 1]
 
 
+def test_plot_shared_cluster_distribution_matplotlib_returns_figure_and_axis():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_distribution_data(result=_make_shared_cluster_result())
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+
+
+def test_plot_shared_cluster_change_matplotlib_returns_figure_and_axis():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_distribution_data(result=_make_shared_cluster_result())
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_change_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+
+
 def _make_shared_cluster_profile_result() -> SharedClusterResult:
     return SharedClusterResult(
         model=SharedClusterModel(
