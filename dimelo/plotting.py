@@ -1274,7 +1274,6 @@ def prepare_shared_cluster_distribution_data(
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     _validate_shared_cluster_result(result)
 
-    sample_order = _ordered_non_null_values(result.cluster_distribution, "sample_id")
     sample_distribution = prepare_cluster_distribution_bar_data(result.cluster_distribution)
 
     _require_columns(
@@ -1282,7 +1281,6 @@ def prepare_shared_cluster_distribution_data(
         ("condition", "cluster", "count", "fraction", "replicate_n"),
         "result.condition_distribution",
     )
-    condition_order = _ordered_non_null_values(result.condition_distribution, "condition")
     condition_distribution = (
         result.condition_distribution.loc[
             :, ["condition", "cluster", "count", "fraction", "replicate_n"]
@@ -1293,7 +1291,6 @@ def prepare_shared_cluster_distribution_data(
 
     if result.distribution_change is None:
         distribution_change = _empty_distribution_change_table()
-        change_condition_order: list[object] = []
     else:
         _require_columns(
             result.distribution_change,
@@ -1309,7 +1306,6 @@ def prepare_shared_cluster_distribution_data(
             ),
             "result.distribution_change",
         )
-        change_condition_order = _ordered_non_null_values(result.distribution_change, "condition")
         distribution_change = (
             result.distribution_change.loc[
                 :,
@@ -1331,9 +1327,6 @@ def prepare_shared_cluster_distribution_data(
     metadata = {
         "mode": result.model.mode,
         "cluster_labels": list(result.model.cluster_labels),
-        "sample_order": sample_order,
-        "condition_order": condition_order,
-        "change_condition_order": change_condition_order,
         "has_distribution_change": not distribution_change.empty,
     }
     return {

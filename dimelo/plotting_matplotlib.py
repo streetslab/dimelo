@@ -93,21 +93,6 @@ def _ordered_unique_values(table: pd.DataFrame, column: str) -> list[object]:
     return table.loc[:, column].drop_duplicates().tolist()
 
 
-def _ordered_axis_values(
-    metadata: Mapping[str, object],
-    key: str,
-    observed_values: list[object],
-) -> list[object]:
-    configured_values = list(metadata.get(key) or [])
-    if not configured_values:
-        return list(observed_values)
-
-    observed_value_set = set(observed_values)
-    ordered_values = [value for value in configured_values if value in observed_value_set]
-    ordered_values.extend([value for value in observed_values if value not in configured_values])
-    return ordered_values
-
-
 def _prepare_region_contrast_value_mode_table(
     plot_table: pd.DataFrame,
     *,
@@ -381,11 +366,7 @@ def plot_shared_cluster_distribution_matplotlib(
         value_table = table.loc[:, [x_column, "cluster", "fraction"]].copy()
         if value_table.duplicated([x_column, "cluster"]).any():
             raise ValueError("plot payload contains duplicate cluster fractions for the same x value.")
-        x_order = _ordered_axis_values(
-            metadata,
-            "sample_order" if level == "sample" else "condition_order",
-            _ordered_unique_values(value_table, x_column),
-        )
+        x_order = _ordered_unique_values(value_table, x_column)
         cluster_order = _ordered_cluster_labels(metadata, _ordered_unique_values(value_table, "cluster"))
         pivot = value_table.set_index([x_column, "cluster"])["fraction"].unstack("cluster", fill_value=0.0)
         pivot = pivot.reindex(index=x_order, columns=cluster_order, fill_value=0.0)
@@ -415,11 +396,7 @@ def plot_shared_cluster_change_matplotlib(
         value_table = change_table.loc[:, ["condition", "cluster", "delta_fraction"]].copy()
         if value_table.duplicated(["condition", "cluster"]).any():
             raise ValueError("plot payload contains duplicate delta fractions for the same condition.")
-        condition_order = _ordered_axis_values(
-            metadata,
-            "change_condition_order",
-            _ordered_unique_values(value_table, "condition"),
-        )
+        condition_order = _ordered_unique_values(value_table, "condition")
         cluster_order = _ordered_cluster_labels(metadata, _ordered_unique_values(value_table, "cluster"))
         matrix = value_table.set_index(["condition", "cluster"])["delta_fraction"].unstack("cluster", fill_value=0.0)
         matrix = matrix.reindex(index=condition_order, columns=cluster_order, fill_value=0.0)

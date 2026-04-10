@@ -403,9 +403,9 @@ def test_prepare_shared_cluster_distribution_data_returns_distribution_payload()
     )
     assert payload["metadata"]["mode"] == "region_anchored"
     assert payload["metadata"]["cluster_labels"] == ["C1", "C0"]
-    assert payload["metadata"]["sample_order"] == ["s1", "s2"]
-    assert payload["metadata"]["condition_order"] == ["NS", "treated"]
-    assert payload["metadata"]["change_condition_order"] == ["treated"]
+    assert "sample_order" not in payload["metadata"]
+    assert "condition_order" not in payload["metadata"]
+    assert "change_condition_order" not in payload["metadata"]
 
 
 def test_plotting_matplotlib_module_exports_save_figure():
@@ -468,22 +468,41 @@ def test_plot_shared_cluster_distribution_matplotlib_returns_figure_and_axis():
     payload = plotting.prepare_shared_cluster_distribution_data(
         result=_make_shared_cluster_result_with_explicit_display_order()
     )
+    assert payload["sample_distribution"]["sample_id"].tolist() == ["s1", "s1", "s2", "s2"]
+    assert payload["condition_distribution"]["condition"].tolist() == [
+        "NS",
+        "NS",
+        "treated",
+        "treated",
+    ]
 
     fig, ax = plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(payload, level="sample")
 
     assert fig is not None
     assert ax is not None
-    assert payload["metadata"]["sample_order"] == ["s2", "s1"]
     assert [text.get_text() for text in ax.get_legend().texts] == ["C1", "C0"]
-    assert [tick.get_text() for tick in ax.get_xticklabels() if tick.get_text()] == ["s2", "s1"]
+    assert [tick.get_text() for tick in ax.get_xticklabels() if tick.get_text()] == ["s1", "s2"]
 
     fig, ax = plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(payload, level="condition")
 
     assert fig is not None
     assert ax is not None
-    assert payload["metadata"]["condition_order"] == ["treated", "NS"]
     assert [text.get_text() for text in ax.get_legend().texts] == ["C1", "C0"]
-    assert [tick.get_text() for tick in ax.get_xticklabels() if tick.get_text()] == ["treated", "NS"]
+    assert [tick.get_text() for tick in ax.get_xticklabels() if tick.get_text()] == ["NS", "treated"]
+
+
+def test_plot_shared_cluster_distribution_matplotlib_rejects_duplicate_x_cluster_rows():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_distribution_data(result=_make_shared_cluster_result())
+    duplicate_row = payload["sample_distribution"].iloc[[0]]
+    payload["sample_distribution"] = pd.concat(
+        [payload["sample_distribution"], duplicate_row],
+        ignore_index=True,
+    )
+
+    with pytest.raises(ValueError, match="duplicate cluster fractions"):
+        plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(payload, level="sample")
 
 
 def test_plot_shared_cluster_change_matplotlib_returns_figure_and_axis():
@@ -492,6 +511,12 @@ def test_plot_shared_cluster_change_matplotlib_returns_figure_and_axis():
     payload = plotting.prepare_shared_cluster_distribution_data(
         result=_make_shared_cluster_result_with_explicit_display_order()
     )
+    assert payload["distribution_change"]["condition"].tolist() == [
+        "baseline",
+        "baseline",
+        "treated",
+        "treated",
+    ]
 
     fig, ax = plotting_matplotlib.plot_shared_cluster_change_matplotlib(payload)
 
@@ -499,14 +524,27 @@ def test_plot_shared_cluster_change_matplotlib_returns_figure_and_axis():
     assert ax is not None
     image = ax.images[0]
 
-    assert payload["metadata"]["change_condition_order"] == ["treated", "baseline"]
     assert [tick.get_text() for tick in ax.get_xticklabels()] == ["C1", "C0"]
-    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["treated", "baseline"]
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["baseline", "treated"]
     assert image.origin == "upper"
     np.testing.assert_allclose(
         np.asarray(image.get_array()),
-        np.array([[5 / 12, -5 / 12], [0.0, 0.0]]),
+        np.array([[0.0, 0.0], [5 / 12, -5 / 12]]),
     )
+
+
+def test_plot_shared_cluster_change_matplotlib_rejects_duplicate_condition_cluster_rows():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_distribution_data(result=_make_shared_cluster_result())
+    duplicate_row = payload["distribution_change"].iloc[[0]]
+    payload["distribution_change"] = pd.concat(
+        [payload["distribution_change"], duplicate_row],
+        ignore_index=True,
+    )
+
+    with pytest.raises(ValueError, match="duplicate delta fractions"):
+        plotting_matplotlib.plot_shared_cluster_change_matplotlib(payload)
 
 
 def _make_shared_cluster_profile_result() -> SharedClusterResult:
