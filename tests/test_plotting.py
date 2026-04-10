@@ -331,12 +331,86 @@ def test_plot_shared_cluster_distribution_matplotlib_returns_figure_and_axis():
     from dimelo import plotting_matplotlib
 
     payload = plotting.prepare_shared_cluster_distribution_data(result=_make_shared_cluster_result())
+    payload = dict(payload)
+    payload["metadata"] = {**payload["metadata"], "cluster_labels": ["C1"]}
+    payload["sample_distribution"] = pd.DataFrame(
+        [
+            {
+                "sample_id": "s2",
+                "condition": "treated",
+                "cluster": "C3",
+                "count": 1,
+                "fraction": 0.25,
+            },
+            {
+                "sample_id": "s1",
+                "condition": "NS",
+                "cluster": "C20",
+                "count": 2,
+                "fraction": 0.75,
+            },
+            {
+                "sample_id": "s2",
+                "condition": "treated",
+                "cluster": "C20",
+                "count": 3,
+                "fraction": 0.75,
+            },
+            {
+                "sample_id": "s1",
+                "condition": "NS",
+                "cluster": "C3",
+                "count": 1,
+                "fraction": 0.25,
+            },
+        ]
+    )
+    payload["condition_distribution"] = pd.DataFrame(
+        [
+            {
+                "condition": "treated",
+                "cluster": "C3",
+                "count": 1,
+                "fraction": 0.25,
+                "replicate_n": 1,
+            },
+            {
+                "condition": "treated",
+                "cluster": "C20",
+                "count": 3,
+                "fraction": 0.75,
+                "replicate_n": 1,
+            },
+            {
+                "condition": "NS",
+                "cluster": "C3",
+                "count": 1,
+                "fraction": 0.25,
+                "replicate_n": 1,
+            },
+            {
+                "condition": "NS",
+                "cluster": "C20",
+                "count": 2,
+                "fraction": 0.75,
+                "replicate_n": 1,
+            },
+        ]
+    )
 
-    fig, ax = plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(payload)
+    fig, ax = plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(payload, level="sample")
 
     assert fig is not None
     assert ax is not None
-    assert [text.get_text() for text in ax.get_legend().texts] == ["C1", "C0"]
+    assert [text.get_text() for text in ax.get_legend().texts] == ["C3", "C20"]
+    assert [tick.get_text() for tick in ax.get_xticklabels() if tick.get_text()] == ["s2", "s1"]
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(payload, level="condition")
+
+    assert fig is not None
+    assert ax is not None
+    assert [text.get_text() for text in ax.get_legend().texts] == ["C3", "C20"]
+    assert [tick.get_text() for tick in ax.get_xticklabels() if tick.get_text()] == ["treated", "NS"]
 
     duplicate_payload = dict(payload)
     duplicate_payload["condition_distribution"] = pd.concat(
@@ -351,12 +425,59 @@ def test_plot_shared_cluster_change_matplotlib_returns_figure_and_axis():
     from dimelo import plotting_matplotlib
 
     payload = plotting.prepare_shared_cluster_distribution_data(result=_make_shared_cluster_result())
+    payload = dict(payload)
+    payload["metadata"] = {**payload["metadata"], "cluster_labels": ["C1"]}
+    payload["distribution_change"] = pd.DataFrame(
+        [
+            {
+                "condition": "treated",
+                "cluster": "C3",
+                "count": 1,
+                "fraction": 0.25,
+                "replicate_n": 1,
+                "reference_fraction": 0.5,
+                "delta_fraction": -0.25,
+                "log2_fc": -1.0,
+            },
+            {
+                "condition": "treated",
+                "cluster": "C20",
+                "count": 3,
+                "fraction": 0.75,
+                "replicate_n": 1,
+                "reference_fraction": 0.5,
+                "delta_fraction": 0.25,
+                "log2_fc": 1.0,
+            },
+            {
+                "condition": "baseline",
+                "cluster": "C3",
+                "count": 2,
+                "fraction": 0.5,
+                "replicate_n": 1,
+                "reference_fraction": 0.5,
+                "delta_fraction": 0.0,
+                "log2_fc": 0.0,
+            },
+            {
+                "condition": "baseline",
+                "cluster": "C20",
+                "count": 2,
+                "fraction": 0.5,
+                "replicate_n": 1,
+                "reference_fraction": 0.5,
+                "delta_fraction": 0.0,
+                "log2_fc": 0.0,
+            },
+        ]
+    )
 
     fig, ax = plotting_matplotlib.plot_shared_cluster_change_matplotlib(payload)
 
     assert fig is not None
     assert ax is not None
-    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["C1", "C0"]
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["C3", "C20"]
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["treated", "baseline"]
 
     duplicate_payload = dict(payload)
     duplicate_payload["distribution_change"] = pd.concat(

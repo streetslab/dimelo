@@ -78,14 +78,19 @@ def _make_axes(*, axes=None, n_axes: int, figsize=(8, 4)):
     return fig, list(created_axes.ravel())
 
 
-def _ordered_cluster_labels(metadata: Mapping[str, object], observed_clusters: pd.Index) -> list[object]:
+def _ordered_cluster_labels(metadata: Mapping[str, object], observed_clusters: list[object]) -> list[object]:
     cluster_labels = list(metadata.get("cluster_labels") or [])
     if not cluster_labels:
         return list(observed_clusters)
 
-    ordered_clusters = [cluster for cluster in cluster_labels if cluster in set(observed_clusters)]
+    observed_cluster_set = set(observed_clusters)
+    ordered_clusters = [cluster for cluster in cluster_labels if cluster in observed_cluster_set]
     ordered_clusters.extend([cluster for cluster in observed_clusters if cluster not in cluster_labels])
     return ordered_clusters
+
+
+def _ordered_unique_values(table: pd.DataFrame, column: str) -> list[object]:
+    return table.loc[:, column].drop_duplicates().tolist()
 
 
 def _prepare_region_contrast_value_mode_table(
@@ -361,8 +366,10 @@ def plot_shared_cluster_distribution_matplotlib(
         value_table = table.loc[:, [x_column, "cluster", "fraction"]].copy()
         if value_table.duplicated([x_column, "cluster"]).any():
             raise ValueError("plot payload contains duplicate cluster fractions for the same x value.")
+        x_order = _ordered_unique_values(value_table, x_column)
+        cluster_order = _ordered_cluster_labels(metadata, _ordered_unique_values(value_table, "cluster"))
         pivot = value_table.set_index([x_column, "cluster"])["fraction"].unstack("cluster", fill_value=0.0)
-        pivot = pivot.reindex(columns=_ordered_cluster_labels(metadata, pivot.columns), fill_value=0.0)
+        pivot = pivot.reindex(index=x_order, columns=cluster_order, fill_value=0.0)
         pivot.plot(kind="bar", stacked=True, ax=ax)
         ax.tick_params(axis="x", rotation=45)
 
@@ -389,8 +396,10 @@ def plot_shared_cluster_change_matplotlib(
         value_table = change_table.loc[:, ["condition", "cluster", "delta_fraction"]].copy()
         if value_table.duplicated(["condition", "cluster"]).any():
             raise ValueError("plot payload contains duplicate delta fractions for the same condition.")
+        condition_order = _ordered_unique_values(value_table, "condition")
+        cluster_order = _ordered_cluster_labels(metadata, _ordered_unique_values(value_table, "cluster"))
         matrix = value_table.set_index(["condition", "cluster"])["delta_fraction"].unstack("cluster", fill_value=0.0)
-        matrix = matrix.reindex(columns=_ordered_cluster_labels(metadata, matrix.columns), fill_value=0.0)
+        matrix = matrix.reindex(index=condition_order, columns=cluster_order, fill_value=0.0)
         max_abs = float(matrix.abs().to_numpy().max()) if not matrix.empty else 0.0
         if max_abs == 0.0:
             max_abs = 1.0
