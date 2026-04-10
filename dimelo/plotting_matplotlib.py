@@ -325,6 +325,99 @@ def plot_region_discovery_hit_context_matplotlib(
     return fig, axes
 
 
+def plot_shared_cluster_distribution_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    level: str = "condition",
+    ax=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("sample_distribution", "condition_distribution", "metadata"),
+        owner="plot_shared_cluster_distribution_matplotlib",
+    )
+    if level not in {"sample", "condition"}:
+        raise ValueError("level must be 'sample' or 'condition'.")
+
+    table = _require_payload_table(
+        payload,
+        "sample_distribution" if level == "sample" else "condition_distribution",
+    )
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
+
+    if not table.empty:
+        x_column = "sample_id" if level == "sample" else "condition"
+        pivot = (
+            table.pivot_table(
+                index=x_column,
+                columns="cluster",
+                values="fraction",
+                aggfunc="mean",
+                fill_value=0.0,
+            )
+            .sort_index(axis=0)
+            .sort_index(axis=1)
+        )
+        pivot.plot(kind="bar", stacked=True, ax=ax)
+        ax.tick_params(axis="x", rotation=45)
+
+    ax.set_xlabel("Sample" if level == "sample" else "Condition")
+    ax.set_ylabel("Fraction")
+    ax.set_title(title or "Shared cluster distribution")
+    return fig, ax
+
+
+def plot_shared_cluster_change_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("distribution_change", "metadata"),
+        owner="plot_shared_cluster_change_matplotlib",
+    )
+    change_table = _require_payload_table(payload, "distribution_change")
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
+
+    if not change_table.empty:
+        matrix = (
+            change_table.pivot_table(
+                index="condition",
+                columns="cluster",
+                values="delta_fraction",
+                aggfunc="mean",
+                fill_value=0.0,
+            )
+            .sort_index(axis=0)
+            .sort_index(axis=1)
+        )
+        max_abs = float(matrix.abs().to_numpy().max()) if not matrix.empty else 0.0
+        if max_abs == 0.0:
+            max_abs = 1.0
+        image = ax.imshow(
+            matrix.to_numpy(),
+            aspect="auto",
+            origin="lower",
+            interpolation="nearest",
+            cmap="coolwarm",
+            vmin=-max_abs,
+            vmax=max_abs,
+        )
+        ax.figure.colorbar(image, ax=ax, label="Delta Fraction")
+        ax.set_xticks(range(len(matrix.columns)))
+        ax.set_xticklabels([str(value) for value in matrix.columns.tolist()], rotation=45, ha="right")
+        ax.set_yticks(range(len(matrix.index)))
+        ax.set_yticklabels([str(value) for value in matrix.index.tolist()])
+
+    ax.set_xlabel("Cluster")
+    ax.set_ylabel("Condition")
+    ax.set_title(title or "Shared cluster change")
+    return fig, ax
+
+
 def plot_global_analysis_summary_matplotlib(
     payload: Mapping[str, object],
     *,
