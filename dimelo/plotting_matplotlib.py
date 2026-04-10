@@ -398,9 +398,10 @@ def plot_shared_cluster_change_matplotlib(
             raise ValueError("plot payload contains duplicate delta fractions for the same condition.")
         condition_order = _ordered_unique_values(value_table, "condition")
         cluster_order = _ordered_cluster_labels(metadata, _ordered_unique_values(value_table, "cluster"))
-        matrix = value_table.set_index(["condition", "cluster"])["delta_fraction"].unstack("cluster", fill_value=0.0)
-        matrix = matrix.reindex(index=condition_order, columns=cluster_order, fill_value=0.0)
-        max_abs = float(matrix.abs().to_numpy().max()) if not matrix.empty else 0.0
+        matrix = value_table.set_index(["condition", "cluster"])["delta_fraction"].unstack("cluster")
+        matrix = matrix.reindex(index=condition_order, columns=cluster_order)
+        finite_values = pd.Series(matrix.abs().to_numpy().ravel()).dropna()
+        max_abs = float(finite_values.max()) if not finite_values.empty else 0.0
         if max_abs == 0.0:
             max_abs = 1.0
         image = ax.imshow(
