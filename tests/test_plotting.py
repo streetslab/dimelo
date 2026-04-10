@@ -607,6 +607,28 @@ def test_prepare_shared_cluster_profile_data_respects_feature_subset():
     ]
 
 
+def test_plot_shared_cluster_profile_heatmap_matplotlib_returns_figure_and_axis():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_profile_data(result=_make_shared_cluster_profile_result())
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_heatmap_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+
+
+def test_plot_shared_cluster_profile_series_matplotlib_returns_figure_and_axis():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_profile_data(result=_make_shared_cluster_profile_result())
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_series_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+
+
 def _make_shared_cluster_region_result() -> SharedClusterResult:
     return SharedClusterResult(
         model=SharedClusterModel(
