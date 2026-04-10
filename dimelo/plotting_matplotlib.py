@@ -78,6 +78,16 @@ def _make_axes(*, axes=None, n_axes: int, figsize=(8, 4)):
     return fig, list(created_axes.ravel())
 
 
+def _ordered_cluster_labels(metadata: Mapping[str, object], observed_clusters: pd.Index) -> list[object]:
+    cluster_labels = list(metadata.get("cluster_labels") or [])
+    if not cluster_labels:
+        return list(observed_clusters)
+
+    ordered_clusters = [cluster for cluster in cluster_labels if cluster in set(observed_clusters)]
+    ordered_clusters.extend([cluster for cluster in observed_clusters if cluster not in cluster_labels])
+    return ordered_clusters
+
+
 def _prepare_region_contrast_value_mode_table(
     plot_table: pd.DataFrame,
     *,
@@ -332,11 +342,7 @@ def plot_shared_cluster_distribution_matplotlib(
     ax=None,
     title: str | None = None,
 ):
-    _require_payload_keys(
-        payload,
-        ("sample_distribution", "condition_distribution", "metadata"),
-        owner="plot_shared_cluster_distribution_matplotlib",
-    )
+    _require_payload_keys(payload, ("metadata",), owner="plot_shared_cluster_distribution_matplotlib")
     if level not in {"sample", "condition"}:
         raise ValueError("level must be 'sample' or 'condition'.")
 
@@ -344,21 +350,19 @@ def plot_shared_cluster_distribution_matplotlib(
         payload,
         "sample_distribution" if level == "sample" else "condition_distribution",
     )
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise TypeError("plot payload key 'metadata' must be a mapping.")
+
     fig, ax = _make_axis(ax=ax, figsize=(8, 4))
 
     if not table.empty:
         x_column = "sample_id" if level == "sample" else "condition"
-        pivot = (
-            table.pivot_table(
-                index=x_column,
-                columns="cluster",
-                values="fraction",
-                aggfunc="mean",
-                fill_value=0.0,
-            )
-            .sort_index(axis=0)
-            .sort_index(axis=1)
-        )
+        value_table = table.loc[:, [x_column, "cluster", "fraction"]].copy()
+        if value_table.duplicated([x_column, "cluster"]).any():
+            raise ValueError("plot payload contains duplicate cluster fractions for the same x value.")
+        pivot = value_table.set_index([x_column, "cluster"])["fraction"].unstack("cluster", fill_value=0.0)
+        pivot = pivot.reindex(columns=_ordered_cluster_labels(metadata, pivot.columns), fill_value=0.0)
         pivot.plot(kind="bar", stacked=True, ax=ax)
         ax.tick_params(axis="x", rotation=45)
 
@@ -374,26 +378,19 @@ def plot_shared_cluster_change_matplotlib(
     ax=None,
     title: str | None = None,
 ):
-    _require_payload_keys(
-        payload,
-        ("distribution_change", "metadata"),
-        owner="plot_shared_cluster_change_matplotlib",
-    )
+    _require_payload_keys(payload, ("metadata",), owner="plot_shared_cluster_change_matplotlib")
     change_table = _require_payload_table(payload, "distribution_change")
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise TypeError("plot payload key 'metadata' must be a mapping.")
     fig, ax = _make_axis(ax=ax, figsize=(8, 4))
 
     if not change_table.empty:
-        matrix = (
-            change_table.pivot_table(
-                index="condition",
-                columns="cluster",
-                values="delta_fraction",
-                aggfunc="mean",
-                fill_value=0.0,
-            )
-            .sort_index(axis=0)
-            .sort_index(axis=1)
-        )
+        value_table = change_table.loc[:, ["condition", "cluster", "delta_fraction"]].copy()
+        if value_table.duplicated(["condition", "cluster"]).any():
+            raise ValueError("plot payload contains duplicate delta fractions for the same condition.")
+        matrix = value_table.set_index(["condition", "cluster"])["delta_fraction"].unstack("cluster", fill_value=0.0)
+        matrix = matrix.reindex(columns=_ordered_cluster_labels(metadata, matrix.columns), fill_value=0.0)
         max_abs = float(matrix.abs().to_numpy().max()) if not matrix.empty else 0.0
         if max_abs == 0.0:
             max_abs = 1.0

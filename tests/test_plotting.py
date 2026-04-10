@@ -129,7 +129,7 @@ def _make_shared_cluster_result() -> SharedClusterResult:
         feature_names=["f0", "f1"],
         preprocessing={"signal_normalization": "none"},
         estimator=object(),
-        cluster_labels=["C0", "C1"],
+        cluster_labels=["C1", "C0"],
         fit_metadata={"clusterer": "minibatch_kmeans", "n_clusters": 2},
     )
     cluster_distribution = pd.DataFrame(
@@ -336,6 +336,15 @@ def test_plot_shared_cluster_distribution_matplotlib_returns_figure_and_axis():
 
     assert fig is not None
     assert ax is not None
+    assert [text.get_text() for text in ax.get_legend().texts] == ["C1", "C0"]
+
+    duplicate_payload = dict(payload)
+    duplicate_payload["condition_distribution"] = pd.concat(
+        [payload["condition_distribution"], payload["condition_distribution"].iloc[[0]]],
+        ignore_index=True,
+    )
+    with pytest.raises(ValueError, match="duplicate cluster fractions"):
+        plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(duplicate_payload)
 
 
 def test_plot_shared_cluster_change_matplotlib_returns_figure_and_axis():
@@ -347,6 +356,15 @@ def test_plot_shared_cluster_change_matplotlib_returns_figure_and_axis():
 
     assert fig is not None
     assert ax is not None
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["C1", "C0"]
+
+    duplicate_payload = dict(payload)
+    duplicate_payload["distribution_change"] = pd.concat(
+        [payload["distribution_change"], payload["distribution_change"].iloc[[0]]],
+        ignore_index=True,
+    )
+    with pytest.raises(ValueError, match="duplicate delta fractions"):
+        plotting_matplotlib.plot_shared_cluster_change_matplotlib(duplicate_payload)
 
 
 def _make_shared_cluster_profile_result() -> SharedClusterResult:
