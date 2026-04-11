@@ -239,7 +239,7 @@ For discovery-to-clustering-to-contrast follow-up, use `workflows.discovery_clus
 
 `global_analysis` now exposes renderer-neutral plotting prep helpers that consume `GlobalAnalysisResult`: `prepare_global_analysis_summary_data(...)` prepares sample-level summaries, optional condition-level views, and normalization tables, while `prepare_global_analysis_window_data(...)` prepares broad-window payloads that stay per-contig by default.
 
-`region_contrasts` uses the same data-prep-first plotting layer: `prepare_region_contrast_profile_data(...)` and `prepare_region_contrast_heatmap_data(...)` consume a `RegionContrastResult` plus an explicit positional table, while shared clustering currently keeps lighter plotting coverage through plot-ready tables in `result.plot_data`.
+`region_contrasts` uses the same data-prep-first plotting layer: `prepare_region_contrast_profile_data(...)` and `prepare_region_contrast_heatmap_data(...)` consume a `RegionContrastResult` plus an explicit positional table, and shared clustering now exposes the same style of renderer-neutral prep helpers on top of its canonical result tables.
 
 For users who want built-in figures instead of only payload tables, `dimelo.plotting_matplotlib` provides an optional Matplotlib renderer layer on top of those prepared payloads, plus `save_figure(...)` for PNG/PDF export.
 

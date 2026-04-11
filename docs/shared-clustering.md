@@ -76,9 +76,11 @@ The workflow returns a `SharedClusterResult` with canonical tables:
 
 `result.region_summaries` is also the standard occupancy handoff into `dimelo.region_contrasts` when you want per-region `cluster_fraction`, `dominant_cluster`, or `cluster_entropy` follow-up instead of only global cluster distributions.
 
-Built-in plotting remains intentionally thin. `result.plot_data["cluster_distribution_bar"]` and `result.plot_data["cluster_distribution_heatmap"]` are plot-ready DataFrames, not renderer-specific figure objects.
+Shared clustering now follows the same layered plotting structure as the other newer analysis families:
 
-This is lighter plotting coverage than the newer analysis-specific helpers in `region_contrasts`, `region_discovery`, and `global_analysis`, which now expose dedicated renderer-neutral plotting-prep functions around their result objects.
+- canonical tables on the result object
+- renderer-neutral prep helpers in `dimelo.plotting`
+- optional built-in Matplotlib renderers in `dimelo.plotting_matplotlib`
 
 ## Plotting Prep Helpers
 
