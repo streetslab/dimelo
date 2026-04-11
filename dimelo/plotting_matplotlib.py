@@ -434,6 +434,143 @@ def plot_shared_cluster_change_matplotlib(
     return fig, ax
 
 
+def plot_shared_cluster_profile_heatmap_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("profile_table", "metadata"),
+        owner="plot_shared_cluster_profile_heatmap_matplotlib",
+    )
+    profile_table = _require_payload_table(payload, "profile_table")
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise TypeError("plot payload key 'metadata' must be a mapping.")
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
+
+    value_table = profile_table.loc[:, ["cluster", "feature", "value"]].copy()
+    if value_table.duplicated(["cluster", "feature"]).any():
+        raise ValueError("plot payload contains duplicate profile values for the same cluster and feature.")
+
+    feature_order = list(metadata.get("feature_names") or [])
+    observed_features = _ordered_unique_values(value_table, "feature")
+    if feature_order:
+        feature_order.extend([feature for feature in observed_features if feature not in feature_order])
+    else:
+        feature_order = observed_features
+
+    observed_clusters = _ordered_unique_values(value_table, "cluster")
+    cluster_order = list(metadata.get("cluster_labels") or [])
+    if cluster_order:
+        cluster_order.extend([cluster for cluster in observed_clusters if cluster not in cluster_order])
+    else:
+        cluster_order = observed_clusters
+
+    if feature_order:
+        ax.set_xticks(range(len(feature_order)))
+        ax.set_xticklabels([str(value) for value in feature_order], rotation=45, ha="right")
+    if cluster_order:
+        ax.set_yticks(range(len(cluster_order)))
+        ax.set_yticklabels([str(value) for value in cluster_order])
+
+    if feature_order and cluster_order:
+        if value_table.empty:
+            matrix = pd.DataFrame(index=cluster_order, columns=feature_order, dtype=float)
+        else:
+            matrix = value_table.set_index(["cluster", "feature"])["value"].unstack("feature")
+            matrix = matrix.reindex(index=cluster_order, columns=feature_order)
+        if matrix.notna().any().any():
+            image = ax.imshow(
+                matrix.to_numpy(),
+                aspect="auto",
+                origin="upper",
+                interpolation="nearest",
+            )
+            ax.figure.colorbar(image, ax=ax, label="Value")
+            ax.set_xticks(range(len(matrix.columns)))
+            ax.set_xticklabels([str(value) for value in matrix.columns.tolist()], rotation=45, ha="right")
+            ax.set_yticks(range(len(matrix.index)))
+            ax.set_yticklabels([str(value) for value in matrix.index.tolist()])
+
+    ax.set_xlabel("Feature")
+    ax.set_ylabel("Cluster")
+    ax.set_title(title or "Shared cluster profiles")
+    return fig, ax
+
+
+def plot_shared_cluster_profile_series_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("profile_table", "metadata"),
+        owner="plot_shared_cluster_profile_series_matplotlib",
+    )
+    profile_table = _require_payload_table(payload, "profile_table")
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise TypeError("plot payload key 'metadata' must be a mapping.")
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
+
+    value_table = profile_table.loc[:, ["cluster", "feature", "value"]].copy()
+    if value_table.duplicated(["cluster", "feature"]).any():
+        raise ValueError("plot payload contains duplicate profile values for the same cluster and feature.")
+
+    feature_order = list(metadata.get("feature_names") or [])
+    observed_features = _ordered_unique_values(value_table, "feature")
+    if feature_order:
+        feature_order.extend([feature for feature in observed_features if feature not in feature_order])
+    else:
+        feature_order = observed_features
+    feature_lookup = {feature: index for index, feature in enumerate(feature_order)}
+
+    observed_clusters = _ordered_unique_values(value_table, "cluster")
+    cluster_order = list(metadata.get("cluster_labels") or [])
+    if cluster_order:
+        cluster_order.extend([cluster for cluster in observed_clusters if cluster not in cluster_order])
+    else:
+        cluster_order = observed_clusters
+
+    for cluster in cluster_order:
+        cluster_table = value_table.loc[value_table["cluster"] == cluster, ["feature", "value"]].copy()
+        if feature_order:
+            cluster_table["feature_order"] = cluster_table["feature"].map(feature_lookup)
+            cluster_table = cluster_table.sort_values("feature_order", kind="stable")
+            cluster_series = cluster_table.set_index("feature_order")["value"].reindex(
+                range(len(feature_order))
+            )
+            cluster_series = cluster_series.astype(float)
+            x_values = cluster_series.index.tolist()
+            y_values = cluster_series.to_numpy()
+        else:
+            x_values = []
+            y_values = []
+        ax.plot(
+            x_values,
+            y_values,
+            marker="o",
+            linewidth=1.5,
+            label=str(cluster),
+        )
+
+    if feature_order:
+        ax.set_xticks(range(len(feature_order)))
+        ax.set_xticklabels(feature_order, rotation=45, ha="right")
+    if ax.lines:
+        ax.legend(title="Cluster")
+
+    ax.set_xlabel("Feature")
+    ax.set_ylabel("Value")
+    ax.set_title(title or "Shared cluster profile series")
+    return fig, ax
+
+
 def plot_global_analysis_summary_matplotlib(
     payload: Mapping[str, object],
     *,

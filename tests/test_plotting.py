@@ -652,6 +652,37 @@ def _make_shared_cluster_profile_result() -> SharedClusterResult:
     )
 
 
+def _make_shared_cluster_profile_result_with_explicit_display_order() -> SharedClusterResult:
+    return SharedClusterResult(
+        model=SharedClusterModel(
+            mode="region_anchored",
+            motifs=["A,0"],
+            feature_names=["f1", "f0"],
+            preprocessing={"signal_normalization": "none"},
+            estimator=object(),
+            cluster_labels=["C1", "C0"],
+            fit_metadata={"clusterer": "minibatch_kmeans", "n_clusters": 2},
+        ),
+        assignments=pd.DataFrame(columns=["sample_id", "condition", "cluster"]),
+        cluster_distribution=pd.DataFrame(
+            columns=["sample_id", "condition", "cluster", "count", "fraction"]
+        ),
+        condition_distribution=pd.DataFrame(
+            columns=["condition", "cluster", "count", "fraction", "replicate_n"]
+        ),
+        distribution_change=None,
+        cluster_profiles=pd.DataFrame(
+            [
+                {"cluster": "C0", "count": 3, "f0": 0.1, "f1": 0.2},
+                {"cluster": "C1", "count": 4, "f0": 0.8, "f1": 0.9},
+            ]
+        ),
+        region_summaries=None,
+        plot_data={},
+        metadata={"mode": "region_anchored"},
+    )
+
+
 def test_prepare_shared_cluster_profile_data_returns_long_form_profiles():
     result = _make_shared_cluster_profile_result()
 
@@ -692,6 +723,58 @@ def test_plot_shared_cluster_profile_heatmap_matplotlib_returns_figure_and_axis(
     assert ax is not None
 
 
+def test_plot_shared_cluster_profile_heatmap_matplotlib_preserves_payload_order():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_profile_data(
+        result=_make_shared_cluster_profile_result_with_explicit_display_order()
+    )
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_heatmap_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+    image = ax.images[0]
+
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["f1", "f0"]
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["C1", "C0"]
+    assert image.origin == "upper"
+    np.testing.assert_allclose(
+        np.asarray(image.get_array()),
+        np.array([[0.9, 0.8], [0.2, 0.1]]),
+    )
+
+
+def test_plot_shared_cluster_profile_heatmap_matplotlib_rejects_duplicate_cluster_feature_rows():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_profile_data(result=_make_shared_cluster_profile_result())
+    duplicate_row = payload["profile_table"].iloc[[0]]
+    payload["profile_table"] = pd.concat(
+        [payload["profile_table"], duplicate_row],
+        ignore_index=True,
+    )
+
+    with pytest.raises(ValueError, match="duplicate profile values"):
+        plotting_matplotlib.plot_shared_cluster_profile_heatmap_matplotlib(payload)
+
+
+def test_plot_shared_cluster_profile_heatmap_matplotlib_handles_empty_payload():
+    from dimelo import plotting_matplotlib
+
+    result = _make_shared_cluster_profile_result()
+    result.cluster_profiles = pd.DataFrame(columns=["cluster", "count", "f0", "f1"])
+    payload = plotting.prepare_shared_cluster_profile_data(result=result)
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_heatmap_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+    assert len(ax.images) == 0
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["f0", "f1"]
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["C0", "C1"]
+
+
 def test_plot_shared_cluster_profile_series_matplotlib_returns_figure_and_axis():
     from dimelo import plotting_matplotlib
 
@@ -701,6 +784,75 @@ def test_plot_shared_cluster_profile_series_matplotlib_returns_figure_and_axis()
 
     assert fig is not None
     assert ax is not None
+
+
+def test_plot_shared_cluster_profile_series_matplotlib_preserves_payload_order():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_profile_data(
+        result=_make_shared_cluster_profile_result_with_explicit_display_order()
+    )
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_series_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["f1", "f0"]
+    assert [line.get_label() for line in ax.lines] == ["C1", "C0"]
+    np.testing.assert_allclose(ax.lines[0].get_xdata(), np.array([0, 1]))
+    np.testing.assert_allclose(ax.lines[0].get_ydata(), np.array([0.9, 0.8]))
+    np.testing.assert_allclose(ax.lines[1].get_xdata(), np.array([0, 1]))
+    np.testing.assert_allclose(ax.lines[1].get_ydata(), np.array([0.2, 0.1]))
+
+
+def test_plot_shared_cluster_profile_series_matplotlib_rejects_duplicate_cluster_feature_rows():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_profile_data(result=_make_shared_cluster_profile_result())
+    duplicate_row = payload["profile_table"].iloc[[0]]
+    payload["profile_table"] = pd.concat(
+        [payload["profile_table"], duplicate_row],
+        ignore_index=True,
+    )
+
+    with pytest.raises(ValueError, match="duplicate profile values"):
+        plotting_matplotlib.plot_shared_cluster_profile_series_matplotlib(payload)
+
+
+def test_plot_shared_cluster_profile_series_matplotlib_preserves_missing_cluster_line():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_profile_data(
+        result=_make_shared_cluster_profile_result_with_explicit_display_order()
+    )
+    payload["profile_table"] = payload["profile_table"].loc[
+        payload["profile_table"]["cluster"] == "C1"
+    ].reset_index(drop=True)
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_series_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+    assert [line.get_label() for line in ax.lines] == ["C1", "C0"]
+    np.testing.assert_allclose(ax.lines[0].get_ydata(), np.array([0.9, 0.8]))
+    assert np.isnan(ax.lines[1].get_ydata()).all()
+
+
+def test_plot_shared_cluster_profile_series_matplotlib_handles_empty_payload():
+    from dimelo import plotting_matplotlib
+
+    result = _make_shared_cluster_profile_result()
+    result.cluster_profiles = pd.DataFrame(columns=["cluster", "count", "f0", "f1"])
+    payload = plotting.prepare_shared_cluster_profile_data(result=result)
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_series_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["f0", "f1"]
+    assert [line.get_label() for line in ax.lines] == ["C0", "C1"]
+    assert np.isnan(ax.lines[0].get_ydata()).all()
+    assert np.isnan(ax.lines[1].get_ydata()).all()
 
 
 def _make_shared_cluster_region_result() -> SharedClusterResult:
