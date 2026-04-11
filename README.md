@@ -243,6 +243,10 @@ For discovery-to-clustering-to-contrast follow-up, use `workflows.discovery_clus
 
 For users who want built-in figures instead of only payload tables, `dimelo.plotting_matplotlib` provides an optional Matplotlib renderer layer on top of those prepared payloads, plus `save_figure(...)` for PNG/PDF export.
 
+`shared_clustering` also supports built-in Matplotlib rendering through
+`dimelo.plotting_matplotlib`, including cluster-distribution, profile, and
+region-occupancy views on top of the prepared clustering payloads.
+
 `region_contrasts` also now supports `analysis_unit="single_read"` for
 extract-backed defined-region comparison. Use `representation="read_mod_fraction"`
 for per-read motif fractions or `representation="read_window_features"` for

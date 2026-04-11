@@ -107,6 +107,71 @@ The plotting contract stays compatibility-safe with older package versions:
 - fixed-window plotting is available for both aggregate and single-read views
 - scaled or segmented metaregion axes are aggregate-only and are not used for single-read plots
 
+## Built-In Matplotlib Renderers
+
+`dimelo.plotting_matplotlib` also provides an optional built-in renderer layer on
+top of these prepared payloads. This is a convenience layer, not a replacement
+for the stable tables in `result.plot_data` or the renderer-neutral prep helpers.
+
+Cluster distribution example:
+
+```python
+from dimelo import plotting, plotting_matplotlib
+
+distribution_payload = plotting.prepare_shared_cluster_distribution_data(result=result)
+fig, ax = plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(
+    distribution_payload,
+    level="sample",
+)
+plotting_matplotlib.save_figure(fig, "shared-cluster-distribution.png")
+```
+
+Condition-level cluster-change heatmap:
+
+```python
+fig, ax = plotting_matplotlib.plot_shared_cluster_change_matplotlib(
+    distribution_payload,
+)
+```
+
+Cluster profile heatmap example:
+
+```python
+profile_payload = plotting.prepare_shared_cluster_profile_data(result=result)
+fig, ax = plotting_matplotlib.plot_shared_cluster_profile_heatmap_matplotlib(profile_payload)
+```
+
+Cluster profile series example:
+
+```python
+fig, ax = plotting_matplotlib.plot_shared_cluster_profile_series_matplotlib(profile_payload)
+```
+
+Region occupancy example:
+
+```python
+region_payload = plotting.prepare_shared_cluster_region_data(result=result)
+fig, ax = plotting_matplotlib.plot_shared_cluster_region_matplotlib(
+    region_payload,
+    level="condition",
+)
+```
+
+The default region occupancy view is condition-level because it is usually the
+main biological summary. Sample-level occupancy remains available when you want
+replicate inspection or QC:
+
+```python
+fig, ax = plotting_matplotlib.plot_shared_cluster_region_matplotlib(
+    region_payload,
+    level="sample",
+)
+```
+
+The older `result.plot_data["cluster_distribution_bar"]` and
+`result.plot_data["cluster_distribution_heatmap"]` payloads remain supported for
+users updating from earlier package versions.
+
 ## Custom Plotting
 
 ```python
