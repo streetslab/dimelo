@@ -1018,6 +1018,31 @@ def test_prepare_shared_cluster_region_data_rejects_missing_region_summaries():
         plotting.prepare_shared_cluster_region_data(result=result)
 
 
+def test_plot_shared_cluster_region_matplotlib_defaults_to_condition_level():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_region_data(result=_make_shared_cluster_region_result())
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_region_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+
+
+def test_plot_shared_cluster_region_matplotlib_supports_sample_level():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_region_data(result=_make_shared_cluster_region_result())
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_region_matplotlib(
+        payload,
+        level="sample",
+    )
+
+    assert fig is not None
+    assert ax is not None
+
+
 def _minimal_region_contrast_result() -> RegionContrastResult:
     regions = pd.DataFrame(
         [
