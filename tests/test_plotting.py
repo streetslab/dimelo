@@ -13,6 +13,16 @@ from dimelo.models import (
 from dimelo import plot_enrichment_profile, plot_reads, plotting
 
 
+@pytest.fixture(autouse=True)
+def _close_matplotlib_figures():
+    yield
+    try:
+        from matplotlib import pyplot as plt
+    except ImportError:
+        return
+    plt.close("all")
+
+
 def test_axis_spec_accepts_fixed_window_region_5to3():
     spec = plotting.AxisSpec(
         orientation="region_5to3",
@@ -403,9 +413,9 @@ def test_prepare_shared_cluster_distribution_data_returns_distribution_payload()
     )
     assert payload["metadata"]["mode"] == "region_anchored"
     assert payload["metadata"]["cluster_labels"] == ["C1", "C0"]
+    assert payload["metadata"]["change_condition_order"] == ["treated"]
     assert "sample_order" not in payload["metadata"]
     assert "condition_order" not in payload["metadata"]
-    assert "change_condition_order" not in payload["metadata"]
 
 
 def test_plotting_matplotlib_module_exports_save_figure():
