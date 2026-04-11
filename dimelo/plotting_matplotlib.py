@@ -571,6 +571,70 @@ def plot_shared_cluster_profile_series_matplotlib(
     return fig, ax
 
 
+def plot_shared_cluster_region_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    level: str = "condition",
+    ax=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("region_table", "condition_region_table", "metadata"),
+        owner="plot_shared_cluster_region_matplotlib",
+    )
+    if level not in {"sample", "condition"}:
+        raise ValueError("level must be 'sample' or 'condition'.")
+
+    table = _require_payload_table(
+        payload,
+        "condition_region_table" if level == "condition" else "region_table",
+    )
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise TypeError("plot payload key 'metadata' must be a mapping.")
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
+
+    value_column = "fraction_mean" if level == "condition" else "fraction"
+    label_column = "condition" if level == "condition" else "sample_id"
+    value_table = table.loc[:, ["region_id", label_column, "cluster", value_column]].copy()
+    value_table["row_id"] = value_table.loc[:, ["region_id", label_column]].astype(str).agg(" | ".join, axis=1)
+    if value_table.duplicated(["row_id", "cluster"]).any():
+        raise ValueError("plot payload contains duplicate region occupancy values for the same row and cluster.")
+
+    row_order = _ordered_unique_values(value_table, "row_id")
+    observed_clusters = _ordered_unique_values(value_table, "cluster")
+    cluster_order = list(metadata.get("cluster_labels") or [])
+    if cluster_order:
+        cluster_order.extend([cluster for cluster in observed_clusters if cluster not in cluster_order])
+    else:
+        cluster_order = observed_clusters
+
+    if cluster_order:
+        ax.set_xticks(range(len(cluster_order)))
+        ax.set_xticklabels([str(value) for value in cluster_order], rotation=45, ha="right")
+    if row_order:
+        ax.set_yticks(range(len(row_order)))
+        ax.set_yticklabels([str(value) for value in row_order])
+
+    if row_order and cluster_order:
+        matrix = value_table.set_index(["row_id", "cluster"])[value_column].unstack("cluster")
+        matrix = matrix.reindex(index=row_order, columns=cluster_order)
+        if matrix.notna().any().any():
+            image = ax.imshow(
+                matrix.to_numpy(),
+                aspect="auto",
+                origin="upper",
+                interpolation="nearest",
+            )
+            ax.figure.colorbar(image, ax=ax, label=value_column.replace("_", " ").title())
+
+    ax.set_xlabel("Cluster")
+    ax.set_ylabel("Region / Condition" if level == "condition" else "Region / Sample")
+    ax.set_title(title or "Shared cluster region occupancy")
+    return fig, ax
+
+
 def plot_global_analysis_summary_matplotlib(
     payload: Mapping[str, object],
     *,

@@ -1027,6 +1027,15 @@ def test_plot_shared_cluster_region_matplotlib_defaults_to_condition_level():
 
     assert fig is not None
     assert ax is not None
+    image = ax.images[0]
+
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["C0", "C1"]
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["reg1 | NS", "reg1 | treated"]
+    assert image.origin == "upper"
+    np.testing.assert_allclose(
+        np.asarray(image.get_array()),
+        np.array([[2 / 3, 1 / 3], [1 / 4, 3 / 4]]),
+    )
 
 
 def test_plot_shared_cluster_region_matplotlib_supports_sample_level():
@@ -1041,6 +1050,29 @@ def test_plot_shared_cluster_region_matplotlib_supports_sample_level():
 
     assert fig is not None
     assert ax is not None
+    image = ax.images[0]
+
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["C0", "C1"]
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["reg1 | s1", "reg1 | s2"]
+    assert image.origin == "upper"
+    np.testing.assert_allclose(
+        np.asarray(image.get_array()),
+        np.array([[2 / 3, 1 / 3], [1 / 4, 3 / 4]]),
+    )
+
+
+def test_plot_shared_cluster_region_matplotlib_rejects_duplicate_row_cluster_values():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_region_data(result=_make_shared_cluster_region_result())
+    duplicate_row = payload["condition_region_table"].iloc[[0]]
+    payload["condition_region_table"] = pd.concat(
+        [payload["condition_region_table"], duplicate_row],
+        ignore_index=True,
+    )
+
+    with pytest.raises(ValueError, match="duplicate region occupancy values"):
+        plotting_matplotlib.plot_shared_cluster_region_matplotlib(payload)
 
 
 def _minimal_region_contrast_result() -> RegionContrastResult:
