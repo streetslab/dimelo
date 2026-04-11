@@ -396,8 +396,17 @@ def plot_shared_cluster_change_matplotlib(
         value_table = change_table.loc[:, ["condition", "cluster", "delta_fraction"]].copy()
         if value_table.duplicated(["condition", "cluster"]).any():
             raise ValueError("plot payload contains duplicate delta fractions for the same condition.")
-        condition_order = _ordered_unique_values(value_table, "condition")
-        cluster_order = _ordered_cluster_labels(metadata, _ordered_unique_values(value_table, "cluster"))
+        condition_order = list(metadata.get("change_condition_order") or [])
+        if not condition_order:
+            condition_order = _ordered_unique_values(value_table, "condition")
+        observed_clusters = _ordered_unique_values(value_table, "cluster")
+        cluster_order = list(metadata.get("cluster_labels") or [])
+        if cluster_order:
+            cluster_order.extend(
+                [cluster for cluster in observed_clusters if cluster not in cluster_order]
+            )
+        else:
+            cluster_order = observed_clusters
         matrix = value_table.set_index(["condition", "cluster"])["delta_fraction"].unstack("cluster")
         matrix = matrix.reindex(index=condition_order, columns=cluster_order)
         finite_values = pd.Series(matrix.abs().to_numpy().ravel()).dropna()

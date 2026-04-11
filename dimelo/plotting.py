@@ -1328,6 +1328,7 @@ def prepare_shared_cluster_distribution_data(
         "mode": result.model.mode,
         "cluster_labels": list(result.model.cluster_labels),
         "has_distribution_change": not distribution_change.empty,
+        "change_condition_order": distribution_change["condition"].drop_duplicates().tolist(),
     }
     return {
         "sample_distribution": sample_distribution,

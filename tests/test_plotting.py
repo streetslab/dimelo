@@ -571,6 +571,56 @@ def test_plot_shared_cluster_change_matplotlib_preserves_sparse_missing_pairs():
     assert matrix[1, 1] == pytest.approx(-5 / 12)
 
 
+def test_plot_shared_cluster_change_matplotlib_preserves_missing_condition_row():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_distribution_data(
+        result=_make_shared_cluster_result_with_explicit_display_order()
+    )
+    payload["distribution_change"] = payload["distribution_change"].loc[
+        payload["distribution_change"]["condition"] == "treated"
+    ].reset_index(drop=True)
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_change_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+    image = ax.images[0]
+    matrix = np.asarray(image.get_array())
+
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["baseline", "treated"]
+    assert image.origin == "upper"
+    assert np.isnan(matrix[0, 0])
+    assert np.isnan(matrix[0, 1])
+    assert matrix[1, 0] == pytest.approx(5 / 12)
+    assert matrix[1, 1] == pytest.approx(-5 / 12)
+
+
+def test_plot_shared_cluster_change_matplotlib_preserves_missing_cluster_column():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_shared_cluster_distribution_data(
+        result=_make_shared_cluster_result_with_explicit_display_order()
+    )
+    payload["distribution_change"] = payload["distribution_change"].loc[
+        payload["distribution_change"]["cluster"] == "C1"
+    ].reset_index(drop=True)
+
+    fig, ax = plotting_matplotlib.plot_shared_cluster_change_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+    image = ax.images[0]
+    matrix = np.asarray(image.get_array())
+
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["C1", "C0"]
+    assert image.origin == "upper"
+    assert matrix[0, 0] == pytest.approx(0.0)
+    assert matrix[1, 0] == pytest.approx(5 / 12)
+    assert np.isnan(matrix[0, 1])
+    assert np.isnan(matrix[1, 1])
+
+
 def _make_shared_cluster_profile_result() -> SharedClusterResult:
     return SharedClusterResult(
         model=SharedClusterModel(
