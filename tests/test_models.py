@@ -17,6 +17,7 @@ from dimelo.models import (
     RegionContrastResult,
     SharedClusterModel,
     SharedClusterResult,
+    SharedClusterContrastResult,
 )
 
 
@@ -285,6 +286,18 @@ def test_shared_cluster_result_rejects_none_core_outputs(field_name):
 
     with pytest.raises(ValueError):
         SharedClusterResult(**kwargs)
+
+
+def test_shared_cluster_contrast_result_requires_summary_details_and_plot_data():
+    with pytest.raises(
+        ValueError,
+        match="SharedClusterContrastResult requires non-None values",
+    ):
+        SharedClusterContrastResult(
+            summary=None,
+            details=pd.DataFrame(),
+            plot_data={},
+        )
 
 
 def test_global_analysis_result_supports_summary_windows_and_normalization():
