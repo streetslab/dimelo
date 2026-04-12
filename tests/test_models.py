@@ -297,6 +297,7 @@ def test_shared_cluster_contrast_result_requires_summary_details_and_plot_data()
             summary=None,
             details=pd.DataFrame(),
             plot_data={},
+            figures={},
         )
 
 

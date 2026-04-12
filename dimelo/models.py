@@ -149,6 +149,31 @@ class SharedClusterResult:
 
 
 @dataclass
+class SharedClusterContrastResult:
+    summary: pd.DataFrame
+    details: pd.DataFrame
+    pairwise: pd.DataFrame | None = None
+    plot_data: dict[str, pd.DataFrame | dict[str, Any]] = field(default_factory=dict)
+    figures: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        required_fields = {
+            "summary": self.summary,
+            "details": self.details,
+            "plot_data": self.plot_data,
+            "figures": self.figures,
+            "metadata": self.metadata,
+        }
+        missing = [name for name, value in required_fields.items() if value is None]
+        if missing:
+            raise ValueError(
+                "SharedClusterContrastResult requires non-None values for: "
+                f"{', '.join(missing)}"
+            )
+
+
+@dataclass
 class GlobalAnalysisResult:
     summary: pd.DataFrame
     windows: pd.DataFrame | None
