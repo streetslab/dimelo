@@ -781,6 +781,220 @@ def test_shared_cluster_distribution_read_global(monkeypatch):
     assert set(result.metadata["cache_misses"]) == {"s1", "s2"}
 
 
+def test_shared_cluster_distribution_propagates_sample_metadata_into_assignments_read_global(
+    monkeypatch,
+):
+    fake_samples = [
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            metadata={
+                "subject_id": "mouse-1",
+                "sample_id": "overwrite-attempt",
+                "condition": "overwrite-attempt",
+                "replicate": 99,
+                "read_name": "overwrite-attempt",
+                "chromosome": "wrong-chr",
+                "region_start": 999,
+                "region_end": 1000,
+            },
+        ),
+        SampleSpec(
+            sample_id="s2",
+            condition="15min",
+            extract_h5="s2.h5",
+            metadata={
+                "subject_id": "mouse-2",
+                "sample_id": "overwrite-attempt",
+                "condition": "overwrite-attempt",
+                "replicate": 88,
+                "read_name": "overwrite-attempt",
+                "chromosome": "wrong-chr",
+                "region_start": 999,
+                "region_end": 1000,
+            },
+        ),
+    ]
+
+    def fake_extract(*args, **kwargs):
+        hdf5_file = kwargs["hdf5_file"]
+
+        class R:
+            if hdf5_file == "s1.h5":
+                data_matrix = np.array([[0.0, 0.0, 0.1, 0.1], [0.0, 0.1, 0.0, 0.1]])
+                metadata = [
+                    {"read_name": "s1-r1", "chromosome": "chr1", "region_start": 0, "region_end": 4},
+                    {"read_name": "s1-r2", "chromosome": "chr1", "region_start": 10, "region_end": 14},
+                ]
+            else:
+                data_matrix = np.array([[1.0, 0.9, 1.0, 0.9], [0.9, 1.0, 0.9, 1.0]])
+                metadata = [
+                    {"read_name": "s2-r1", "chromosome": "chr1", "region_start": 20, "region_end": 24},
+                    {"read_name": "s2-r2", "chromosome": "chr1", "region_start": 30, "region_end": 34},
+                ]
+            val_matrix = np.ones((2, 4), dtype=float)
+            datasets = []
+            regions_dict = None
+
+        return R()
+
+    monkeypatch.setattr(workflows.cluster, "extract_read_windows", fake_extract)
+    monkeypatch.setattr(
+        workflows.cluster,
+        "read_window_feature_matrix",
+        lambda result, **kwargs: (result.data_matrix, ["f0", "f1", "f2", "f3"]),
+    )
+
+    result = workflows.shared_cluster_distribution(
+        samples=fake_samples,
+        mode="read_global",
+        motifs=["A,0"],
+        n_clusters=2,
+        training_sample_per_dataset=2,
+    )
+
+    assert "subject_id" in result.assignments.columns
+    by_read_name = result.assignments.set_index("read_name")[
+        ["subject_id", "sample_id", "condition", "region_start", "region_end"]
+    ].to_dict("index")
+    assert by_read_name == {
+        "s1-r1": {
+            "subject_id": "mouse-1",
+            "sample_id": "s1",
+            "condition": "NS",
+            "region_start": 0,
+            "region_end": 4,
+        },
+        "s1-r2": {
+            "subject_id": "mouse-1",
+            "sample_id": "s1",
+            "condition": "NS",
+            "region_start": 10,
+            "region_end": 14,
+        },
+        "s2-r1": {
+            "subject_id": "mouse-2",
+            "sample_id": "s2",
+            "condition": "15min",
+            "region_start": 20,
+            "region_end": 24,
+        },
+        "s2-r2": {
+            "subject_id": "mouse-2",
+            "sample_id": "s2",
+            "condition": "15min",
+            "region_start": 30,
+            "region_end": 34,
+        },
+    }
+    assert set(result.assignments["replicate"]) == {None}
+    assert set(result.assignments["chromosome"]) == {"chr1"}
+
+
+def test_shared_cluster_distribution_propagates_sample_metadata_into_assignments_region_anchored(
+    monkeypatch,
+):
+    fake_samples = [
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            regions_bed="r1.bed",
+            metadata={
+                "pileup_path": "s1.bed.gz",
+                "subject_id": "mouse-1",
+                "sample_id": "overwrite-attempt",
+                "condition": "overwrite-attempt",
+                "replicate": 99,
+                "region_id": "wrong-region",
+                "chromosome": "wrong-chr",
+                "start": 999,
+                "end": 1000,
+                "strand": "-",
+            },
+        ),
+        SampleSpec(
+            sample_id="s2",
+            condition="15min",
+            extract_h5="s2.h5",
+            regions_bed="r2.bed",
+            metadata={
+                "pileup_path": "s2.bed.gz",
+                "subject_id": "mouse-2",
+                "sample_id": "overwrite-attempt",
+                "condition": "overwrite-attempt",
+                "replicate": 88,
+                "region_id": "wrong-region",
+                "chromosome": "wrong-chr",
+                "start": 999,
+                "end": 1000,
+                "strand": "-",
+            },
+        ),
+    ]
+
+    def fake_region_table(*args, **kwargs):
+        return np.array([[0.2, 0.8], [0.7, 0.3]], dtype=np.float32), [
+            {
+                "sample_id": "s1",
+                "condition": "NS",
+                "replicate": None,
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 2,
+                "strand": "+",
+            },
+            {
+                "sample_id": "s2",
+                "condition": "15min",
+                "replicate": None,
+                "region_id": "reg1",
+                "chromosome": "chr1",
+                "start": 0,
+                "end": 2,
+                "strand": "+",
+            },
+        ]
+
+    monkeypatch.setattr(workflows.region_analysis, "build_region_feature_table", fake_region_table)
+
+    result = workflows.shared_cluster_distribution(
+        samples=fake_samples,
+        mode="region_anchored",
+        motifs=["A,0"],
+        matched_regions="matched.bed",
+        n_clusters=2,
+        make_plots=False,
+    )
+
+    assert "subject_id" in result.assignments.columns
+    by_region = result.assignments.set_index(["sample_id", "region_id"])[
+        ["subject_id", "condition", "replicate", "chromosome", "start", "end", "strand"]
+    ].to_dict("index")
+    assert by_region == {
+        ("s1", "reg1"): {
+            "subject_id": "mouse-1",
+            "condition": "NS",
+            "replicate": None,
+            "chromosome": "chr1",
+            "start": 0,
+            "end": 2,
+            "strand": "+",
+        },
+        ("s2", "reg1"): {
+            "subject_id": "mouse-2",
+            "condition": "15min",
+            "replicate": None,
+            "chromosome": "chr1",
+            "start": 0,
+            "end": 2,
+            "strand": "+",
+        },
+    }
+
+
 def test_shared_cluster_distribution_rejects_unsupported_mode():
     with pytest.raises(NotImplementedError, match="region_anchored"):
         workflows.shared_cluster_distribution(

@@ -76,6 +76,18 @@ def _coerce_artifacts(sample: SampleSpec) -> list[DatasetArtifact]:
     return coerced
 
 
+def _merge_sample_metadata(
+    row: dict[str, Any],
+    sample_metadata: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not sample_metadata:
+        return row
+    for key, value in sample_metadata.items():
+        if key not in row:
+            row[key] = value
+    return row
+
+
 def _requested_extract_artifact(
     sample: SampleSpec,
     *,
@@ -791,6 +803,10 @@ def shared_cluster_distribution(
             matched_regions=matched_regions,
             pileup_paths=pileup_paths,
         )
+        sample_by_id = {sample.sample_id: sample for sample in sample_list}
+        for row in metadata_rows:
+            sample = sample_by_id[row["sample_id"]]
+            _merge_sample_metadata(row, sample.metadata)
         sample_ids = [row["sample_id"] for row in metadata_rows]
         sample_dataset_sizes = {
             sample_id: int(sum(1 for row_sample in sample_ids if row_sample == sample_id))
@@ -999,6 +1015,7 @@ def shared_cluster_distribution(
                 "condition": sample.condition,
                 "replicate": sample.replicate,
             }
+            _merge_sample_metadata(row, sample.metadata)
             row.update(metadata)
             metadata_rows.append(row)
 
