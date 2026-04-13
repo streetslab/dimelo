@@ -944,11 +944,10 @@ def read_by_base_txt_to_hdf5(
             # TODO: initialize read name to actual first read so we can get rid of the logic in the loop
             read_name = ""
             read_chrom = ""
-            read_len = 0
             ref_strand = ""
             read_start = 0
             read_end = 0
-            valid_coordinates_list: list[int] = []
+            valid_genomic_positions_list: list[int] = []
             mod_values_list: list[float] = []
 
             # Count reads for batched write
@@ -961,160 +960,46 @@ def read_by_base_txt_to_hdf5(
             # TODO: replace in loop with read_counter%chunk_size as appropriate
             reads_in_chunk = 0
 
-            # Setting up progress bars if not in quiet mode
-            # Skip header
-            iterator = enumerate(txt)
-            next(iterator)
-            if not quiet:
-                iterator = tqdm(
-                    iterator,
-                    total=num_lines,
-                    desc=f"Transferring {num_reads} from {input_txt.name} into {output_h5.name}, new size {old_size + num_reads}",
-                    bar_format="{bar}| {desc} {percentage:3.0f}% | {elapsed}<{remaining}",
-                )
+            def flush_current_read() -> None:
+                nonlocal read_counter, reads_in_chunk, chunk_datasets_contents
 
-            # Loop through txt file
-            for line_index, line in iterator:
-                # TODO: use csv module
-                fields = line.rstrip("\n").split("\t")
-                pos_in_genome = int(fields[2])
-                canonical_base = fields[15]
-                prob = float(fields[10])
-                mod_code = fields[11]
+                if len(read_name) == 0:
+                    return
 
-                if read_name != fields[0]:
-                    # Record the previous read details unless this is the first line
-                    if line_index > 1:
-                        read_len_along_ref = max(read_end - read_start, 1)
-
-                        # Populate mod vector array appropriately based on thresh settings.
-                        # Option 1: when thresh is provided, write binary 0/1 values; otherwise preserve raw probs.
-                        mod_vector = np.zeros(read_len_along_ref, dtype=np.uint8)
-                        if thresh is None:
-                            # We subtract 0.25 because in modkit they add 0.5, but our elements are zero when the
-                            # base motif isn't present, so to get things to round to the right integers to match the
-                            # original .bam file, subtracting 0.25 is good. Anything from 0.001 to 0.4999 would work I think
-                            mod_vector[valid_coordinates_list] = np.rint(
-                                np.array(mod_values_list) * 256 - 0.25
-                            ).astype(np.uint8)
-                        else:
-                            mod_vector[valid_coordinates_list] = np.array(
-                                mod_values_list
-                            ).astype(np.uint8)
-                        # TODO: consolidate compression into a function shared across
-                        mod_vector_compressed = np.frombuffer(
-                            gzip.compress(
-                                mod_vector.tobytes(), compresslevel=compress_level
-                            ),
-                            dtype=np.uint8,
-                        )
-
-                        # Populate valid vector array
-                        valid_vector = np.zeros(read_len_along_ref, dtype=np.uint8)
-                        valid_vector[valid_coordinates_list] = 1
-                        valid_vector_compressed = np.frombuffer(
-                            gzip.compress(
-                                valid_vector.tobytes(), compresslevel=compress_level
-                            ),
-                            dtype=np.uint8,
-                        )
-
-                        chunk_datasets_contents["read_name"].append(read_name)
-                        chunk_datasets_contents["chromosome"].append(read_chrom)
-                        chunk_datasets_contents["read_start"].append(read_start)
-                        chunk_datasets_contents["read_end"].append(read_end)
-                        chunk_datasets_contents["strand"].append(ref_strand)
-                        chunk_datasets_contents["motif"].append(motif)
-                        chunk_datasets_contents["mod_vector"].append(
-                            mod_vector_compressed
-                        )
-                        chunk_datasets_contents["val_vector"].append(
-                            valid_vector_compressed
-                        )
-
-                        # Write chunk if enough reads have built up
-                        reads_in_chunk += 1
-                        if reads_in_chunk >= chunk_size:
-                            for dataset, entry in chunk_datasets_contents.items():
-                                start_index = (
-                                    old_size + (read_counter // chunk_size) * chunk_size
-                                )
-                                end_index = old_size + read_counter + 1
-                                h5[dataset][start_index:end_index] = entry
-                            chunk_datasets_contents = defaultdict(list)
-                            reads_in_chunk = 0
-                        read_counter += 1
-
-                    ## Set up for next read
-                    # Metadata
-                    read_name = fields[0]
-                    read_chrom = fields[3]
-                    read_len = int(fields[9])
-                    ref_strand = fields[5]
-                    # TODO: verify that read position is in the right (ref) coordinate system
-                    if ref_strand == "+":
-                        pos_in_read_ref = int(fields[1])
-                    elif ref_strand == "-":
-                        pos_in_read_ref = read_len - int(fields[1]) - 1
-                    # Calculate read start (leftmost position on ref genome)
-                    # TODO: logic can be replaced when we switch to true read start/end from modkit
-                    read_start = pos_in_genome - pos_in_read_ref
-                    # Instantiate lists
-                    mod_values_list = []
-                    valid_coordinates_list = []
-
-                # Adjust the read_end (rightmost position on ref genome) each time there's a new mod
-                # This will lead to the most accurate end positions for gapped reads
-                # TODO: logic can be replaced when we switch to true read start/end from modkit
-                if ref_strand == "+":
-                    pos_in_read_ref = int(fields[1])
-                elif ref_strand == "-":
-                    pos_in_read_ref = read_len - int(fields[1]) - 1
-                read_end = pos_in_genome + (read_len - pos_in_read_ref)
-                # Regardless of whether its a new read or not,
-                # add modification to vector if motif type is correct
-                # for the motif in question
-                if (
-                    canonical_base == parsed_motif.modified_base
-                    and mod_code in parsed_motif.mod_codes
-                ):
-                    valid_coordinates_list.append(pos_in_genome - read_start)
-                    if thresh is None:
-                        mod_values_list.append(prob)
-                    elif prob >= thresh:
-                        mod_values_list.append(1)
-                    else:
-                        mod_values_list.append(0)
-
-            # Save the last read
-            # TODO: try to consolidate
-            if len(read_name) > 0:
-                # Build the vectors
                 read_len_along_ref = max(read_end - read_start, 1)
 
                 # Populate mod vector array appropriately based on thresh settings.
                 # Option 1: when thresh is provided, write binary 0/1 values; otherwise preserve raw probs.
                 mod_vector = np.zeros(read_len_along_ref, dtype=np.uint8)
-                if thresh is None:
-                    # We subtract 0.25 because in modkit they add 0.5, but our elements are zero when the
-                    # base motif isn't present, so to get things to round to the right integers to match the
-                    # original .bam file, subtracting 0.25 is good. Anything from 0.001 to 0.4999 would work I think
-                    mod_vector[valid_coordinates_list] = np.rint(
-                        np.array(mod_values_list) * 256 - 0.25
-                    ).astype(np.uint8)
-                else:
-                    mod_vector[valid_coordinates_list] = np.array(
-                        mod_values_list
-                    ).astype(np.uint8)
+                valid_vector = np.zeros(read_len_along_ref, dtype=np.uint8)
+
+                if len(valid_genomic_positions_list) > 0:
+                    valid_coordinates = (
+                        np.asarray(valid_genomic_positions_list, dtype=int) - read_start
+                    )
+                    mod_values = np.asarray(mod_values_list, dtype=float)
+                    in_bounds = (valid_coordinates >= 0) & (
+                        valid_coordinates < read_len_along_ref
+                    )
+                    valid_coordinates = valid_coordinates[in_bounds]
+                    mod_values = mod_values[in_bounds]
+
+                    if thresh is None:
+                        # We subtract 0.25 because in modkit they add 0.5, but our elements are zero when the
+                        # base motif isn't present, so to get things to round to the right integers to match the
+                        # original .bam file, subtracting 0.25 is good. Anything from 0.001 to 0.4999 would work I think
+                        mod_vector[valid_coordinates] = np.rint(
+                            mod_values * 256 - 0.25
+                        ).astype(np.uint8)
+                    else:
+                        mod_vector[valid_coordinates] = mod_values.astype(np.uint8)
+                    valid_vector[valid_coordinates] = 1
+
                 # TODO: consolidate compression into a function shared across
                 mod_vector_compressed = np.frombuffer(
                     gzip.compress(mod_vector.tobytes(), compresslevel=compress_level),
                     dtype=np.uint8,
                 )
-
-                # Populate valid vector array
-                valid_vector = np.zeros(read_len_along_ref, dtype=np.uint8)
-                valid_vector[valid_coordinates_list] = 1
                 valid_vector_compressed = np.frombuffer(
                     gzip.compress(valid_vector.tobytes(), compresslevel=compress_level),
                     dtype=np.uint8,
@@ -1129,11 +1014,91 @@ def read_by_base_txt_to_hdf5(
                 chunk_datasets_contents["mod_vector"].append(mod_vector_compressed)
                 chunk_datasets_contents["val_vector"].append(valid_vector_compressed)
 
-                for dataset, entry in chunk_datasets_contents.items():
-                    start_index = old_size + (read_counter // chunk_size) * chunk_size
-                    end_index = old_size + read_counter + 1
-                    h5[dataset][start_index:end_index] = entry
                 read_counter += 1
+                reads_in_chunk += 1
+                if reads_in_chunk >= chunk_size:
+                    start_index = old_size + read_counter - reads_in_chunk
+                    end_index = old_size + read_counter
+                    for dataset, entry in chunk_datasets_contents.items():
+                        h5[dataset][start_index:end_index] = entry
+                    chunk_datasets_contents = defaultdict(list)
+                    reads_in_chunk = 0
+
+            # Setting up progress bars if not in quiet mode
+            # Skip header
+            iterator = enumerate(txt)
+            next(iterator)
+            if not quiet:
+                iterator = tqdm(
+                    iterator,
+                    total=num_lines,
+                    desc=f"Transferring {num_reads} from {input_txt.name} into {output_h5.name}, new size {old_size + num_reads}",
+                    bar_format="{bar}| {desc} {percentage:3.0f}% | {elapsed}<{remaining}",
+                )
+
+            # Loop through txt file
+            for _, line in iterator:
+                # TODO: use csv module
+                fields = line.rstrip("\n").split("\t")
+                pos_in_genome = int(fields[2])
+                canonical_base = fields[15]
+                prob = float(fields[10])
+                mod_code = fields[11]
+                pos_in_read = int(fields[1])
+                line_read_len = int(fields[9])
+                line_ref_strand = fields[5]
+                # TODO: verify that read position is in the right (ref) coordinate system
+                if line_ref_strand == "+":
+                    pos_in_read_ref = pos_in_read
+                elif line_ref_strand == "-":
+                    pos_in_read_ref = line_read_len - pos_in_read - 1
+                else:
+                    raise ValueError(
+                        f"Unexpected strand '{line_ref_strand}' in modkit extract row."
+                    )
+                start_candidate = pos_in_genome - pos_in_read_ref
+                end_candidate = start_candidate + line_read_len
+
+                if read_name != fields[0]:
+                    flush_current_read()
+
+                    ## Set up for next read
+                    # Metadata
+                    read_name = fields[0]
+                    read_chrom = fields[3]
+                    ref_strand = line_ref_strand
+                    read_start = start_candidate
+                    read_end = end_candidate
+                    # Instantiate lists
+                    mod_values_list = []
+                    valid_genomic_positions_list = []
+
+                # keep read extents in reference coordinates by using inferred starts/ends from
+                # each line, which is robust even when rows are not ordered by genomic position
+                read_start = min(read_start, start_candidate)
+                read_end = max(read_end, end_candidate)
+
+                # Regardless of whether its a new read or not,
+                # add modification to vector if motif type is correct
+                # for the motif in question
+                if (
+                    canonical_base == parsed_motif.modified_base
+                    and mod_code in parsed_motif.mod_codes
+                ):
+                    valid_genomic_positions_list.append(pos_in_genome)
+                    if thresh is None:
+                        mod_values_list.append(prob)
+                    elif prob >= thresh:
+                        mod_values_list.append(1)
+                    else:
+                        mod_values_list.append(0)
+
+            flush_current_read()
+            if reads_in_chunk > 0:
+                start_index = old_size + read_counter - reads_in_chunk
+                end_index = old_size + read_counter
+                for dataset, entry in chunk_datasets_contents.items():
+                    h5[dataset][start_index:end_index] = entry
     return
 
 

@@ -91,6 +91,60 @@ def _write_extract_file(path: Path) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
+def _write_coordinate_stress_extract_file(path: Path) -> None:
+    header = "\t".join(f"col{i}" for i in range(16))
+    lines = [
+        header,
+        # plus strand read with inferred start drift across rows (tests coordinate robustness)
+        _make_extract_line(
+            "read_plus_drift",
+            pos_in_read=1,
+            pos_in_genome=102,
+            chromosome="chr2",
+            strand="+",
+            read_len=10,
+            prob=0.90,
+            mod_code="a",
+            canonical_base="A",
+        ),
+        _make_extract_line(
+            "read_plus_drift",
+            pos_in_read=0,
+            pos_in_genome=100,
+            chromosome="chr2",
+            strand="+",
+            read_len=10,
+            prob=0.80,
+            mod_code="a",
+            canonical_base="A",
+        ),
+        # minus strand read where reference-oriented positions should still map left-to-right
+        _make_extract_line(
+            "read_minus",
+            pos_in_read=1,
+            pos_in_genome=208,
+            chromosome="chr2",
+            strand="-",
+            read_len=10,
+            prob=0.70,
+            mod_code="a",
+            canonical_base="A",
+        ),
+        _make_extract_line(
+            "read_minus",
+            pos_in_read=9,
+            pos_in_genome=200,
+            chromosome="chr2",
+            strand="-",
+            read_len=10,
+            prob=0.95,
+            mod_code="a",
+            canonical_base="A",
+        ),
+    ]
+    path.write_text("\n".join(lines) + "\n")
+
+
 def _decode_vector(dataset, index: int) -> np.ndarray:
     raw_bytes = np.asarray(dataset[index], dtype=np.uint8).tobytes()
     return np.frombuffer(gzip.decompress(raw_bytes), dtype=np.uint8)
@@ -217,3 +271,51 @@ def test_read_vectors_from_hdf5_loads_thresholded_vectors_as_binary(tmp_path):
         quiet=True,
     )
     assert len(mod_positions) == 1
+
+
+def test_read_by_base_txt_to_hdf5_reconstructs_coordinates_robustly(tmp_path):
+    input_txt = tmp_path / "extract.coordinate_stress.txt"
+    output_h5 = tmp_path / "reads.coordinate_stress.h5"
+    _write_coordinate_stress_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    with h5py.File(output_h5, "r") as h5:
+        read_names = [
+            name.decode() if isinstance(name, bytes) else str(name)
+            for name in h5["read_name"][:]
+        ]
+        read_name_to_index = {name: idx for idx, name in enumerate(read_names)}
+
+        plus_idx = read_name_to_index["read_plus_drift"]
+        minus_idx = read_name_to_index["read_minus"]
+
+        assert int(h5["read_start"][plus_idx]) == 100
+        assert int(h5["read_end"][plus_idx]) == 111
+        plus_mod = _decode_vector(h5["mod_vector"], plus_idx)
+        plus_val = _decode_vector(h5["val_vector"], plus_idx)
+        assert len(plus_mod) == 11
+        np.testing.assert_array_equal(
+            plus_mod, np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.uint8)
+        )
+        np.testing.assert_array_equal(
+            plus_val, np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.uint8)
+        )
+
+        assert int(h5["read_start"][minus_idx]) == 200
+        assert int(h5["read_end"][minus_idx]) == 210
+        minus_mod = _decode_vector(h5["mod_vector"], minus_idx)
+        minus_val = _decode_vector(h5["val_vector"], minus_idx)
+        assert len(minus_mod) == 10
+        np.testing.assert_array_equal(
+            minus_mod, np.array([1, 0, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.uint8)
+        )
+        np.testing.assert_array_equal(
+            minus_val, np.array([1, 0, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.uint8)
+        )
