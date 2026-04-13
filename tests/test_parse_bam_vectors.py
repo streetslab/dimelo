@@ -348,3 +348,30 @@ def test_readwise_binary_modification_arrays_returns_empty_for_empty_region(tmp_
     assert read_ids.size == 0
     assert motifs.size == 0
     assert regions_dict == {"chr1": [(1000, 1010, ".")]}
+
+
+def test_read_vectors_from_hdf5_subset_empty_region_returns_empty(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    read_tuples, datasets, regions_dict = load_processed.read_vectors_from_hdf5(
+        file=output_h5,
+        motifs=["A,0"],
+        regions="chr1:1000-1010",
+        subset_parameters={"n": 1},
+        calculate_mod_fractions=False,
+        quiet=True,
+    )
+
+    assert read_tuples == []
+    assert "mod_vector" in datasets
+    assert regions_dict == {"chr1": [(1000, 1010, ".")]}

@@ -745,11 +745,14 @@ def read_vectors_from_hdf5(
                         )
                     )
                     if subset_parameters is not None:
-                        relevant_read_indices = np.sort(
-                            utils.random_sample(
-                                relevant_read_indices, **subset_parameters
+                        if len(relevant_read_indices) > 0:
+                            relevant_read_indices = np.sort(
+                                utils.random_sample(
+                                    relevant_read_indices, **subset_parameters
+                                )
                             )
-                        )
+                        else:
+                            relevant_read_indices = np.array([], dtype=int)
                     read_tuples_raw += list(
                         zip(
                             *(
@@ -773,9 +776,12 @@ def read_vectors_from_hdf5(
             regions_dict = None
             relevant_read_indices = np.flatnonzero(np.isin(read_motifs, motifs))
             if subset_parameters is not None:
-                relevant_read_indices = np.sort(
-                    utils.random_sample(relevant_read_indices, **subset_parameters)
-                )
+                if len(relevant_read_indices) > 0:
+                    relevant_read_indices = np.sort(
+                        utils.random_sample(relevant_read_indices, **subset_parameters)
+                    )
+                else:
+                    relevant_read_indices = np.array([], dtype=int)
             read_tuples_raw = list(
                 zip(
                     *(
