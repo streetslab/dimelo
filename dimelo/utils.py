@@ -1,5 +1,6 @@
 import multiprocessing
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -133,7 +134,7 @@ def process_chunks_from_regions_dict(
 
 
 def regions_dict_from_input(
-    regions: str | Path | list[str | Path] | None = None,
+    regions: str | Path | Sequence[str | Path] | None = None,
     window_size: int | None = None,
 ) -> dict:
     """
@@ -152,7 +153,7 @@ def regions_dict_from_input(
             "Invalid window_size. To disable windowing, set window_size to None or do not pass a value (the default is None)."
         )
 
-    if isinstance(regions, list):
+    if isinstance(regions, Sequence) and not isinstance(regions, (str, Path)):
         for region in regions:
             add_region_to_dict(region, window_size, regions_dict)
     else:
