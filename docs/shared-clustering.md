@@ -189,6 +189,72 @@ For heatmaps:
 heatmap = result.plot_data["cluster_distribution_heatmap"].set_index("condition")
 ```
 
+## Global Composition Inference
+
+Shared clustering now includes a dedicated inference helper for global
+composition changes:
+
+```python
+from dimelo import shared_cluster_tests
+from dimelo.models import ContrastSpec
+
+contrast_result = shared_cluster_tests.shared_cluster_tests(
+    result=result,
+    contrast=ContrastSpec(
+        mode="pairwise",
+        numerator=["treated"],
+        denominator=["NS"],
+    ),
+    test="permutation",
+)
+```
+
+Matched pairwise example:
+
+```python
+contrast_result = shared_cluster_tests.shared_cluster_tests(
+    result=result,
+    contrast=ContrastSpec(
+        mode="matched_pairwise",
+        numerator=["treated"],
+        denominator=["NS"],
+        pairing_key="subject_id",
+    ),
+    test="permutation",
+)
+```
+
+Time-course example:
+
+```python
+contrast_result = shared_cluster_tests.shared_cluster_tests(
+    result=result,
+    contrast=ContrastSpec(mode="time_course", time_order=["t0", "t1", "t2"]),
+    test="permutation",
+    include_pairwise=True,
+)
+```
+
+Pooled screening example:
+
+```python
+screen_result = shared_cluster_tests.shared_cluster_tests(
+    result=result,
+    contrast=ContrastSpec(mode="pairwise", numerator=["treated"], denominator=["NS"]),
+    test="chi_squared",
+)
+```
+
+Inference boundary:
+
+- `shared_cluster_tests(...)` is for global cluster-composition inference from
+  `SharedClusterResult`.
+- `region_contrasts.score_regions(..., analysis_unit="cluster_occupancy")`
+  remains the path for region-level occupancy inference.
+- Pooled `chi_squared` and `g_test` are screening-oriented outputs; use
+  replicate-aware permutation paths as the primary inferential mode when
+  replicate structure exists.
+
 ## Current V1 Scope
 
 - `mode="read_global"` supports shared read clustering from extract outputs.

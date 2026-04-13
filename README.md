@@ -255,6 +255,15 @@ inference.
 
 Shared clustering also has renderer-neutral plotting prep in `dimelo.plotting`. Use `prepare_shared_cluster_distribution_data(...)` for sample/condition cluster fractions, `prepare_shared_cluster_profile_data(...)` for cluster feature summaries, and `prepare_shared_cluster_region_data(...)` for region-level occupancy tables. The older lightweight `result.plot_data["cluster_distribution_bar"]` and `result.plot_data["cluster_distribution_heatmap"]` payloads remain supported.
 
+Global shared-cluster composition inference is available through
+`dimelo.shared_cluster_tests.shared_cluster_tests(...)`, which consumes a
+`SharedClusterResult` plus a `ContrastSpec`. Use this for global composition
+shifts (`pairwise`, `matched_pairwise`, `group_vs_group`, `time_course`), and
+keep per-region occupancy inference in
+`region_contrasts.score_regions(..., analysis_unit="cluster_occupancy")`.
+Pooled `chi_squared` and `g_test` modes are screening-oriented and should not
+replace replicate-aware permutation analyses when replicates are available.
+
 For human-readable pileups (bedmethyl files, .bed) and extracted reads (.txt tab-separated values), run with `cleanup=False`. `cleanup=True` will clear these outputs because they can take up a lot of space.
 
 ### Parsing outputs
