@@ -80,7 +80,11 @@ def pileup(
         output_directory: optional str or Path pointing to an output directory.
             If left as None, outputs will be stored in a new folder within the input
             directory.
-        regions: TODO
+        regions: optional region selector passed through to modkit via an include-bed
+            file. This may be a BED file path, a single region file, or a list of
+            region files/paths that define the loci to process. When paired with
+            ``window_size``, the provided regions are expanded around their centers
+            before being passed to modkit.
         motifs: a list of strings specifying which base modifications to look for.
             The basemods are each specified as {sequence_motif},{position_of_modification}.
             For example, a methylated adenine is specified as 'A,0' and CpG methylation
@@ -329,7 +333,11 @@ def extract(
         output_directory: optional str or Path pointing to an output directory.
             If left as None, outputs will be stored in a new folder within the input
             directory.
-        regions: TODO
+        regions: optional region selector passed through to modkit via an include-bed
+            file. This may be a BED file path, a single region file, or a list of
+            region files/paths that define the loci to process. When paired with
+            ``window_size``, the provided regions are expanded around their centers
+            before being passed to modkit.
         motifs: a list of strings specifying which base modifications to look for.
             The basemods are each specified as {sequence_motif},{position_of_modification}.
             For example, a methylated adenine is specified as 'A,0' and CpG methylation
