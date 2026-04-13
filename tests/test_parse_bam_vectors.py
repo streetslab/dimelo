@@ -3,6 +3,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pytest
 
 from dimelo import load_processed, parse_bam
 
@@ -403,3 +404,27 @@ def test_readwise_binary_modification_arrays_splits_duplicate_read_names_by_regi
     assert set(read_ids.tolist()) == {0, 1}
     assert motifs.size == read_ids.size == 2
     assert regions_dict == {"chr1": [(95, 105, "."), (100, 110, ".")]}
+
+
+def test_read_vectors_from_hdf5_rejects_subset_without_n_or_frac(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    with pytest.raises(ValueError, match="subset_parameters must include"):
+        load_processed.read_vectors_from_hdf5(
+            file=output_h5,
+            motifs=["A,0"],
+            regions="chr1:95-110",
+            subset_parameters={},
+            calculate_mod_fractions=False,
+            quiet=True,
+        )
