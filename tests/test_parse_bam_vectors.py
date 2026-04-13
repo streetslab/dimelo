@@ -319,3 +319,32 @@ def test_read_by_base_txt_to_hdf5_reconstructs_coordinates_robustly(tmp_path):
         np.testing.assert_array_equal(
             minus_val, np.array([1, 0, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.uint8)
         )
+
+
+def test_readwise_binary_modification_arrays_returns_empty_for_empty_region(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    mod_positions, read_ids, motifs, regions_dict = (
+        load_processed.readwise_binary_modification_arrays(
+            file=output_h5,
+            motifs=["A,0"],
+            regions="chr1:1000-1010",
+            thresh=None,
+            quiet=True,
+        )
+    )
+
+    assert mod_positions.size == 0
+    assert read_ids.size == 0
+    assert motifs.size == 0
+    assert regions_dict == {"chr1": [(1000, 1010, ".")]}
