@@ -9,12 +9,13 @@ import select
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional, cast
+from typing import Optional, TypeAlias, cast
 
 from tqdm.auto import tqdm
 
 # This should be updated in tandem with the environment.yml nanoporetech::modkit version
 EXPECTED_MODKIT_VERSION = "0.2.4"
+FindingProgressDict: TypeAlias = dict[str, tuple[int, int]]
 
 def ensure_modkit_available(quiet: bool = False) -> None:
     """
@@ -125,8 +126,7 @@ def run_with_progress_bars(
     pbar_contigs: Optional[tqdm] = None
     pbar_chr: Optional[tqdm] = None
 
-    # TODO: Is this the correct type annotation? I think it is, based on approx. line 280
-    finding_progress_dict: dict[str, tuple[int, int]] = {}
+    finding_progress_dict: FindingProgressDict = {}
     in_contig_progress = (0, 1)
     total_contigs = 0
 
@@ -322,21 +322,21 @@ def run_with_progress_bars(
 
 
 def update_progress_bars(
-    pbar_pre,
-    pbar_contigs,
-    pbar_chr,
-    tail_buffer,
-    contigs_progress_regex,
-    single_contig_regex,
-    find_motifs_regex,
-    load_fasta_regex,
-    region_parsing_started,
-    in_contig_progress,
-    finding_progress_dict,
-    ref_genome,
-    input_file,
-    motifs,
-):
+    pbar_pre: Optional[tqdm],
+    pbar_contigs: Optional[tqdm],
+    pbar_chr: Optional[tqdm],
+    tail_buffer: str,
+    contigs_progress_regex: str,
+    single_contig_regex: str,
+    find_motifs_regex: str,
+    load_fasta_regex: str,
+    region_parsing_started: bool,
+    in_contig_progress: tuple[int, int],
+    finding_progress_dict: FindingProgressDict,
+    ref_genome: Path,
+    input_file: Path,
+    motifs: list[str],
+) -> tuple[bool, tuple[int, int]]:
     # We check these in the reverse order from that in which they occur, which I guess will save a tiny
     # amount of processing time because we don't check for previous steps when on later steps
     # Once we are in the contig progress stage, step 1 is done by definition
