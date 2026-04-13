@@ -628,8 +628,6 @@ def check_bam_format(
                                 #     raise ValueError(
                                 #         f'Base modification name unexpected: {tag_value[2]} to modify {tag_value[0]}, should be in set {valid_mod_codes}. \n\nIf you know what your mod names correspond to in terms of the latest .bam standard, consider using "modkit adjust-mods {str(bam_file)} new_file.bam --convert 5mC_name m --convert N6mA_name a --convert other_basemod_name correct_label" and then trying with the new file. Note: currently supported mod names are {utils.BASEMOD_NAMES_DICT}'
                                 #     )
-            if all(basemods_found_dict.values()):
-                return
         if reads_checked == NUM_READS_TO_CHECK:
             missing_bases = []
             for base, found in basemods_found_dict.items():
