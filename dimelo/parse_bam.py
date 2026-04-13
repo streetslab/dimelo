@@ -1,4 +1,5 @@
 import gzip
+import itertools
 import multiprocessing
 import os
 import subprocess
@@ -578,7 +579,11 @@ def check_bam_format(
     input_bam = pysam.AlignmentFile(bam_file)
 
     try:
-        for counter, read in enumerate(input_bam.fetch()):
+        reads_checked = 0
+        for counter, read in enumerate(
+            itertools.islice(input_bam.fetch(), NUM_READS_TO_CHECK)
+        ):
+            reads_checked = counter + 1
             read_dict = read.to_dict()
             for tag_string in read_dict["tags"]:
                 tag = tag_string.split(",")[0].split(":")[0]
@@ -625,22 +630,22 @@ def check_bam_format(
                                 #     )
             if all(basemods_found_dict.values()):
                 return
-            if counter >= NUM_READS_TO_CHECK:
-                missing_bases = []
-                for base, found in basemods_found_dict.items():
-                    if not found:
-                        missing_bases.append(base)
-                print(
-                    f"""
-WARNING: no modified appropriately-coded values found for {missing_bases} in the first {counter} reads. 
+        if reads_checked == NUM_READS_TO_CHECK:
+            missing_bases = []
+            for base, found in basemods_found_dict.items():
+                if not found:
+                    missing_bases.append(base)
+            print(
+                f"""
+WARNING: no modified appropriately-coded values found for {missing_bases} in the first {reads_checked} reads. 
 Do you expect this file to contain these modifications? parse_bam is looking for {motifs} but for {missing_bases} found only found {[f"{base}+{mod_codes}" for base, mod_codes in mod_codes_found_dict.items()]}.
 
 Consider passing only the motifs and mod codes (e.g. m,h,a) that you expect to be present in your file. 
 You can use modkit adjust-mods --convert <CONVERT> <CONVERT> [OPTIONS] <IN_BAM> <OUT_BAM> to update or consolidate mod codes.
 See https://github.com/nanoporetech/modkit/blob/master/book/src/advanced_usage.md
                     """
-                )
-                return
+            )
+            return
     except ValueError as e:
         if "fetch called on bamfile without index" in str(e):
             raise ValueError(
