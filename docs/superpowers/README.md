@@ -18,6 +18,7 @@ This directory tracks internal design and implementation work for the current br
 ### Shared Clustering
 
 - [2026-03-31-shared-cluster-distribution-design.md](specs/2026-03-31-shared-cluster-distribution-design.md) - shared-boundary clustering architecture and artifact model. Status: `partially implemented`
+- [2026-04-12-shared-cluster-tests-design.md](specs/2026-04-12-shared-cluster-tests-design.md) - global shared-cluster composition inference layer that consumes `SharedClusterResult` and `ContrastSpec`. Status: `partially implemented`
 
 ### Region Analysis
 
@@ -44,6 +45,7 @@ This directory tracks internal design and implementation work for the current br
 ### Shared Clustering
 
 - [2026-03-31-shared-clustering-foundations.md](plans/2026-03-31-shared-clustering-foundations.md) - shared clustering models, artifacts, plotting payloads, and workflows. Status: `implemented`
+- [2026-04-12-shared-cluster-tests.md](plans/2026-04-12-shared-cluster-tests.md) - shared-cluster global composition inference with permutation paths plus pooled screening options. Status: `partially implemented`
 
 ### Region Analysis
 
