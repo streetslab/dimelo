@@ -61,3 +61,27 @@ def test_check_bam_format_raises_on_malformed_tags_after_motifs_are_found(monkey
 
     with pytest.raises(ValueError, match="Mm and Ml instead of MM and ML"):
         parse_bam.check_bam_format("dummy.bam", motifs=["A,0", "CG,0"])
+
+
+def test_threads_command_list_defaults_to_all_available_cores(monkeypatch):
+    monkeypatch.setattr(parse_bam.multiprocessing, "cpu_count", lambda: 12)
+
+    command = parse_bam._threads_command_list(cores=None, quiet=True)
+
+    assert command == ["--threads", "12"]
+
+
+def test_threads_command_list_caps_requested_cores_to_available(monkeypatch):
+    monkeypatch.setattr(parse_bam.multiprocessing, "cpu_count", lambda: 8)
+
+    command = parse_bam._threads_command_list(cores=32, quiet=True)
+
+    assert command == ["--threads", "8"]
+
+
+def test_threads_command_list_uses_requested_cores_when_available(monkeypatch):
+    monkeypatch.setattr(parse_bam.multiprocessing, "cpu_count", lambda: 16)
+
+    command = parse_bam._threads_command_list(cores=6, quiet=True)
+
+    assert command == ["--threads", "6"]

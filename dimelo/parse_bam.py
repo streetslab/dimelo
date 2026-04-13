@@ -25,6 +25,26 @@ Global variables
 # Specifies how many reads to check for the base modifications of interest.
 NUM_READS_TO_CHECK = 100
 
+
+def _threads_command_list(cores: int | None, quiet: bool) -> list[str]:
+    cores_avail = multiprocessing.cpu_count()
+    if cores is None:
+        if not quiet:
+            print(
+                f"No specified number of cores requested. {cores_avail} available on machine, allocating all."
+            )
+        return ["--threads", str(cores_avail)]
+    if cores > cores_avail:
+        if not quiet:
+            print(
+                f"Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}"
+            )
+        return ["--threads", str(cores_avail)]
+    if not quiet:
+        print(f"Allocating requested {cores} cores.")
+    return ["--threads", str(cores)]
+
+
 """
 User-facing parse operations: pileup and extract
 """
@@ -184,24 +204,7 @@ def pileup(
     else:
         log_command_list = []
 
-    # TODO: This should be a method, like create_region_specifier, or just combined into a prep method for the start...
-    cores_avail = multiprocessing.cpu_count()
-    if cores is None:
-        if not quiet:
-            print(
-                f"No specified number of cores requested. {cores_avail} available on machine, allocating all."
-            )
-        cores_command_list = ["--threads", str(cores_avail)]
-    elif cores > cores_avail:
-        if not quiet:
-            print(
-                f"Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}"
-            )
-        cores_command_list = ["--threads", str(cores_avail)]
-    else:
-        if not quiet:
-            print(f"Allocating requested {cores} cores.")
-        cores_command_list = ["--threads", str(cores)]
+    cores_command_list = _threads_command_list(cores=cores, quiet=quiet)
 
     # TODO: This is SO SO SO similar to extract; just the ValueError vs. printing. I think this can be resolved
     mod_thresh_command_list: list[str] = []
@@ -392,23 +395,7 @@ def extract(
         window_size,
     )
 
-    cores_avail = multiprocessing.cpu_count()
-    if cores is None:
-        if not quiet:
-            print(
-                f"No specified number of cores requested. {cores_avail} available on machine, allocating all."
-            )
-        cores_command_list = ["--threads", str(cores_avail)]
-    elif cores > cores_avail:
-        if not quiet:
-            print(
-                f"Warning: {cores} cores request, {cores_avail} available. Allocating {cores_avail}"
-            )
-        cores_command_list = ["--threads", str(cores_avail)]
-    else:
-        if not quiet:
-            print(f"Allocating requested {cores} cores.")
-        cores_command_list = ["--threads", str(cores)]
+    cores_command_list = _threads_command_list(cores=cores, quiet=quiet)
 
     if thresh is None:
         if not quiet:
