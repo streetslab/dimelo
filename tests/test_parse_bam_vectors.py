@@ -4,7 +4,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-from dimelo import parse_bam
+from dimelo import load_processed, parse_bam
 
 
 def _make_extract_line(
@@ -129,3 +129,91 @@ def test_read_by_base_txt_to_hdf5_uses_dense_span_vectors(tmp_path):
     assert len(no_hits_val_vector) == no_hits_span
     assert np.all(no_hits_mod_vector == 0)
     assert np.all(no_hits_val_vector == 0)
+
+
+def test_read_by_base_txt_to_hdf5_thresholds_at_write_time(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    with h5py.File(output_h5, "r") as h5:
+        assert np.isclose(h5["threshold"][()], 0.5)
+
+        sparse_index = 0
+        sparse_mod_vector = _decode_vector(h5["mod_vector"], sparse_index)
+        sparse_val_vector = _decode_vector(h5["val_vector"], sparse_index)
+
+    assert set(np.unique(sparse_mod_vector)).issubset({0, 1})
+    assert set(np.unique(sparse_val_vector)).issubset({0, 1})
+    np.testing.assert_array_equal(
+        sparse_mod_vector,
+        np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.uint8),
+    )
+    np.testing.assert_array_equal(
+        sparse_val_vector,
+        np.array([1, 0, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.uint8),
+    )
+
+
+def test_read_vectors_from_hdf5_loads_thresholded_vectors_as_binary(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    read_tuples, datasets, _ = load_processed.read_vectors_from_hdf5(
+        file=output_h5,
+        motifs=["A,0"],
+        calculate_mod_fractions=False,
+        quiet=True,
+    )
+
+    mod_vector_index = datasets.index("mod_vector")
+    val_vector_index = datasets.index("val_vector")
+    read_name_index = datasets.index("read_name")
+
+    assert len(read_tuples) == 2
+    assert all(read_tuple[mod_vector_index].dtype == np.bool_ for read_tuple in read_tuples)
+    assert all(read_tuple[val_vector_index].dtype == np.bool_ for read_tuple in read_tuples)
+
+    reads_by_name = {
+        read_tuple[read_name_index]: read_tuple for read_tuple in read_tuples
+    }
+
+    sparse_read = reads_by_name["read_sparse"]
+    no_hits_read = reads_by_name["read_no_hits"]
+
+    np.testing.assert_array_equal(
+        sparse_read[mod_vector_index],
+        np.array([False, False, False, False, False, False, False, False, True, False]),
+    )
+    np.testing.assert_array_equal(
+        sparse_read[val_vector_index],
+        np.array([True, False, False, False, False, False, False, False, True, False]),
+    )
+    assert not np.any(no_hits_read[mod_vector_index])
+    assert not np.any(no_hits_read[val_vector_index])
+
+    mod_positions, _, _, _ = load_processed.readwise_binary_modification_arrays(
+        file=output_h5,
+        motifs=["A,0"],
+        regions="chr1:95-220",
+        thresh=None,
+        quiet=True,
+    )
+    assert len(mod_positions) == 1

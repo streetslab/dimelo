@@ -645,9 +645,10 @@ def read_vectors_from_hdf5(
     a list. The bytes are then decoded for the array entries, which are manually compressed because
     h5py wasn't behaving.
 
-    There's some adjustment for the raw probability (no thresh) to match modkit extract outputs.
-    Specifically, the 0-255 8bit int has 0.5 added before dividing by 256, giving mod qualities
-    between 0.001953 and 0.99805 for bases in valid motifs. (Invalid positions have zeros.)
+    Thresholded files are loaded as binary arrays when the stored threshold metadata is present.
+    Unthresholded files preserve the raw modkit probability encoding, where the 0-255 8bit int
+    has 0.5 added before dividing by 256, giving mod qualities between 0.001953 and 0.99805
+    for bases in valid motifs. (Invalid positions have zeros.)
 
     After this processing, we calculate modification fractions, sort, and return.
 
