@@ -689,8 +689,6 @@ def read_vectors_from_hdf5(
         a list of strings, naming the datasets returned.
         a regions_dict, containing lists of (region_start,region_end) coordinates by chromosome/contig.
 
-    TODO: The way the subsetting is implemented is confusing, in that you need to pass all but one of
-        the available parameters.
     """
     if subset_parameters is not None:
         if not isinstance(subset_parameters, dict):

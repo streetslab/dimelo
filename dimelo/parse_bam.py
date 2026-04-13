@@ -45,6 +45,16 @@ def _threads_command_list(cores: int | None, quiet: bool) -> list[str]:
     return ["--threads", str(cores)]
 
 
+def _compress_uint8_vector(
+    vector: np.ndarray,
+    compress_level: int,
+) -> np.ndarray:
+    return np.frombuffer(
+        gzip.compress(vector.tobytes(), compresslevel=compress_level),
+        dtype=np.uint8,
+    )
+
+
 """
 User-facing parse operations: pileup and extract
 """
@@ -963,14 +973,11 @@ def read_by_base_txt_to_hdf5(
                         mod_vector[valid_coordinates] = mod_values.astype(np.uint8)
                     valid_vector[valid_coordinates] = 1
 
-                # TODO: consolidate compression into a function shared across
-                mod_vector_compressed = np.frombuffer(
-                    gzip.compress(mod_vector.tobytes(), compresslevel=compress_level),
-                    dtype=np.uint8,
+                mod_vector_compressed = _compress_uint8_vector(
+                    mod_vector, compress_level=compress_level
                 )
-                valid_vector_compressed = np.frombuffer(
-                    gzip.compress(valid_vector.tobytes(), compresslevel=compress_level),
-                    dtype=np.uint8,
+                valid_vector_compressed = _compress_uint8_vector(
+                    valid_vector, compress_level=compress_level
                 )
 
                 chunk_datasets_contents["read_name"].append(read_name)
