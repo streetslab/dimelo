@@ -428,3 +428,27 @@ def test_read_vectors_from_hdf5_rejects_subset_without_n_or_frac(tmp_path):
             calculate_mod_fractions=False,
             quiet=True,
         )
+
+
+def test_read_vectors_from_hdf5_rejects_subset_with_array_key(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    with pytest.raises(ValueError, match="cannot include 'array'"):
+        load_processed.read_vectors_from_hdf5(
+            file=output_h5,
+            motifs=["A,0"],
+            regions="chr1:95-110",
+            subset_parameters={"array": np.array([0]), "n": 1},
+            calculate_mod_fractions=False,
+            quiet=True,
+        )

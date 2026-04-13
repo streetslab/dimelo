@@ -693,6 +693,10 @@ def read_vectors_from_hdf5(
     if subset_parameters is not None:
         if not isinstance(subset_parameters, dict):
             raise ValueError("subset_parameters must be provided as a dictionary.")
+        if "array" in subset_parameters:
+            raise ValueError(
+                "subset_parameters cannot include 'array'; it is provided internally."
+            )
         if "n" not in subset_parameters and "frac" not in subset_parameters:
             raise ValueError(
                 "subset_parameters must include at least one of 'n' or 'frac'."
