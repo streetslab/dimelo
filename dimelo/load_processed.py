@@ -1024,20 +1024,23 @@ def readwise_binary_modification_arrays(
         else:
             thresh = utils.adjust_threshold(thresh)
 
+        read_identity_to_int: dict[tuple, int] = {}
         read_ints_list = []
+        for read_data in sorted_read_data_converted:
+            read_identity = (
+                read_data[read_name_index],
+                read_data[region_start_index],
+                read_data[region_end_index],
+                read_data[region_strand_index],
+            )
+            if read_identity not in read_identity_to_int:
+                read_identity_to_int[read_identity] = len(read_identity_to_int)
+            read_ints_list.append(read_identity_to_int[read_identity])
+        read_ints = np.array(read_ints_list)
+
+        read_ids_by_mod_pos: list[int] = []
         mod_coords_list = []
         motifs_list = []
-
-        read_names = np.array(
-            [read_data[read_name_index] for read_data in sorted_read_data_converted]
-        )
-        # TODO: handle the case where a read shows up in more than one different region
-        _, unique_first_indices = np.unique(read_names, return_index=True)
-        unique_in_order = read_names[np.sort(unique_first_indices)]
-        string_to_int = {
-            read_name: index for index, read_name in enumerate(unique_in_order)
-        }
-        read_ints = np.array([string_to_int[read_name] for read_name in read_names])
 
         for read_int, read_data in zip(read_ints, sorted_read_data_converted):
             if thresh is None:
@@ -1072,12 +1075,12 @@ def readwise_binary_modification_arrays(
                 mod_pos_record = mod_pos_in_read + read_data[read_start_index]
 
             mod_coords_list += list(mod_pos_record)
-            read_ints_list += [read_int] * len(mod_pos_record)
+            read_ids_by_mod_pos += [read_int] * len(mod_pos_record)
             motifs_list += [read_data[motif_index]] * len(mod_pos_record)
 
         return (
             np.array(mod_coords_list),
-            np.array(read_ints_list),
+            np.array(read_ids_by_mod_pos),
             np.array(motifs_list),
             regions_dict,
         )

@@ -375,3 +375,31 @@ def test_read_vectors_from_hdf5_subset_empty_region_returns_empty(tmp_path):
     assert read_tuples == []
     assert "mod_vector" in datasets
     assert regions_dict == {"chr1": [(1000, 1010, ".")]}
+
+
+def test_readwise_binary_modification_arrays_splits_duplicate_read_names_by_region(
+    tmp_path,
+):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    _, read_ids, motifs, regions_dict = load_processed.readwise_binary_modification_arrays(
+        file=output_h5,
+        motifs=["A,0"],
+        regions=["chr1:95-105", "chr1:100-110"],
+        thresh=None,
+        quiet=True,
+    )
+
+    assert set(read_ids.tolist()) == {0, 1}
+    assert motifs.size == read_ids.size == 2
+    assert regions_dict == {"chr1": [(95, 105, "."), (100, 110, ".")]}
