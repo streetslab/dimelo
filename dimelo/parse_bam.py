@@ -741,17 +741,18 @@ def read_by_base_txt_to_hdf5(
     all the data from a specified motif into an hdf5 file. If a thresh is specified, it
     also binarizes the mod calls.
 
-    If the h5 file does not exist it will be created and datasets will be added for read_name,
-    chromosome, read_start, read_end, strand, motif, mod_vector, and val_vector.
+    If the h5 file does not exist it will be created with top-level datasets named
+    ``read_name``, ``chromosome``, ``read_start``, ``read_end``, ``strand``, ``motif``,
+    ``mod_vector``, and ``val_vector``. Each dataset stores one value per read, so the arrays
+    are parallel and have length ``num_reads``. The optional ``threshold`` dataset stores the
+    scalar threshold used for binarization and is not part of the per-read arrays.
 
-    All the datasets (exception threshold) are parallel arrays of length num_reads
-
-    Each read's position data is defined in genomic reference coordinates on the positive strand
-    (i.e. the read_start is the leftmost aligned position, read_end is the rightmost, vectors
-    are left to right along genomic coordinates)
-
-    TODO: Make a nice key:value map of the h5 file structure, make sure start and end are documented
-    as reconstructions NOT original cigarstring alignment info. mention pysam
+    Each read's position data is stored in genomic reference coordinates on the positive strand
+    convention. ``read_start`` and ``read_end`` are reconstructed from the aligned modkit extract
+    coordinates, not copied from the original BAM CIGAR string or any raw alignment tag. In this
+    representation, ``read_start`` is the leftmost aligned reference position for the read and
+    ``read_end`` is the rightmost aligned reference position observed while iterating through the
+    read. The modification vectors are ordered left to right along genomic coordinates.
 
     Args:
         input_txt: a string or Path pointing to a modkit extracted base-by-base modifications
