@@ -112,25 +112,16 @@ def pileup(
         Path object pointing to 'regions.processed.bed', the `--include-bed` file used for `modkit pileup`
 
     """
-    """
-    TODO: There are a lot of issues that are all related here:
-    dimelo/parse_bam.py:150: error: Incompatible types in assignment (expression has type "Path | None", variable has type "str | Path")  [assignment]
-    dimelo/parse_bam.py:169: error: Argument "input_file" to "prep_outputs" has incompatible type "str | Path"; expected "Path"  [arg-type]
-    dimelo/parse_bam.py:256: error: Argument "input_file" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
-    dimelo/parse_bam.py:257: error: Argument "ref_genome" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
-    
-    I'm not sure of the most elegant way to fix it. Come back and address.
-    """
-
     ## Verify and prepare inputs and outputs
-
-    run_modkit.ensure_modkit_available(quiet=quiet)
 
     run_modkit.ensure_modkit_available(quiet=quiet)
 
     input_file, ref_genome, output_directory = utils.sanitize_path_args(
         input_file, ref_genome, output_directory
     )
+    input_file = Path(input_file)
+    ref_genome = Path(ref_genome)
+    output_directory = None if output_directory is None else Path(output_directory)
 
     try:
         verify_inputs(input_file, motifs, ref_genome)
@@ -365,21 +356,14 @@ def extract(
         Path object pointing to 'regions.processed.bed', the `--include-bed` file used for `modkit extract`
 
     """
-    """
-    TODO: There are a lot of issues that are all related here:
-    dimelo/parse_bam.py:374: error: Incompatible types in assignment (expression has type "Path | None", variable has type "str | Path")  [assignment]
-    dimelo/parse_bam.py:393: error: Argument "input_file" to "prep_outputs" has incompatible type "str | Path"; expected "Path"  [arg-type]
-    dimelo/parse_bam.py:480: error: Argument "input_file" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
-    dimelo/parse_bam.py:481: error: Argument "ref_genome" to "run_with_progress_bars" has incompatible type "str | Path"; expected "Path"  [arg-type]
-    
-    I'm not sure of the most elegant way to fix it. Come back and address.
-    """
-
     ## Verify and prepare inputs and outputs
 
     input_file, ref_genome, output_directory = utils.sanitize_path_args(
         input_file, ref_genome, output_directory
     )
+    input_file = Path(input_file)
+    ref_genome = Path(ref_genome)
+    output_directory = None if output_directory is None else Path(output_directory)
 
     try:
         verify_inputs(input_file, motifs, ref_genome)
@@ -774,15 +758,9 @@ def read_by_base_txt_to_hdf5(
         None
 
     """
-    """
-    TODO: There are some issues that are all related here:
-    dimelo/parse_bam.py:718: error: Incompatible types in assignment (expression has type "Path | None", variable has type "str | Path")  [assignment]
-    dimelo/parse_bam.py:725: error: Item "str" of "str | Path" has no attribute "open"  [union-attr]
-    dimelo/parse_bam.py:890: error: Item "str" of "str | Path" has no attribute "name"  [union-attr]
-    
-    I'm not sure of the most elegant way to fix it. Come back and address.
-    """
     input_txt, output_h5 = utils.sanitize_path_args(input_txt, output_h5)
+    input_txt = Path(input_txt)
+    output_h5 = Path(output_h5)
 
     parsed_motif = utils.ParsedMotif(motif)
 
@@ -792,11 +770,14 @@ def read_by_base_txt_to_hdf5(
     # TODO: Consider opening both files at once
     with input_txt.open() as txt:
         # Check file length
+        line_index = -1
         for line_index, line in enumerate(txt):
             fields = line.rstrip("\n").split("\t")
             if line_index > 0 and read_name != fields[0]:
                 read_name = fields[0]
                 num_reads += 1
+        if line_index < 0:
+            raise ValueError(f"modkit extract output is empty: {input_txt}")
         num_lines = line_index
         txt.seek(0)
 
