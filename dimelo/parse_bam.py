@@ -988,12 +988,7 @@ def read_by_base_txt_to_hdf5(
                 if read_name != fields[0]:
                     # Record the previous read details unless this is the first line
                     if line_index > 1:
-                        # TODO: Replace this with read_end-read_start; this will pad vectors and require
-                        # regenerating test reference data
-                        if len(valid_coordinates_list) > 0:
-                            read_len_along_ref = max(valid_coordinates_list) + 1
-                        else:
-                            read_len_along_ref = read_len
+                        read_len_along_ref = max(read_end - read_start, 1)
 
                         # Populate mod vector array appropriately based on thresh settings
                         mod_vector = np.zeros(read_len_along_ref, dtype=np.uint8)
@@ -1097,10 +1092,7 @@ def read_by_base_txt_to_hdf5(
             # TODO: try to consolidate
             if len(read_name) > 0:
                 # Build the vectors
-                if len(valid_coordinates_list) > 0:
-                    read_len_along_ref = max(valid_coordinates_list) + 1
-                else:
-                    read_len_along_ref = read_len
+                read_len_along_ref = max(read_end - read_start, 1)
 
                 # Populate mod vector array appropriately based on thresh settings
                 mod_vector = np.zeros(read_len_along_ref, dtype=np.uint8)
