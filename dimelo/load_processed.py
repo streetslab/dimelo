@@ -33,6 +33,61 @@ def _subset_indices(
     return np.sort(utils.random_sample(indices, **subset_parameters))
 
 
+def _readwise_mod_positions_for_read(
+    *,
+    read_int: int,
+    read_data: tuple,
+    mod_vector_index: int,
+    motif_index: int,
+    region_start_index: int,
+    region_end_index: int,
+    read_start_index: int,
+    region_strand_index: int,
+    thresh: float | None,
+    relative: bool,
+    regions_5to3prime: bool,
+) -> tuple[list[int], list[int], list[str]]:
+    if thresh is None:
+        mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index])
+    else:
+        mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index] > thresh)
+
+    if relative:
+        if regions_5to3prime and read_data[region_strand_index] == "-":
+            # Here we want to show the regions each along their 5 prime to 3 prime direction
+            # This means that negative strand regions need to be flipped
+            mod_pos_record = -(
+                mod_pos_in_read
+                + read_data[read_start_index]
+                - (read_data[region_start_index] + read_data[region_end_index]) // 2
+            )
+        else:
+            # This is the default case: just make the coordinates relative using
+            # the reference genome coordinate system. Normal, easy, chill, nice.
+            mod_pos_record = (
+                mod_pos_in_read
+                + read_data[read_start_index]
+                - (read_data[region_start_index] + read_data[region_end_index]) // 2
+            )
+    else:
+        # If we aren't using relative coordinates, then I think the 5prime to 3prime argument
+        # can just be ignored, and I think it's nicer if that's silent - less clutter in the output
+        # Basically if you are keeping different regions separate using other metadata (such as
+        # just keeping their actual real genomic coordinates) it is superfluous to do the 5to3 flip.
+        mod_pos_record = mod_pos_in_read + read_data[read_start_index]
+
+    n_positions = len(mod_pos_record)
+    return (
+        list(mod_pos_record),
+        [read_int] * n_positions,
+        [read_data[motif_index]] * n_positions,
+    )
+
+
+def _readwise_mod_positions_from_payload(payload: dict) -> tuple[list[int], list[int], list[str]]:
+    return _readwise_mod_positions_for_read(**payload)
+
+
 ################################################################################################################
 ####                                           Loader wrappers                                              ####
 ################################################################################################################
@@ -1069,51 +1124,61 @@ def readwise_binary_modification_arrays(
         mod_coords_list = []
         motifs_list = []
 
-        read_iterator = zip(read_ints, sorted_read_data_converted)
-        if len(sorted_read_data_converted) > 0:
+        n_reads = len(sorted_read_data_converted)
+        cores_to_run = 1 if cores is None else max(1, min(cores, n_reads))
+
+        read_payloads = (
+            {
+                "read_int": read_int,
+                "read_data": read_data,
+                "mod_vector_index": mod_vector_index,
+                "motif_index": motif_index,
+                "region_start_index": region_start_index,
+                "region_end_index": region_end_index,
+                "read_start_index": read_start_index,
+                "region_strand_index": region_strand_index,
+                "thresh": thresh,
+                "relative": relative,
+                "regions_5to3prime": regions_5to3prime,
+            }
+            for read_int, read_data in zip(read_ints, sorted_read_data_converted)
+        )
+
+        if cores_to_run > 1:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=cores_to_run
+            ) as executor:
+                read_iterator = executor.map(
+                    _readwise_mod_positions_from_payload,
+                    read_payloads,
+                )
+                read_iterator = tqdm(
+                    read_iterator,
+                    total=n_reads,
+                    disable=quiet,
+                    desc="Extracting readwise modifications",
+                    leave=False,
+                )
+                for mod_pos_record, read_ids, motif_labels in read_iterator:
+                    mod_coords_list += mod_pos_record
+                    read_ids_by_mod_pos += read_ids
+                    motifs_list += motif_labels
+        else:
+            read_iterator = map(
+                _readwise_mod_positions_from_payload,
+                read_payloads,
+            )
             read_iterator = tqdm(
                 read_iterator,
-                total=len(sorted_read_data_converted),
+                total=n_reads,
                 disable=quiet,
                 desc="Extracting readwise modifications",
                 leave=False,
             )
-
-        for read_int, read_data in read_iterator:
-            if thresh is None:
-                mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index])
-            else:
-                mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index] > thresh)
-
-            if relative:
-                if regions_5to3prime and read_data[region_strand_index] == "-":
-                    # Here we want to show the regions each along their 5 prime to 3 prime direction
-                    # This means that negative strand regions need to be flipped
-                    mod_pos_record = -(
-                        mod_pos_in_read
-                        + read_data[read_start_index]
-                        - (read_data[region_start_index] + read_data[region_end_index])
-                        // 2
-                    )
-                else:
-                    # This is the default case: just make the coordinates relative using
-                    # the reference genome coordinate system. Normal, easy, chill, nice.
-                    mod_pos_record = (
-                        mod_pos_in_read
-                        + read_data[read_start_index]
-                        - (read_data[region_start_index] + read_data[region_end_index])
-                        // 2
-                    )
-            else:
-                # If we aren't using relative coordinates, then I think the 5prime to 3prime argument
-                # can just be ignored, and I think it's nicer if that's silent - less clutter in the output
-                # Basically if you are keeping different regions separate using other metadata (such as
-                # just keeping their actual real genomic coordinates) it is superfluous to do the 5to3 flip.
-                mod_pos_record = mod_pos_in_read + read_data[read_start_index]
-
-            mod_coords_list += list(mod_pos_record)
-            read_ids_by_mod_pos += [read_int] * len(mod_pos_record)
-            motifs_list += [read_data[motif_index]] * len(mod_pos_record)
+            for mod_pos_record, read_ids, motif_labels in read_iterator:
+                mod_coords_list += mod_pos_record
+                read_ids_by_mod_pos += read_ids
+                motifs_list += motif_labels
 
         return (
             np.array(mod_coords_list),

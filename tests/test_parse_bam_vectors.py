@@ -503,3 +503,39 @@ def test_readwise_binary_modification_arrays_passes_subset_and_quiet(monkeypatch
     assert read_ids.tolist() == [0]
     assert motifs.tolist() == ["A,0"]
     assert regions_dict == {"chr1": [(100, 110, ".")]}
+
+
+def test_readwise_binary_modification_arrays_parallel_matches_serial(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    serial = load_processed.readwise_binary_modification_arrays(
+        file=output_h5,
+        motifs=["A,0"],
+        regions="chr1:95-220",
+        thresh=None,
+        quiet=True,
+        cores=1,
+    )
+    parallel = load_processed.readwise_binary_modification_arrays(
+        file=output_h5,
+        motifs=["A,0"],
+        regions="chr1:95-220",
+        thresh=None,
+        quiet=True,
+        cores=2,
+    )
+
+    np.testing.assert_array_equal(serial[0], parallel[0])
+    np.testing.assert_array_equal(serial[1], parallel[1])
+    np.testing.assert_array_equal(serial[2], parallel[2])
+    assert serial[3] == parallel[3]
