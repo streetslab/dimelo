@@ -21,6 +21,192 @@ from . import test_data, utils
 # the reasonable upper bound) and 10x fewer cores (which is about the reasonable lower bound).
 DEFAULT_CHUNK_SIZE = 1_000_000
 
+
+def _subset_indices(
+    indices: np.ndarray,
+    subset_parameters: dict | None,
+) -> np.ndarray:
+    if subset_parameters is None:
+        return indices
+    if len(indices) == 0:
+        return np.array([], dtype=int)
+    return np.sort(utils.random_sample(indices, **subset_parameters))
+
+
+def _region_job_to_read_indices(
+    region_job: tuple[str, int, int, str],
+    *,
+    read_chromosomes: np.ndarray,
+    read_starts: np.ndarray,
+    read_ends: np.ndarray,
+    read_motifs: np.ndarray,
+    ref_strands: np.ndarray,
+    motifs: list[str],
+    single_strand: bool,
+    span_full_window: bool,
+) -> np.ndarray:
+    chrom, region_start, region_end, region_strand = region_job
+    return np.flatnonzero(
+        (read_ends > region_start)
+        & (read_starts < region_end)
+        & (read_starts <= region_start if span_full_window else True)
+        & (read_ends >= region_end if span_full_window else True)
+        & np.isin(read_motifs, motifs)
+        & (read_chromosomes == chrom)
+        & (
+            (not single_strand)
+            | (region_strand not in ["+", "-"])
+            | (ref_strands == region_strand)
+        )
+    )
+
+
+def _readwise_mod_positions_for_read(
+    *,
+    read_int: int,
+    read_data: tuple,
+    mod_vector_index: int,
+    motif_index: int,
+    region_start_index: int,
+    region_end_index: int,
+    read_start_index: int,
+    region_strand_index: int,
+    thresh: float | None,
+    relative: bool,
+    regions_5to3prime: bool,
+) -> tuple[list[int], list[int], list[str]]:
+    if thresh is None:
+        mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index])
+    else:
+        mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index] > thresh)
+
+    if relative:
+        if regions_5to3prime and read_data[region_strand_index] == "-":
+            # Here we want to show the regions each along their 5 prime to 3 prime direction
+            # This means that negative strand regions need to be flipped
+            mod_pos_record = -(
+                mod_pos_in_read
+                + read_data[read_start_index]
+                - (read_data[region_start_index] + read_data[region_end_index]) // 2
+            )
+        else:
+            # This is the default case: just make the coordinates relative using
+            # the reference genome coordinate system. Normal, easy, chill, nice.
+            mod_pos_record = (
+                mod_pos_in_read
+                + read_data[read_start_index]
+                - (read_data[region_start_index] + read_data[region_end_index]) // 2
+            )
+    else:
+        # If we aren't using relative coordinates, then I think the 5prime to 3prime argument
+        # can just be ignored, and I think it's nicer if that's silent - less clutter in the output
+        # Basically if you are keeping different regions separate using other metadata (such as
+        # just keeping their actual real genomic coordinates) it is superfluous to do the 5to3 flip.
+        mod_pos_record = mod_pos_in_read + read_data[read_start_index]
+
+    n_positions = len(mod_pos_record)
+    return (
+        list(mod_pos_record),
+        [read_int] * n_positions,
+        [read_data[motif_index]] * n_positions,
+    )
+
+
+def _readwise_mod_positions_from_payload(payload: dict) -> tuple[list[int], list[int], list[str]]:
+    return _readwise_mod_positions_for_read(**payload)
+
+
+def _validate_subset_parameters(subset_parameters: dict | None) -> None:
+    if subset_parameters is None:
+        return
+    if not isinstance(subset_parameters, dict):
+        raise ValueError("subset_parameters must be provided as a dictionary.")
+    if "array" in subset_parameters:
+        raise ValueError(
+            "subset_parameters cannot include 'array'; it is provided internally."
+        )
+    if "n" not in subset_parameters and "frac" not in subset_parameters:
+        raise ValueError(
+            "subset_parameters must include at least one of 'n' or 'frac'."
+        )
+
+
+def _load_read_tuples_for_indices(
+    *,
+    h5: h5py.File,
+    readwise_datasets: list[str],
+    compressed_binary_datasets: list[str],
+    binarized: bool,
+    relevant_read_indices: np.ndarray,
+    region_start: int,
+    region_end: int,
+    region_strand: str,
+) -> list[tuple]:
+    n_reads = len(relevant_read_indices)
+    return list(
+        zip(
+            *(
+                retrieve_h5_data(
+                    h5=h5,
+                    dataset=dataset,
+                    indices=relevant_read_indices,
+                    compressed=dataset in compressed_binary_datasets,
+                    dtype=np.uint8,
+                    decompressor=gzip.decompress,
+                    binarized=binarized,
+                )
+                for dataset in readwise_datasets
+            ),
+            [region_start] * n_reads,
+            [region_end] * n_reads,
+            [region_strand] * n_reads,
+        )
+    )
+
+
+def _normalize_sort_by(
+    sort_by: str | tuple[str, str] | list[str | tuple[str, str]],
+) -> list[tuple[str, str]]:
+    if not isinstance(sort_by, list):
+        sort_by = [sort_by]
+
+    sort_by_normalized: list[tuple[str, str]] = []
+    for item in sort_by:
+        if isinstance(item, tuple):
+            field, order = item
+            if order not in ["asc", "desc"]:
+                raise ValueError(
+                    f"Sort order must be 'asc' or 'desc', got '{order}' for field '{field}'"
+                )
+            sort_by_normalized.append((field, order))
+        else:
+            sort_by_normalized.append((item, "asc"))
+    return sort_by_normalized
+
+
+def _assign_region_scoped_read_ints(
+    *,
+    read_data: list[tuple],
+    read_name_index: int,
+    region_start_index: int,
+    region_end_index: int,
+    region_strand_index: int,
+) -> np.ndarray:
+    read_identity_to_int: dict[tuple, int] = {}
+    read_ints: list[int] = []
+    for row in read_data:
+        read_identity = (
+            row[read_name_index],
+            row[region_start_index],
+            row[region_end_index],
+            row[region_strand_index],
+        )
+        if read_identity not in read_identity_to_int:
+            read_identity_to_int[read_identity] = len(read_identity_to_int)
+        read_ints.append(read_identity_to_int[read_identity])
+    return np.array(read_ints)
+
+
 ################################################################################################################
 ####                                           Loader wrappers                                              ####
 ################################################################################################################
@@ -147,7 +333,7 @@ def pileup_counts_from_bedmethyl(
     If no regions are specified, returns the sum total for the motif of interest across the
     entire bedmethyl file.
 
-    TODO: Consider renaming this method, e.g. counts_from_pileup
+    Preferred alias: `counts_from_pileup`.
 
     Args:
         bedmethyl_file: Path to bedmethyl file
@@ -259,7 +445,7 @@ def pileup_vectors_from_bedmethyl(
     A region must be provided because otherwise there is no way to know what vector to return.
     However, a region can be a whole chromosome if desired.
 
-    TODO: Consider renaming this method, e.g. vectors_from_pileup
+    Preferred alias: `vectors_from_pileup`.
 
     Args:
         bedmethyl_file: Path to bedmethyl file
@@ -346,6 +532,58 @@ def pileup_vectors_from_bedmethyl(
     shm_valid.unlink()
 
     return modified_base_counts, valid_base_counts
+
+
+def counts_from_pileup(
+    bedmethyl_file: str | Path,
+    motif: str,
+    regions: str | Path | list[str | Path],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+) -> tuple[int, int]:
+    """
+    Preferred alias for `pileup_counts_from_bedmethyl`.
+    """
+    return pileup_counts_from_bedmethyl(
+        bedmethyl_file=bedmethyl_file,
+        motif=motif,
+        regions=regions,
+        window_size=window_size,
+        single_strand=single_strand,
+        quiet=quiet,
+        cores=cores,
+        chunk_size=chunk_size,
+    )
+
+
+def vectors_from_pileup(
+    bedmethyl_file: str | Path,
+    motif: str,
+    regions: str | Path | list[str | Path],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    regions_5to3prime: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Preferred alias for `pileup_vectors_from_bedmethyl`.
+    """
+    return pileup_vectors_from_bedmethyl(
+        bedmethyl_file=bedmethyl_file,
+        motif=motif,
+        regions=regions,
+        window_size=window_size,
+        single_strand=single_strand,
+        regions_5to3prime=regions_5to3prime,
+        quiet=quiet,
+        cores=cores,
+        chunk_size=chunk_size,
+    )
 
 
 def counts_from_fake(*args, **kwargs) -> tuple[int, int]:
@@ -624,10 +862,14 @@ def read_vectors_from_hdf5(
     regions: str | Path | list[str | Path] | None = None,
     window_size: int | None = None,
     single_strand: bool = False,
-    sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
+    sort_by: str | tuple[str, str] | list[str | tuple[str, str]] = [
+        "chromosome",
+        "region_start",
+        "read_start",
+    ],
     calculate_mod_fractions: bool = True,
-    quiet: bool = True,  # currently unused; change to default False when pbars are implemented
-    cores: int | None = None,  # currently unused
+    quiet: bool = True,
+    cores: int | None = None,
     subset_parameters: dict | None = None,
     span_full_window: bool = False,
 ) -> tuple[list[tuple], list[str], dict | None]:
@@ -645,13 +887,12 @@ def read_vectors_from_hdf5(
     a list. The bytes are then decoded for the array entries, which are manually compressed because
     h5py wasn't behaving.
 
-    There's some adjustment for the raw probability (no thresh) to match modkit extract outputs.
-    Specifically, the 0-255 8bit int has 0.5 added before dividing by 256, giving mod qualities
-    between 0.001953 and 0.99805 for bases in valid motifs. (Invalid positions have zeros.)
+    Thresholded files are loaded as binary arrays when the stored threshold metadata is present.
+    Unthresholded files preserve the raw modkit probability encoding, where the 0-255 8bit int
+    has 0.5 added before dividing by 256, giving mod qualities between 0.001953 and 0.99805
+    for bases in valid motifs. (Invalid positions have zeros.)
 
     After this processing, we calculate modification fractions, sort, and return.
-
-    TODO: Implement progress bars and parallelization as with pileup loaders
 
     Args:
         file: Path to an hdf5 (.h5) file containing modification data for single reads,
@@ -675,8 +916,9 @@ def read_vectors_from_hdf5(
         sort_by: Read properties by which to sort, either one string or a list of strings. Options
             include chromosome, region_start, region_end, read_start, read_end, and motif. More to
             be added in future.
-        quiet: silences progress bars (currently unused)
-        cores: cores across which to parallelize processes (currently unused)
+        quiet: silences progress bars
+        cores: if >1 and regions are provided, parallelize per-region read-index
+            selection before h5 retrieval
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
@@ -688,9 +930,9 @@ def read_vectors_from_hdf5(
         a list of strings, naming the datasets returned.
         a regions_dict, containing lists of (region_start,region_end) coordinates by chromosome/contig.
 
-    TODO: The way the subsetting is implemented is confusing, in that you need to pass all but one of
-        the available parameters.
     """
+    _validate_subset_parameters(subset_parameters)
+
     with h5py.File(file, "r") as h5:
         datasets: list[str] = [
             name for name, obj in h5.items() if isinstance(obj, h5py.Dataset)
@@ -725,74 +967,79 @@ def read_vectors_from_hdf5(
                 window_size=window_size,
             )
             read_tuples_raw = []
-            for chrom, region_list in regions_dict.items():
-                for region_start, region_end, region_strand in region_list:
-                    # Find the read indices that we want to load
-                    # TODO: consider building this up and then loading all at the end, chunked
-                    # TODO: consolidate logic into clear variables
-                    relevant_read_indices = np.flatnonzero(
-                        (read_ends > region_start)
-                        & (read_starts < region_end)
-                        & (read_starts <= region_start if span_full_window else True)
-                        & (read_ends >= region_end if span_full_window else True)
-                        & np.isin(read_motifs, motifs)
-                        & (read_chromosomes == chrom)
-                        & (
-                            (not single_strand)
-                            | (region_strand not in ["+", "-"])
-                            | (ref_strands == region_strand)
-                        )
-                    )
-                    if subset_parameters is not None:
-                        relevant_read_indices = np.sort(
-                            utils.random_sample(
-                                relevant_read_indices, **subset_parameters
-                            )
-                        )
-                    read_tuples_raw += list(
-                        zip(
-                            *(
-                                retrieve_h5_data(
-                                    h5=h5,
-                                    dataset=dataset,
-                                    indices=relevant_read_indices,
-                                    compressed=dataset in compressed_binary_datasets,
-                                    dtype=np.uint8,
-                                    decompressor=gzip.decompress,
-                                    binarized=binarized,
-                                )
-                                for dataset in readwise_datasets
-                            ),
-                            [region_start for _ in relevant_read_indices],
-                            [region_end for _ in relevant_read_indices],
-                            [region_strand for _ in relevant_read_indices],
-                        )
-                    )
+            region_jobs = [
+                (chrom, region_start, region_end, region_strand)
+                for chrom, region_list in regions_dict.items()
+                for region_start, region_end, region_strand in region_list
+            ]
+            cores_to_run = (
+                1
+                if cores is None
+                else max(1, min(cores, len(region_jobs)))
+            )
+            region_to_indices = partial(
+                _region_job_to_read_indices,
+                read_chromosomes=read_chromosomes,
+                read_starts=read_starts,
+                read_ends=read_ends,
+                read_motifs=read_motifs,
+                ref_strands=ref_strands,
+                motifs=motifs,
+                single_strand=single_strand,
+                span_full_window=span_full_window,
+            )
+            if cores_to_run > 1 and len(region_jobs) > 1:
+                with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=cores_to_run
+                ) as executor:
+                    region_results = list(executor.map(region_to_indices, region_jobs))
+            else:
+                region_results = [region_to_indices(job) for job in region_jobs]
+            region_iterator = (
+                tqdm(
+                    zip(region_jobs, region_results),
+                    total=len(region_jobs),
+                    disable=quiet,
+                    desc="Loading read vectors",
+                    leave=False,
+                )
+                if len(region_jobs) > 0
+                else []
+            )
+            for (
+                chrom,
+                region_start,
+                region_end,
+                region_strand,
+            ), relevant_read_indices in region_iterator:
+                relevant_read_indices = _subset_indices(
+                    relevant_read_indices, subset_parameters=subset_parameters
+                )
+                read_tuples_raw += _load_read_tuples_for_indices(
+                    h5=h5,
+                    readwise_datasets=readwise_datasets,
+                    compressed_binary_datasets=compressed_binary_datasets,
+                    binarized=binarized,
+                    relevant_read_indices=relevant_read_indices,
+                    region_start=region_start,
+                    region_end=region_end,
+                    region_strand=region_strand,
+                )
         else:
             regions_dict = None
             relevant_read_indices = np.flatnonzero(np.isin(read_motifs, motifs))
-            if subset_parameters is not None:
-                relevant_read_indices = np.sort(
-                    utils.random_sample(relevant_read_indices, **subset_parameters)
-                )
-            read_tuples_raw = list(
-                zip(
-                    *(
-                        retrieve_h5_data(
-                            h5=h5,
-                            dataset=dataset,
-                            indices=relevant_read_indices,
-                            compressed=dataset in compressed_binary_datasets,
-                            dtype=np.uint8,
-                            decompressor=gzip.decompress,
-                            binarized=binarized,
-                        )
-                        for dataset in readwise_datasets
-                    ),
-                    [-1 for _ in relevant_read_indices],
-                    [-1 for _ in relevant_read_indices],
-                    ["." for _ in relevant_read_indices],
-                )
+            relevant_read_indices = _subset_indices(
+                relevant_read_indices, subset_parameters=subset_parameters
+            )
+            read_tuples_raw = _load_read_tuples_for_indices(
+                h5=h5,
+                readwise_datasets=readwise_datasets,
+                compressed_binary_datasets=compressed_binary_datasets,
+                binarized=binarized,
+                relevant_read_indices=relevant_read_indices,
+                region_start=-1,
+                region_end=-1,
+                region_strand=".",
             )
     #  We add region information (start, end, and strand; chromosome is already present!)
     # so that it is possible to sort by and process based on these
@@ -804,11 +1051,13 @@ def read_vectors_from_hdf5(
             convert_bytes_to_strings(tup) for tup in read_tuples_raw
         ]
     else:
+        mod_vector_index = readwise_datasets.index("mod_vector")
+        val_vector_index = readwise_datasets.index("val_vector")
         read_tuples_processed = [
             adjust_mod_probs_in_tuples(
                 convert_bytes_to_strings(tup),
-                readwise_datasets.index("mod_vector"),
-                readwise_datasets.index("val_vector"),
+                mod_vector_index,
+                val_vector_index,
             )
             for tup in read_tuples_raw
         ]
@@ -823,15 +1072,19 @@ def read_vectors_from_hdf5(
         mod_fractions_by_read_name_by_motif: defaultdict[
             str, defaultdict[str, float]
         ] = defaultdict(lambda: defaultdict(lambda: 0.0))
+        motif_index = readwise_datasets.index("motif")
+        mod_vector_index = readwise_datasets.index("mod_vector")
+        val_vector_index = readwise_datasets.index("val_vector")
+        read_name_index = readwise_datasets.index("read_name")
         for motif in motifs:
             for read_tuple in read_tuples_processed:
-                if read_tuple[readwise_datasets.index("motif")] == motif:
-                    mod_sum = np.sum(read_tuple[readwise_datasets.index("mod_vector")])
-                    val_sum = np.sum(read_tuple[readwise_datasets.index("val_vector")])
+                if read_tuple[motif_index] == motif:
+                    mod_sum = np.sum(read_tuple[mod_vector_index])
+                    val_sum = np.sum(read_tuple[val_vector_index])
                     mod_fraction = mod_sum / val_sum if val_sum > 0 else 0
-                    mod_fractions_by_read_name_by_motif[
-                        read_tuple[readwise_datasets.index("read_name")]
-                    ][motif] = mod_fraction
+                    mod_fractions_by_read_name_by_motif[read_tuple[read_name_index]][
+                        motif
+                    ] = mod_fraction
 
         read_tuples_all = []
         for read_tuple in read_tuples_processed:
@@ -842,7 +1095,7 @@ def read_vectors_from_hdf5(
                 + tuple(
                     mod_frac
                     for mod_frac in mod_fractions_by_read_name_by_motif[
-                        read_tuple[readwise_datasets.index("read_name")]
+                        read_tuple[read_name_index]
                     ].values()
                 )
             )
@@ -859,23 +1112,7 @@ def read_vectors_from_hdf5(
     #   - "field" or ["field1", "field2"] -> [("field1", "asc"), ("field2", "asc")]
     #   - [("field1", "desc"), "field2"] -> [("field1", "desc"), ("field2", "asc")]
 
-    # Enforce that sort_by is a list
-    if not isinstance(sort_by, list):
-        sort_by = [sort_by]
-
-    # Parse into (field, order) tuples
-    sort_by_normalized = []
-    for item in sort_by:
-        if isinstance(item, tuple):
-            field, order = item
-            if order not in ["asc", "desc"]:
-                raise ValueError(
-                    f"Sort order must be 'asc' or 'desc', got '{order}' for field '{field}'"
-                )
-            sort_by_normalized.append((field, order))
-        else:
-            # Default to ascending order
-            sort_by_normalized.append((item, "asc"))
+    sort_by_normalized = _normalize_sort_by(sort_by)
 
     # If 'shuffle' appears anywhere in sort_by, we first shuffle the list
     if any(field == "shuffle" for field, _ in sort_by_normalized):
@@ -913,11 +1150,15 @@ def readwise_binary_modification_arrays(
     window_size: int | None = None,
     regions_5to3prime: bool = False,
     single_strand: bool = False,
-    sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
+    sort_by: str | tuple[str, str] | list[str | tuple[str, str]] = [
+        "chromosome",
+        "region_start",
+        "read_start",
+    ],
     thresh: float | None = None,
     relative: bool = True,
-    quiet: bool = True,  # currently unused; change to default False when pbars are implemented
-    cores: int | None = None,  # currently unused
+    quiet: bool = True,
+    cores: int | None = None,
     subset_parameters: dict | None = None,
 ) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str], dict | None]:
     """
@@ -933,8 +1174,6 @@ def readwise_binary_modification_arrays(
     the read was identified, allowing for nice plotting, but can also be expressed in absolute
     coordinates. If positions are relative, regions_5to3prime can be used to show all regions
     as upstream-to-downstream along their respective strands.
-
-    TODO: Implement progress bars and parallelization as with pileup loaders
 
     Args:
         file: Path to an hdf5 (.h5) file containing modification data for single reads,
@@ -964,8 +1203,9 @@ def readwise_binary_modification_arrays(
             in the genomes, centered at the center of the region. If False, absolute coordinates are provided.
             There is not currently a check for all reads being on the same chromosome if relative=False, but
             this could create unexpected behaviour for a the standard visualizations.
-        quiet: silences progress bars (currently unused)
-        cores: cores across which to parallelize processes (currently unused)
+        quiet: silences progress bars
+        cores: cores across which per-read modification position extraction is
+            parallelized
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
@@ -991,6 +1231,8 @@ def readwise_binary_modification_arrays(
             window_size=window_size,
             single_strand=single_strand,
             sort_by=sort_by,
+            quiet=quiet,
+            subset_parameters=subset_parameters,
         )
         read_name_index = datasets.index("read_name")
         mod_vector_index = datasets.index("mod_vector")
@@ -999,6 +1241,14 @@ def readwise_binary_modification_arrays(
         region_end_index = datasets.index("region_end")
         read_start_index = datasets.index("read_start")
         region_strand_index = datasets.index("region_strand")
+
+        if len(sorted_read_data_converted) == 0:
+            return (
+                np.array([], dtype=int),
+                np.array([], dtype=int),
+                np.array([], dtype=str),
+                regions_dict,
+            )
 
         # Check this .h5 file was created with a threshold, i.e. that the mod calls are binarized
         if thresh is None:
@@ -1009,60 +1259,77 @@ def readwise_binary_modification_arrays(
         else:
             thresh = utils.adjust_threshold(thresh)
 
-        read_ints_list = []
+        read_ints = _assign_region_scoped_read_ints(
+            read_data=sorted_read_data_converted,
+            read_name_index=read_name_index,
+            region_start_index=region_start_index,
+            region_end_index=region_end_index,
+            region_strand_index=region_strand_index,
+        )
+
+        read_ids_by_mod_pos: list[int] = []
         mod_coords_list = []
         motifs_list = []
 
-        read_names = np.array(
-            [read_data[read_name_index] for read_data in sorted_read_data_converted]
+        n_reads = len(sorted_read_data_converted)
+        cores_to_run = 1 if cores is None else max(1, min(cores, n_reads))
+
+        read_payloads = (
+            {
+                "read_int": read_int,
+                "read_data": read_data,
+                "mod_vector_index": mod_vector_index,
+                "motif_index": motif_index,
+                "region_start_index": region_start_index,
+                "region_end_index": region_end_index,
+                "read_start_index": read_start_index,
+                "region_strand_index": region_strand_index,
+                "thresh": thresh,
+                "relative": relative,
+                "regions_5to3prime": regions_5to3prime,
+            }
+            for read_int, read_data in zip(read_ints, sorted_read_data_converted)
         )
-        # TODO: handle the case where a read shows up in more than one different region
-        _, unique_first_indices = np.unique(read_names, return_index=True)
-        unique_in_order = read_names[np.sort(unique_first_indices)]
-        string_to_int = {
-            read_name: index for index, read_name in enumerate(unique_in_order)
-        }
-        read_ints = np.array([string_to_int[read_name] for read_name in read_names])
 
-        for read_int, read_data in zip(read_ints, sorted_read_data_converted):
-            if thresh is None:
-                mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index])
-            else:
-                mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index] > thresh)
-
-            if relative:
-                if regions_5to3prime and read_data[region_strand_index] == "-":
-                    # Here we want to show the regions each along their 5 prime to 3 prime direction
-                    # This means that negative strand regions need to be flipped
-                    mod_pos_record = -(
-                        mod_pos_in_read
-                        + read_data[read_start_index]
-                        - (read_data[region_start_index] + read_data[region_end_index])
-                        // 2
-                    )
-                else:
-                    # This is the default case: just make the coordinates relative using
-                    # the reference genome coordinate system. Normal, easy, chill, nice.
-                    mod_pos_record = (
-                        mod_pos_in_read
-                        + read_data[read_start_index]
-                        - (read_data[region_start_index] + read_data[region_end_index])
-                        // 2
-                    )
-            else:
-                # If we aren't using relative coordinates, then I think the 5prime to 3prime argument
-                # can just be ignored, and I think it's nicer if that's silent - less clutter in the output
-                # Basically if you are keeping different regions separate using other metadata (such as
-                # just keeping their actual real genomic coordinates) it is superfluous to do the 5to3 flip.
-                mod_pos_record = mod_pos_in_read + read_data[read_start_index]
-
-            mod_coords_list += list(mod_pos_record)
-            read_ints_list += [read_int] * len(mod_pos_record)
-            motifs_list += [read_data[motif_index]] * len(mod_pos_record)
+        if cores_to_run > 1:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=cores_to_run
+            ) as executor:
+                read_iterator = executor.map(
+                    _readwise_mod_positions_from_payload,
+                    read_payloads,
+                )
+                read_iterator = tqdm(
+                    read_iterator,
+                    total=n_reads,
+                    disable=quiet,
+                    desc="Extracting readwise modifications",
+                    leave=False,
+                )
+                for mod_pos_record, read_ids, motif_labels in read_iterator:
+                    mod_coords_list += mod_pos_record
+                    read_ids_by_mod_pos += read_ids
+                    motifs_list += motif_labels
+        else:
+            read_iterator = map(
+                _readwise_mod_positions_from_payload,
+                read_payloads,
+            )
+            read_iterator = tqdm(
+                read_iterator,
+                total=n_reads,
+                disable=quiet,
+                desc="Extracting readwise modifications",
+                leave=False,
+            )
+            for mod_pos_record, read_ids, motif_labels in read_iterator:
+                mod_coords_list += mod_pos_record
+                read_ids_by_mod_pos += read_ids
+                motifs_list += motif_labels
 
         return (
             np.array(mod_coords_list),
-            np.array(read_ints_list),
+            np.array(read_ids_by_mod_pos),
             np.array(motifs_list),
             regions_dict,
         )
@@ -1084,25 +1351,25 @@ def reads_from_fake(
     """
     Helper function to support testing.
 
-    TODO: What does the bed file represent in this method? This one is breaking my brain a bit.
-    TODO: Variable names in this method stink.
-    TODO: Currently assumes mod calling (thresholding probabilities) was already performed elsewhere
-
     Args:
         file: Path to file containing modification data for single reads
-        bed_file: Path to bed file specifying regions (WHAT DO THESE REPRESENT???)
-        mod_names: types of modification to extract data for
+        regions: Placeholder for a regions input, kept for signature compatibility with
+            non-stub loaders. It is intentionally unused by this synthetic data helper.
+        motifs: types of modification to extract data for
 
     Returns:
-        Returns three parallel arrays, of length (N_READS * len(mod_names)), containing the following for each index:
+        Returns three parallel arrays, of length (N_READS * len(motifs)), containing the following for each index:
         * array of positions at which the specified modification was found in a read
         * unique integer ID for the read
         * modification represented by the positions
-        For example, if called on a dataset with a single read and two modification types, each array would have two entries. The unique IDs would be the same, as both entries would represent the same single read. The mods and positions would be different, as they would extact different mods.
+        For example, if called on a dataset with a single read and two modification
+        types, each array would have two entries. The unique IDs would be the same,
+        as both entries would represent the same single read. The mods and positions
+        would be different, as they would extract different mods.
     """
-    reads = []
-    read_names = []
-    mods = []
+    read_positions = []
+    read_ids_by_mod = []
+    motif_labels = []
     for mod_name in motifs:
         match mod_name:
             case "A,0":
@@ -1119,13 +1386,13 @@ def reads_from_fake(
                 ]
             case _:
                 raise ValueError(f"No stub settings for requested mod {mod_name}")
-        reads += mod_reads
-        read_names.append(np.arange(len(mod_reads)))
-        mods.append([mod_name] * len(mod_reads))
+        read_positions += mod_reads
+        read_ids_by_mod.append(np.arange(len(mod_reads)))
+        motif_labels.append([mod_name] * len(mod_reads))
 
-    read_names = np.concatenate(read_names)
-    mods = np.concatenate(mods)
-    return reads, read_names, mods, {}
+    read_ids_by_mod = np.concatenate(read_ids_by_mod)
+    motif_labels = np.concatenate(motif_labels)
+    return read_positions, read_ids_by_mod, motif_labels, {}
 
 
 # def convert_bytes(item):
