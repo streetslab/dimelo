@@ -690,6 +690,58 @@ def pileup_vectors_from_bedmethyl(
     return modified_base_counts, valid_base_counts
 
 
+def counts_from_pileup(
+    bedmethyl_file: str | Path,
+    motif: str,
+    regions: str | Path | list[str | Path],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+) -> tuple[int, int]:
+    """
+    Preferred alias for `pileup_counts_from_bedmethyl`.
+    """
+    return pileup_counts_from_bedmethyl(
+        bedmethyl_file=bedmethyl_file,
+        motif=motif,
+        regions=regions,
+        window_size=window_size,
+        single_strand=single_strand,
+        quiet=quiet,
+        cores=cores,
+        chunk_size=chunk_size,
+    )
+
+
+def vectors_from_pileup(
+    bedmethyl_file: str | Path,
+    motif: str,
+    regions: str | Path | list[str | Path],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    regions_5to3prime: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Preferred alias for `pileup_vectors_from_bedmethyl`.
+    """
+    return pileup_vectors_from_bedmethyl(
+        bedmethyl_file=bedmethyl_file,
+        motif=motif,
+        regions=regions,
+        window_size=window_size,
+        single_strand=single_strand,
+        regions_5to3prime=regions_5to3prime,
+        quiet=quiet,
+        cores=cores,
+        chunk_size=chunk_size,
+    )
+
+
 def counts_from_fake(*args, **kwargs) -> tuple[int, int]:
     """
     Test helper function.
@@ -967,6 +1019,28 @@ def process_pileup_row(
 ################################################################################################################
 
 
+def _validate_subset_parameters(subset_parameters: dict | None) -> None:
+    if subset_parameters is None:
+        return
+    if not isinstance(subset_parameters, dict):
+        raise ValueError("subset_parameters must be provided as a dictionary.")
+    if "array" in subset_parameters:
+        raise ValueError(
+            "subset_parameters cannot include 'array'; this is set internally."
+        )
+    if "n" not in subset_parameters and "frac" not in subset_parameters:
+        raise ValueError("subset_parameters must include at least one of n or frac.")
+
+
+def _subset_indices(
+    relevant_read_indices: np.ndarray,
+    subset_parameters: dict | None,
+) -> np.ndarray:
+    if subset_parameters is None or relevant_read_indices.size == 0:
+        return relevant_read_indices
+    return np.sort(utils.random_sample(relevant_read_indices, **subset_parameters))
+
+
 def read_vectors_from_hdf5(
     file: str | Path,
     motifs: list[str],
@@ -1040,6 +1114,8 @@ def read_vectors_from_hdf5(
     TODO: The way the subsetting is implemented is confusing, in that you need to pass all but one of
         the available parameters.
     """
+    _validate_subset_parameters(subset_parameters)
+
     with h5py.File(file, "r") as h5:
         datasets: list[str] = [
             name for name, obj in h5.items() if isinstance(obj, h5py.Dataset)
@@ -1092,12 +1168,9 @@ def read_vectors_from_hdf5(
                             | (ref_strands == region_strand)
                         )
                     )
-                    if subset_parameters is not None:
-                        relevant_read_indices = np.sort(
-                            utils.random_sample(
-                                relevant_read_indices, **subset_parameters
-                            )
-                        )
+                    relevant_read_indices = _subset_indices(
+                        relevant_read_indices, subset_parameters=subset_parameters
+                    )
                     read_tuples_raw += list(
                         zip(
                             *(
@@ -1120,10 +1193,9 @@ def read_vectors_from_hdf5(
         else:
             regions_dict = None
             relevant_read_indices = np.flatnonzero(np.isin(read_motifs, motifs))
-            if subset_parameters is not None:
-                relevant_read_indices = np.sort(
-                    utils.random_sample(relevant_read_indices, **subset_parameters)
-                )
+            relevant_read_indices = _subset_indices(
+                relevant_read_indices, subset_parameters=subset_parameters
+            )
             read_tuples_raw = list(
                 zip(
                     *(
@@ -1349,6 +1421,9 @@ def readwise_binary_modification_arrays(
             window_size=window_size,
             single_strand=single_strand,
             sort_by=sort_by,
+            quiet=quiet,
+            cores=cores,
+            subset_parameters=subset_parameters,
         )
         read_name_index = datasets.index("read_name")
         mod_vector_index = datasets.index("mod_vector")
@@ -1357,6 +1432,14 @@ def readwise_binary_modification_arrays(
         region_end_index = datasets.index("region_end")
         read_start_index = datasets.index("read_start")
         region_strand_index = datasets.index("region_strand")
+
+        if len(sorted_read_data_converted) == 0:
+            return (
+                np.array([], dtype=int),
+                np.array([], dtype=int),
+                np.array([], dtype=str),
+                regions_dict,
+            )
 
         # Check this .h5 file was created with a threshold, i.e. that the mod calls are binarized
         if thresh is None:
@@ -1371,16 +1454,22 @@ def readwise_binary_modification_arrays(
         mod_coords_list = []
         motifs_list = []
 
-        read_names = np.array(
-            [read_data[read_name_index] for read_data in sorted_read_data_converted]
-        )
-        # TODO: handle the case where a read shows up in more than one different region
-        _, unique_first_indices = np.unique(read_names, return_index=True)
-        unique_in_order = read_names[np.sort(unique_first_indices)]
-        string_to_int = {
-            read_name: index for index, read_name in enumerate(unique_in_order)
-        }
-        read_ints = np.array([string_to_int[read_name] for read_name in read_names])
+        read_ids_by_region_key: dict[tuple[str, int, int, str], int] = {}
+        read_ints = np.empty(len(sorted_read_data_converted), dtype=int)
+        next_read_int = 0
+        for idx, read_data in enumerate(sorted_read_data_converted):
+            read_key = (
+                read_data[read_name_index],
+                read_data[region_start_index],
+                read_data[region_end_index],
+                read_data[region_strand_index],
+            )
+            read_int = read_ids_by_region_key.get(read_key)
+            if read_int is None:
+                read_int = next_read_int
+                read_ids_by_region_key[read_key] = read_int
+                next_read_int += 1
+            read_ints[idx] = read_int
 
         for read_int, read_data in zip(read_ints, sorted_read_data_converted):
             if thresh is None:
