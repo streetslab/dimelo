@@ -1,7 +1,6 @@
 import gzip
 import itertools
 import multiprocessing
-import os
 import subprocess
 from collections import defaultdict
 from pathlib import Path
@@ -53,6 +52,11 @@ def _compress_uint8_vector(
         gzip.compress(vector.tobytes(), compresslevel=compress_level),
         dtype=np.uint8,
     )
+
+
+def _unlink_existing(*paths: Path) -> None:
+    for path in paths:
+        path.unlink(missing_ok=True)
 
 
 """
@@ -180,7 +184,6 @@ def pileup(
 
     ## Build up the command list to be sent to modkit, then run modkit
 
-    # TODO: This is mildly confusing. I get what it's doing, but it's hard to follow / names are bad. Also, why is it used in cleanup here, but not in extract?
     region_command_list, processed_regions_path = create_region_command_list(
         output_path,
         regions,
@@ -216,7 +219,6 @@ def pileup(
 
     cores_command_list = _threads_command_list(cores=cores, quiet=quiet)
 
-    # TODO: This is SO SO SO similar to extract; just the ValueError vs. printing. I think this can be resolved
     mod_thresh_command_list: list[str] = []
     if thresh is None:
         if not quiet:
@@ -251,8 +253,7 @@ def pileup(
         + log_command_list
     )
 
-    # TODO: Do we need to store and use the output from this method? Previously was being printed immediately afterward.
-    _ = run_modkit.run_with_progress_bars(
+    run_modkit.run_with_progress_bars(
         command_list=pileup_command_list,
         input_file=input_file,
         ref_genome=ref_genome,
@@ -268,7 +269,6 @@ def pileup(
         expect_done=True,
         quiet=quiet,
     )
-    # print(done_string)
 
     ## Sort, compress, and index the output bedmethyl file
 
@@ -279,12 +279,8 @@ def pileup(
     pysam.tabix_compress(output_bedmethyl_sorted, output_pileup_path, force=True)
     pysam.tabix_index(str(output_pileup_path), preset="bed", force=True)
 
-    # TODO: Can cleanup be consolidated?
     if cleanup:
-        if output_bedmethyl.exists():
-            output_bedmethyl.unlink()
-        if output_bedmethyl_sorted.exists():
-            output_bedmethyl_sorted.unlink()
+        _unlink_existing(output_bedmethyl, output_bedmethyl_sorted)
 
     return output_pileup_path, processed_regions_path
 
@@ -389,7 +385,6 @@ def extract(
                 f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.'
             ) from e
 
-    # TODO: Add intermediate mod-specific .txt files?
     output_path, (output_reads_path,) = prep_output_directory(
         output_directory=output_directory,
         output_name=output_name,
@@ -450,8 +445,7 @@ def extract(
 
         output_txt = Path(output_path) / (f"reads.{motif}.txt")
 
-        if os.path.exists(output_txt):
-            os.remove(output_txt)
+        output_txt.unlink(missing_ok=True)
 
         extract_command_list = (
             ["modkit", "extract", input_file, output_txt]
@@ -463,9 +457,7 @@ def extract(
             + filter_command_list
         )
 
-        # TODO: Do we need to store and use the output from this method? Previously was being printed immediately afterward.
-        # This is something the user might want to see - it's the end-of-process message for modkit, says e.g. how many reads were processed and stuff
-        _ = run_modkit.run_with_progress_bars(
+        run_modkit.run_with_progress_bars(
             command_list=extract_command_list,
             input_file=input_file,
             ref_genome=ref_genome,
@@ -481,7 +473,6 @@ def extract(
             expect_done=False,
             quiet=quiet,
         )
-        # print(done_string)
 
         # Create the compressed and indexed output
         read_by_base_txt_to_hdf5(
@@ -493,7 +484,7 @@ def extract(
         )
         # Delete intermediate file
         if cleanup:
-            os.remove(output_txt)
+            output_txt.unlink()
 
     return output_reads_path, processed_regions_path
 
