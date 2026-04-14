@@ -333,6 +333,36 @@ def test_read_by_base_txt_to_hdf5_reconstructs_coordinates_robustly(tmp_path):
         )
 
 
+def test_read_by_base_txt_to_hdf5_rejects_out_of_bounds_pos_in_read(tmp_path):
+    input_txt = tmp_path / "extract.bad_position.txt"
+    output_h5 = tmp_path / "reads.bad_position.h5"
+    header = "\t".join(f"col{i}" for i in range(16))
+    lines = [
+        header,
+        _make_extract_line(
+            "read_bad",
+            pos_in_read=10,
+            pos_in_genome=110,
+            chromosome="chr2",
+            strand="+",
+            read_len=10,
+            prob=0.80,
+            mod_code="a",
+            canonical_base="A",
+        ),
+    ]
+    input_txt.write_text("\n".join(lines) + "\n")
+
+    with pytest.raises(ValueError, match="out of bounds for read length"):
+        parse_bam.read_by_base_txt_to_hdf5(
+            input_txt=input_txt,
+            output_h5=output_h5,
+            motif="A,0",
+            thresh=0.5,
+            quiet=True,
+        )
+
+
 def test_readwise_binary_modification_arrays_returns_empty_for_empty_region(tmp_path):
     input_txt = tmp_path / "extract.txt"
     output_h5 = tmp_path / "reads_thresholded.h5"

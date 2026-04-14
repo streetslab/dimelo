@@ -60,6 +60,28 @@ def _unlink_existing(*paths: Path) -> None:
         path.unlink(missing_ok=True)
 
 
+def _reference_oriented_read_offset(
+    *,
+    pos_in_read: int,
+    read_length: int,
+    ref_strand: str,
+) -> int:
+    """
+    Convert modkit's read-oriented position into a left-to-right reference offset.
+    """
+    if read_length <= 0:
+        raise ValueError(f"read length must be positive; got {read_length}.")
+    if pos_in_read < 0 or pos_in_read >= read_length:
+        raise ValueError(
+            f"pos_in_read {pos_in_read} is out of bounds for read length {read_length}."
+        )
+    if ref_strand == "+":
+        return pos_in_read
+    if ref_strand == "-":
+        return read_length - pos_in_read - 1
+    raise ValueError(f"Unexpected strand '{ref_strand}' in modkit extract row.")
+
+
 """
 User-facing parse operations: pileup and extract
 """
@@ -976,15 +998,11 @@ def read_by_base_txt_to_hdf5(
                 pos_in_read = int(fields[1])
                 line_read_len = int(fields[9])
                 line_ref_strand = fields[5]
-                # TODO: verify that read position is in the right (ref) coordinate system
-                if line_ref_strand == "+":
-                    pos_in_read_ref = pos_in_read
-                elif line_ref_strand == "-":
-                    pos_in_read_ref = line_read_len - pos_in_read - 1
-                else:
-                    raise ValueError(
-                        f"Unexpected strand '{line_ref_strand}' in modkit extract row."
-                    )
+                pos_in_read_ref = _reference_oriented_read_offset(
+                    pos_in_read=pos_in_read,
+                    read_length=line_read_len,
+                    ref_strand=line_ref_strand,
+                )
                 start_candidate = pos_in_genome - pos_in_read_ref
                 end_candidate = start_candidate + line_read_len
 
