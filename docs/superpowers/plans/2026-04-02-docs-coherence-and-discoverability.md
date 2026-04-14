@@ -10,6 +10,12 @@
 
 ---
 
+## Status Note (2026-04-14)
+
+This document remains the detailed execution playbook for docs coherence work.
+The active cross-plan backlog now lives in
+`docs/superpowers/plans/2026-04-14-unified-remaining-work-plan.md`.
+
 ## File Map
 
 - Modify: `docs/superpowers/README.md`

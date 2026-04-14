@@ -5,6 +5,8 @@ This directory tracks internal design and implementation work for the current br
 - `specs/` contains design documents.
 - `plans/` contains executable implementation breakdowns.
 - Status is tracked here centrally so historical docs can remain stable snapshots.
+- Historical plan checkboxes may remain unchecked; treat this index and the
+  unified remaining-work plan as the canonical execution status.
 
 ## Status Labels
 
@@ -45,7 +47,7 @@ This directory tracks internal design and implementation work for the current br
 ### Shared Clustering
 
 - [2026-03-31-shared-clustering-foundations.md](plans/2026-03-31-shared-clustering-foundations.md) - shared clustering models, artifacts, plotting payloads, and workflows. Status: `implemented`
-- [2026-04-12-shared-cluster-tests.md](plans/2026-04-12-shared-cluster-tests.md) - shared-cluster global composition inference with permutation paths plus pooled screening options. Status: `partially implemented`
+- [2026-04-12-shared-cluster-tests.md](plans/2026-04-12-shared-cluster-tests.md) - shared-cluster global composition inference with permutation paths plus pooled screening options. Status: `implemented`
 
 ### Region Analysis
 
@@ -67,12 +69,17 @@ This directory tracks internal design and implementation work for the current br
 - [2026-04-01-region-contrasts-plotting.md](plans/2026-04-01-region-contrasts-plotting.md) - region contrast plotting prep for profiles and heatmaps. Status: `implemented`
 - [2026-04-02-region-discovery-plotting.md](plans/2026-04-02-region-discovery-plotting.md) - region discovery plotting prep for per-contig scans and local hit-context views. Status: `implemented`
 - [2026-04-02-global-analysis-plotting.md](plans/2026-04-02-global-analysis-plotting.md) - global analysis plotting prep for summary and broad-window payloads. Status: `implemented`
+- [2026-04-02-shared-clustering-plotting.md](plans/2026-04-02-shared-clustering-plotting.md) - shared clustering plotting prep for distribution, profile, and occupancy payloads. Status: `implemented`
+- [2026-04-08-matplotlib-renderers.md](plans/2026-04-08-matplotlib-renderers.md) - Matplotlib renderers and export helpers for region contrasts, discovery, and global analysis payloads. Status: `implemented`
+- [2026-04-10-shared-clustering-matplotlib-renderers.md](plans/2026-04-10-shared-clustering-matplotlib-renderers.md) - Matplotlib renderers for shared-clustering payloads. Status: `implemented`
 
 ### Cleanup And Docs
 
 - [2026-04-02-superpowers-docs-cleanup.md](plans/2026-04-02-superpowers-docs-cleanup.md) - central docs index and tracked-plan cleanup. Status: `implemented`
 - [2026-04-02-docs-and-integration-cleanup.md](plans/2026-04-02-docs-and-integration-cleanup.md) - historical path normalization plus narrow discoverability cleanup around completed analysis and plotting work. Status: `implemented`
 - [2026-04-02-docs-coherence-and-discoverability.md](plans/2026-04-02-docs-coherence-and-discoverability.md) - coherence pass across internal and user-facing docs plus narrow package-surface cleanup if needed. Status: `partially implemented`
+- [2026-04-13-legacy-cleanup-and-shared-cluster-tests-execution.md](plans/2026-04-13-legacy-cleanup-and-shared-cluster-tests-execution.md) - sprintized completion pass for shared-cluster follow-up and legacy cleanup tracks. Status: `partially implemented`
+- [2026-04-14-unified-remaining-work-plan.md](plans/2026-04-14-unified-remaining-work-plan.md) - consolidated, current backlog across all historical plan docs. Status: `partially implemented`
 
 ## Current Themes
 
@@ -83,3 +90,4 @@ This directory tracks internal design and implementation work for the current br
 - Global analysis: use the region analysis architecture spec first, then the global analysis foundations plan.
 - Plotting: start with the plotting-axis spec, then the plotting-axis implementation plan, then the region-contrasts, region-discovery, and global-analysis plotting plans for helper-level coverage.
 - Docs cleanup: use the docs cleanup design and plan for the central status map and tracked historical plans, then the docs-and-integration and docs-coherence follow-on docs passes for portability and discoverability cleanup.
+- Legacy cleanup: use the legacy cleanup execution plan for debt-lane context, then treat the unified remaining-work plan as the canonical active backlog.
