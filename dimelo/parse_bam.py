@@ -1,3 +1,4 @@
+import csv
 import gzip
 import itertools
 import multiprocessing
@@ -765,13 +766,11 @@ def read_by_base_txt_to_hdf5(
 
     read_name = ""
     num_reads = 0
-    # TODO: I think the function calls can be consolidated; lots of repetition
-    # TODO: Consider opening both files at once
-    with input_txt.open() as txt:
+    with input_txt.open(newline="") as txt:
+        reader = csv.reader(txt, delimiter="\t")
         # Check file length
         line_index = -1
-        for line_index, line in enumerate(txt):
-            fields = line.rstrip("\n").split("\t")
+        for line_index, fields in enumerate(reader):
             if line_index > 0 and read_name != fields[0]:
                 read_name = fields[0]
                 num_reads += 1
@@ -871,8 +870,7 @@ def read_by_base_txt_to_hdf5(
 
             ## Add data to datasets from txt file
             # Initialize loop vars - these will go into datasets
-            # TODO: initialize read name to actual first read so we can get rid of the logic in the loop
-            read_name = ""
+            read_name: str | None = None
             read_chrom = ""
             ref_strand = ""
             read_start = 0
@@ -884,27 +882,26 @@ def read_by_base_txt_to_hdf5(
             read_counter = 0
             # Keys (strings): dataset names, values: lists of dataset values by read; string or ints or arrays
             # Contents reset at the end of each chunk, after writing to h5
-            chunk_datasets_contents: defaultdict[str, list[str | int | np.ndarray]] = (
+            chunk_rows: defaultdict[str, list[str | int | np.ndarray]] = (
                 defaultdict(list)
             )
-            # TODO: replace in loop with read_counter%chunk_size as appropriate
-            reads_in_chunk = 0
+            chunk_row_count = 0
 
             def flush_pending_chunk_to_h5() -> None:
-                nonlocal reads_in_chunk, chunk_datasets_contents
-                if reads_in_chunk <= 0:
+                nonlocal chunk_row_count, chunk_rows
+                if chunk_row_count <= 0:
                     return
-                start_index = old_size + read_counter - reads_in_chunk
+                start_index = old_size + read_counter - chunk_row_count
                 end_index = old_size + read_counter
-                for dataset, entry in chunk_datasets_contents.items():
+                for dataset, entry in chunk_rows.items():
                     h5[dataset][start_index:end_index] = entry
-                chunk_datasets_contents = defaultdict(list)
-                reads_in_chunk = 0
+                chunk_rows = defaultdict(list)
+                chunk_row_count = 0
 
             def flush_current_read() -> None:
-                nonlocal read_counter, reads_in_chunk, chunk_datasets_contents
+                nonlocal read_counter, chunk_row_count, chunk_rows
 
-                if len(read_name) == 0:
+                if read_name is None:
                     return
 
                 read_len_along_ref = max(read_end - read_start, 1)
@@ -943,24 +940,25 @@ def read_by_base_txt_to_hdf5(
                     valid_vector, compress_level=compress_level
                 )
 
-                chunk_datasets_contents["read_name"].append(read_name)
-                chunk_datasets_contents["chromosome"].append(read_chrom)
-                chunk_datasets_contents["read_start"].append(read_start)
-                chunk_datasets_contents["read_end"].append(read_end)
-                chunk_datasets_contents["strand"].append(ref_strand)
-                chunk_datasets_contents["motif"].append(motif)
-                chunk_datasets_contents["mod_vector"].append(mod_vector_compressed)
-                chunk_datasets_contents["val_vector"].append(valid_vector_compressed)
+                chunk_rows["read_name"].append(read_name)
+                chunk_rows["chromosome"].append(read_chrom)
+                chunk_rows["read_start"].append(read_start)
+                chunk_rows["read_end"].append(read_end)
+                chunk_rows["strand"].append(ref_strand)
+                chunk_rows["motif"].append(motif)
+                chunk_rows["mod_vector"].append(mod_vector_compressed)
+                chunk_rows["val_vector"].append(valid_vector_compressed)
 
                 read_counter += 1
-                reads_in_chunk += 1
-                if reads_in_chunk >= chunk_size:
+                chunk_row_count += 1
+                if chunk_row_count >= chunk_size:
                     flush_pending_chunk_to_h5()
 
             # Setting up progress bars if not in quiet mode
             # Skip header
-            iterator = enumerate(txt)
-            next(iterator)
+            reader = csv.reader(txt, delimiter="\t")
+            next(reader)
+            iterator = reader
             if not quiet:
                 iterator = tqdm(
                     iterator,
@@ -970,9 +968,7 @@ def read_by_base_txt_to_hdf5(
                 )
 
             # Loop through txt file
-            for _, line in iterator:
-                # TODO: use csv module
-                fields = line.rstrip("\n").split("\t")
+            for fields in iterator:
                 pos_in_genome = int(fields[2])
                 canonical_base = fields[15]
                 prob = float(fields[10])
