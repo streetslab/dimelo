@@ -774,7 +774,7 @@ def read_vectors_from_hdf5(
     sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
     calculate_mod_fractions: bool = True,
     quiet: bool = True,
-    cores: int | None = None,  # currently unused
+    cores: int | None = None,
     subset_parameters: dict | None = None,
     span_full_window: bool = False,
 ) -> tuple[list[tuple], list[str], dict | None]:
@@ -799,8 +799,6 @@ def read_vectors_from_hdf5(
 
     After this processing, we calculate modification fractions, sort, and return.
 
-    TODO: Implement parallelization as with pileup loaders
-
     Args:
         file: Path to an hdf5 (.h5) file containing modification data for single reads,
             stored in datasets read_name, chromosome, read_start,
@@ -824,7 +822,8 @@ def read_vectors_from_hdf5(
             include chromosome, region_start, region_end, read_start, read_end, and motif. More to
             be added in future.
         quiet: silences progress bars
-        cores: if >1 and regions are provided, region index-selection work is parallelized
+        cores: if >1 and regions are provided, parallelize per-region read-index
+            selection before h5 retrieval
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
@@ -1098,7 +1097,7 @@ def readwise_binary_modification_arrays(
     thresh: float | None = None,
     relative: bool = True,
     quiet: bool = True,
-    cores: int | None = None,  # currently unused
+    cores: int | None = None,
     subset_parameters: dict | None = None,
 ) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str], dict | None]:
     """
@@ -1114,8 +1113,6 @@ def readwise_binary_modification_arrays(
     the read was identified, allowing for nice plotting, but can also be expressed in absolute
     coordinates. If positions are relative, regions_5to3prime can be used to show all regions
     as upstream-to-downstream along their respective strands.
-
-    TODO: Implement parallelization as with pileup loaders
 
     Args:
         file: Path to an hdf5 (.h5) file containing modification data for single reads,
@@ -1146,7 +1143,8 @@ def readwise_binary_modification_arrays(
             There is not currently a check for all reads being on the same chromosome if relative=False, but
             this could create unexpected behaviour for a the standard visualizations.
         quiet: silences progress bars
-        cores: cores across which to parallelize processes (currently unused)
+        cores: cores across which per-read modification position extraction is
+            parallelized
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
@@ -1298,25 +1296,25 @@ def reads_from_fake(
     """
     Helper function to support testing.
 
-    TODO: What does the bed file represent in this method? This one is breaking my brain a bit.
-    TODO: Variable names in this method stink.
-    TODO: Currently assumes mod calling (thresholding probabilities) was already performed elsewhere
-
     Args:
         file: Path to file containing modification data for single reads
-        bed_file: Path to bed file specifying regions (WHAT DO THESE REPRESENT???)
-        mod_names: types of modification to extract data for
+        regions: Placeholder for a regions input, kept for signature compatibility with
+            non-stub loaders. It is intentionally unused by this synthetic data helper.
+        motifs: types of modification to extract data for
 
     Returns:
-        Returns three parallel arrays, of length (N_READS * len(mod_names)), containing the following for each index:
+        Returns three parallel arrays, of length (N_READS * len(motifs)), containing the following for each index:
         * array of positions at which the specified modification was found in a read
         * unique integer ID for the read
         * modification represented by the positions
-        For example, if called on a dataset with a single read and two modification types, each array would have two entries. The unique IDs would be the same, as both entries would represent the same single read. The mods and positions would be different, as they would extact different mods.
+        For example, if called on a dataset with a single read and two modification
+        types, each array would have two entries. The unique IDs would be the same,
+        as both entries would represent the same single read. The mods and positions
+        would be different, as they would extract different mods.
     """
-    reads = []
-    read_names = []
-    mods = []
+    read_positions = []
+    read_ids_by_mod = []
+    motif_labels = []
     for mod_name in motifs:
         match mod_name:
             case "A,0":
@@ -1333,13 +1331,13 @@ def reads_from_fake(
                 ]
             case _:
                 raise ValueError(f"No stub settings for requested mod {mod_name}")
-        reads += mod_reads
-        read_names.append(np.arange(len(mod_reads)))
-        mods.append([mod_name] * len(mod_reads))
+        read_positions += mod_reads
+        read_ids_by_mod.append(np.arange(len(mod_reads)))
+        motif_labels.append([mod_name] * len(mod_reads))
 
-    read_names = np.concatenate(read_names)
-    mods = np.concatenate(mods)
-    return reads, read_names, mods, {}
+    read_ids_by_mod = np.concatenate(read_ids_by_mod)
+    motif_labels = np.concatenate(motif_labels)
+    return read_positions, read_ids_by_mod, motif_labels, {}
 
 
 # def convert_bytes(item):
