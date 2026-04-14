@@ -81,16 +81,6 @@ def by_modification(
         **kwargs,
     )
 
-
-"""
-TODO: Re-assignment issue:
-dimelo/plot_enrichment.py:115: error: Incompatible types in assignment (expression has type "list[str | Path | list[str | Path]]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment.py:121: error: Argument "sample_names" to "plot_enrichment" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-dimelo/plot_enrichment.py:141: error: Incompatible types in assignment (expression has type "list[str | Path]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment.py:147: error: Argument "sample_names" to "plot_enrichment" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-"""
-
-
 def by_regions(
     mod_file_name: str | Path,
     regions_list: list[str | Path | list[str | Path]],
@@ -105,14 +95,15 @@ def by_regions(
 
     See plot_enrichment for details.
     """
-    if sample_names is None:
-        sample_names = regions_list
+    sample_names_for_plot = (
+        sample_names if sample_names is not None else [str(region) for region in regions_list]
+    )
     n_beds = len(regions_list)
     return plot_enrichment(
         mod_file_names=[mod_file_name] * n_beds,
         regions_list=regions_list,
         motifs=[motif] * n_beds,
-        sample_names=sample_names,
+        sample_names=sample_names_for_plot,
         **kwargs,
     )
 
@@ -131,14 +122,17 @@ def by_dataset(
 
     See plot_enrichment for details.
     """
-    if sample_names is None:
-        sample_names = mod_file_names
+    sample_names_for_plot = (
+        sample_names
+        if sample_names is not None
+        else [str(mod_file) for mod_file in mod_file_names]
+    )
     n_mod_files = len(mod_file_names)
     return plot_enrichment(
         mod_file_names=mod_file_names,
         regions_list=[regions] * n_mod_files,
         motifs=[motif] * n_mod_files,
-        sample_names=sample_names,
+        sample_names=sample_names_for_plot,
         **kwargs,
     )
 
@@ -158,9 +152,6 @@ def get_enrichments(
     This helper function can be useful during plot prototyping, when repeatedly building plots from the same data.
     Its outputs can be passed as the first argument to make_enrichment_plot().
 
-    TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
-    TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
-
     Args:
         mod_file_names: list of paths to modified base pileup data files
         regions_list: list of paths to bed files specifying regions to extract
@@ -176,12 +167,10 @@ def get_enrichments(
     """
     if not utils.check_len_equal(mod_file_names, regions_list, motifs):
         raise ValueError("Unequal number of inputs")
-    # TODO: redefinition error; still need to figure out how to do this elegantly in a way mypy likes
-    # dimelo/plot_enrichment.py:45: error: Item "str" of "str | Path" has no attribute "suffix"  [union-attr]
-    mod_file_names = [Path(fn) for fn in mod_file_names]
+    mod_file_paths = [Path(fn) for fn in mod_file_names]
 
     mod_fractions = []
-    for mod_file, regions, motif in zip(mod_file_names, regions_list, motifs):
+    for mod_file, regions, motif in zip(mod_file_paths, regions_list, motifs):
         match mod_file.suffix:
             case ".gz":
                 n_mod, n_total = load_processed.pileup_counts_from_bedmethyl(

@@ -1,14 +1,4 @@
-"""
-I'm conflicted about how to handle some of this.
-
-There are two different ways of doing single read plotting: "rectangular" and "whole read".
-"rectangular" means displaying exactly the requested region.
-"whole read" means displaying the entirety of any read overlapping the requested region.
-Probably need separate methods for all of this? Is there shared functionality? Do they live in the same file? Etc.
-
-I'm beginning to lose the thread of where we check for regions making sense.
-Maybe this is an argument for an internal region class that makes checking easy? I don't know.
-"""
+"""Single-read plotting entrypoints and legacy axis routing helpers."""
 
 from collections.abc import Sequence
 import math
@@ -92,10 +82,6 @@ def plot_reads(
     """
     Plots centered single reads as a scatterplot, cut off at the boundaries of the requested regions?
 
-    TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
-    TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
-    TODO: So far, this is the only method to do plotting without utility methods. Is this reasonable? Is it that unique?
-
     Args:
         mod_file_name: path to file containing modification data for single reads
         regions: path to bed file specifying regions to extract
@@ -120,10 +106,7 @@ def plot_reads(
     merged_palette = {**utils.DEFAULT_COLORS, **palette}
 
     match mod_file_name.suffix:
-        # TODO: Fix how the fake reads options work, and make sure they have the same interface as the real ones.
-        # dimelo/plot_reads.py:63: error: Argument "regions" to "reads_from_fake" has incompatible type "str | Path | list[str | Path]"; expected "Path"  [arg-type]
-        # Will also fix the following error:
-        # dimelo/plot_reads.py:68: error: Incompatible types in assignment (expression has type "dict[Any, Any] | None", variable has type "dict[Any, Any]")  [assignment]
+        # Keep fake-file handling aligned with the non-fake return contract.
         case ".fake":
             reads, read_names, mods, regions_dict = load_processed.reads_from_fake(
                 file=mod_file_name,
@@ -190,8 +173,7 @@ def plot_reads(
     # Retrieve legend handles and labels
     handles, labels = axes.get_legend_handles_labels()
 
-    # Update legend properties
-    # TODO: Do we need to do this now and after?
+    # Update legend properties.
     if legend is not None:
         legend.set_title("Mod")
 
@@ -200,15 +182,10 @@ def plot_reads(
         if hasattr(handle, "set_markersize"):
             handle.set_markersize(10)  # Set a larger marker size for legend
 
-    # Re-apply the legend with updated handles
-    # TODO: Is this step necessary?
+    # Re-apply the legend with updated marker size.
     axes.legend(handles, labels, title="Mod")
 
-    # TODO: Technically, regions_dict can be None by this point. In that scenario, it will error out when checking the length.
-    # It can be None according to type hints but in the actual logical flow I believe it cannot be None
-    # However, we can easily just check whether it is None here as well, in case we change behavior elsewhere.
-    # Identified with mypy through the following error:
-    # dimelo/plot_reads.py:101: error: Argument 1 to "len" has incompatible type "dict[Any, Any] | None"; expected "Sized"  [arg-type]
+    # regions_dict may be absent for some loader paths, so guard before reading bounds.
     if relative and regions_dict is not None and len(regions_dict) > 0:
         region1_start, region1_end, _ = next(iter(regions_dict.values()))[0]
         effective_window_size = (region1_end - region1_start) // 2

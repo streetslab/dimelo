@@ -117,11 +117,6 @@ def plot_enrichment_profile(
     This is the most flexible method for enrichment profile plotting. For most use cases, consider
     using one of the plot_enrichment_profile.by_* methods.
 
-    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
-    TODO: Should the more restrictive meta versions allow *args, or only **kwargs?
-    No, we want to be able to pass kwargs down to the line plotter, I think. Especially if we swap it out for one that takes more different standard args.
-    TODO: It's mildly confusing that there are required args that are only seen as *args or **kwargs in the more restrictive meta versions... But this is so much cleaner...
-
     Args:
         mod_file_names: list of paths to modified base data files
         bed_file_names: list of paths to bed files specifying centered equal-length regions
@@ -207,18 +202,6 @@ def by_modification(
         **kwargs,
     )
 
-
-"""
-TODO: Re-assignment issue:
-dimelo/plot_enrichment_profile.py:142: error: Incompatible types in assignment (expression has type "list[str | Path | list[str | Path]]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment_profile.py:148: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-dimelo/plot_enrichment_profile.py:168: error: Incompatible types in assignment (expression has type "list[str | Path]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment_profile.py:174: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-
-If sample names is None we assign it non-None values, so it's not clear what the problem is to me. We could make an intermediate dummy variable I guess? If that is the complaint?
-"""
-
-
 def by_regions(
     mod_file_name: str | Path,
     regions_list: list[str | Path | list[str | Path]],
@@ -233,14 +216,15 @@ def by_regions(
 
     See plot_enrichment_profile for details.
     """
-    if sample_names is None:
-        sample_names = regions_list
+    sample_names_for_plot = (
+        sample_names if sample_names is not None else [str(region) for region in regions_list]
+    )
     n_beds = len(regions_list)
     return plot_enrichment_profile(
         mod_file_names=[mod_file_name] * n_beds,
         regions_list=regions_list,
         motifs=[motif] * n_beds,
-        sample_names=sample_names,
+        sample_names=sample_names_for_plot,
         **kwargs,
     )
 
@@ -259,14 +243,17 @@ def by_dataset(
 
     See plot_enrichment_profile for details.
     """
-    if sample_names is None:
-        sample_names = mod_file_names
+    sample_names_for_plot = (
+        sample_names
+        if sample_names is not None
+        else [str(mod_file) for mod_file in mod_file_names]
+    )
     n_mod_files = len(mod_file_names)
     return plot_enrichment_profile(
         mod_file_names=mod_file_names,
         regions_list=[regions] * n_mod_files,
         motifs=[motif] * n_mod_files,
-        sample_names=sample_names,
+        sample_names=sample_names_for_plot,
         **kwargs,
     )
 
@@ -288,10 +275,6 @@ def get_enrichment_profiles(
     This helper function can be useful during plot prototyping, when repeatedly building plots from the same data.
     Its outputs can be passed as the first argument to make_enrichment_profile_plot().
 
-    TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
-    TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
-    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
-
     Args:
         mod_file_names: list of paths to modified base data files
         bed_file_names: list of paths to bed files specifying centered equal-length regions
@@ -309,12 +292,10 @@ def get_enrichment_profiles(
     """
     if not utils.check_len_equal(mod_file_names, regions_list, motifs):
         raise ValueError("Unequal number of inputs")
-    # TODO: redefinition error; still need to figure out how to do this elegantly in a way mypy likes
-    # dimelo/plot_enrichment_profile.py:53: error: Item "str" of "str | Path" has no attribute "suffix"  [union-attr]
-    mod_file_names = [Path(fn) for fn in mod_file_names]
+    mod_file_paths = [Path(fn) for fn in mod_file_names]
 
     trace_vectors = []
-    for mod_file, regions, motif in zip(mod_file_names, regions_list, motifs):
+    for mod_file, regions, motif in zip(mod_file_paths, regions_list, motifs):
         match mod_file.suffix:
             case ".gz":
                 modified_base_counts, valid_base_counts = (
