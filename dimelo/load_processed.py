@@ -242,7 +242,7 @@ def pileup_counts_from_bedmethyl(
     If no regions are specified, returns the sum total for the motif of interest across the
     entire bedmethyl file.
 
-    TODO: Consider renaming this method, e.g. counts_from_pileup
+    Preferred alias: `counts_from_pileup`.
 
     Args:
         bedmethyl_file: Path to bedmethyl file
@@ -354,7 +354,7 @@ def pileup_vectors_from_bedmethyl(
     A region must be provided because otherwise there is no way to know what vector to return.
     However, a region can be a whole chromosome if desired.
 
-    TODO: Consider renaming this method, e.g. vectors_from_pileup
+    Preferred alias: `vectors_from_pileup`.
 
     Args:
         bedmethyl_file: Path to bedmethyl file
@@ -441,6 +441,58 @@ def pileup_vectors_from_bedmethyl(
     shm_valid.unlink()
 
     return modified_base_counts, valid_base_counts
+
+
+def counts_from_pileup(
+    bedmethyl_file: str | Path,
+    motif: str,
+    regions: str | Path | list[str | Path],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+) -> tuple[int, int]:
+    """
+    Preferred alias for `pileup_counts_from_bedmethyl`.
+    """
+    return pileup_counts_from_bedmethyl(
+        bedmethyl_file=bedmethyl_file,
+        motif=motif,
+        regions=regions,
+        window_size=window_size,
+        single_strand=single_strand,
+        quiet=quiet,
+        cores=cores,
+        chunk_size=chunk_size,
+    )
+
+
+def vectors_from_pileup(
+    bedmethyl_file: str | Path,
+    motif: str,
+    regions: str | Path | list[str | Path],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    regions_5to3prime: bool = False,
+    quiet: bool = False,
+    cores: int | None = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Preferred alias for `pileup_vectors_from_bedmethyl`.
+    """
+    return pileup_vectors_from_bedmethyl(
+        bedmethyl_file=bedmethyl_file,
+        motif=motif,
+        regions=regions,
+        window_size=window_size,
+        single_strand=single_strand,
+        regions_5to3prime=regions_5to3prime,
+        quiet=quiet,
+        cores=cores,
+        chunk_size=chunk_size,
+    )
 
 
 def counts_from_fake(*args, **kwargs) -> tuple[int, int]:
