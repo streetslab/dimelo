@@ -812,7 +812,6 @@ def read_by_base_txt_to_hdf5(
                 h5.create_dataset("threshold", data=threshold_to_store)
 
             ## Create read metadata datasets
-            # TODO: loop through dict instead?
             if "read_name" in h5:
                 old_size = h5["read_name"].shape[0]
                 h5["read_name"].resize((old_size + num_reads,))
@@ -826,106 +825,57 @@ def read_by_base_txt_to_hdf5(
                     compression="gzip",
                     compression_opts=9,
                 )
-            if "chromosome" in h5:
-                if old_size != h5["chromosome"].shape[0]:
-                    print("size mismatch: read_name:chromosome")
-                else:
-                    h5["chromosome"].resize((old_size + num_reads,))
-            else:
+            def ensure_dataset_capacity(
+                *,
+                name: str,
+                dtype,
+                mismatch_message: str,
+                compression: str | None = None,
+                compression_opts: int | None = None,
+            ) -> None:
+                if name in h5:
+                    if old_size != h5[name].shape[0]:
+                        print(mismatch_message)
+                    else:
+                        h5[name].resize((old_size + num_reads,))
+                    return
+
+                create_kwargs: dict[str, object] = {
+                    "maxshape": (None,),
+                    "dtype": dtype,
+                }
+                if compression is not None:
+                    create_kwargs["compression"] = compression
+                if compression_opts is not None:
+                    create_kwargs["compression_opts"] = compression_opts
+
                 h5.create_dataset(
-                    "chromosome",
+                    name,
                     (num_reads,),
-                    maxshape=(None,),
-                    dtype=dt_str,
-                    compression="gzip",
-                    compression_opts=9,
+                    **create_kwargs,
                 )
-            if "read_start" in h5:
-                if old_size != h5["read_start"].shape[0]:
-                    print("size mismatch", "read_name", "read_start")
-                else:
-                    h5["read_start"].resize((old_size + num_reads,))
-            else:
-                h5.create_dataset(
-                    "read_start",
-                    (num_reads,),
-                    maxshape=(None,),
-                    dtype="i",
-                    compression="gzip",
-                    compression_opts=9,
-                )
-            if "read_end" in h5:
-                if old_size != h5["read_end"].shape[0]:
-                    print("size mismatch", "read_name", "read_end")
-                else:
-                    h5["read_end"].resize((old_size + num_reads,))
-            else:
-                h5.create_dataset(
-                    "read_end",
-                    (num_reads,),
-                    maxshape=(None,),
-                    dtype="i",
-                    compression="gzip",
-                    compression_opts=9,
-                )
-            if "strand" in h5:
-                if old_size != h5["strand"].shape[0]:
-                    print("size mismatch", "read_name", "strand")
-                else:
-                    h5["strand"].resize((old_size + num_reads,))
-            else:
-                h5.create_dataset(
-                    "strand",
-                    (num_reads,),
-                    maxshape=(None,),
-                    dtype=dt_str,
-                    compression="gzip",
-                    compression_opts=9,
-                )
-            if "motif" in h5:
-                if old_size != h5["motif"].shape[0]:
-                    print("size mismatch", "read_name", "motif")
-                else:
-                    h5["motif"].resize((old_size + num_reads,))
-            else:
-                h5.create_dataset(
-                    "motif",
-                    (num_reads,),
-                    maxshape=(None,),
-                    dtype=dt_str,
+
+            for dataset_name, dataset_dtype, mismatch_message in [
+                ("chromosome", dt_str, "size mismatch: read_name:chromosome"),
+                ("read_start", "i", "size mismatch read_name:read_start"),
+                ("read_end", "i", "size mismatch read_name:read_end"),
+                ("strand", dt_str, "size mismatch read_name:strand"),
+                ("motif", dt_str, "size mismatch read_name:motif"),
+            ]:
+                ensure_dataset_capacity(
+                    name=dataset_name,
+                    dtype=dataset_dtype,
+                    mismatch_message=mismatch_message,
                     compression="gzip",
                     compression_opts=9,
                 )
 
             ## Create the vector datasets. These will contain raw bytes formatted into a uint8 array
-            # TODO: loop through dict instead
-            if "mod_vector" in h5:
-                if old_size != h5["mod_vector"].shape[0]:
-                    print("size mismatch read_name:mod_vector")
-                else:
-                    h5["mod_vector"].resize((old_size + num_reads,))
-            else:
-                h5.create_dataset(
-                    "mod_vector",
-                    (num_reads,),
-                    maxshape=(None,),
+            for dataset_name in ["mod_vector", "val_vector"]:
+                ensure_dataset_capacity(
+                    name=dataset_name,
                     dtype=dt_vlen,
-                    # compression='gzip', # we are handling compression ourselves because hdf5 is bad at it
-                    # compression_opts=9,
-                )
-            if "val_vector" in h5:
-                if old_size != h5["val_vector"].shape[0]:
-                    print("size mismatch read_name:val_vector")
-                else:
-                    h5["val_vector"].resize((old_size + num_reads,))
-            else:
-                h5.create_dataset(
-                    "val_vector",
-                    (num_reads,),
-                    maxshape=(None,),
-                    dtype=dt_vlen,
-                    # compression='gzip', # we are handling compression ourselves because hdf5 is bad at it
-                    # compression_opts=9,
+                    mismatch_message=f"size mismatch read_name:{dataset_name}",
                 )
 
             ## Add data to datasets from txt file
@@ -948,6 +898,17 @@ def read_by_base_txt_to_hdf5(
             )
             # TODO: replace in loop with read_counter%chunk_size as appropriate
             reads_in_chunk = 0
+
+            def flush_pending_chunk_to_h5() -> None:
+                nonlocal reads_in_chunk, chunk_datasets_contents
+                if reads_in_chunk <= 0:
+                    return
+                start_index = old_size + read_counter - reads_in_chunk
+                end_index = old_size + read_counter
+                for dataset, entry in chunk_datasets_contents.items():
+                    h5[dataset][start_index:end_index] = entry
+                chunk_datasets_contents = defaultdict(list)
+                reads_in_chunk = 0
 
             def flush_current_read() -> None:
                 nonlocal read_counter, reads_in_chunk, chunk_datasets_contents
@@ -1003,12 +964,7 @@ def read_by_base_txt_to_hdf5(
                 read_counter += 1
                 reads_in_chunk += 1
                 if reads_in_chunk >= chunk_size:
-                    start_index = old_size + read_counter - reads_in_chunk
-                    end_index = old_size + read_counter
-                    for dataset, entry in chunk_datasets_contents.items():
-                        h5[dataset][start_index:end_index] = entry
-                    chunk_datasets_contents = defaultdict(list)
-                    reads_in_chunk = 0
+                    flush_pending_chunk_to_h5()
 
             # Setting up progress bars if not in quiet mode
             # Skip header
@@ -1080,11 +1036,7 @@ def read_by_base_txt_to_hdf5(
                         mod_values_list.append(0)
 
             flush_current_read()
-            if reads_in_chunk > 0:
-                start_index = old_size + read_counter - reads_in_chunk
-                end_index = old_size + read_counter
-                for dataset, entry in chunk_datasets_contents.items():
-                    h5[dataset][start_index:end_index] = entry
+            flush_pending_chunk_to_h5()
     return
 
 
