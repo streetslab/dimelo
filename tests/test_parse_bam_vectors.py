@@ -363,6 +363,66 @@ def test_read_by_base_txt_to_hdf5_rejects_out_of_bounds_pos_in_read(tmp_path):
         )
 
 
+def test_read_by_base_txt_to_hdf5_rejects_invalid_strand(tmp_path):
+    input_txt = tmp_path / "extract.bad_strand.txt"
+    output_h5 = tmp_path / "reads.bad_strand.h5"
+    header = "\t".join(f"col{i}" for i in range(16))
+    lines = [
+        header,
+        _make_extract_line(
+            "read_bad_strand",
+            pos_in_read=2,
+            pos_in_genome=102,
+            chromosome="chr2",
+            strand="?",
+            read_len=10,
+            prob=0.80,
+            mod_code="a",
+            canonical_base="A",
+        ),
+    ]
+    input_txt.write_text("\n".join(lines) + "\n")
+
+    with pytest.raises(ValueError, match="Unexpected strand"):
+        parse_bam.read_by_base_txt_to_hdf5(
+            input_txt=input_txt,
+            output_h5=output_h5,
+            motif="A,0",
+            thresh=0.5,
+            quiet=True,
+        )
+
+
+def test_read_by_base_txt_to_hdf5_rejects_non_positive_read_length(tmp_path):
+    input_txt = tmp_path / "extract.bad_read_length.txt"
+    output_h5 = tmp_path / "reads.bad_read_length.h5"
+    header = "\t".join(f"col{i}" for i in range(16))
+    lines = [
+        header,
+        _make_extract_line(
+            "read_bad_length",
+            pos_in_read=0,
+            pos_in_genome=100,
+            chromosome="chr2",
+            strand="+",
+            read_len=0,
+            prob=0.80,
+            mod_code="a",
+            canonical_base="A",
+        ),
+    ]
+    input_txt.write_text("\n".join(lines) + "\n")
+
+    with pytest.raises(ValueError, match="read length must be positive"):
+        parse_bam.read_by_base_txt_to_hdf5(
+            input_txt=input_txt,
+            output_h5=output_h5,
+            motif="A,0",
+            thresh=0.5,
+            quiet=True,
+        )
+
+
 def test_readwise_binary_modification_arrays_returns_empty_for_empty_region(tmp_path):
     input_txt = tmp_path / "extract.txt"
     output_h5 = tmp_path / "reads_thresholded.h5"
@@ -471,6 +531,30 @@ def test_read_vectors_from_hdf5_rejects_subset_without_n_or_frac(tmp_path):
         )
 
 
+def test_read_vectors_from_hdf5_rejects_non_dict_subset_parameters(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    with pytest.raises(ValueError, match="provided as a dictionary"):
+        load_processed.read_vectors_from_hdf5(
+            file=output_h5,
+            motifs=["A,0"],
+            regions="chr1:95-110",
+            subset_parameters=1,
+            calculate_mod_fractions=False,
+            quiet=True,
+        )
+
+
 def test_read_vectors_from_hdf5_rejects_subset_with_array_key(tmp_path):
     input_txt = tmp_path / "extract.txt"
     output_h5 = tmp_path / "reads_thresholded.h5"
@@ -493,6 +577,34 @@ def test_read_vectors_from_hdf5_rejects_subset_with_array_key(tmp_path):
             calculate_mod_fractions=False,
             quiet=True,
         )
+
+
+def test_read_vectors_from_hdf5_accepts_tuple_sort_by(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    read_tuples, datasets, _ = load_processed.read_vectors_from_hdf5(
+        file=output_h5,
+        motifs=["A,0"],
+        sort_by=("read_start", "desc"),
+        calculate_mod_fractions=False,
+        quiet=True,
+    )
+
+    read_name_index = datasets.index("read_name")
+    assert [read_tuple[read_name_index] for read_tuple in read_tuples] == [
+        "read_no_hits",
+        "read_sparse",
+    ]
 
 
 def test_readwise_binary_modification_arrays_passes_subset_and_quiet(monkeypatch):
