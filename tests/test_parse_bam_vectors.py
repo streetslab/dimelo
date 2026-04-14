@@ -151,6 +151,17 @@ def _decode_vector(dataset, index: int) -> np.ndarray:
     return np.frombuffer(gzip.decompress(raw_bytes), dtype=np.uint8)
 
 
+def _assert_read_tuples_equal(left: list[tuple], right: list[tuple]) -> None:
+    assert len(left) == len(right)
+    for left_tuple, right_tuple in zip(left, right, strict=True):
+        assert len(left_tuple) == len(right_tuple)
+        for left_value, right_value in zip(left_tuple, right_tuple, strict=True):
+            if isinstance(left_value, np.ndarray):
+                np.testing.assert_array_equal(left_value, right_value)
+            else:
+                assert left_value == right_value
+
+
 def test_read_by_base_txt_to_hdf5_uses_dense_span_vectors(tmp_path):
     input_txt = tmp_path / "extract.txt"
     output_h5 = tmp_path / "reads.h5"
@@ -539,3 +550,38 @@ def test_readwise_binary_modification_arrays_parallel_matches_serial(tmp_path):
     np.testing.assert_array_equal(serial[1], parallel[1])
     np.testing.assert_array_equal(serial[2], parallel[2])
     assert serial[3] == parallel[3]
+
+
+def test_read_vectors_from_hdf5_parallel_region_selection_matches_serial(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    serial = load_processed.read_vectors_from_hdf5(
+        file=output_h5,
+        motifs=["A,0"],
+        regions=["chr1:95-105", "chr1:100-110"],
+        quiet=True,
+        calculate_mod_fractions=False,
+        cores=1,
+    )
+    parallel = load_processed.read_vectors_from_hdf5(
+        file=output_h5,
+        motifs=["A,0"],
+        regions=["chr1:95-105", "chr1:100-110"],
+        quiet=True,
+        calculate_mod_fractions=False,
+        cores=2,
+    )
+
+    _assert_read_tuples_equal(serial[0], parallel[0])
+    assert serial[1] == parallel[1]
+    assert serial[2] == parallel[2]

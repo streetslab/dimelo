@@ -33,6 +33,34 @@ def _subset_indices(
     return np.sort(utils.random_sample(indices, **subset_parameters))
 
 
+def _region_job_to_read_indices(
+    region_job: tuple[str, int, int, str],
+    *,
+    read_chromosomes: np.ndarray,
+    read_starts: np.ndarray,
+    read_ends: np.ndarray,
+    read_motifs: np.ndarray,
+    ref_strands: np.ndarray,
+    motifs: list[str],
+    single_strand: bool,
+    span_full_window: bool,
+) -> np.ndarray:
+    chrom, region_start, region_end, region_strand = region_job
+    return np.flatnonzero(
+        (read_ends > region_start)
+        & (read_starts < region_end)
+        & (read_starts <= region_start if span_full_window else True)
+        & (read_ends >= region_end if span_full_window else True)
+        & np.isin(read_motifs, motifs)
+        & (read_chromosomes == chrom)
+        & (
+            (not single_strand)
+            | (region_strand not in ["+", "-"])
+            | (ref_strands == region_strand)
+        )
+    )
+
+
 def _readwise_mod_positions_for_read(
     *,
     read_int: int,
@@ -744,7 +772,7 @@ def read_vectors_from_hdf5(
             include chromosome, region_start, region_end, read_start, read_end, and motif. More to
             be added in future.
         quiet: silences progress bars
-        cores: cores across which to parallelize processes (currently unused)
+        cores: if >1 and regions are provided, region index-selection work is parallelized
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
@@ -808,32 +836,46 @@ def read_vectors_from_hdf5(
                 for chrom, region_list in regions_dict.items()
                 for region_start, region_end, region_strand in region_list
             ]
+            cores_to_run = (
+                1
+                if cores is None
+                else max(1, min(cores, len(region_jobs)))
+            )
+            region_to_indices = partial(
+                _region_job_to_read_indices,
+                read_chromosomes=read_chromosomes,
+                read_starts=read_starts,
+                read_ends=read_ends,
+                read_motifs=read_motifs,
+                ref_strands=ref_strands,
+                motifs=motifs,
+                single_strand=single_strand,
+                span_full_window=span_full_window,
+            )
+            if cores_to_run > 1 and len(region_jobs) > 1:
+                with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=cores_to_run
+                ) as executor:
+                    region_results = list(executor.map(region_to_indices, region_jobs))
+            else:
+                region_results = [region_to_indices(job) for job in region_jobs]
             region_iterator = (
                 tqdm(
-                    region_jobs,
+                    zip(region_jobs, region_results),
                     total=len(region_jobs),
                     disable=quiet,
                     desc="Loading read vectors",
                     leave=False,
                 )
                 if len(region_jobs) > 0
-                else region_jobs
+                else []
             )
-            for chrom, region_start, region_end, region_strand in region_iterator:
-                # Find the read indices that we want to load
-                relevant_read_indices = np.flatnonzero(
-                    (read_ends > region_start)
-                    & (read_starts < region_end)
-                    & (read_starts <= region_start if span_full_window else True)
-                    & (read_ends >= region_end if span_full_window else True)
-                    & np.isin(read_motifs, motifs)
-                    & (read_chromosomes == chrom)
-                    & (
-                        (not single_strand)
-                        | (region_strand not in ["+", "-"])
-                        | (ref_strands == region_strand)
-                    )
-                )
+            for (
+                chrom,
+                region_start,
+                region_end,
+                region_strand,
+            ), relevant_read_indices in region_iterator:
                 relevant_read_indices = _subset_indices(
                     relevant_read_indices, subset_parameters=subset_parameters
                 )
