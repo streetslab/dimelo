@@ -168,7 +168,7 @@ def pileup(
         prep_output_directory(
             output_directory=output_directory,
             output_name=output_name,
-            input_file=input_file,
+            default_directory=input_file.parent,
             output_file_names=[
                 "pileup.bed",
                 "pileup.sorted.bed",
@@ -393,7 +393,7 @@ def extract(
     output_path, (output_reads_path,) = prep_output_directory(
         output_directory=output_directory,
         output_name=output_name,
-        input_file=input_file,
+        default_directory=input_file.parent,
         output_file_names=["reads.combined_basemods.h5"],
     )
 
@@ -1043,13 +1043,11 @@ def read_by_base_txt_to_hdf5(
 def prep_output_directory(
     output_directory: Path | None,
     output_name: str,
-    input_file: Path,
+    default_directory: Path,
     output_file_names: list[str],
 ) -> tuple[Path, list[Path]]:
     """
     As a side effect, if files exist that match the requested outputs, they are deleted.
-
-    TODO: Is it kind of silly that this takes in input_file? Maybe should take in some generic default parameter, or this default should be set outside this method?
 
     Args:
         output_directory: Path pointing to an output directory.
@@ -1057,7 +1055,7 @@ def prep_output_directory(
             directory.
         output_name: a string that will be used to create an output folder
             containing the intermediate and final outputs, along with any logs.
-        input_file: Path to input file; used to define default output directory
+        default_directory: default output directory when output_directory is None
         output_file_names: list of names of desired output files
 
     Returns:
@@ -1065,7 +1063,7 @@ def prep_output_directory(
         * List of Paths to requested output files
     """
     if output_directory is None:
-        output_directory = input_file.parent
+        output_directory = default_directory
         print(f"No output directory provided, using input directory {output_directory}")
 
     output_path = output_directory / output_name
