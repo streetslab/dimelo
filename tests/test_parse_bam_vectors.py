@@ -452,3 +452,54 @@ def test_read_vectors_from_hdf5_rejects_subset_with_array_key(tmp_path):
             calculate_mod_fractions=False,
             quiet=True,
         )
+
+
+def test_readwise_binary_modification_arrays_passes_subset_and_quiet(monkeypatch):
+    captured_kwargs = {}
+
+    def _fake_read_vectors_from_hdf5(**kwargs):
+        captured_kwargs.update(kwargs)
+        return (
+            [
+                (
+                    "read1",
+                    np.array([True, False], dtype=np.bool_),
+                    "A,0",
+                    100,
+                    110,
+                    100,
+                    ".",
+                )
+            ],
+            [
+                "read_name",
+                "mod_vector",
+                "motif",
+                "region_start",
+                "region_end",
+                "read_start",
+                "region_strand",
+            ],
+            {"chr1": [(100, 110, ".")]},
+        )
+
+    monkeypatch.setattr(
+        load_processed, "read_vectors_from_hdf5", _fake_read_vectors_from_hdf5
+    )
+
+    mod_positions, read_ids, motifs, regions_dict = (
+        load_processed.readwise_binary_modification_arrays(
+            file=Path("dummy.h5"),
+            motifs=["A,0"],
+            regions="chr1:100-110",
+            subset_parameters={"n": 1},
+            quiet=False,
+        )
+    )
+
+    assert captured_kwargs["quiet"] is False
+    assert captured_kwargs["subset_parameters"] == {"n": 1}
+    assert mod_positions.tolist() == [-5]
+    assert read_ids.tolist() == [0]
+    assert motifs.tolist() == ["A,0"]
+    assert regions_dict == {"chr1": [(100, 110, ".")]}

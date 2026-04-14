@@ -626,7 +626,7 @@ def read_vectors_from_hdf5(
     single_strand: bool = False,
     sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
     calculate_mod_fractions: bool = True,
-    quiet: bool = True,  # currently unused; change to default False when pbars are implemented
+    quiet: bool = True,
     cores: int | None = None,  # currently unused
     subset_parameters: dict | None = None,
     span_full_window: bool = False,
@@ -652,7 +652,7 @@ def read_vectors_from_hdf5(
 
     After this processing, we calculate modification fractions, sort, and return.
 
-    TODO: Implement progress bars and parallelization as with pileup loaders
+    TODO: Implement parallelization as with pileup loaders
 
     Args:
         file: Path to an hdf5 (.h5) file containing modification data for single reads,
@@ -676,7 +676,7 @@ def read_vectors_from_hdf5(
         sort_by: Read properties by which to sort, either one string or a list of strings. Options
             include chromosome, region_start, region_end, read_start, read_end, and motif. More to
             be added in future.
-        quiet: silences progress bars (currently unused)
+        quiet: silences progress bars
         cores: cores across which to parallelize processes (currently unused)
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
@@ -736,52 +736,67 @@ def read_vectors_from_hdf5(
                 window_size=window_size,
             )
             read_tuples_raw = []
-            for chrom, region_list in regions_dict.items():
-                for region_start, region_end, region_strand in region_list:
-                    # Find the read indices that we want to load
-                    # TODO: consider building this up and then loading all at the end, chunked
-                    # TODO: consolidate logic into clear variables
-                    relevant_read_indices = np.flatnonzero(
-                        (read_ends > region_start)
-                        & (read_starts < region_end)
-                        & (read_starts <= region_start if span_full_window else True)
-                        & (read_ends >= region_end if span_full_window else True)
-                        & np.isin(read_motifs, motifs)
-                        & (read_chromosomes == chrom)
-                        & (
-                            (not single_strand)
-                            | (region_strand not in ["+", "-"])
-                            | (ref_strands == region_strand)
-                        )
+            region_jobs = [
+                (chrom, region_start, region_end, region_strand)
+                for chrom, region_list in regions_dict.items()
+                for region_start, region_end, region_strand in region_list
+            ]
+            region_iterator = (
+                tqdm(
+                    region_jobs,
+                    total=len(region_jobs),
+                    disable=quiet,
+                    desc="Loading read vectors",
+                    leave=False,
+                )
+                if len(region_jobs) > 0
+                else region_jobs
+            )
+            for chrom, region_start, region_end, region_strand in region_iterator:
+                # Find the read indices that we want to load
+                # TODO: consider building this up and then loading all at the end, chunked
+                # TODO: consolidate logic into clear variables
+                relevant_read_indices = np.flatnonzero(
+                    (read_ends > region_start)
+                    & (read_starts < region_end)
+                    & (read_starts <= region_start if span_full_window else True)
+                    & (read_ends >= region_end if span_full_window else True)
+                    & np.isin(read_motifs, motifs)
+                    & (read_chromosomes == chrom)
+                    & (
+                        (not single_strand)
+                        | (region_strand not in ["+", "-"])
+                        | (ref_strands == region_strand)
                     )
-                    if subset_parameters is not None:
-                        if len(relevant_read_indices) > 0:
-                            relevant_read_indices = np.sort(
-                                utils.random_sample(
-                                    relevant_read_indices, **subset_parameters
-                                )
+                )
+                if subset_parameters is not None:
+                    if len(relevant_read_indices) > 0:
+                        relevant_read_indices = np.sort(
+                            utils.random_sample(
+                                relevant_read_indices, **subset_parameters
                             )
-                        else:
-                            relevant_read_indices = np.array([], dtype=int)
-                    read_tuples_raw += list(
-                        zip(
-                            *(
-                                retrieve_h5_data(
-                                    h5=h5,
-                                    dataset=dataset,
-                                    indices=relevant_read_indices,
-                                    compressed=dataset in compressed_binary_datasets,
-                                    dtype=np.uint8,
-                                    decompressor=gzip.decompress,
-                                    binarized=binarized,
-                                )
-                                for dataset in readwise_datasets
-                            ),
-                            [region_start for _ in relevant_read_indices],
-                            [region_end for _ in relevant_read_indices],
-                            [region_strand for _ in relevant_read_indices],
                         )
+                    else:
+                        relevant_read_indices = np.array([], dtype=int)
+                read_tuples_raw += list(
+                    zip(
+                        *(
+                            retrieve_h5_data(
+                                h5=h5,
+                                dataset=dataset,
+                                indices=relevant_read_indices,
+                                compressed=dataset in compressed_binary_datasets,
+                                dtype=np.uint8,
+                                decompressor=gzip.decompress,
+                                binarized=binarized,
+                            )
+                            for dataset in readwise_datasets
+                        ),
+                        [region_start for _ in relevant_read_indices],
+                        [region_end for _ in relevant_read_indices],
+                        [region_strand for _ in relevant_read_indices],
                     )
+                )
         else:
             regions_dict = None
             relevant_read_indices = np.flatnonzero(np.isin(read_motifs, motifs))
@@ -933,7 +948,7 @@ def readwise_binary_modification_arrays(
     sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
     thresh: float | None = None,
     relative: bool = True,
-    quiet: bool = True,  # currently unused; change to default False when pbars are implemented
+    quiet: bool = True,
     cores: int | None = None,  # currently unused
     subset_parameters: dict | None = None,
 ) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str], dict | None]:
@@ -951,7 +966,7 @@ def readwise_binary_modification_arrays(
     coordinates. If positions are relative, regions_5to3prime can be used to show all regions
     as upstream-to-downstream along their respective strands.
 
-    TODO: Implement progress bars and parallelization as with pileup loaders
+    TODO: Implement parallelization as with pileup loaders
 
     Args:
         file: Path to an hdf5 (.h5) file containing modification data for single reads,
@@ -981,7 +996,7 @@ def readwise_binary_modification_arrays(
             in the genomes, centered at the center of the region. If False, absolute coordinates are provided.
             There is not currently a check for all reads being on the same chromosome if relative=False, but
             this could create unexpected behaviour for a the standard visualizations.
-        quiet: silences progress bars (currently unused)
+        quiet: silences progress bars
         cores: cores across which to parallelize processes (currently unused)
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
@@ -1008,6 +1023,8 @@ def readwise_binary_modification_arrays(
             window_size=window_size,
             single_strand=single_strand,
             sort_by=sort_by,
+            quiet=quiet,
+            subset_parameters=subset_parameters,
         )
         read_name_index = datasets.index("read_name")
         mod_vector_index = datasets.index("mod_vector")
@@ -1052,7 +1069,17 @@ def readwise_binary_modification_arrays(
         mod_coords_list = []
         motifs_list = []
 
-        for read_int, read_data in zip(read_ints, sorted_read_data_converted):
+        read_iterator = zip(read_ints, sorted_read_data_converted)
+        if len(sorted_read_data_converted) > 0:
+            read_iterator = tqdm(
+                read_iterator,
+                total=len(sorted_read_data_converted),
+                disable=quiet,
+                desc="Extracting readwise modifications",
+                leave=False,
+            )
+
+        for read_int, read_data in read_iterator:
             if thresh is None:
                 mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index])
             else:
