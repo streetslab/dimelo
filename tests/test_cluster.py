@@ -17,8 +17,8 @@ def test_region_feature_matrix_from_pileup(monkeypatch):
         cluster.load_processed,
         "regions_to_list",
         lambda **kwargs: [
-            (np.array([1, 1, 0], dtype=float), np.array([2, 2, 1], dtype=float)),
-            (np.array([0, 2, 2], dtype=float), np.array([1, 4, 4], dtype=float)),
+            np.array([0.5, 0.5, 0.0], dtype=float),
+            np.array([0.0, 0.5, 0.5], dtype=float),
         ],
     )
 
@@ -39,6 +39,24 @@ def test_region_feature_matrix_from_pileup(monkeypatch):
         ),
     )
     assert metadata == [("chr1", 0, 3, "+"), ("chr2", 5, 8, "-")]
+
+
+def test_pileup_fraction_vector_from_bedmethyl(monkeypatch):
+    monkeypatch.setattr(
+        cluster.load_processed,
+        "pileup_vectors_from_bedmethyl",
+        lambda **kwargs: (
+            np.array([1, 1, 0], dtype=float),
+            np.array([2, 2, 1], dtype=float),
+        ),
+    )
+    fraction = cluster._pileup_fraction_vector_from_bedmethyl(
+        bedmethyl_file="pileup.bed.gz",
+        motif="A,0",
+        regions="chr1:0-3,+",
+        pseudo_count=0.0,
+    )
+    np.testing.assert_allclose(fraction, np.array([0.5, 0.5, 0.0], dtype=float))
 
 
 def test_read_mod_fraction_table(monkeypatch):

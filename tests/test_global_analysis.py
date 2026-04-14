@@ -29,13 +29,25 @@ def test_summarize_global_samples_from_pileup(monkeypatch):
         ("s2.bed.gz", "CG,0"): (0, 0),
     }
 
-    def fake_global_counts_from_bedmethyl(bedmethyl_file, motif, quiet=True):
-        return counts[(bedmethyl_file, motif)]
+    observed_calls = []
+
+    def fake_global_counts_for_motifs_from_bedmethyl(
+        bedmethyl_file, motifs, quiet=True
+    ):
+        observed_calls.append((bedmethyl_file, tuple(motifs), quiet))
+        return {motif: counts[(bedmethyl_file, motif)] for motif in motifs}
 
     monkeypatch.setattr(
         global_analysis,
+        "_global_counts_for_motifs_from_bedmethyl",
+        fake_global_counts_for_motifs_from_bedmethyl,
+    )
+    monkeypatch.setattr(
+        global_analysis,
         "_global_counts_from_bedmethyl",
-        fake_global_counts_from_bedmethyl,
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("legacy single-motif counter should not be used here")
+        ),
     )
 
     result = global_analysis.summarize_global_samples(
@@ -85,6 +97,85 @@ def test_summarize_global_samples_from_pileup(monkeypatch):
     )
 
     pd.testing.assert_frame_equal(result, expected)
+    assert observed_calls == [
+        ("s1.bed.gz", ("A,0", "CG,0"), True),
+        ("s2.bed.gz", ("A,0", "CG,0"), True),
+    ]
+
+
+def test_global_counts_for_motifs_from_bedmethyl_single_pass(monkeypatch):
+    rows_by_contig = {
+        "chr1": ["row-1", "row-2"],
+        "chr2": ["row-3"],
+    }
+
+    class FakeTabixFile:
+        opened_paths = []
+        fetch_calls = []
+
+        def __init__(self, path):
+            self.opened_paths.append(path)
+            self.contigs = tuple(rows_by_contig)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def fetch(self, contig):
+            self.fetch_calls.append(contig)
+            return iter(rows_by_contig[contig])
+
+    parsed_motifs = []
+
+    def fake_parsed_motif(motif):
+        parsed_motifs.append(motif)
+        return {"motif": motif}
+
+    processed_rows = []
+    process_results = {
+        ("row-1", "A,0"): (True, 10, 3, 8),
+        ("row-1", "CG,0"): (False, 10, 99, 99),
+        ("row-2", "A,0"): (False, 11, 99, 99),
+        ("row-2", "CG,0"): (True, 11, 4, 9),
+        ("row-3", "A,0"): (True, 12, 5, 10),
+        ("row-3", "CG,0"): (True, 12, 6, 12),
+    }
+
+    def fake_process_pileup_row(row, parsed_motif, region_strand, single_strand=False):
+        motif = parsed_motif["motif"]
+        processed_rows.append((row, motif, region_strand, single_strand))
+        return process_results[(row, motif)]
+
+    monkeypatch.setattr(global_analysis.pysam, "TabixFile", FakeTabixFile)
+    monkeypatch.setattr(global_analysis.utils, "ParsedMotif", fake_parsed_motif)
+    monkeypatch.setattr(
+        global_analysis.load_processed,
+        "process_pileup_row",
+        fake_process_pileup_row,
+    )
+
+    counts_by_motif = global_analysis._global_counts_for_motifs_from_bedmethyl(
+        bedmethyl_file="pileup.bed.gz",
+        motifs=["A,0", "CG,0"],
+    )
+
+    assert counts_by_motif == {
+        "A,0": (8, 18),
+        "CG,0": (10, 21),
+    }
+    assert parsed_motifs == ["A,0", "CG,0"]
+    assert FakeTabixFile.opened_paths == ["pileup.bed.gz"]
+    assert FakeTabixFile.fetch_calls == ["chr1", "chr2"]
+    assert processed_rows == [
+        ("row-1", "A,0", ".", False),
+        ("row-1", "CG,0", ".", False),
+        ("row-2", "A,0", ".", False),
+        ("row-2", "CG,0", ".", False),
+        ("row-3", "A,0", ".", False),
+        ("row-3", "CG,0", ".", False),
+    ]
 
 
 def test_global_counts_from_bedmethyl_sums_only_matching_rows(monkeypatch):

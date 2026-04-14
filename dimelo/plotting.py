@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 from dimelo.distribution import _require_columns
@@ -1114,23 +1115,39 @@ def prepare_region_discovery_hit_context_data(
             f"{', '.join(missing_selected_hit_ids)}."
         )
 
+    windows_by_contig: dict[str, pd.DataFrame] = {}
+    window_position_by_contig: dict[str, dict[str, int]] = {}
+    for contig, contig_windows in windows.groupby("contig", sort=False):
+        contig_table = contig_windows.reset_index(drop=True)
+        windows_by_contig[contig] = contig_table
+        window_position_by_contig[contig] = dict(
+            zip(contig_table["window_id"], contig_table.index, strict=False)
+        )
+
     context_frames: list[pd.DataFrame] = []
     padding = int(padding_windows or 0)
+    has_rank = "rank" in selected_hits.columns
 
-    for _, hit in selected_hits.iterrows():
-        same_contig = windows.loc[windows["contig"] == hit["contig"]].reset_index(drop=True)
-        hit_positions = same_contig.index[same_contig["window_id"] == hit["window_id"]].tolist()
-        if not hit_positions:
+    for hit in selected_hits.itertuples(index=False):
+        hit_contig = hit.contig
+        hit_window_id = hit.window_id
+        contig_windows = windows_by_contig.get(hit_contig)
+        if contig_windows is None:
             continue
 
-        hit_position = hit_positions[0]
+        hit_position = window_position_by_contig[hit_contig].get(hit_window_id)
+        if hit_position is None:
+            continue
+
         start_index = max(0, hit_position - padding)
-        end_index = min(len(same_contig), hit_position + padding + 1)
-        context = same_contig.iloc[start_index:end_index].copy()
-        context["selected_hit_id"] = hit["window_id"]
-        context["selected_hit_rank"] = hit.get("rank")
-        context["relative_window_offset"] = list(range(start_index - hit_position, end_index - hit_position))
-        context["is_selected_hit"] = context["window_id"] == hit["window_id"]
+        end_index = min(len(contig_windows), hit_position + padding + 1)
+        context = contig_windows.iloc[start_index:end_index].copy()
+        context["selected_hit_id"] = hit_window_id
+        context["selected_hit_rank"] = getattr(hit, "rank") if has_rank else np.nan
+        context["relative_window_offset"] = np.arange(
+            start_index - hit_position, end_index - hit_position
+        )
+        context["is_selected_hit"] = context["window_id"] == hit_window_id
         context_frames.append(context)
 
     if context_frames:

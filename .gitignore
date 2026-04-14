@@ -62,3 +62,5 @@ dimelo/test/output
 # Checkpoint files
 .ipynb_checkpoints/
 
+# Local worktrees
+.worktrees/

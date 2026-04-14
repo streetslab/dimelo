@@ -91,6 +91,7 @@ def region_feature_matrix_from_pileup(
     split_large_regions: bool = False,
     quiet: bool = False,
     cores: int | None = None,
+    regions_executor=None,
 ) -> tuple[np.ndarray, list[RegionMetadata]]:
     """
     Convert every region in a pileup into a vector of modification fractions suitable for clustering.
@@ -119,32 +120,35 @@ def region_feature_matrix_from_pileup(
         raise ValueError("regions must be provided when building a clustering matrix.")
 
     regions_dict = utils.regions_dict_from_input(regions, window_size)
-    region_metadata = [
-        (chromosome, start, end, strand)
-        for chromosome, region_list in regions_dict.items()
-        for start, end, strand in region_list
-    ]
+    region_metadata: list[RegionMetadata] = []
+    region_strings: list[str] = []
+    for chromosome, region_list in regions_dict.items():
+        for start, end, strand in region_list:
+            region_metadata.append((chromosome, start, end, strand))
+            region_strings.append(f"{chromosome}:{start}-{end},{strand}")
     if len(region_metadata) == 0:
         raise ValueError("No regions were found to build clustering features.")
 
     loader = partial(
-        load_processed.pileup_vectors_from_bedmethyl,
+        _pileup_fraction_vector_from_bedmethyl,
         bedmethyl_file=bedmethyl_file,
         motif=motif,
         window_size=window_size,
         single_strand=single_strand,
         regions_5to3prime=regions_5to3prime,
+        pseudo_count=pseudo_count,
         quiet=quiet,
         cores=cores,
         chunk_size=chunk_size,
     )
     per_region_vectors = load_processed.regions_to_list(
         function_handle=loader,
-        regions=regions,
+        regions=region_strings,
         window_size=window_size,
         quiet=quiet,
         cores=cores,
         split_large_regions=split_large_regions,
+        executor=regions_executor,
     )
 
     if len(per_region_vectors) != len(region_metadata):
@@ -155,31 +159,73 @@ def region_feature_matrix_from_pileup(
 
     feature_vectors = []
     expected_length: int | None = None
-    for modified_vec, valid_vec in per_region_vectors:
-        modified = np.asarray(modified_vec, dtype=np.float64)
-        valid = np.asarray(valid_vec, dtype=np.float64)
-        if modified.shape != valid.shape:
-            raise ValueError("Modified and valid vectors must have matching shapes.")
+    for vector in per_region_vectors:
+        # Backward-compatible path if upstream loaders still return (modified, valid).
+        if isinstance(vector, tuple) and len(vector) == 2:
+            modified = np.asarray(vector[0], dtype=np.float32)
+            valid = np.asarray(vector[1], dtype=np.float32)
+            if modified.shape != valid.shape:
+                raise ValueError("Modified and valid vectors must have matching shapes.")
+            denominator = valid + (2 * pseudo_count)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                fraction = np.divide(
+                    modified + pseudo_count,
+                    denominator,
+                    out=np.zeros_like(modified),
+                    where=denominator > 0,
+                )
+        else:
+            fraction = np.asarray(vector, dtype=np.float32)
+
         if expected_length is None:
-            expected_length = modified.shape[0]
-        elif modified.shape[0] != expected_length:
+            expected_length = fraction.shape[0]
+        elif fraction.shape[0] != expected_length:
             raise ValueError(
                 "All regions must have the same length. "
                 "Pass window_size to enforce length-matched regions."
             )
-
-        denominator = valid + (2 * pseudo_count)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            fraction = np.divide(
-                modified + pseudo_count,
-                denominator,
-                out=np.zeros_like(modified),
-                where=denominator > 0,
-            )
         feature_vectors.append(fraction)
 
-    feature_matrix = np.vstack(feature_vectors)
+    feature_matrix = np.vstack(feature_vectors).astype(np.float32, copy=False)
     return feature_matrix, region_metadata
+
+
+def _pileup_fraction_vector_from_bedmethyl(
+    *,
+    bedmethyl_file: str | Path,
+    motif: str,
+    regions: str | Path | list[str | Path],
+    window_size: int | None = None,
+    single_strand: bool = False,
+    regions_5to3prime: bool = False,
+    pseudo_count: float = 1e-3,
+    quiet: bool = False,
+    cores: int | None = None,
+    chunk_size: int = load_processed.DEFAULT_CHUNK_SIZE,
+) -> np.ndarray:
+    modified_vec, valid_vec = load_processed.pileup_vectors_from_bedmethyl(
+        bedmethyl_file=bedmethyl_file,
+        motif=motif,
+        regions=regions,
+        window_size=window_size,
+        single_strand=single_strand,
+        regions_5to3prime=regions_5to3prime,
+        quiet=quiet,
+        cores=cores,
+        chunk_size=chunk_size,
+    )
+    modified = np.asarray(modified_vec, dtype=np.float32)
+    valid = np.asarray(valid_vec, dtype=np.float32)
+    if modified.shape != valid.shape:
+        raise ValueError("Modified and valid vectors must have matching shapes.")
+    denominator = valid + (2 * pseudo_count)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.divide(
+            modified + pseudo_count,
+            denominator,
+            out=np.zeros_like(modified),
+            where=denominator > 0,
+        )
 
 
 def read_mod_fraction_table(
@@ -1613,19 +1659,45 @@ def plot_multisite_read_raster(
     # Filter by beds if provided
     keep_idx = np.arange(len(meta))
     if bed_filters:
-        keep_mask = []
-        for i, m in enumerate(meta):
+        interval_rows = []
+        for idx, m in enumerate(meta):
             try:
                 chrom = m.get("chromosome")
-                rs = int(m.get("region_start", -1))
-                re = int(m.get("region_end", -1))
+                start_bp = int(m.get("region_start", -1))
+                end_bp = int(m.get("region_end", -1))
             except Exception:
-                keep_mask.append(False)
                 continue
-            pr_row = pr.PyRanges(pd.DataFrame({"Chromosome": [chrom], "Start": [rs], "End": [re]}))
-            ok = all(len(pr_row.join(bf)) > 0 for bf in bed_filters)
-            keep_mask.append(ok)
-        keep_idx = np.flatnonzero(keep_mask)
+            if chrom is None or start_bp < 0 or end_bp <= start_bp:
+                continue
+            interval_rows.append(
+                {
+                    "read_idx": idx,
+                    "Chromosome": chrom,
+                    "Start": start_bp,
+                    "End": end_bp,
+                }
+            )
+
+        if interval_rows:
+            intervals = pd.DataFrame(interval_rows)
+            candidate_indices = intervals["read_idx"].to_numpy(dtype=int)
+            for bed_filter in bed_filters:
+                if candidate_indices.size == 0:
+                    break
+                candidate_df = intervals.loc[
+                    intervals["read_idx"].isin(candidate_indices),
+                    ["read_idx", "Chromosome", "Start", "End"],
+                ]
+                joined = pr.PyRanges(candidate_df).join(bed_filter)
+                if joined.df.empty:
+                    candidate_indices = np.array([], dtype=int)
+                    break
+                candidate_indices = joined.df["read_idx"].drop_duplicates().to_numpy(dtype=int)
+
+            keep_idx = np.sort(candidate_indices)
+        else:
+            keep_idx = np.array([], dtype=int)
+
         X = X[keep_idx]
         meta = [meta[i] for i in keep_idx]
 

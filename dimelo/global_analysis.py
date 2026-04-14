@@ -11,6 +11,47 @@ from . import load_processed, utils
 from .models import GlobalAnalysisResult, SampleSpec
 
 
+def _global_counts_for_motifs_from_bedmethyl(
+    bedmethyl_file: str | Path,
+    motifs: Sequence[str],
+    quiet: bool = True,
+) -> dict[str, tuple[int, int]]:
+    """
+    Sum modified and valid pileup counts across all contigs for all motifs in one pass.
+    """
+
+    del quiet
+
+    unique_motifs = list(dict.fromkeys(motifs))
+    if len(unique_motifs) == 0:
+        return {}
+
+    parsed_motifs = {
+        motif: utils.ParsedMotif(motif) for motif in unique_motifs
+    }
+    counts_by_motif = {motif: [0, 0] for motif in unique_motifs}
+
+    with pysam.TabixFile(str(bedmethyl_file)) as tabix_file:
+        for contig in tabix_file.contigs:
+            for row in tabix_file.fetch(contig):
+                for motif, parsed_motif in parsed_motifs.items():
+                    keep_basemod, _, modified_in_row, valid_in_row = (
+                        load_processed.process_pileup_row(
+                            row=row,
+                            parsed_motif=parsed_motif,
+                            region_strand=".",
+                        )
+                    )
+                    if keep_basemod:
+                        counts_by_motif[motif][0] += modified_in_row
+                        counts_by_motif[motif][1] += valid_in_row
+
+    return {
+        motif: (modified_count, valid_count)
+        for motif, (modified_count, valid_count) in counts_by_motif.items()
+    }
+
+
 def _global_counts_from_bedmethyl(
     bedmethyl_file: str | Path,
     motif: str,
@@ -20,27 +61,12 @@ def _global_counts_from_bedmethyl(
     Sum modified and valid pileup counts across all contigs for one motif.
     """
 
-    del quiet
-
-    parsed_motif = utils.ParsedMotif(motif)
-    modified_count = 0
-    valid_count = 0
-
-    with pysam.TabixFile(str(bedmethyl_file)) as tabix_file:
-        for contig in tabix_file.contigs:
-            for row in tabix_file.fetch(contig):
-                keep_basemod, _, modified_in_row, valid_in_row = (
-                    load_processed.process_pileup_row(
-                        row=row,
-                        parsed_motif=parsed_motif,
-                        region_strand=".",
-                    )
-                )
-                if keep_basemod:
-                    modified_count += modified_in_row
-                    valid_count += valid_in_row
-
-    return modified_count, valid_count
+    counts_by_motif = _global_counts_for_motifs_from_bedmethyl(
+        bedmethyl_file=bedmethyl_file,
+        motifs=[motif],
+        quiet=quiet,
+    )
+    return counts_by_motif[motif]
 
 
 def summarize_global_samples(
@@ -61,12 +87,13 @@ def summarize_global_samples(
             )
 
         pileup_path = sample.metadata["pileup_path"]
+        counts_by_motif = _global_counts_for_motifs_from_bedmethyl(
+            bedmethyl_file=pileup_path,
+            motifs=motifs,
+            quiet=quiet,
+        )
         for motif in motifs:
-            modified_count, valid_count = _global_counts_from_bedmethyl(
-                bedmethyl_file=pileup_path,
-                motif=motif,
-                quiet=quiet,
-            )
+            modified_count, valid_count = counts_by_motif[motif]
             rows.append(
                 {
                     "sample_id": sample.sample_id,

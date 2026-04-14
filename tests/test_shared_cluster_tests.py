@@ -216,3 +216,30 @@ def test_shared_cluster_tests_time_course_optional_pairwise_follow_up():
     )
 
     assert result.pairwise is not None
+
+
+def test_shared_cluster_tests_time_course_permutations_do_not_build_dataframe_per_iteration(
+    monkeypatch,
+):
+    from dimelo import shared_cluster_tests
+
+    result = _make_shared_cluster_time_course_result()
+    n_permutations = 20
+    dataframe_calls = 0
+    original_dataframe = shared_cluster_tests.pd.DataFrame
+
+    def _counting_dataframe(*args, **kwargs):
+        nonlocal dataframe_calls
+        dataframe_calls += 1
+        return original_dataframe(*args, **kwargs)
+
+    monkeypatch.setattr(shared_cluster_tests.pd, "DataFrame", _counting_dataframe)
+    shared_cluster_tests.shared_cluster_tests(
+        result=result,
+        contrast=ContrastSpec(mode="time_course", time_order=["t0", "t1", "t2"]),
+        test="permutation",
+        n_permutations=n_permutations,
+        random_state=7,
+    )
+
+    assert dataframe_calls < n_permutations

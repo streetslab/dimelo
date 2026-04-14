@@ -258,14 +258,31 @@ def _cluster_label_strings(labels: np.ndarray) -> list[str]:
 
 
 def _cluster_profiles(
-    feature_frame: pd.DataFrame,
-    assignments: pd.DataFrame,
+    feature_matrix: np.ndarray,
+    feature_names: list[str],
+    cluster_labels: np.ndarray,
 ) -> pd.DataFrame:
-    profiles = feature_frame.copy()
-    profiles["cluster"] = assignments["cluster"].to_numpy()
-    aggregated = profiles.groupby("cluster", sort=True).mean(numeric_only=True).reset_index()
-    counts = assignments.groupby("cluster", sort=True).size().reset_index(name="count")
-    return counts.merge(aggregated, on="cluster", how="left")
+    if feature_matrix.shape[0] == 0:
+        return pd.DataFrame(columns=["cluster", "count", *feature_names])
+
+    labels = np.asarray(cluster_labels, dtype=str)
+    unique_labels = np.unique(labels)
+    codes = pd.Categorical(labels, categories=unique_labels, ordered=True).codes
+    counts = np.bincount(codes, minlength=len(unique_labels)).astype(np.int64, copy=False)
+
+    sums = np.zeros((len(unique_labels), feature_matrix.shape[1]), dtype=np.float64)
+    np.add.at(sums, codes, np.asarray(feature_matrix, dtype=np.float64))
+    means = np.divide(
+        sums,
+        counts[:, None],
+        out=np.zeros_like(sums),
+        where=counts[:, None] > 0,
+    )
+
+    profiles = pd.DataFrame(means, columns=feature_names)
+    profiles.insert(0, "count", counts)
+    profiles.insert(0, "cluster", unique_labels)
+    return profiles
 
 
 def _sample_training_rows(
@@ -662,10 +679,13 @@ def _build_shared_cluster_result(
     assignments = pd.DataFrame(metadata_rows)
     assignments["cluster"] = _cluster_label_strings(predicted_ordered)
 
-    feature_frame = pd.DataFrame(full_matrix, columns=feature_names)
     cluster_distribution = distribution.build_cluster_distribution(assignments)
     condition_distribution = distribution.build_condition_distribution(cluster_distribution)
-    cluster_profiles = _cluster_profiles(feature_frame, assignments)
+    cluster_profiles = _cluster_profiles(
+        full_matrix,
+        feature_names,
+        assignments["cluster"].to_numpy(),
+    )
     plot_data = {
         "cluster_distribution_bar": plotting.prepare_cluster_distribution_bar_data(
             cluster_distribution
@@ -742,6 +762,7 @@ def shared_cluster_distribution(
     artifact_policy: str = "prefer_cached",
     random_state: int = 42,
     make_plots: bool = True,
+    cores: int | None = None,
 ) -> SharedClusterResult:
     """
     Fit one shared clustering model on pooled read windows and assign all reads back
@@ -802,27 +823,38 @@ def shared_cluster_distribution(
             motifs=motif_list,
             matched_regions=matched_regions,
             pileup_paths=pileup_paths,
+            cores=cores,
         )
         sample_by_id = {sample.sample_id: sample for sample in sample_list}
         for row in metadata_rows:
             sample = sample_by_id[row["sample_id"]]
             _merge_sample_metadata(row, sample.metadata)
-        sample_ids = [row["sample_id"] for row in metadata_rows]
+        sample_row_positions: dict[str, list[int]] = {
+            sample.sample_id: [] for sample in sample_list
+        }
+        for index, row in enumerate(metadata_rows):
+            sample_id = row["sample_id"]
+            if sample_id in sample_row_positions:
+                sample_row_positions[sample_id].append(index)
+        sample_row_indices = {
+            sample_id: np.asarray(indices, dtype=int)
+            for sample_id, indices in sample_row_positions.items()
+        }
         sample_dataset_sizes = {
-            sample_id: int(sum(1 for row_sample in sample_ids if row_sample == sample_id))
-            for sample_id in {sample.sample_id for sample in sample_list}
+            sample.sample_id: int(sample_row_indices[sample.sample_id].size)
+            for sample in sample_list
         }
         sample_normalization = {
             sample.sample_id: {"global_offset": None} for sample in sample_list
         }
         region_matrix = np.asarray(feature_matrix, dtype=float)
         if signal_normalization in {"per_sample_global", "control_regions"}:
-            for sample_id in sample_dataset_sizes:
-                mask = np.array([row["sample_id"] == sample_id for row in metadata_rows], dtype=bool)
+            for sample in sample_list:
+                sample_id = sample.sample_id
+                sample_indices = sample_row_indices[sample_id]
+                if sample_indices.size == 0:
+                    continue
                 if signal_normalization == "control_regions":
-                    sample = next(
-                        sample_item for sample_item in sample_list if sample_item.sample_id == sample_id
-                    )
                     control_regions = sample.regions_bed
                     if control_regions is None or control_regions == matched_regions:
                         raise ValueError(
@@ -852,11 +884,12 @@ def shared_cluster_distribution(
                         motifs=motif_list,
                         matched_regions=control_regions,
                         pileup_paths={sample.sample_id: control_path},
+                        cores=cores,
                     )
                     offset = float(np.asarray(control_matrix, dtype=float).mean())
                 else:
-                    offset = float(region_matrix[mask].mean())
-                region_matrix[mask] = region_matrix[mask] - offset
+                    offset = float(region_matrix[sample_indices].mean())
+                region_matrix[sample_indices] = region_matrix[sample_indices] - offset
                 sample_normalization[sample_id] = {"global_offset": offset}
 
         if cluster_basis == "shape_only":
@@ -872,11 +905,7 @@ def shared_cluster_distribution(
         training_blocks: list[np.ndarray] = []
         sample_training_rows: dict[str, int] = {}
         for sample in sample_list:
-            mask = np.array(
-                [row["sample_id"] == sample.sample_id for row in metadata_rows],
-                dtype=bool,
-            )
-            sample_matrix = region_matrix[mask]
+            sample_matrix = region_matrix[sample_row_indices[sample.sample_id]]
             feature_blocks.append(sample_matrix)
             training_matrix, _ = _sample_training_rows(
                 sample_matrix,

@@ -508,6 +508,20 @@ def _build_pooled_omnibus_p_value(
     return float(omnibus_p_value)
 
 
+def _mean_by_group_codes(
+    values: np.ndarray,
+    group_codes: np.ndarray,
+    *,
+    n_groups: int,
+) -> np.ndarray:
+    sums = np.zeros((n_groups, values.shape[1]), dtype=float)
+    np.add.at(sums, group_codes, values)
+    counts = np.bincount(group_codes, minlength=n_groups).astype(float, copy=False)
+    means = np.zeros_like(sums)
+    np.divide(sums, counts[:, None], out=means, where=counts[:, None] > 0)
+    return means
+
+
 def _score_time_course(
     *,
     result: SharedClusterResult,
@@ -528,20 +542,21 @@ def _score_time_course(
     filtered["condition"] = pd.Categorical(filtered["condition"], categories=time_order, ordered=True)
     filtered = filtered.sort_values(["condition", "sample_id"], kind="stable").reset_index(drop=True)
 
-    grouped = (
-        filtered.groupby("condition", sort=False, observed=False)[cluster_order]
-        .mean()
-        .reindex(time_order)
+    n_timepoints = len(time_order)
+    condition_codes = filtered["condition"].cat.codes.to_numpy(dtype=np.int64, copy=False)
+    if (condition_codes < 0).any():
+        raise ValueError("Shared cluster time_course found rows with conditions outside time_order.")
+    value_matrix = filtered.loc[:, cluster_order].to_numpy(dtype=float)
+    observed_matrix = _mean_by_group_codes(
+        value_matrix,
+        condition_codes,
+        n_groups=n_timepoints,
     )
-    counts = (
-        filtered.groupby("condition", sort=False, observed=False)["sample_id"]
-        .nunique()
-        .reindex(time_order)
-    )
-    time_course_table = grouped.reset_index(names="timepoint")
-    time_course_table["n_samples"] = counts.to_numpy(dtype=int)
+    counts = np.bincount(condition_codes, minlength=n_timepoints).astype(int, copy=False)
+    time_course_table = pd.DataFrame(observed_matrix, columns=cluster_order)
+    time_course_table.insert(0, "timepoint", time_order)
+    time_course_table["n_samples"] = counts
 
-    observed_matrix = grouped.to_numpy(dtype=float)
     observed_first = observed_matrix[0]
     observed_last = observed_matrix[-1]
     observed_delta = observed_last - observed_first
@@ -552,19 +567,14 @@ def _score_time_course(
     permuted_cluster_stats = np.zeros((n_permutations, len(cluster_order)), dtype=float)
     permuted_omnibus_stats = np.zeros(n_permutations, dtype=float)
     permuted_trend_stats = np.zeros(n_permutations, dtype=float)
-    condition_values = filtered["condition"].to_numpy()
-    value_matrix = filtered.loc[:, cluster_order].to_numpy(dtype=float)
 
     for permutation_index in range(n_permutations):
-        permuted_conditions = rng.permutation(condition_values)
-        permuted = pd.DataFrame(value_matrix, columns=cluster_order)
-        permuted["condition"] = permuted_conditions
-        permuted_grouped = (
-            permuted.groupby("condition", sort=False, observed=False)[cluster_order]
-            .mean()
-            .reindex(time_order)
+        permuted_codes = rng.permutation(condition_codes)
+        permuted_matrix = _mean_by_group_codes(
+            value_matrix,
+            permuted_codes,
+            n_groups=n_timepoints,
         )
-        permuted_matrix = permuted_grouped.to_numpy(dtype=float)
         permuted_delta = permuted_matrix[-1] - permuted_matrix[0]
         permuted_cluster_stats[permutation_index] = np.abs(permuted_delta)
         permuted_omnibus_stats[permutation_index] = _composition_effect_size_from_vectors(

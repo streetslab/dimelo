@@ -654,6 +654,16 @@ def _build_merged_hit(group: pd.DataFrame) -> dict[str, object]:
     return merged
 
 
+def _build_window_id_series(frame: pd.DataFrame) -> pd.Series:
+    return (
+        frame["chromosome"].astype(str)
+        + ":"
+        + frame["start"].astype("int64").astype(str)
+        + "-"
+        + frame["end"].astype("int64").astype(str)
+    )
+
+
 def merge_adjacent_hits(hits: pd.DataFrame, merge_distance: int) -> pd.DataFrame:
     if hits.empty:
         merged = hits.copy()
@@ -670,41 +680,34 @@ def merge_adjacent_hits(hits: pd.DataFrame, merge_distance: int) -> pd.DataFrame
             else 1
         )
         if {"chromosome", "start", "end"}.issubset(merged.columns):
-            merged["window_id"] = merged.apply(
-                lambda row: f"{row['chromosome']}:{int(row['start'])}-{int(row['end'])}",
-                axis=1,
-            )
+            merged["window_id"] = _build_window_id_series(merged)
         if {"modified_count", "valid_count"}.issubset(merged.columns):
             merged["window_fraction"] = _safe_fraction(
                 merged["modified_count"], merged["valid_count"]
             )
         return merged
 
-    merged_rows: list[dict[str, object]] = []
-    current_group: list[pd.Series] = [ordered.iloc[0]]
+    same_chromosome = pd.Series(True, index=ordered.index)
+    if "chromosome" in ordered.columns:
+        same_chromosome = ordered["chromosome"].eq(ordered["chromosome"].shift())
 
-    def _can_merge(previous: pd.Series, row: pd.Series) -> bool:
-        same_chromosome = row.get("chromosome") == previous.get("chromosome")
-        same_strand = row.get("strand") == previous.get("strand")
-        within_distance = int(row["start"]) <= int(previous["end"]) + merge_distance
-        return same_chromosome and same_strand and within_distance
+    same_strand = pd.Series(True, index=ordered.index)
+    if "strand" in ordered.columns:
+        same_strand = ordered["strand"].eq(ordered["strand"].shift())
 
-    for _, row in ordered.iloc[1:].iterrows():
-        if _can_merge(current_group[-1], row):
-            current_group.append(row)
-            continue
-        merged_rows.append(_build_merged_hit(pd.DataFrame(current_group)))
-        current_group = [row]
+    within_distance = ordered["start"].le(ordered["end"].shift().add(merge_distance))
+    merge_with_previous = (same_chromosome & same_strand & within_distance).fillna(False)
+    merge_group = (~merge_with_previous).cumsum()
 
-    merged_rows.append(_build_merged_hit(pd.DataFrame(current_group)))
-    merged = pd.DataFrame(merged_rows)
+    merged_rows = [
+        _build_merged_hit(group)
+        for _, group in ordered.groupby(merge_group, sort=False, group_keys=False)
+    ]
+    merged = pd.DataFrame.from_records(merged_rows)
     merged = _sort_hits_for_output(merged)
 
     if "window_id" not in merged.columns and {"chromosome", "start", "end"}.issubset(merged.columns):
-        merged["window_id"] = merged.apply(
-            lambda row: f"{row['chromosome']}:{int(row['start'])}-{int(row['end'])}",
-            axis=1,
-        )
+        merged["window_id"] = _build_window_id_series(merged)
 
     if "merged_window_count" not in merged.columns:
         merged["merged_window_count"] = 1

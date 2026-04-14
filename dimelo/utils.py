@@ -1,4 +1,5 @@
 import multiprocessing
+import os
 from collections import defaultdict
 from collections.abc import Sequence
 from pathlib import Path
@@ -43,12 +44,53 @@ DEFAULT_COLORSCALES.update([(k, ["white", v]) for k, v in DEFAULT_COLORS.items()
 rng = np.random.default_rng()
 
 
+def _parse_positive_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    digits = []
+    for char in text:
+        if char.isdigit():
+            digits.append(char)
+        else:
+            break
+    if not digits:
+        return None
+    parsed = int("".join(digits))
+    return parsed if parsed > 0 else None
+
+
+def _effective_cpu_count() -> int:
+    candidates: list[int] = []
+
+    try:
+        candidates.append(int(multiprocessing.cpu_count()))
+    except Exception:
+        pass
+
+    try:
+        affinity = os.sched_getaffinity(0)
+        if affinity:
+            candidates.append(len(affinity))
+    except Exception:
+        pass
+
+    slurm_cpus_per_task = _parse_positive_int(os.environ.get("SLURM_CPUS_PER_TASK"))
+    if slurm_cpus_per_task is not None:
+        candidates.append(slurm_cpus_per_task)
+
+    if not candidates:
+        return 1
+    return max(1, min(candidates))
+
+
 def cores_to_run(cores):
-    cores_avail = multiprocessing.cpu_count()
-    if cores is None or cores > cores_avail:
+    cores_avail = _effective_cpu_count()
+    if cores is None:
         return cores_avail
-    else:
-        return cores
+    return max(1, min(int(cores), cores_avail))
 
 
 class ParsedMotif:
