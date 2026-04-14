@@ -116,6 +116,97 @@ def _readwise_mod_positions_from_payload(payload: dict) -> tuple[list[int], list
     return _readwise_mod_positions_for_read(**payload)
 
 
+def _validate_subset_parameters(subset_parameters: dict | None) -> None:
+    if subset_parameters is None:
+        return
+    if not isinstance(subset_parameters, dict):
+        raise ValueError("subset_parameters must be provided as a dictionary.")
+    if "array" in subset_parameters:
+        raise ValueError(
+            "subset_parameters cannot include 'array'; it is provided internally."
+        )
+    if "n" not in subset_parameters and "frac" not in subset_parameters:
+        raise ValueError(
+            "subset_parameters must include at least one of 'n' or 'frac'."
+        )
+
+
+def _load_read_tuples_for_indices(
+    *,
+    h5: h5py.File,
+    readwise_datasets: list[str],
+    compressed_binary_datasets: list[str],
+    binarized: bool,
+    relevant_read_indices: np.ndarray,
+    region_start: int,
+    region_end: int,
+    region_strand: str,
+) -> list[tuple]:
+    n_reads = len(relevant_read_indices)
+    return list(
+        zip(
+            *(
+                retrieve_h5_data(
+                    h5=h5,
+                    dataset=dataset,
+                    indices=relevant_read_indices,
+                    compressed=dataset in compressed_binary_datasets,
+                    dtype=np.uint8,
+                    decompressor=gzip.decompress,
+                    binarized=binarized,
+                )
+                for dataset in readwise_datasets
+            ),
+            [region_start] * n_reads,
+            [region_end] * n_reads,
+            [region_strand] * n_reads,
+        )
+    )
+
+
+def _normalize_sort_by(
+    sort_by: str | tuple[str, str] | list[str | tuple[str, str]],
+) -> list[tuple[str, str]]:
+    if not isinstance(sort_by, list):
+        sort_by = [sort_by]
+
+    sort_by_normalized: list[tuple[str, str]] = []
+    for item in sort_by:
+        if isinstance(item, tuple):
+            field, order = item
+            if order not in ["asc", "desc"]:
+                raise ValueError(
+                    f"Sort order must be 'asc' or 'desc', got '{order}' for field '{field}'"
+                )
+            sort_by_normalized.append((field, order))
+        else:
+            sort_by_normalized.append((item, "asc"))
+    return sort_by_normalized
+
+
+def _assign_region_scoped_read_ints(
+    *,
+    read_data: list[tuple],
+    read_name_index: int,
+    region_start_index: int,
+    region_end_index: int,
+    region_strand_index: int,
+) -> np.ndarray:
+    read_identity_to_int: dict[tuple, int] = {}
+    read_ints: list[int] = []
+    for row in read_data:
+        read_identity = (
+            row[read_name_index],
+            row[region_start_index],
+            row[region_end_index],
+            row[region_strand_index],
+        )
+        if read_identity not in read_identity_to_int:
+            read_identity_to_int[read_identity] = len(read_identity_to_int)
+        read_ints.append(read_identity_to_int[read_identity])
+    return np.array(read_ints)
+
+
 ################################################################################################################
 ####                                           Loader wrappers                                              ####
 ################################################################################################################
@@ -771,7 +862,11 @@ def read_vectors_from_hdf5(
     regions: str | Path | list[str | Path] | None = None,
     window_size: int | None = None,
     single_strand: bool = False,
-    sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
+    sort_by: str | tuple[str, str] | list[str | tuple[str, str]] = [
+        "chromosome",
+        "region_start",
+        "read_start",
+    ],
     calculate_mod_fractions: bool = True,
     quiet: bool = True,
     cores: int | None = None,
@@ -836,17 +931,7 @@ def read_vectors_from_hdf5(
         a regions_dict, containing lists of (region_start,region_end) coordinates by chromosome/contig.
 
     """
-    if subset_parameters is not None:
-        if not isinstance(subset_parameters, dict):
-            raise ValueError("subset_parameters must be provided as a dictionary.")
-        if "array" in subset_parameters:
-            raise ValueError(
-                "subset_parameters cannot include 'array'; it is provided internally."
-            )
-        if "n" not in subset_parameters and "frac" not in subset_parameters:
-            raise ValueError(
-                "subset_parameters must include at least one of 'n' or 'frac'."
-            )
+    _validate_subset_parameters(subset_parameters)
 
     with h5py.File(file, "r") as h5:
         datasets: list[str] = [
@@ -930,24 +1015,15 @@ def read_vectors_from_hdf5(
                 relevant_read_indices = _subset_indices(
                     relevant_read_indices, subset_parameters=subset_parameters
                 )
-                read_tuples_raw += list(
-                    zip(
-                        *(
-                            retrieve_h5_data(
-                                h5=h5,
-                                dataset=dataset,
-                                indices=relevant_read_indices,
-                                compressed=dataset in compressed_binary_datasets,
-                                dtype=np.uint8,
-                                decompressor=gzip.decompress,
-                                binarized=binarized,
-                            )
-                            for dataset in readwise_datasets
-                        ),
-                        [region_start for _ in relevant_read_indices],
-                        [region_end for _ in relevant_read_indices],
-                        [region_strand for _ in relevant_read_indices],
-                    )
+                read_tuples_raw += _load_read_tuples_for_indices(
+                    h5=h5,
+                    readwise_datasets=readwise_datasets,
+                    compressed_binary_datasets=compressed_binary_datasets,
+                    binarized=binarized,
+                    relevant_read_indices=relevant_read_indices,
+                    region_start=region_start,
+                    region_end=region_end,
+                    region_strand=region_strand,
                 )
         else:
             regions_dict = None
@@ -955,24 +1031,15 @@ def read_vectors_from_hdf5(
             relevant_read_indices = _subset_indices(
                 relevant_read_indices, subset_parameters=subset_parameters
             )
-            read_tuples_raw = list(
-                zip(
-                    *(
-                        retrieve_h5_data(
-                            h5=h5,
-                            dataset=dataset,
-                            indices=relevant_read_indices,
-                            compressed=dataset in compressed_binary_datasets,
-                            dtype=np.uint8,
-                            decompressor=gzip.decompress,
-                            binarized=binarized,
-                        )
-                        for dataset in readwise_datasets
-                    ),
-                    [-1 for _ in relevant_read_indices],
-                    [-1 for _ in relevant_read_indices],
-                    ["." for _ in relevant_read_indices],
-                )
+            read_tuples_raw = _load_read_tuples_for_indices(
+                h5=h5,
+                readwise_datasets=readwise_datasets,
+                compressed_binary_datasets=compressed_binary_datasets,
+                binarized=binarized,
+                relevant_read_indices=relevant_read_indices,
+                region_start=-1,
+                region_end=-1,
+                region_strand=".",
             )
     #  We add region information (start, end, and strand; chromosome is already present!)
     # so that it is possible to sort by and process based on these
@@ -984,11 +1051,13 @@ def read_vectors_from_hdf5(
             convert_bytes_to_strings(tup) for tup in read_tuples_raw
         ]
     else:
+        mod_vector_index = readwise_datasets.index("mod_vector")
+        val_vector_index = readwise_datasets.index("val_vector")
         read_tuples_processed = [
             adjust_mod_probs_in_tuples(
                 convert_bytes_to_strings(tup),
-                readwise_datasets.index("mod_vector"),
-                readwise_datasets.index("val_vector"),
+                mod_vector_index,
+                val_vector_index,
             )
             for tup in read_tuples_raw
         ]
@@ -1003,15 +1072,19 @@ def read_vectors_from_hdf5(
         mod_fractions_by_read_name_by_motif: defaultdict[
             str, defaultdict[str, float]
         ] = defaultdict(lambda: defaultdict(lambda: 0.0))
+        motif_index = readwise_datasets.index("motif")
+        mod_vector_index = readwise_datasets.index("mod_vector")
+        val_vector_index = readwise_datasets.index("val_vector")
+        read_name_index = readwise_datasets.index("read_name")
         for motif in motifs:
             for read_tuple in read_tuples_processed:
-                if read_tuple[readwise_datasets.index("motif")] == motif:
-                    mod_sum = np.sum(read_tuple[readwise_datasets.index("mod_vector")])
-                    val_sum = np.sum(read_tuple[readwise_datasets.index("val_vector")])
+                if read_tuple[motif_index] == motif:
+                    mod_sum = np.sum(read_tuple[mod_vector_index])
+                    val_sum = np.sum(read_tuple[val_vector_index])
                     mod_fraction = mod_sum / val_sum if val_sum > 0 else 0
-                    mod_fractions_by_read_name_by_motif[
-                        read_tuple[readwise_datasets.index("read_name")]
-                    ][motif] = mod_fraction
+                    mod_fractions_by_read_name_by_motif[read_tuple[read_name_index]][
+                        motif
+                    ] = mod_fraction
 
         read_tuples_all = []
         for read_tuple in read_tuples_processed:
@@ -1022,7 +1095,7 @@ def read_vectors_from_hdf5(
                 + tuple(
                     mod_frac
                     for mod_frac in mod_fractions_by_read_name_by_motif[
-                        read_tuple[readwise_datasets.index("read_name")]
+                        read_tuple[read_name_index]
                     ].values()
                 )
             )
@@ -1039,23 +1112,7 @@ def read_vectors_from_hdf5(
     #   - "field" or ["field1", "field2"] -> [("field1", "asc"), ("field2", "asc")]
     #   - [("field1", "desc"), "field2"] -> [("field1", "desc"), ("field2", "asc")]
 
-    # Enforce that sort_by is a list
-    if not isinstance(sort_by, list):
-        sort_by = [sort_by]
-
-    # Parse into (field, order) tuples
-    sort_by_normalized = []
-    for item in sort_by:
-        if isinstance(item, tuple):
-            field, order = item
-            if order not in ["asc", "desc"]:
-                raise ValueError(
-                    f"Sort order must be 'asc' or 'desc', got '{order}' for field '{field}'"
-                )
-            sort_by_normalized.append((field, order))
-        else:
-            # Default to ascending order
-            sort_by_normalized.append((item, "asc"))
+    sort_by_normalized = _normalize_sort_by(sort_by)
 
     # If 'shuffle' appears anywhere in sort_by, we first shuffle the list
     if any(field == "shuffle" for field, _ in sort_by_normalized):
@@ -1093,7 +1150,11 @@ def readwise_binary_modification_arrays(
     window_size: int | None = None,
     regions_5to3prime: bool = False,
     single_strand: bool = False,
-    sort_by: str | list[str] = ["chromosome", "region_start", "read_start"],
+    sort_by: str | tuple[str, str] | list[str | tuple[str, str]] = [
+        "chromosome",
+        "region_start",
+        "read_start",
+    ],
     thresh: float | None = None,
     relative: bool = True,
     quiet: bool = True,
@@ -1198,19 +1259,13 @@ def readwise_binary_modification_arrays(
         else:
             thresh = utils.adjust_threshold(thresh)
 
-        read_identity_to_int: dict[tuple, int] = {}
-        read_ints_list = []
-        for read_data in sorted_read_data_converted:
-            read_identity = (
-                read_data[read_name_index],
-                read_data[region_start_index],
-                read_data[region_end_index],
-                read_data[region_strand_index],
-            )
-            if read_identity not in read_identity_to_int:
-                read_identity_to_int[read_identity] = len(read_identity_to_int)
-            read_ints_list.append(read_identity_to_int[read_identity])
-        read_ints = np.array(read_ints_list)
+        read_ints = _assign_region_scoped_read_ints(
+            read_data=sorted_read_data_converted,
+            read_name_index=read_name_index,
+            region_start_index=region_start_index,
+            region_end_index=region_end_index,
+            region_strand_index=region_strand_index,
+        )
 
         read_ids_by_mod_pos: list[int] = []
         mod_coords_list = []
