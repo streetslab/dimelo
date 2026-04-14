@@ -681,30 +681,41 @@ def get_alignment_quality(
 
 
 def create_region_command_list(
-    output_path,
-    regions,
-    window_size,
-):
+    output_path: Path,
+    regions: str | Path | list[str | Path] | None,
+    window_size: int | None,
+) -> tuple[list[str], Path | None]:
     """
-    Creates commands to pass to modkit for specifying genomic regions.
-
-    TODO: Split into two function? Convert to bed, then construct commands
+    Create modkit `--include-bed` arguments and the processed BED path, if regions are provided.
     """
 
-    if regions is not None:
-        bed_filepath_processed = output_path / "regions.processed.bed"
-        regions_dict = utils.regions_dict_from_input(
-            regions,
-            window_size,
-        )
-        utils.bed_from_regions_dict(regions_dict, bed_filepath_processed)
-        region_specifier = ["--include-bed", str(bed_filepath_processed)]
+    bed_filepath_processed = _regions_to_processed_bed(
+        output_path=output_path,
+        regions=regions,
+        window_size=window_size,
+    )
+    if bed_filepath_processed is None:
+        return [], None
+    return ["--include-bed", str(bed_filepath_processed)], bed_filepath_processed
 
-    else:
-        bed_filepath_processed = None
-        region_specifier = []
 
-    return region_specifier, bed_filepath_processed
+def _regions_to_processed_bed(
+    output_path: Path,
+    regions: str | Path | list[str | Path] | None,
+    window_size: int | None,
+) -> Path | None:
+    """
+    Build a normalized BED file from region inputs for downstream modkit calls.
+    """
+    if regions is None:
+        return None
+    bed_filepath_processed = output_path / "regions.processed.bed"
+    regions_dict = utils.regions_dict_from_input(
+        regions,
+        window_size,
+    )
+    utils.bed_from_regions_dict(regions_dict, bed_filepath_processed)
+    return bed_filepath_processed
 
 
 def read_by_base_txt_to_hdf5(

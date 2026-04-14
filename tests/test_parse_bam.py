@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 
 from dimelo import parse_bam
 
@@ -85,3 +86,26 @@ def test_threads_command_list_uses_requested_cores_when_available(monkeypatch):
     command = parse_bam._threads_command_list(cores=6, quiet=True)
 
     assert command == ["--threads", "6"]
+
+
+def test_create_region_command_list_returns_empty_without_regions(tmp_path):
+    command, bed_path = parse_bam.create_region_command_list(
+        output_path=tmp_path,
+        regions=None,
+        window_size=None,
+    )
+
+    assert command == []
+    assert bed_path is None
+
+
+def test_create_region_command_list_writes_processed_bed(tmp_path):
+    command, bed_path = parse_bam.create_region_command_list(
+        output_path=tmp_path,
+        regions="chr1:10-20",
+        window_size=None,
+    )
+
+    assert bed_path == Path(tmp_path) / "regions.processed.bed"
+    assert command == ["--include-bed", str(bed_path)]
+    assert bed_path.exists()
