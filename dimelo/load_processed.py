@@ -21,6 +21,18 @@ from . import test_data, utils
 # the reasonable upper bound) and 10x fewer cores (which is about the reasonable lower bound).
 DEFAULT_CHUNK_SIZE = 1_000_000
 
+
+def _subset_indices(
+    indices: np.ndarray,
+    subset_parameters: dict | None,
+) -> np.ndarray:
+    if subset_parameters is None:
+        return indices
+    if len(indices) == 0:
+        return np.array([], dtype=int)
+    return np.sort(utils.random_sample(indices, **subset_parameters))
+
+
 ################################################################################################################
 ####                                           Loader wrappers                                              ####
 ################################################################################################################
@@ -754,8 +766,6 @@ def read_vectors_from_hdf5(
             )
             for chrom, region_start, region_end, region_strand in region_iterator:
                 # Find the read indices that we want to load
-                # TODO: consider building this up and then loading all at the end, chunked
-                # TODO: consolidate logic into clear variables
                 relevant_read_indices = np.flatnonzero(
                     (read_ends > region_start)
                     & (read_starts < region_end)
@@ -769,15 +779,9 @@ def read_vectors_from_hdf5(
                         | (ref_strands == region_strand)
                     )
                 )
-                if subset_parameters is not None:
-                    if len(relevant_read_indices) > 0:
-                        relevant_read_indices = np.sort(
-                            utils.random_sample(
-                                relevant_read_indices, **subset_parameters
-                            )
-                        )
-                    else:
-                        relevant_read_indices = np.array([], dtype=int)
+                relevant_read_indices = _subset_indices(
+                    relevant_read_indices, subset_parameters=subset_parameters
+                )
                 read_tuples_raw += list(
                     zip(
                         *(
@@ -800,13 +804,9 @@ def read_vectors_from_hdf5(
         else:
             regions_dict = None
             relevant_read_indices = np.flatnonzero(np.isin(read_motifs, motifs))
-            if subset_parameters is not None:
-                if len(relevant_read_indices) > 0:
-                    relevant_read_indices = np.sort(
-                        utils.random_sample(relevant_read_indices, **subset_parameters)
-                    )
-                else:
-                    relevant_read_indices = np.array([], dtype=int)
+            relevant_read_indices = _subset_indices(
+                relevant_read_indices, subset_parameters=subset_parameters
+            )
             read_tuples_raw = list(
                 zip(
                     *(
