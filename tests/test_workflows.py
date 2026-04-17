@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -5,6 +7,7 @@ import pytest
 from dimelo import plotting, workflows
 from dimelo.models import ContrastSpec, DatasetArtifact
 from dimelo.models import (
+    ChipAtlasEnrichmentResult,
     RegionContrastResult,
     RegionDiscoveryResult,
     SampleSpec,
@@ -781,6 +784,220 @@ def test_shared_cluster_distribution_read_global(monkeypatch):
     assert set(result.metadata["cache_misses"]) == {"s1", "s2"}
 
 
+def test_shared_cluster_distribution_read_global_builds_region_summaries_from_coordinates(
+    monkeypatch,
+):
+    fake_samples = [
+        SampleSpec(sample_id="s1", condition="NS", extract_h5="s1.h5"),
+        SampleSpec(sample_id="s2", condition="15min", extract_h5="s2.h5"),
+    ]
+
+    def fake_extract(*args, **kwargs):
+        hdf5_file = kwargs["hdf5_file"]
+
+        class R:
+            if hdf5_file == "s1.h5":
+                data_matrix = np.array([[0.0, 0.0, 0.1, 0.1], [0.0, 0.1, 0.0, 0.1]])
+                metadata = [
+                    {
+                        "read_name": "s1-r1",
+                        "chromosome": "chr1",
+                        "region_start": 0,
+                        "region_end": 4,
+                    },
+                    {
+                        "read_name": "s1-r2",
+                        "chromosome": "chr1",
+                        "region_start": 10,
+                        "region_end": 14,
+                    },
+                ]
+            else:
+                data_matrix = np.array([[1.0, 0.9, 1.0, 0.9], [0.9, 1.0, 0.9, 1.0]])
+                metadata = [
+                    {
+                        "read_name": "s2-r1",
+                        "chromosome": "chr1",
+                        "region_start": 20,
+                        "region_end": 24,
+                        "region_strand": "+",
+                    },
+                    {
+                        "read_name": "s2-r2",
+                        "chromosome": "chr1",
+                        "region_start": 30,
+                        "region_end": 34,
+                        "region_strand": "-",
+                    },
+                ]
+            val_matrix = np.ones((2, 4), dtype=float)
+            datasets = []
+            regions_dict = None
+
+        return R()
+
+    monkeypatch.setattr(workflows.cluster, "extract_read_windows", fake_extract)
+    monkeypatch.setattr(
+        workflows.cluster,
+        "read_window_feature_matrix",
+        lambda result, **kwargs: (result.data_matrix, ["f0", "f1", "f2", "f3"]),
+    )
+
+    result = workflows.shared_cluster_distribution(
+        samples=fake_samples,
+        mode="read_global",
+        motifs=["A,0"],
+        n_clusters=2,
+        training_sample_per_dataset=2,
+        make_plots=False,
+    )
+
+    assert result.region_summaries is not None
+    assert {"region_id", "sample_id", "condition", "cluster", "count", "fraction"} <= set(
+        result.region_summaries.columns
+    )
+    assert set(result.region_summaries["sample_id"]) == {"s1", "s2"}
+    assert set(result.region_summaries["condition"]) == {"NS", "15min"}
+
+
+def test_shared_cluster_distribution_read_global_leaves_region_summaries_empty_without_coordinates(
+    monkeypatch,
+):
+    fake_samples = [
+        SampleSpec(sample_id="s1", condition="NS", extract_h5="s1.h5"),
+        SampleSpec(sample_id="s2", condition="15min", extract_h5="s2.h5"),
+    ]
+
+    def fake_extract(*args, **kwargs):
+        class R:
+            data_matrix = np.array([[0.0, 0.0], [1.0, 1.0]])
+            val_matrix = np.ones((2, 2), dtype=float)
+            metadata = [{"read_name": "r1"}, {"read_name": "r2"}]
+            datasets = []
+            regions_dict = None
+
+        return R()
+
+    monkeypatch.setattr(workflows.cluster, "extract_read_windows", fake_extract)
+    monkeypatch.setattr(
+        workflows.cluster,
+        "read_window_feature_matrix",
+        lambda result, **kwargs: (result.data_matrix, ["f0", "f1"]),
+    )
+
+    result = workflows.shared_cluster_distribution(
+        samples=fake_samples,
+        mode="read_global",
+        motifs=["A,0"],
+        n_clusters=2,
+        training_sample_per_dataset=2,
+        make_plots=False,
+    )
+
+    assert result.region_summaries is None
+
+
+def test_shared_cluster_distribution_read_global_prefers_cluster_summarizer(monkeypatch):
+    fake_samples = [
+        SampleSpec(sample_id="s1", condition="NS", extract_h5="s1.h5"),
+        SampleSpec(sample_id="s2", condition="15min", extract_h5="s2.h5"),
+    ]
+    called = {"count": 0}
+
+    def fake_extract(*args, **kwargs):
+        hdf5_file = kwargs["hdf5_file"]
+
+        class R:
+            if hdf5_file == "s1.h5":
+                data_matrix = np.array([[0.0, 0.0], [0.0, 0.1]])
+                metadata = [
+                    {
+                        "read_name": "s1-r1",
+                        "chromosome": "chr1",
+                        "region_start": 0,
+                        "region_end": 2,
+                    },
+                    {
+                        "read_name": "s1-r2",
+                        "chromosome": "chr1",
+                        "region_start": 10,
+                        "region_end": 12,
+                    },
+                ]
+            else:
+                data_matrix = np.array([[1.0, 1.0], [0.9, 1.0]])
+                metadata = [
+                    {
+                        "read_name": "s2-r1",
+                        "chromosome": "chr1",
+                        "region_start": 20,
+                        "region_end": 22,
+                    },
+                    {
+                        "read_name": "s2-r2",
+                        "chromosome": "chr1",
+                        "region_start": 30,
+                        "region_end": 32,
+                    },
+                ]
+            val_matrix = np.ones((2, 2), dtype=float)
+            datasets = []
+            regions_dict = None
+
+        return R()
+
+    def fake_summarizer(*, metadata, labels, include_strand=True):
+        called["count"] += 1
+        if metadata:
+            first = metadata[0]
+            chrom = first.get("chromosome")
+            start = int(first.get("region_start"))
+            end = int(first.get("region_end"))
+        else:
+            chrom, start, end = "chr1", 0, 1
+        return pd.DataFrame(
+            [
+                {
+                    "chrom": chrom,
+                    "start": start,
+                    "end": end,
+                    "strand": "+",
+                    "cluster": labels[0] if len(labels) else "C0",
+                    "count": len(labels),
+                    "fraction": 1.0 if len(labels) else 0.0,
+                    "source": "summarizer",
+                }
+            ]
+        )
+
+    monkeypatch.setattr(workflows.cluster, "extract_read_windows", fake_extract)
+    monkeypatch.setattr(
+        workflows.cluster,
+        "read_window_feature_matrix",
+        lambda result, **kwargs: (result.data_matrix, ["f0", "f1"]),
+    )
+    monkeypatch.setattr(
+        workflows.cluster,
+        "summarize_read_cluster_region_associations",
+        fake_summarizer,
+        raising=False,
+    )
+
+    result = workflows.shared_cluster_distribution(
+        samples=fake_samples,
+        mode="read_global",
+        motifs=["A,0"],
+        n_clusters=2,
+        training_sample_per_dataset=2,
+        make_plots=False,
+    )
+
+    assert called["count"] == len(fake_samples)
+    assert result.region_summaries is not None
+    assert "source" in result.region_summaries.columns
+    assert set(result.region_summaries["source"]) == {"summarizer"}
+
+
 def test_shared_cluster_distribution_propagates_sample_metadata_into_assignments_read_global(
     monkeypatch,
 ):
@@ -1496,3 +1713,233 @@ def test_shared_cluster_distribution_rebuilds_when_source_fingerprint_mismatches
 
     assert seen_paths[0] == "s1.h5"
     assert "s1" not in result.metadata["cache_hits"]
+
+
+def test_chip_atlas_enrichment_workflow_forwards_to_module(monkeypatch):
+    captured = {}
+
+    def fake_run_enrichment(**kwargs):
+        captured.update(kwargs)
+        return ChipAtlasEnrichmentResult(
+            request_id="REQ1",
+            status="finished",
+            results=pd.DataFrame({"target": ["CTCF"]}),
+        )
+
+    monkeypatch.setattr(workflows.chip_atlas, "run_enrichment", fake_run_enrichment)
+
+    result = workflows.chip_atlas_enrichment_workflow(
+        regions=["chr1:0-100,+"],
+        genome="hg38",
+        regions_genome="chm13",
+        cell_type="K562",
+        crossmap_chain_cache_dir="cache/chains",
+        fetch_results=False,
+    )
+
+    assert result.request_id == "REQ1"
+    assert captured["regions"] == ["chr1:0-100,+"]
+    assert captured["genome"] == "hg38"
+    assert captured["regions_genome"] == "chm13"
+    assert captured["antigen_class"] == "TFs and others"
+    assert captured["cell_type_class"] == "No description"
+    assert captured["threshold"] == "100"
+    assert captured["cell_type"] == "K562"
+    assert captured["crossmap_chain_cache_dir"] == "cache/chains"
+    assert captured["fetch_results"] is False
+
+
+def test_chip_atlas_cluster_enrichment_workflow_per_cluster(monkeypatch):
+    region_summaries = pd.DataFrame(
+        [
+            {"region_id": "chr1:0-100,+", "cluster": "C0", "fraction": 0.8},
+            {"region_id": "chr1:100-200,+", "cluster": "C0", "fraction": 0.2},
+            {"region_id": "chr2:0-100,-", "cluster": "C1", "fraction": 0.9},
+        ]
+    )
+    cluster_result = SharedClusterResult(
+        model=SharedClusterModel(
+            mode="read_global",
+            motifs=["A,0"],
+            feature_names=["f0"],
+            preprocessing={},
+            estimator=object(),
+            cluster_labels=["C0", "C1"],
+            fit_metadata={},
+        ),
+        assignments=pd.DataFrame(
+            [
+                {"sample_id": "s1", "condition": "NS", "cluster": "C0"},
+                {"sample_id": "s2", "condition": "TX", "cluster": "C1"},
+            ]
+        ),
+        cluster_distribution=pd.DataFrame(
+            [{"sample_id": "s1", "condition": "NS", "cluster": "C0", "count": 1, "fraction": 1.0}]
+        ),
+        condition_distribution=pd.DataFrame(
+            [{"condition": "NS", "cluster": "C0", "fraction": 1.0, "replicate_n": 1}]
+        ),
+        distribution_change=None,
+        cluster_profiles=pd.DataFrame([{"cluster": "C0", "count": 1, "f0": 0.1}]),
+        region_summaries=region_summaries,
+        plot_data={},
+    )
+
+    called = []
+
+    def fake_chip_atlas_workflow(*, regions, **kwargs):
+        called.append(regions.copy())
+        return ChipAtlasEnrichmentResult(
+            request_id=f"REQ-{len(called)}",
+            status="finished",
+            results=pd.DataFrame({"target": ["CTCF"]}),
+        )
+
+    monkeypatch.setattr(workflows, "chip_atlas_enrichment_workflow", fake_chip_atlas_workflow)
+
+    results = workflows.chip_atlas_cluster_enrichment_workflow(
+        cluster_result=cluster_result,
+        clusters=["C0", "C1"],
+        min_fraction=0.5,
+        cell_type="K562",
+    )
+
+    assert set(results.keys()) == {"C0", "C1"}
+    assert len(called) == 2
+    assert all(frame.shape[0] >= 1 for frame in called)
+    assert all({"chrom", "start", "end", "strand"}.issubset(frame.columns) for frame in called)
+
+
+def test_chip_atlas_search_peak_datasets_workflow_forwards(monkeypatch):
+    captured = {}
+
+    def fake_search(**kwargs):
+        captured.update(kwargs)
+        return pd.DataFrame([{"dataset_id": "SRX1", "bed_url": "http://example.org/srx1.bed"}])
+
+    monkeypatch.setattr(workflows.chip_atlas, "search_peak_datasets", fake_search)
+    out = workflows.chip_atlas_search_peak_datasets_workflow(
+        antigen="CTCF",
+        genome="hg38",
+        cell_type="K562",
+    )
+    assert out.shape[0] == 1
+    assert captured["antigen"] == "CTCF"
+    assert captured["genome"] == "hg38"
+    assert captured["cell_type"] == "K562"
+
+
+def test_chip_atlas_download_peak_datasets_workflow_forwards(monkeypatch):
+    captured = {}
+
+    def fake_download(**kwargs):
+        captured.update(kwargs)
+        return pd.DataFrame([{"dataset_id": "SRX1", "variant": "top_3000"}])
+
+    monkeypatch.setattr(workflows.chip_atlas, "download_peak_datasets", fake_download)
+    datasets = pd.DataFrame([{"dataset_id": "SRX1", "bed_url": "http://example.org/srx1.bed", "genome_assembly": "hg38"}])
+    out = workflows.chip_atlas_download_peak_datasets_workflow(
+        datasets=datasets,
+        dataset_ids=["SRX1"],
+        stratify="quartiles",
+    )
+    assert out.shape[0] == 1
+    assert captured["datasets"].equals(datasets)
+    assert captured["dataset_ids"] == ["SRX1"]
+    assert captured["stratify"] == "quartiles"
+
+
+def test_modkit_dmr_pair_workflow_forwards(monkeypatch):
+    captured = {}
+
+    def fake_run_dmr_pair(**kwargs):
+        captured.update(kwargs)
+        from dimelo.models import ModkitDMRPairResult
+
+        return ModkitDMRPairResult(
+            output_path=Path("/tmp/out.bed"),
+            segment_path=None,
+            command=["modkit", "dmr", "pair"],
+            sites=pd.DataFrame(),
+            segments=None,
+            high_confidence_sites=pd.DataFrame(),
+            metadata={},
+        )
+
+    monkeypatch.setattr(workflows.dmr, "run_dmr_pair", fake_run_dmr_pair)
+    out = workflows.modkit_dmr_pair_workflow(
+        control_bed_methyl="a.bed.gz",
+        experiment_bed_methyl="b.bed.gz",
+        ref_genome="ref.fa",
+        out_path="out.bed",
+        bases=["A"],
+    )
+    assert out.output_path == Path("/tmp/out.bed")
+    assert captured["control_bed_methyl"] == "a.bed.gz"
+    assert captured["bases"] == ["A"]
+
+
+def test_modkit_dmr_multi_workflow_forwards(monkeypatch):
+    captured = {}
+
+    def fake_run_dmr_multi(**kwargs):
+        captured.update(kwargs)
+        from dimelo.models import ModkitDMRMultiResult
+
+        return ModkitDMRMultiResult(
+            out_dir=Path("/tmp/out"),
+            command=["modkit", "dmr", "multi"],
+            pair_files=pd.DataFrame([{"pair_name": "s1_vs_s2"}]),
+            metadata={},
+        )
+
+    monkeypatch.setattr(workflows.dmr, "run_dmr_multi", fake_run_dmr_multi)
+    out = workflows.modkit_dmr_multi_workflow(
+        samples={"s1": "s1.bed.gz", "s2": "s2.bed.gz"},
+        regions_bed="regions.bed",
+        ref_genome="ref.fa",
+        out_dir="out",
+        bases=["A"],
+    )
+    assert out.pair_files.shape[0] == 1
+    assert captured["samples"] == {"s1": "s1.bed.gz", "s2": "s2.bed.gz"}
+    assert captured["bases"] == ["A"]
+
+
+def test_modkit_dmr_multi_from_samples_workflow_reads_pileup_paths(monkeypatch):
+    captured = {}
+
+    def fake_multi(**kwargs):
+        captured.update(kwargs)
+        from dimelo.models import ModkitDMRMultiResult
+
+        return ModkitDMRMultiResult(
+            out_dir=Path("/tmp/out"),
+            command=["modkit", "dmr", "multi"],
+            pair_files=pd.DataFrame([{"pair_name": "s1_vs_s2"}]),
+            metadata={},
+        )
+
+    monkeypatch.setattr(workflows, "modkit_dmr_multi_workflow", fake_multi)
+    samples = [
+        SampleSpec(
+            sample_id="s1",
+            condition="A",
+            extract_h5="s1.h5",
+            metadata={"pileup_path": "s1.bed.gz"},
+        ),
+        SampleSpec(
+            sample_id="s2",
+            condition="B",
+            extract_h5="s2.h5",
+            metadata={"pileup_path": "s2.bed.gz"},
+        ),
+    ]
+    out = workflows.modkit_dmr_multi_from_samples_workflow(
+        samples=samples,
+        regions_bed="regions.bed",
+        ref_genome="ref.fa",
+        out_dir="out",
+    )
+    assert out.pair_files.shape[0] == 1
+    assert captured["samples"] == {"s1": "s1.bed.gz", "s2": "s2.bed.gz"}

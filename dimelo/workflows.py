@@ -5,23 +5,31 @@ from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
+from tqdm.auto import tqdm
 
 from .artifacts import resolve_artifact
 from . import (
+    chip_atlas,
     cluster,
+    dmr,
     distribution,
     plotting,
+    regulatory_enrichment,
     region_analysis,
     region_contrasts,
     region_discovery,
 )
 from .models import (
+    ChipAtlasEnrichmentResult,
+    ModkitDMRMultiResult,
+    ModkitDMRPairResult,
     DatasetArtifact,
     RegionDiscoveryClusterContrastResult,
     RegionDiscoveryClusterResult,
     SampleSpec,
     SharedClusterModel,
     SharedClusterResult,
+    UniBindJobResult,
 )
 
 _SUPPORTED_SIGNAL_NORMALIZATION = {"none", "per_sample_global", "control_regions"}
@@ -326,6 +334,71 @@ def _build_region_summary(assignments: pd.DataFrame) -> pd.DataFrame:
     return summary
 
 
+def _assignments_have_region_coordinates(assignments: pd.DataFrame) -> bool:
+    required = ("chromosome", "region_start", "region_end")
+    if not set(required).issubset(assignments.columns):
+        return False
+    return assignments.loc[:, list(required)].notna().all().all()
+
+
+def _region_id_from_coordinates(row: pd.Series) -> str:
+    chrom = row.get("chromosome", row.get("chrom"))
+    start = row.get("region_start", row.get("start"))
+    end = row.get("region_end", row.get("end"))
+    region_id = f"{chrom}:{int(start)}-{int(end)}"
+    strand = row.get("region_strand", row.get("strand"))
+    if pd.notna(strand):
+        strand_value = str(strand)
+        if strand_value in {"+", "-", "."}:
+            return f"{region_id},{strand_value}"
+    return region_id
+
+
+def _build_read_global_region_summary(assignments: pd.DataFrame) -> pd.DataFrame | None:
+    if not _assignments_have_region_coordinates(assignments):
+        return None
+
+    summarizer = getattr(cluster, "summarize_read_cluster_region_associations", None)
+    if callable(summarizer):
+        association_frames: list[pd.DataFrame] = []
+        include_strand = "region_strand" in assignments.columns
+        grouping_columns = ["sample_id", "condition"]
+        grouped = assignments.groupby(grouping_columns, sort=False, dropna=False)
+        for (sample_id, condition), sample_assignments in grouped:
+            try:
+                sample_summary = summarizer(
+                    metadata=sample_assignments.to_dict("records"),
+                    labels=sample_assignments["cluster"].to_numpy(),
+                    include_strand=include_strand,
+                )
+            except Exception:
+                association_frames = []
+                break
+            if not isinstance(sample_summary, pd.DataFrame) or sample_summary.empty:
+                continue
+            normalized_summary = sample_summary.copy()
+            if "region_id" not in normalized_summary.columns:
+                coordinate_columns = {"chrom", "start", "end"}
+                if coordinate_columns.issubset(normalized_summary.columns):
+                    normalized_summary["region_id"] = normalized_summary.apply(
+                        _region_id_from_coordinates,
+                        axis=1,
+                    )
+            normalized_summary["sample_id"] = sample_id
+            normalized_summary["condition"] = condition
+            association_frames.append(normalized_summary)
+
+        if association_frames:
+            region_summaries = pd.concat(association_frames, ignore_index=True)
+            required_columns = {"region_id", "sample_id", "condition", "cluster", "count", "fraction"}
+            if required_columns.issubset(region_summaries.columns):
+                return region_summaries
+
+    summary_source = assignments.copy()
+    summary_source["region_id"] = summary_source.apply(_region_id_from_coordinates, axis=1)
+    return _build_region_summary(summary_source)
+
+
 def _select_discovery_hits(
     hits: pd.DataFrame,
     *,
@@ -494,6 +567,610 @@ def _normalize_cluster_region_ids(
     )
 
 
+def _require_region_summary_table_for_chip_atlas(
+    cluster_result: SharedClusterResult,
+) -> pd.DataFrame:
+    if cluster_result.region_summaries is not None:
+        region_summaries = cluster_result.region_summaries.copy()
+    else:
+        assignments = cluster_result.assignments.copy()
+        if "region_id" not in assignments.columns:
+            if _assignments_have_region_coordinates(assignments):
+                assignments["region_id"] = assignments.apply(_region_id_from_coordinates, axis=1)
+            else:
+                raise ValueError(
+                    "SharedClusterResult does not include region_summaries, and assignments "
+                    "do not contain region coordinates to derive region ids."
+                )
+        region_summaries = _build_region_summary(assignments)
+
+    required_columns = {"cluster", "region_id"}
+    if not required_columns.issubset(region_summaries.columns):
+        missing = required_columns - set(region_summaries.columns)
+        raise ValueError(
+            "Cluster region summary table is missing required columns for ChIP-Atlas "
+            f"workflow: {sorted(missing)}"
+        )
+    return region_summaries
+
+
+def _rank_cluster_regions_for_chip_atlas(
+    *,
+    region_summaries: pd.DataFrame,
+    cluster_label: str,
+    min_fraction: float | None,
+    top_n_regions: int | None,
+) -> list[str]:
+    cluster_rows = region_summaries.loc[region_summaries["cluster"] == cluster_label].copy()
+    if cluster_rows.empty:
+        return []
+
+    if "fraction" in cluster_rows.columns:
+        ranked = (
+            cluster_rows.groupby("region_id", dropna=False)["fraction"]
+            .mean()
+            .sort_values(ascending=False)
+            .reset_index(name="score")
+        )
+        if min_fraction is not None:
+            ranked = ranked.loc[ranked["score"] >= float(min_fraction)]
+    elif "count" in cluster_rows.columns:
+        ranked = (
+            cluster_rows.groupby("region_id", dropna=False)["count"]
+            .sum()
+            .sort_values(ascending=False)
+            .reset_index(name="score")
+        )
+    else:
+        ranked = (
+            cluster_rows.groupby("region_id", dropna=False)
+            .size()
+            .sort_values(ascending=False)
+            .reset_index(name="score")
+        )
+
+    if top_n_regions is not None:
+        ranked = ranked.head(int(top_n_regions))
+    return [str(region_id) for region_id in ranked["region_id"].tolist() if pd.notna(region_id)]
+
+
+def resolve_regulatory_enrichment_spec(
+    *,
+    providers: Iterable[str] = ("screen", "unibind"),
+    species: str | None = None,
+    reference_genome: str | None = None,
+    target_genome: str | None = None,
+    crossmap_chain_file: str | Path | None = None,
+    crossmap_chain_url: str | None = None,
+    crossmap_chain_cache_dir: str | Path | None = None,
+    crossmap_executable: str | None = "CrossMap.py",
+    strict_provider_support: bool = False,
+    ) -> regulatory_enrichment.RegulatoryEnrichmentSpec:
+    return regulatory_enrichment.RegulatoryEnrichmentSpec(
+        providers=tuple(providers),
+        species=species,
+        reference_genome=reference_genome,
+        target_genome=target_genome,
+        crossmap_chain_file=crossmap_chain_file,
+        crossmap_chain_url=crossmap_chain_url,
+        crossmap_chain_cache_dir=crossmap_chain_cache_dir,
+        crossmap_executable=crossmap_executable,
+        strict_provider_support=strict_provider_support,
+    )
+
+
+def resolve_unibind_track_paths(
+    *,
+    track_paths: Iterable[str | Path] | None = None,
+    trackhub_url: str | None = None,
+    collection: str = "robust",
+    assembly: str | None = None,
+    search_terms: Iterable[str] | None = None,
+    cache_dir: str | Path = "cache/unibind_tracks",
+    max_tracks: int | None = None,
+    allow_cached: bool = True,
+    timeout_seconds: float = 60.0,
+    convert_bigbed_to_bed: bool = False,
+    regulatory_spec: regulatory_enrichment.RegulatoryEnrichmentSpec | None = None,
+) -> list[Path]:
+    resolved_assembly = assembly
+    if resolved_assembly is None and regulatory_spec is not None:
+        resolved_assembly = regulatory_spec.target_genome
+    return regulatory_enrichment.resolve_unibind_track_paths(
+        track_paths=track_paths,
+        trackhub_url=trackhub_url,
+        collection=collection,
+        assembly=resolved_assembly,
+        search_terms=search_terms,
+        cache_dir=cache_dir,
+        max_tracks=max_tracks,
+        allow_cached=allow_cached,
+        timeout_seconds=timeout_seconds,
+        convert_bigbed_to_bed=convert_bigbed_to_bed,
+    )
+
+
+def unibind_tfbs_extraction_workflow(
+    *,
+    regions: Any,
+    species: str | None = None,
+    collection: str = "robust",
+    tf_list: str | Path | Iterable[str] | None = None,
+    experiment_ids: str | Path | Iterable[str] | None = None,
+    name: str | None = None,
+    email: str | None = None,
+    endpoint_url: str = regulatory_enrichment.DEFAULT_UNIBIND_TFBS_EXTRACTION_URL,
+    submit_timeout_seconds: float = 120.0,
+    wait: bool = True,
+    poll_interval_seconds: float = 5.0,
+    timeout_seconds: float = 1200.0,
+    download_outputs: bool = False,
+    output_dir: str | Path = "cache/unibind_jobs",
+    allow_cached_downloads: bool = True,
+    download_timeout_seconds: float = 120.0,
+    regulatory_spec: regulatory_enrichment.RegulatoryEnrichmentSpec | None = None,
+) -> UniBindJobResult:
+    resolved_species = species
+    if resolved_species is None and regulatory_spec is not None:
+        resolved_species = regulatory_spec.species
+    return regulatory_enrichment.run_unibind_tfbs_extraction(
+        regions=regions,
+        species=resolved_species or "homo_sapiens",
+        collection=collection,
+        tf_list=tf_list,
+        experiment_ids=experiment_ids,
+        name=name,
+        email=email,
+        endpoint_url=endpoint_url,
+        submit_timeout_seconds=submit_timeout_seconds,
+        wait=wait,
+        poll_interval_seconds=poll_interval_seconds,
+        timeout_seconds=timeout_seconds,
+        download_outputs=download_outputs,
+        output_dir=output_dir,
+        allow_cached_downloads=allow_cached_downloads,
+        download_timeout_seconds=download_timeout_seconds,
+    )
+
+
+def unibind_enrichment_workflow(
+    *,
+    regions: Any,
+    analysis_type: str = "oneSetBg",
+    background_regions: Any | None = None,
+    comparison_regions: Any | None = None,
+    species: str | None = None,
+    collection: str = "robust",
+    name: str | None = None,
+    email: str | None = None,
+    endpoint_url: str = regulatory_enrichment.DEFAULT_UNIBIND_ENRICHMENT_URL,
+    submit_timeout_seconds: float = 120.0,
+    wait: bool = True,
+    poll_interval_seconds: float = 5.0,
+    timeout_seconds: float = 1200.0,
+    download_outputs: bool = False,
+    output_dir: str | Path = "cache/unibind_jobs",
+    allow_cached_downloads: bool = True,
+    download_timeout_seconds: float = 120.0,
+    regulatory_spec: regulatory_enrichment.RegulatoryEnrichmentSpec | None = None,
+) -> UniBindJobResult:
+    resolved_species = species
+    if resolved_species is None and regulatory_spec is not None:
+        resolved_species = regulatory_spec.species
+    return regulatory_enrichment.run_unibind_enrichment(
+        regions=regions,
+        analysis_type=analysis_type,
+        background_regions=background_regions,
+        comparison_regions=comparison_regions,
+        species=resolved_species or "homo_sapiens",
+        collection=collection,
+        name=name,
+        email=email,
+        endpoint_url=endpoint_url,
+        submit_timeout_seconds=submit_timeout_seconds,
+        wait=wait,
+        poll_interval_seconds=poll_interval_seconds,
+        timeout_seconds=timeout_seconds,
+        download_outputs=download_outputs,
+        output_dir=output_dir,
+        allow_cached_downloads=allow_cached_downloads,
+        download_timeout_seconds=download_timeout_seconds,
+    )
+
+
+def chip_atlas_search_peak_datasets_workflow(
+    *,
+    antigen: str,
+    genome: str = "hg38",
+    cell_type: str | None = None,
+    antigen_class: str | None = None,
+    cell_type_class: str | None = None,
+    threshold: str = "05",
+    match_mode: str = "contains",
+    max_results: int | None = None,
+    experiment_list_url: str = chip_atlas.DEFAULT_EXPERIMENT_LIST_URL,
+    cache_dir: str | Path = chip_atlas.DEFAULT_METADATA_CACHE_DIR,
+    allow_cached_metadata: bool = True,
+    timeout_seconds: float = 120.0,
+) -> pd.DataFrame:
+    return chip_atlas.search_peak_datasets(
+        antigen=antigen,
+        genome=genome,
+        cell_type=cell_type,
+        antigen_class=antigen_class,
+        cell_type_class=cell_type_class,
+        threshold=threshold,
+        match_mode=match_mode,
+        max_results=max_results,
+        experiment_list_url=experiment_list_url,
+        cache_dir=cache_dir,
+        allow_cached_metadata=allow_cached_metadata,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def chip_atlas_download_peak_datasets_workflow(
+    *,
+    datasets: pd.DataFrame,
+    dataset_ids: Iterable[str] | None = None,
+    output_dir: str | Path = "cache/chip_atlas/peak_sets",
+    include_complete_sorted: bool = True,
+    include_top_n: int | None = 3000,
+    include_bottom_n: int | None = 3000,
+    stratify: str | int | None = None,
+    allow_cached: bool = True,
+    timeout_seconds: float = 180.0,
+    crossmap_target_genome: str | None = None,
+    crossmap_chain_file: str | Path | None = None,
+    crossmap_chain_url: str | None = None,
+    crossmap_chain_cache_dir: str | Path | None = None,
+    crossmap_executable: str | None = "CrossMap.py",
+) -> pd.DataFrame:
+    return chip_atlas.download_peak_datasets(
+        datasets=datasets,
+        dataset_ids=dataset_ids,
+        output_dir=output_dir,
+        include_complete_sorted=include_complete_sorted,
+        include_top_n=include_top_n,
+        include_bottom_n=include_bottom_n,
+        stratify=stratify,
+        allow_cached=allow_cached,
+        timeout_seconds=timeout_seconds,
+        crossmap_target_genome=crossmap_target_genome,
+        crossmap_chain_file=crossmap_chain_file,
+        crossmap_chain_url=crossmap_chain_url,
+        crossmap_chain_cache_dir=crossmap_chain_cache_dir,
+        crossmap_executable=crossmap_executable,
+    )
+
+
+def chip_atlas_enrichment_workflow(
+    *,
+    regions: pd.DataFrame | str | Path | list[str],
+    genome: str = "hg38",
+    regions_genome: str | None = None,
+    antigen_class: str | None = "TFs and others",
+    antigen: str | None = None,
+    cell_type_class: str | None = "No description",
+    cell_type: str | None = None,
+    distance: int | None = None,
+    threshold: str | None = "100",
+    crossmap_chain_file: str | Path | None = None,
+    crossmap_chain_url: str | None = None,
+    crossmap_chain_cache_dir: str | Path | None = None,
+    crossmap_executable: str | None = "CrossMap.py",
+    params: dict[str, Any] | None = None,
+    wait: bool = True,
+    fetch_results: bool = True,
+    raise_on_failure: bool = True,
+    submit_url: str = chip_atlas.DEFAULT_SUBMIT_URL,
+    status_url: str = chip_atlas.DEFAULT_STATUS_URL,
+    result_url: str = chip_atlas.DEFAULT_RESULT_URL,
+    poll_interval_seconds: float = 5.0,
+    timeout_seconds: float = 600.0,
+) -> ChipAtlasEnrichmentResult:
+    return chip_atlas.run_enrichment(
+        regions=regions,
+        genome=genome,
+        regions_genome=regions_genome,
+        antigen_class=antigen_class,
+        antigen=antigen,
+        cell_type_class=cell_type_class,
+        cell_type=cell_type,
+        distance=distance,
+        threshold=threshold,
+        crossmap_chain_file=crossmap_chain_file,
+        crossmap_chain_url=crossmap_chain_url,
+        crossmap_chain_cache_dir=crossmap_chain_cache_dir,
+        crossmap_executable=crossmap_executable,
+        params=params,
+        wait=wait,
+        fetch_results=fetch_results,
+        raise_on_failure=raise_on_failure,
+        submit_url=submit_url,
+        status_url=status_url,
+        result_url=result_url,
+        poll_interval_seconds=poll_interval_seconds,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def chip_atlas_cluster_enrichment_workflow(
+    *,
+    cluster_result: SharedClusterResult,
+    genome: str = "hg38",
+    regions_genome: str | None = None,
+    clusters: Iterable[str] | None = None,
+    min_fraction: float | None = None,
+    top_n_regions: int | None = None,
+    mode: str = "per_cluster",
+    antigen_class: str | None = "TFs and others",
+    antigen: str | None = None,
+    cell_type_class: str | None = "No description",
+    cell_type: str | None = None,
+    distance: int | None = None,
+    threshold: str | None = "100",
+    crossmap_chain_file: str | Path | None = None,
+    crossmap_chain_url: str | None = None,
+    crossmap_chain_cache_dir: str | Path | None = None,
+    crossmap_executable: str | None = "CrossMap.py",
+    params: dict[str, Any] | None = None,
+    wait: bool = True,
+    fetch_results: bool = True,
+    raise_on_failure: bool = True,
+    submit_url: str = chip_atlas.DEFAULT_SUBMIT_URL,
+    status_url: str = chip_atlas.DEFAULT_STATUS_URL,
+    result_url: str = chip_atlas.DEFAULT_RESULT_URL,
+    poll_interval_seconds: float = 5.0,
+    timeout_seconds: float = 600.0,
+) -> dict[str, ChipAtlasEnrichmentResult]:
+    if mode not in {"per_cluster", "combined"}:
+        raise ValueError("mode must be 'per_cluster' or 'combined'.")
+
+    region_summaries = _require_region_summary_table_for_chip_atlas(cluster_result)
+    available_clusters = [str(value) for value in pd.unique(region_summaries["cluster"])]
+    selected_clusters = (
+        [str(cluster_label) for cluster_label in clusters]
+        if clusters is not None
+        else available_clusters
+    )
+    unknown = sorted(set(selected_clusters) - set(available_clusters))
+    if unknown:
+        raise ValueError(
+            "Requested clusters were not present in cluster_result.region_summaries: "
+            f"{unknown}"
+        )
+
+    per_cluster_region_ids: dict[str, list[str]] = {}
+    for cluster_label in selected_clusters:
+        region_ids = _rank_cluster_regions_for_chip_atlas(
+            region_summaries=region_summaries,
+            cluster_label=cluster_label,
+            min_fraction=min_fraction,
+            top_n_regions=top_n_regions,
+        )
+        if region_ids:
+            per_cluster_region_ids[cluster_label] = region_ids
+
+    if not per_cluster_region_ids:
+        raise ValueError("No regions met the requested filters for ChIP-Atlas enrichment.")
+
+    queries: dict[str, list[str]]
+    if mode == "combined":
+        union_region_ids = sorted({region_id for ids in per_cluster_region_ids.values() for region_id in ids})
+        queries = {"combined": union_region_ids}
+    else:
+        queries = per_cluster_region_ids
+
+    results: dict[str, ChipAtlasEnrichmentResult] = {}
+    for query_key, region_ids in queries.items():
+        bed_frame = chip_atlas.region_ids_to_bed_dataframe(region_ids)
+        enrichment = chip_atlas_enrichment_workflow(
+            regions=bed_frame,
+            genome=genome,
+            regions_genome=regions_genome,
+            antigen_class=antigen_class,
+            antigen=antigen,
+            cell_type_class=cell_type_class,
+            cell_type=cell_type,
+            distance=distance,
+            threshold=threshold,
+            crossmap_chain_file=crossmap_chain_file,
+            crossmap_chain_url=crossmap_chain_url,
+            crossmap_chain_cache_dir=crossmap_chain_cache_dir,
+            crossmap_executable=crossmap_executable,
+            params=params,
+            wait=wait,
+            fetch_results=fetch_results,
+            raise_on_failure=raise_on_failure,
+            submit_url=submit_url,
+            status_url=status_url,
+            result_url=result_url,
+            poll_interval_seconds=poll_interval_seconds,
+            timeout_seconds=timeout_seconds,
+        )
+        enrichment.metadata["workflow"] = {
+            "query_key": query_key,
+            "cluster_mode": mode,
+            "source_clusters": selected_clusters,
+            "region_count": len(region_ids),
+            "min_fraction": min_fraction,
+            "top_n_regions": top_n_regions,
+        }
+        results[query_key] = enrichment
+    return results
+
+
+def modkit_dmr_pair_workflow(
+    *,
+    control_bed_methyl: str | Path,
+    experiment_bed_methyl: str | Path,
+    ref_genome: str | Path,
+    out_path: str | Path,
+    regions_bed: str | Path | None = None,
+    segment_path: str | Path | None = None,
+    bases: Iterable[str] = ("A",),
+    assign_codes: Iterable[str] | None = None,
+    min_valid_coverage: int = 0,
+    dmr_prior: float | None = None,
+    diff_stay: float | None = None,
+    significance_factor: float | None = None,
+    decay_distance: int | None = None,
+    max_gap_size: int | None = None,
+    log_transition_decay: bool = False,
+    fine_grained: bool = False,
+    prior_alpha: float | None = None,
+    prior_beta: float | None = None,
+    delta: float | None = None,
+    n_sample_records: int | None = None,
+    max_coverages: tuple[int, int] | None = None,
+    cap_coverages: bool = False,
+    missing: str | None = None,
+    threads: int | None = None,
+    io_threads: int | None = None,
+    batch_size: int | None = None,
+    interval_size: int | None = None,
+    header: bool = True,
+    force: bool = True,
+    suppress_progress: bool = True,
+    log_filepath: str | Path | None = None,
+    modkit_executable: str | Path | None = None,
+    pvalue_max: float = 0.01,
+    abs_effect_size_min: float = 0.1,
+    min_total_coverage: int | None = None,
+) -> ModkitDMRPairResult:
+    return dmr.run_dmr_pair(
+        control_bed_methyl=control_bed_methyl,
+        experiment_bed_methyl=experiment_bed_methyl,
+        ref_genome=ref_genome,
+        out_path=out_path,
+        regions_bed=regions_bed,
+        segment_path=segment_path,
+        bases=list(bases),
+        assign_codes=None if assign_codes is None else list(assign_codes),
+        min_valid_coverage=min_valid_coverage,
+        dmr_prior=dmr_prior,
+        diff_stay=diff_stay,
+        significance_factor=significance_factor,
+        decay_distance=decay_distance,
+        max_gap_size=max_gap_size,
+        log_transition_decay=log_transition_decay,
+        fine_grained=fine_grained,
+        prior_alpha=prior_alpha,
+        prior_beta=prior_beta,
+        delta=delta,
+        n_sample_records=n_sample_records,
+        max_coverages=max_coverages,
+        cap_coverages=cap_coverages,
+        missing=missing,
+        threads=threads,
+        io_threads=io_threads,
+        batch_size=batch_size,
+        interval_size=interval_size,
+        header=header,
+        force=force,
+        suppress_progress=suppress_progress,
+        log_filepath=log_filepath,
+        modkit_executable=modkit_executable,
+        pvalue_max=pvalue_max,
+        abs_effect_size_min=abs_effect_size_min,
+        min_total_coverage=min_total_coverage,
+    )
+
+
+def modkit_dmr_multi_workflow(
+    *,
+    samples: dict[str, str | Path] | Iterable[tuple[str, str | Path]],
+    regions_bed: str | Path,
+    ref_genome: str | Path,
+    out_dir: str | Path,
+    bases: Iterable[str] = ("A",),
+    assign_codes: Iterable[str] | None = None,
+    min_valid_coverage: int = 0,
+    missing: str | None = None,
+    threads: int | None = None,
+    io_threads: int | None = None,
+    prefix: str | None = None,
+    header: bool = True,
+    force: bool = True,
+    suppress_progress: bool = True,
+    log_filepath: str | Path | None = None,
+    modkit_executable: str | Path | None = None,
+) -> ModkitDMRMultiResult:
+    return dmr.run_dmr_multi(
+        samples=samples,
+        regions_bed=regions_bed,
+        ref_genome=ref_genome,
+        out_dir=out_dir,
+        bases=list(bases),
+        assign_codes=None if assign_codes is None else list(assign_codes),
+        min_valid_coverage=min_valid_coverage,
+        missing=missing,
+        threads=threads,
+        io_threads=io_threads,
+        prefix=prefix,
+        header=header,
+        force=force,
+        suppress_progress=suppress_progress,
+        log_filepath=log_filepath,
+        modkit_executable=modkit_executable,
+    )
+
+
+def modkit_dmr_multi_from_samples_workflow(
+    *,
+    samples: Iterable[SampleSpec],
+    regions_bed: str | Path,
+    ref_genome: str | Path,
+    out_dir: str | Path,
+    bases: Iterable[str] = ("A",),
+    assign_codes: Iterable[str] | None = None,
+    min_valid_coverage: int = 0,
+    missing: str | None = None,
+    threads: int | None = None,
+    io_threads: int | None = None,
+    prefix: str | None = None,
+    header: bool = True,
+    force: bool = True,
+    suppress_progress: bool = True,
+    log_filepath: str | Path | None = None,
+    modkit_executable: str | Path | None = None,
+) -> ModkitDMRMultiResult:
+    sample_list = list(samples)
+    if len(sample_list) < 2:
+        raise ValueError("modkit_dmr_multi_from_samples_workflow requires at least two samples.")
+
+    dmr_samples: dict[str, str | Path] = {}
+    for sample in sample_list:
+        metadata = sample.metadata or {}
+        pileup_path = metadata.get("pileup_path")
+        if pileup_path is None:
+            raise ValueError(
+                f"Sample {sample.sample_id!r} is missing metadata['pileup_path'] "
+                "required for modkit DMR multi workflow."
+            )
+        dmr_samples[sample.sample_id] = pileup_path
+
+    return modkit_dmr_multi_workflow(
+        samples=dmr_samples,
+        regions_bed=regions_bed,
+        ref_genome=ref_genome,
+        out_dir=out_dir,
+        bases=list(bases),
+        assign_codes=None if assign_codes is None else list(assign_codes),
+        min_valid_coverage=min_valid_coverage,
+        missing=missing,
+        threads=threads,
+        io_threads=io_threads,
+        prefix=prefix,
+        header=header,
+        force=force,
+        suppress_progress=suppress_progress,
+        log_filepath=log_filepath,
+        modkit_executable=modkit_executable,
+    )
+
+
 def discovery_cluster_workflow(
     *,
     samples: Iterable[SampleSpec],
@@ -502,6 +1179,7 @@ def discovery_cluster_workflow(
     discovery: dict[str, Any],
     clustering: dict[str, Any],
     selection: dict[str, Any] | None = None,
+    quiet: bool = True,
 ) -> RegionDiscoveryClusterResult:
     sample_list = list(samples)
     motif_list = list(motifs)
@@ -541,6 +1219,7 @@ def discovery_cluster_workflow(
         samples=sample_list,
         motifs=motif_list,
         matched_regions=matched_regions,
+        quiet=quiet,
         **clustering,
     )
     return RegionDiscoveryClusterResult(
@@ -646,6 +1325,7 @@ def _build_shared_cluster_result(
     cache_hits: dict[str, str],
     cache_misses: list[str],
     sample_rebuild_decisions: dict[str, str],
+    quiet: bool,
     region_summaries: pd.DataFrame | None = None,
 ) -> SharedClusterResult:
     full_matrix = np.vstack(feature_blocks)
@@ -696,6 +1376,8 @@ def _build_shared_cluster_result(
     }
     if region_summaries is None and mode == "region_anchored":
         region_summaries = _build_region_summary(assignments)
+    if region_summaries is None and mode == "read_global":
+        region_summaries = _build_read_global_region_summary(assignments)
 
     model = SharedClusterModel(
         mode=mode,
@@ -743,6 +1425,7 @@ def _build_shared_cluster_result(
             "sample_dataset_sizes": sample_dataset_sizes,
             "rows_after_filtering": sample_dataset_sizes,
             "sample_normalization": sample_normalization,
+            "quiet": quiet,
         },
     )
 
@@ -763,6 +1446,7 @@ def shared_cluster_distribution(
     random_state: int = 42,
     make_plots: bool = True,
     cores: int | None = None,
+    quiet: bool = True,
 ) -> SharedClusterResult:
     """
     Fit one shared clustering model on pooled read windows and assign all reads back
@@ -795,7 +1479,7 @@ def shared_cluster_distribution(
         cache_misses: list[str] = []
         sample_rebuild_decisions: dict[str, str] = {}
 
-        for sample in sample_list:
+        for sample in tqdm(sample_list, desc="Processing samples", disable=quiet):
             requested_artifact = _requested_pileup_artifact(
                 sample,
                 motifs=motif_list,
@@ -824,6 +1508,7 @@ def shared_cluster_distribution(
             matched_regions=matched_regions,
             pileup_paths=pileup_paths,
             cores=cores,
+            quiet=quiet,
         )
         sample_by_id = {sample.sample_id: sample for sample in sample_list}
         for row in metadata_rows:
@@ -885,6 +1570,7 @@ def shared_cluster_distribution(
                         matched_regions=control_regions,
                         pileup_paths={sample.sample_id: control_path},
                         cores=cores,
+                        quiet=quiet,
                     )
                     offset = float(np.asarray(control_matrix, dtype=float).mean())
                 else:
@@ -938,6 +1624,7 @@ def shared_cluster_distribution(
             cache_hits=cache_hits,
             cache_misses=cache_misses,
             sample_rebuild_decisions=sample_rebuild_decisions,
+            quiet=quiet,
         )
 
     feature_blocks: list[np.ndarray] = []
@@ -1073,4 +1760,5 @@ def shared_cluster_distribution(
         cache_hits=cache_hits,
         cache_misses=cache_misses,
         sample_rebuild_decisions=sample_rebuild_decisions,
+        quiet=quiet,
     )

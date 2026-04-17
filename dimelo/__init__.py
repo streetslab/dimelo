@@ -1,5 +1,7 @@
 from . import (
+    chip_atlas,
     cluster,
+    dmr,
     distribution,
     export,
     global_analysis,
@@ -14,6 +16,7 @@ from . import (
     plot_enrichment_profile,
     plot_read_browser,
     plot_reads,
+    regulatory_enrichment,
     region_discovery,
     region_analysis,
     region_contrasts,
@@ -21,13 +24,19 @@ from . import (
     workflows,
 )
 from .models import (
+    ChipAtlasEnrichmentResult,
+    ModkitDMRMultiResult,
+    ModkitDMRPairResult,
     RegionDiscoveryClusterContrastResult,
     RegionDiscoveryClusterResult,
     SharedClusterContrastResult,
+    UniBindJobResult,
 )
 
 __all__ = [
+    "chip_atlas",
     "cluster",
+    "dmr",
     "distribution",
     "export",
     "global_analysis",
@@ -42,12 +51,17 @@ __all__ = [
     "plot_enrichment_profile",
     "plot_read_browser",
     "plot_reads",
+    "regulatory_enrichment",
     "region_discovery",
     "region_analysis",
     "region_contrasts",
     "shared_cluster_tests",
+    "ChipAtlasEnrichmentResult",
+    "ModkitDMRMultiResult",
+    "ModkitDMRPairResult",
     "RegionDiscoveryClusterContrastResult",
     "RegionDiscoveryClusterResult",
     "SharedClusterContrastResult",
+    "UniBindJobResult",
     "workflows",
 ]

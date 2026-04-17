@@ -368,6 +368,7 @@ def line_plot(
     dep_vectors: list[np.ndarray],
     dep_names: list[str],
     y_label: str,
+    legend_title: str = "variable",
     **kwargs,
 ) -> Axes:
     """
@@ -376,14 +377,13 @@ def line_plot(
     Takes in one independent vector and arbitrarily many dependent vectors. Plots all dependent vectors on the same axes against the same dependent vector.
     All vectors must be of equal length.
 
-    TODO: Right now, this always generates a legend with the title "variable". I could add a parameter to specify this (by passing the var_name argument to pd.DataFrame.melt), but then that percolates upwards to other methods. How to do this cleanly?
-
     Args:
         indep_vector: parallel with each entry in dep_vectors; independent variable values shared across each overlayed line
         indep_name: name of independent variable; set as x axis label
         dep_vectors: outer list parallel with dep_names; each inner vector parallel with indep_vector; dependent variable values for each overlayed line
         dep_names: parallel with dep_vectors; names of each overlayed line; set as legend entries
         y_label: y-axis label
+        legend_title: legend heading shown for the overlaid traces
         kwargs: other keyword parameters passed through to seaborn.lineplot
 
     Returns:
@@ -394,10 +394,13 @@ def line_plot(
     """
     # construct dict of {vector_name: vector}, including the x vector using dict union operations
     data_dict = {indep_name: indep_vector} | dict(zip(dep_names, dep_vectors))
+    hue_column = legend_title if legend_title else "variable"
     # construct long-form data table for plotting
     try:
         data_table = pd.DataFrame(data_dict).melt(
-            id_vars=indep_name, value_name=y_label
+            id_vars=indep_name,
+            value_name=y_label,
+            var_name=hue_column,
         )
     except ValueError as e:
         raise ValueError(
@@ -405,7 +408,7 @@ def line_plot(
         ) from e
     # plot lines
     return sns.lineplot(
-        data=data_table, x=indep_name, y=y_label, hue="variable", **kwargs
+        data=data_table, x=indep_name, y=y_label, hue=hue_column, **kwargs
     )
 
 

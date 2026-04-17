@@ -1459,3 +1459,377 @@ def prepare_shared_cluster_region_data(
             "has_condition_aggregation": aggregate_conditions,
         },
     }
+
+
+_READ_CLUSTER_ASSOCIATION_VALUE_MODES = {"fraction", "log2_enrichment"}
+_READ_CLUSTER_ASSOCIATION_REGION_COLUMNS = ("region_id", "chrom", "chromosome", "start", "end", "strand")
+_READ_CLUSTER_ASSOCIATION_LEGACY_EXCLUDE_COLUMNS = {
+    "count",
+    "fraction",
+    "log2_enrichment",
+    "total_reads",
+    "dominant_cluster",
+    "dominant_fraction",
+    "entropy",
+    "value",
+    "value_mode",
+}
+
+
+def _format_region_coordinate(value) -> str:
+    if pd.isna(value):
+        raise ValueError("region coordinates must not be missing.")
+    if isinstance(value, (np.integer, int)):
+        return str(int(value))
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _synthesize_read_cluster_region_id(table: pd.DataFrame, *, owner: str) -> pd.Series:
+    if "chrom" not in table.columns and "chromosome" not in table.columns:
+        raise ValueError(
+            f"{owner} requires region_id or chrom/chromosome, start, end, and strand columns."
+        )
+    _require_columns(table, ("start", "end", "strand"), owner)
+
+    chrom_column = "chrom" if "chrom" in table.columns else "chromosome"
+    if table[[chrom_column, "start", "end", "strand"]].isna().any().any():
+        raise ValueError(
+            f"{owner} requires region_id or chrom/chromosome, start, end, and strand columns."
+        )
+
+    return table.loc[:, [chrom_column, "start", "end", "strand"]].apply(
+        lambda row: (
+            f"{_format_region_coordinate(row.iloc[0])}:"
+            f"{_format_region_coordinate(row.iloc[1])}-"
+            f"{_format_region_coordinate(row.iloc[2])}:"
+            f"{_format_region_coordinate(row.iloc[3])}"
+        ),
+        axis=1,
+    )
+
+
+def _ensure_read_cluster_region_ids(table: pd.DataFrame, *, owner: str) -> pd.DataFrame:
+    normalized = table.copy()
+    if "region_id" not in normalized.columns:
+        normalized["region_id"] = _synthesize_read_cluster_region_id(normalized, owner=owner)
+        return normalized
+
+    missing_region_ids = normalized["region_id"].isna()
+    if missing_region_ids.any():
+        replacement_ids = _synthesize_read_cluster_region_id(normalized.loc[missing_region_ids], owner=owner)
+        normalized.loc[missing_region_ids, "region_id"] = replacement_ids
+    normalized["region_id"] = normalized["region_id"].astype(str)
+    return normalized
+
+
+def _normalize_long_form_read_cluster_region_association(
+    table: pd.DataFrame,
+    *,
+    value_mode: str,
+) -> pd.DataFrame:
+    _require_columns(table, ("cluster",), "association_table")
+    if value_mode not in _READ_CLUSTER_ASSOCIATION_VALUE_MODES:
+        raise ValueError("Unsupported read-cluster association value_mode.")
+    if value_mode not in table.columns:
+        raise ValueError(
+            f"association_table does not include the requested {value_mode} column."
+        )
+
+    normalized = _ensure_read_cluster_region_ids(table, owner="association_table")
+    if normalized["region_id"].isna().any():
+        raise ValueError(
+            "association_table requires region_id or chrom/chromosome, start, end, and strand columns."
+        )
+
+    normalized = normalized.copy()
+    normalized["value"] = normalized[value_mode]
+    normalized["value_mode"] = value_mode
+    normalized["source_format"] = "long_form"
+    return normalized
+
+
+def _infer_read_cluster_columns(table: pd.DataFrame) -> list[object]:
+    excluded_columns = {
+        column
+        for column in _READ_CLUSTER_ASSOCIATION_REGION_COLUMNS
+        if column in table.columns
+    }
+    excluded_columns.update(col for col in _READ_CLUSTER_ASSOCIATION_LEGACY_EXCLUDE_COLUMNS if col in table.columns)
+    cluster_columns = [column for column in table.columns if column not in excluded_columns]
+    if "region_id" in cluster_columns:
+        cluster_columns.remove("region_id")
+    return cluster_columns
+
+
+def _normalize_legacy_read_cluster_region_association(
+    table: pd.DataFrame,
+    *,
+    value_mode: str,
+) -> pd.DataFrame:
+    if value_mode != "fraction":
+        raise ValueError(
+            "Legacy read-cluster association tables only support value_mode='fraction'."
+        )
+
+    cluster_columns = _infer_read_cluster_columns(table)
+    if not cluster_columns:
+        raise ValueError("Could not infer cluster columns from the legacy association table.")
+
+    normalized = _ensure_read_cluster_region_ids(table, owner="association_table")
+    if normalized["region_id"].isna().any():
+        raise ValueError(
+            "association_table requires region_id or chrom/chromosome, start, end, and strand columns."
+        )
+
+    if "total_reads" not in normalized.columns:
+        normalized["total_reads"] = normalized.loc[:, cluster_columns].sum(axis=1)
+    if (normalized["total_reads"] <= 0).any():
+        raise ValueError("Legacy association rows must have positive total_reads or cluster counts.")
+
+    id_vars = [column for column in normalized.columns if column not in cluster_columns]
+    melted = normalized.melt(
+        id_vars=id_vars,
+        value_vars=cluster_columns,
+        var_name="cluster",
+        value_name="count",
+    )
+    melted["fraction"] = melted["count"] / melted["total_reads"]
+    melted["value"] = melted["fraction"]
+    melted["value_mode"] = "fraction"
+    melted["source_format"] = "legacy_wide"
+    return melted
+
+
+def _read_cluster_region_association_cluster_order(table: pd.DataFrame) -> list[object]:
+    return table.loc[:, "cluster"].drop_duplicates().tolist()
+
+
+def _parse_region_id_components(region_id: object) -> tuple[str, int, int, str]:
+    text = str(region_id)
+    strand = "."
+    core = text
+    if "," in text:
+        candidate_core, candidate_strand = text.rsplit(",", 1)
+        if candidate_strand in {"+", "-", "."}:
+            core = candidate_core
+            strand = candidate_strand
+    if ":" not in core or "-" not in core:
+        return text, -1, -1, strand
+    chrom, coords = core.split(":", 1)
+    start_s, end_s = coords.split("-", 1)
+    try:
+        start = int(start_s)
+        end = int(end_s)
+    except ValueError:
+        start = -1
+        end = -1
+    return chrom, start, end, strand
+
+
+def _region_coordinate_table_for_association(table: pd.DataFrame) -> pd.DataFrame:
+    regions = table.loc[:, ["region_id"]].drop_duplicates().copy()
+    has_chrom = "chrom" in table.columns or "chromosome" in table.columns
+    has_start_end = "start" in table.columns and "end" in table.columns
+    if has_chrom and has_start_end:
+        chrom_col = "chrom" if "chrom" in table.columns else "chromosome"
+        coords = (
+            table.loc[:, ["region_id", chrom_col, "start", "end"] + (["strand"] if "strand" in table.columns else [])]
+            .drop_duplicates(subset=["region_id"])
+            .copy()
+        )
+        coords = coords.rename(columns={chrom_col: "chrom"})
+        if "strand" not in coords.columns:
+            coords["strand"] = "."
+        coords["start"] = pd.to_numeric(coords["start"], errors="coerce").fillna(-1).astype(int)
+        coords["end"] = pd.to_numeric(coords["end"], errors="coerce").fillna(-1).astype(int)
+        return coords.loc[:, ["region_id", "chrom", "start", "end", "strand"]]
+
+    parsed = regions["region_id"].map(_parse_region_id_components)
+    regions["chrom"] = parsed.map(lambda x: x[0])
+    regions["start"] = parsed.map(lambda x: x[1])
+    regions["end"] = parsed.map(lambda x: x[2])
+    regions["strand"] = parsed.map(lambda x: x[3])
+    return regions
+
+
+def _chromosome_sort_key(chrom: object) -> tuple[int, object]:
+    text = str(chrom)
+    if text.lower().startswith("chr"):
+        suffix = text[3:]
+        if suffix.isdigit():
+            return (0, int(suffix))
+        if suffix in {"X", "x"}:
+            return (1, 23)
+        if suffix in {"Y", "y"}:
+            return (1, 24)
+        if suffix in {"M", "MT", "m", "mt"}:
+            return (1, 25)
+        return (2, suffix)
+    return (3, text)
+
+
+def _read_cluster_region_association_region_order(
+    table: pd.DataFrame,
+    *,
+    region_sort: str,
+    strength_aggregate: str,
+) -> list[object]:
+    if region_sort == "input":
+        return table.loc[:, "region_id"].drop_duplicates().tolist()
+
+    coords = _region_coordinate_table_for_association(table)
+    coords = coords.copy()
+    coords["chrom_sort"] = coords["chrom"].map(_chromosome_sort_key)
+    coords = coords.sort_values(["chrom_sort", "start", "end", "region_id"], kind="stable")
+
+    if region_sort == "genomic":
+        return coords["region_id"].tolist()
+
+    if region_sort == "association_strength":
+        grouped = table.groupby("region_id", sort=False)["value"]
+        if strength_aggregate == "mean":
+            strength = grouped.mean()
+        else:
+            strength = grouped.max()
+        coords = coords.merge(
+            strength.rename("association_strength"),
+            left_on="region_id",
+            right_index=True,
+            how="left",
+        )
+        coords = coords.sort_values(
+            ["association_strength", "chrom_sort", "start", "end", "region_id"],
+            ascending=[False, True, True, True, True],
+            kind="stable",
+        )
+        return coords["region_id"].tolist()
+
+    raise ValueError("region_sort must be 'input', 'genomic', or 'association_strength'.")
+
+
+def prepare_read_cluster_region_association_data(
+    association_table: pd.DataFrame,
+    *,
+    value_mode: str = "fraction",
+    top_n_regions_per_cluster: int | None = 5,
+    region_sort: str = "input",
+    association_strength_aggregate: str = "max",
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    if not isinstance(association_table, pd.DataFrame):
+        raise TypeError("association_table must be a pandas DataFrame.")
+    if value_mode not in _READ_CLUSTER_ASSOCIATION_VALUE_MODES:
+        raise ValueError("value_mode must be 'fraction' or 'log2_enrichment'.")
+    if top_n_regions_per_cluster is not None and top_n_regions_per_cluster < 0:
+        raise ValueError("top_n_regions_per_cluster must be non-negative.")
+    if region_sort not in {"input", "genomic", "association_strength"}:
+        raise ValueError("region_sort must be 'input', 'genomic', or 'association_strength'.")
+    if association_strength_aggregate not in {"max", "mean"}:
+        raise ValueError("association_strength_aggregate must be 'max' or 'mean'.")
+
+    if "cluster" in association_table.columns:
+        normalized = _normalize_long_form_read_cluster_region_association(
+            association_table,
+            value_mode=value_mode,
+        )
+    else:
+        normalized = _normalize_legacy_read_cluster_region_association(
+            association_table,
+            value_mode=value_mode,
+        )
+
+    normalized = normalized.copy()
+    if normalized.duplicated(["region_id", "cluster"]).any():
+        raise ValueError("association_table contains duplicate region and cluster rows.")
+
+    region_order = _read_cluster_region_association_region_order(
+        normalized,
+        region_sort=region_sort,
+        strength_aggregate=association_strength_aggregate,
+    )
+    cluster_order = _read_cluster_region_association_cluster_order(normalized)
+    normalized["region_id"] = pd.Categorical(normalized["region_id"], categories=region_order, ordered=True)
+    normalized["cluster"] = pd.Categorical(normalized["cluster"], categories=cluster_order, ordered=True)
+    normalized = normalized.sort_values(["region_id", "cluster"], kind="stable").reset_index(drop=True)
+    normalized["region_id"] = normalized["region_id"].astype(str)
+    normalized["cluster"] = normalized["cluster"].astype(object)
+
+    matrix_table = (
+        normalized.loc[:, ["region_id", "cluster", "value"]]
+        .pivot(index="region_id", columns="cluster", values="value")
+        .reindex(index=region_order, columns=cluster_order)
+        .reset_index()
+    )
+    matrix_table.columns.name = None
+    region_axis_table = _region_coordinate_table_for_association(normalized).copy()
+    region_axis_table = (
+        region_axis_table.set_index("region_id")
+        .reindex(region_order)
+        .reset_index()
+    )
+    region_axis_table["axis_index"] = np.arange(len(region_axis_table))
+    chromosome_blocks: list[dict[str, object]] = []
+    if not region_axis_table.empty:
+        grouped = region_axis_table.groupby("chrom", sort=False)["axis_index"]
+        for chrom, values in grouped:
+            chromosome_blocks.append(
+                {
+                    "chrom": str(chrom),
+                    "start_index": int(values.min()),
+                    "end_index": int(values.max()),
+                    "n_regions": int(values.max() - values.min() + 1),
+                }
+            )
+
+    top_columns = [
+        column
+        for column in [
+            "region_id",
+            "chrom",
+            "chromosome",
+            "start",
+            "end",
+            "strand",
+            "cluster",
+            "count",
+            "fraction",
+            "log2_enrichment",
+            "total_reads",
+            "value",
+        ]
+        if column in normalized.columns
+    ]
+    if top_n_regions_per_cluster is None or top_n_regions_per_cluster == 0:
+        top_regions_table = normalized.loc[:, top_columns].head(0).copy()
+        top_regions_table["rank"] = pd.Series(dtype="int64")
+    else:
+        top_regions_table = (
+            normalized.loc[:, top_columns]
+            .sort_values(["cluster", "value", "region_id"], ascending=[True, False, True], kind="stable")
+            .groupby("cluster", as_index=False, sort=False, group_keys=False)
+            .head(top_n_regions_per_cluster)
+            .copy()
+        )
+        top_regions_table["rank"] = top_regions_table.groupby("cluster", sort=False).cumcount() + 1
+        top_regions_table = top_regions_table.sort_values(["cluster", "rank"], kind="stable").reset_index(drop=True)
+
+    metadata = {
+        "plot_family": "read_cluster_region_association_heatmap",
+        "value_mode": value_mode,
+        "source_format": normalized["source_format"].iloc[0] if not normalized.empty else "long_form",
+        "region_order": [str(value) for value in region_order],
+        "cluster_order": cluster_order,
+        "top_n_regions_per_cluster": top_n_regions_per_cluster,
+        "has_top_regions_table": not top_regions_table.empty,
+        "region_sort": region_sort,
+        "association_strength_aggregate": association_strength_aggregate,
+        "chromosome_blocks": chromosome_blocks,
+    }
+    return {
+        "association_table": normalized.reset_index(drop=True),
+        "matrix_table": matrix_table,
+        "region_axis_table": region_axis_table,
+        "top_regions_table": top_regions_table,
+        "metadata": metadata,
+    }

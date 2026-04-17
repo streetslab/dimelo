@@ -1,6 +1,7 @@
 import csv
 import gzip
 import itertools
+import json
 import multiprocessing
 import subprocess
 from collections import defaultdict
@@ -24,6 +25,194 @@ Global variables
 
 # Specifies how many reads to check for the base modifications of interest.
 NUM_READS_TO_CHECK = 100
+ThresholdInput = int | float | dict[str, int | float] | None
+
+
+def _unique_preserve_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        ordered.append(item)
+    return ordered
+
+
+def _build_pileup_targeting_command_list(
+    motifs: list[str],
+    capabilities: run_modkit.ModkitCapabilities,
+) -> list[str]:
+    # modkit 0.6.x requires --modified-bases. In some environments capability
+    # detection can be stale during in-session binary upgrades, so treat version
+    # 0.6+ as requiring modified-bases even if the help-derived flag is false.
+    requires_modified_bases = capabilities.supports_modified_bases or (
+        capabilities.version_tuple is not None
+        and len(capabilities.version_tuple) >= 2
+        and (capabilities.version_tuple[0], capabilities.version_tuple[1]) >= (0, 6)
+    )
+
+    motif_command_list: list[str] = []
+    modified_bases: list[str] = []
+    include_cpg = False
+    motif_pairs_seen: set[tuple[str, int]] = set()
+
+    for motif in motifs:
+        parsed_motif = utils.ParsedMotif(motif)
+        if requires_modified_bases:
+            modified_bases.extend(
+                f"{parsed_motif.modified_base}:{mod_code}"
+                for mod_code in parsed_motif.mod_codes
+            )
+
+        if parsed_motif.motif_seq == "CG" and parsed_motif.modified_pos == 0:
+            include_cpg = True
+            continue
+
+        if (
+            requires_modified_bases
+            and len(parsed_motif.motif_seq) == 1
+            and parsed_motif.modified_pos == 0
+        ):
+            continue
+
+        key = (parsed_motif.motif_seq, parsed_motif.modified_pos)
+        if key in motif_pairs_seen:
+            continue
+        motif_pairs_seen.add(key)
+        motif_command_list.extend(
+            ["--motif", parsed_motif.motif_seq, str(parsed_motif.modified_pos)]
+        )
+
+    modified_bases_command_list: list[str] = []
+    if requires_modified_bases:
+        for modified_base in _unique_preserve_order(modified_bases):
+            modified_bases_command_list.extend(["--modified-bases", modified_base])
+        if len(modified_bases_command_list) == 0:
+            raise ValueError(
+                "No mod codes were resolved from motifs; cannot build required "
+                "--modified-bases arguments for modkit pileup. Pass motifs with "
+                "explicit mod codes (for example 'A,0,a' or 'CG,0,m')."
+            )
+
+    cpg_command_list = ["--cpg"] if include_cpg else []
+    return modified_bases_command_list + cpg_command_list + motif_command_list
+
+
+def _build_extract_targeting_command_list(
+    parsed_motif: utils.ParsedMotif,
+) -> list[str]:
+    if parsed_motif.motif_seq == "CG" and parsed_motif.modified_pos == 0:
+        return ["--cpg"]
+    return ["--motif", parsed_motif.motif_seq, str(parsed_motif.modified_pos)]
+
+
+def _build_mod_threshold_command_list(
+    motifs: list[str],
+    motif_thresholds: dict[str, float],
+    capabilities: run_modkit.ModkitCapabilities,
+) -> list[str]:
+    if capabilities.supports_mod_threshold:
+        threshold_flag = "--mod-threshold"
+    elif capabilities.supports_mod_thresholds:
+        threshold_flag = "--mod-thresholds"
+    else:
+        threshold_flag = "--mod-threshold"
+
+    mod_code_thresholds: dict[str, float] = {}
+    for motif in motifs:
+        parsed_motif = utils.ParsedMotif(motif)
+        threshold_for_motif = motif_thresholds[motif]
+        for mod_code in parsed_motif.mod_codes:
+            existing_threshold = mod_code_thresholds.get(mod_code)
+            if (
+                existing_threshold is not None
+                and abs(existing_threshold - threshold_for_motif) > 1e-12
+            ):
+                raise ValueError(
+                    "Cannot apply different thresholds to motifs that share mod code "
+                    f"{mod_code!r}. Received both {existing_threshold} and {threshold_for_motif}."
+                )
+            mod_code_thresholds[mod_code] = threshold_for_motif
+
+    command: list[str] = []
+    for mod_code in _unique_preserve_order(list(mod_code_thresholds.keys())):
+        command.extend([threshold_flag, f"{mod_code}:{mod_code_thresholds[mod_code]}"])
+    return command
+
+
+def _build_extract_command_prefix(
+    input_file: Path,
+    output_txt: Path,
+    capabilities: run_modkit.ModkitCapabilities,
+) -> list[str | Path]:
+    if capabilities.supports_extract_subcommands:
+        return [capabilities.executable, "extract", "full", input_file, output_txt]
+    return [capabilities.executable, "extract", input_file, output_txt]
+
+
+def _build_extract_reference_command_list(
+    ref_genome: Path,
+    capabilities: run_modkit.ModkitCapabilities,
+) -> list[str | Path]:
+    if capabilities.supports_extract_subcommands:
+        if capabilities.extract_supports_reference_long:
+            return ["--reference", ref_genome]
+        if capabilities.extract_supports_reference_short:
+            return ["--ref", ref_genome]
+        return []
+    if capabilities.extract_supports_reference_short:
+        return ["--ref", ref_genome]
+    if capabilities.extract_supports_reference_long:
+        return ["--reference", ref_genome]
+    return ["--ref", ref_genome]
+
+
+def _build_implicit_tag_command_list(
+    capabilities: run_modkit.ModkitCapabilities,
+) -> list[str]:
+    if capabilities.supports_force_allow_implicit:
+        return ["--force-allow-implicit"]
+    return []
+
+
+def _canonical_motif_key(motif: str) -> str:
+    parsed = utils.ParsedMotif(motif)
+    return f"{parsed.motif_seq},{parsed.modified_pos}"
+
+
+def _resolve_motif_thresholds(
+    motifs: list[str],
+    thresh: ThresholdInput,
+    quiet: bool,
+) -> dict[str, float] | None:
+    if thresh is None:
+        return None
+
+    if isinstance(thresh, (int, float)):
+        adjusted = utils.adjust_threshold(float(thresh), quiet=quiet)
+        return {motif: adjusted for motif in motifs}
+
+    if not isinstance(thresh, dict):
+        raise TypeError(
+            "thresh must be None, a number, or a dict mapping motif keys to thresholds."
+        )
+
+    resolved: dict[str, float] = {}
+    for motif in motifs:
+        canonical_key = _canonical_motif_key(motif)
+        threshold_value = None
+        for key in (motif, canonical_key, "default", "*"):
+            if key in thresh:
+                threshold_value = thresh[key]
+                break
+        if threshold_value is None:
+            raise ValueError(
+                f"Missing threshold for motif {motif!r}. Provide an exact key, canonical key "
+                f"{canonical_key!r}, or a default key ('default' or '*')."
+            )
+        resolved[motif] = utils.adjust_threshold(float(threshold_value), quiet=quiet)
+    return resolved
 
 
 def _threads_command_list(cores: int | None, quiet: bool) -> list[str]:
@@ -94,13 +283,14 @@ def pileup(
     output_directory: str | Path | None = None,
     regions: str | Path | list[str | Path] | None = None,
     motifs: list = ["A,0", "CG,0"],
-    thresh: float | None = None,
+    thresh: ThresholdInput = None,
     window_size: int | None = None,
     cores: int | None = None,
     log: bool = False,
     cleanup: bool = True,
     quiet: bool = False,
     override_checks: bool = False,
+    modkit_executable: str | Path | None = None,
 ) -> tuple[Path, Path]:
     """
     Takes a bam file containing long read sequencing data aligned
@@ -147,9 +337,12 @@ def pileup(
             The basemods are each specified as {sequence_motif},{position_of_modification}.
             For example, a methylated adenine is specified as 'A,0' and CpG methylation
             is specified as 'CG,0'.
-        thresh: float point number specifying the base modification probability threshold
-            used to delineate modificaton calls as True or False. When set to None, modkit
-            will select its own threshold automatically based on the data.
+        thresh: base modification threshold specification. Accepted forms are:
+            * None: modkit infers thresholds from data
+            * float/int: one threshold for all motifs
+            * dict: motif-specific thresholds keyed by exact motif string
+              (e.g. ``{"A,0": 0.7, "CG,0": 0.8}``), canonical motif key, or
+              ``default``/``*`` fallback.
         window_size: an integer specifying a window around the center of each bed_file
             region. If set to None, the bed_file is used unmodified. If set to a non-zero
             positive integer, the bed_file regions are replaced by new regions with that
@@ -162,6 +355,9 @@ def pileup(
             outputs. The final processed files are not human-readable, whereas the intermediate
             outputs are. However, intermediate outputs can also be quite large.
         override_checks: convert errors from input checking into warnings if True
+        modkit_executable: optional executable name or path to a specific modkit
+            binary. If None, dimelo resolves modkit from PATH (or
+            DIMELO_MODKIT_EXECUTABLE when set).
 
     Returns:
         Path object pointing to the compressed and indexed .bed.gz bedmethyl file, ready
@@ -171,7 +367,10 @@ def pileup(
     """
     ## Verify and prepare inputs and outputs
 
-    run_modkit.ensure_modkit_available(quiet=quiet)
+    capabilities = run_modkit._ensure_modkit_available(
+        quiet=quiet,
+        executable=modkit_executable,
+    )
 
     input_file, ref_genome, output_directory = utils.sanitize_path_args(
         input_file, ref_genome, output_directory
@@ -195,7 +394,7 @@ def pileup(
         prep_output_directory(
             output_directory=output_directory,
             output_name=output_name,
-            default_directory=input_file.parent,
+            input_file=input_file.parent,
             output_file_names=[
                 "pileup.bed",
                 "pileup.sorted.bed",
@@ -213,25 +412,12 @@ def pileup(
         window_size,
     )
 
-    motif_command_list = []
-    if len(motifs) > 0:
-        for motif in motifs:
-            parsed_motif = utils.ParsedMotif(motif)
-            motif_command_present = False
-            for a, b in zip(motif_command_list, motif_command_list[1:]):
-                if a == parsed_motif.motif_seq and b == str(parsed_motif.modified_pos):
-                    # This motif is already going to be processed; we want to skip adding it a second
-                    # time because modkit does not like duplicate motifs.
-                    # It's actually ok if it's a different mod code in the two cases because the pileup
-                    # operation, under the hood, keeps all mod codes. Filtering is only done when loading.
-                    motif_command_present = True
-                    break
-            if not motif_command_present:
-                motif_command_list.append("--motif")
-                motif_command_list.append(parsed_motif.motif_seq)
-                motif_command_list.append(str(parsed_motif.modified_pos))
-    else:
+    if len(motifs) == 0:
         raise ValueError("Error: no motifs specified. Nothing to process.")
+    motif_command_list = _build_pileup_targeting_command_list(
+        motifs=motifs,
+        capabilities=capabilities,
+    )
 
     if log:
         if not quiet:
@@ -243,34 +429,38 @@ def pileup(
     cores_command_list = _threads_command_list(cores=cores, quiet=quiet)
 
     mod_thresh_command_list: list[str] = []
-    if thresh is None:
+    motif_thresholds = _resolve_motif_thresholds(
+        motifs=motifs,
+        thresh=thresh,
+        quiet=quiet,
+    )
+    if motif_thresholds is None:
         if not quiet:
             print(
                 "No base modification threshold provided. Using adaptive threshold selection via modkit."
             )
     else:
-        adjusted_threshold = utils.adjust_threshold(thresh, quiet=quiet)
-        if adjusted_threshold < 0.5 and not quiet:
+        if any(value < 0.5 for value in motif_thresholds.values()) and not quiet:
             print(
                 f"WARNING: thresh {thresh} is very low and may lead to unexpected behavior. Typical thresholds are at least 0.5 or 128."
             )
-        for motif in motifs:
-            parsed_motif = utils.ParsedMotif(motif)
-            for mod_code in parsed_motif.mod_codes:
-                mod_thresh_command_list = mod_thresh_command_list + [
-                    "--mod-thresholds",
-                    f"{mod_code}:{adjusted_threshold}",
-                ]
+        mod_thresh_command_list = _build_mod_threshold_command_list(
+            motifs=motifs,
+            motif_thresholds=motif_thresholds,
+            capabilities=capabilities,
+        )
 
     ref_genome_command_list = ["--ref", ref_genome]
     filter_command_list = ["--filter-threshold", "0"]
+    implicit_tag_command_list = _build_implicit_tag_command_list(capabilities)
 
     pileup_command_list = (
-        ["modkit", "pileup", input_file, output_bedmethyl]
+        [capabilities.executable, "pileup", input_file, output_bedmethyl]
         + region_command_list
         + motif_command_list
         + ref_genome_command_list
         + filter_command_list
+        + implicit_tag_command_list
         + mod_thresh_command_list
         + cores_command_list
         + log_command_list
@@ -315,13 +505,14 @@ def extract(
     output_directory: str | Path | None = None,
     regions: str | Path | list[str | Path] | None = None,
     motifs: list = ["A,0", "CG,0", "GCH,1"],
-    thresh: float | None = None,
+    thresh: ThresholdInput = None,
     window_size: int | None = None,
     cores: int | None = None,
     log: bool = False,
     cleanup: bool = True,
     quiet: bool = False,
     override_checks: bool = False,
+    modkit_executable: str | Path | None = None,
 ) -> tuple[Path, Path]:
     """
     Takes a bam file containing long read sequencing data aligned
@@ -366,9 +557,12 @@ def extract(
             The basemods are each specified as {sequence_motif},{position_of_modification}.
             For example, a methylated adenine is specified as 'A,0' and CpG methylation
             is specified as 'CG,0'.
-        thresh: float point number specifying the base modification probability threshold
-            used to delineate modificaton calls as True or False. When set to None, modkit
-            will select its own threshold automatically based on the data.
+        thresh: base modification threshold specification. Accepted forms are:
+            * None: keep raw probabilities in output vectors
+            * float/int: one threshold for all motifs
+            * dict: motif-specific thresholds keyed by exact motif string
+              (e.g. ``{"A,0": 0.7, "CG,0": 0.8}``), canonical motif key, or
+              ``default``/``*`` fallback.
         window_size: an integer specifying a window around the center of each bed_file
             region. If set to None, the bed_file is used unmodified. If set to a non-zero
             positive integer, the bed_file regions are replaced by new regions with that
@@ -381,6 +575,9 @@ def extract(
             outputs. The final processed files are not human-readable, whereas the intermediate
             outputs are. However, intermediate outputs can also be quite large.
         override_checks: convert errors from input checking into warnings if True
+        modkit_executable: optional executable name or path to a specific modkit
+            binary. If None, dimelo resolves modkit from PATH (or
+            DIMELO_MODKIT_EXECUTABLE when set).
 
     Returns:
         Path object pointing to the compressed and indexed output .h5 file, ready for
@@ -389,6 +586,10 @@ def extract(
 
     """
     ## Verify and prepare inputs and outputs
+    capabilities = run_modkit._ensure_modkit_available(
+        quiet=quiet,
+        executable=modkit_executable,
+    )
 
     input_file, ref_genome, output_directory = utils.sanitize_path_args(
         input_file, ref_genome, output_directory
@@ -411,7 +612,7 @@ def extract(
     output_path, (output_reads_path,) = prep_output_directory(
         output_directory=output_directory,
         output_name=output_name,
-        default_directory=input_file.parent,
+        input_file=input_file.parent,
         output_file_names=["reads.combined_basemods.h5"],
     )
 
@@ -425,15 +626,18 @@ def extract(
 
     cores_command_list = _threads_command_list(cores=cores, quiet=quiet)
 
-    if thresh is None:
+    motif_thresholds = _resolve_motif_thresholds(
+        motifs=motifs,
+        thresh=thresh,
+        quiet=quiet,
+    )
+    if motif_thresholds is None:
         if not quiet:
             print(
                 "No valid base modification threshold provided. Raw probabilities will be saved."
             )
-        adjusted_threshold = None
     else:
-        adjusted_threshold = utils.adjust_threshold(thresh, quiet=quiet)
-        if adjusted_threshold < 0.5 and not quiet:
+        if any(value < 0.5 for value in motif_thresholds.values()) and not quiet:
             print(
                 f"WARNING: thresh {thresh} is very low and may lead to unexpected behavior. Typical thresholds are at least 0.5 or 128."
             )
@@ -449,8 +653,14 @@ def extract(
     else:
         log_command_list = []
 
-    ref_genome_command_list = ["--ref", ref_genome]
-    filter_command_list = ["--filter-threshold", "0"]
+    ref_genome_command_list = _build_extract_reference_command_list(
+        ref_genome=ref_genome,
+        capabilities=capabilities,
+    )
+    filter_command_list = (
+        [] if capabilities.supports_extract_subcommands else ["--filter-threshold", "0"]
+    )
+    implicit_tag_command_list = _build_implicit_tag_command_list(capabilities)
 
     # Run modkit once for each motif, because the output .txt can be ambiguous otherwise
     # There is no column currently to specify the motif (e.g. CG,0 vs GCH,1), only canonical
@@ -460,24 +670,26 @@ def extract(
     for motif in motifs:
         # Here we prepare the motif-specific commands and delete any old .txt file because
         # modkit will crash otherwise
-        motif_command_list = []
         parsed_motif = utils.ParsedMotif(motif)
-        motif_command_list.append("--motif")
-        motif_command_list.append(parsed_motif.motif_seq)
-        motif_command_list.append(str(parsed_motif.modified_pos))
+        motif_command_list = _build_extract_targeting_command_list(parsed_motif)
 
         output_txt = Path(output_path) / (f"reads.{motif}.txt")
 
         output_txt.unlink(missing_ok=True)
 
         extract_command_list = (
-            ["modkit", "extract", input_file, output_txt]
+            _build_extract_command_prefix(
+                input_file=input_file,
+                output_txt=output_txt,
+                capabilities=capabilities,
+            )
             + region_command_list
             + motif_command_list
             + cores_command_list
             + log_command_list
             + ref_genome_command_list
             + filter_command_list
+            + implicit_tag_command_list
         )
 
         run_modkit.run_with_progress_bars(
@@ -502,7 +714,7 @@ def extract(
             output_txt,
             output_reads_path,
             motif,
-            adjusted_threshold,
+            None if motif_thresholds is None else motif_thresholds[motif],
             quiet=quiet,
         )
         # Delete intermediate file
@@ -761,8 +973,8 @@ def read_by_base_txt_to_hdf5(
 
     Args:
         input_txt: a string or Path pointing to a modkit extracted base-by-base modifications
-            file. This file is assumed to have been created by modkit v0.2.4, other versions may
-            have a different format and may not function normally.
+            file. This parser supports both legacy and current extract table schemas used by
+            modkit 0.2.4 and 0.6.x.
         output_h5: a string or Path pointing to a valid place to save an .h5 file. If this
             file already exists, it will not be cleared and will simply be appended to.
         motif: a string specifying a single base modification. Basemods are specified as
@@ -790,14 +1002,26 @@ def read_by_base_txt_to_hdf5(
     num_reads = 0
     with input_txt.open(newline="") as txt:
         reader = csv.reader(txt, delimiter="\t")
-        # Check file length
-        line_index = -1
-        for line_index, fields in enumerate(reader):
-            if line_index > 0 and read_name != fields[0]:
-                read_name = fields[0]
-                num_reads += 1
-        if line_index < 0:
+        header_fields = next(reader, None)
+        if header_fields is None:
             raise ValueError(f"modkit extract output is empty: {input_txt}")
+
+        if "read_id" in header_fields:
+            first_pass_read_name_idx = header_fields.index("read_id")
+        elif "read_name" in header_fields:
+            first_pass_read_name_idx = header_fields.index("read_name")
+        else:
+            first_pass_read_name_idx = 0
+
+        # Check file length
+        line_index = 0
+        for line_index, fields in enumerate(reader, start=1):
+            read_id_value = fields[first_pass_read_name_idx]
+            if read_name != read_id_value:
+                read_name = read_id_value
+                num_reads += 1
+        if line_index == 0:
+            raise ValueError(f"modkit extract output has no data rows: {input_txt}")
         num_lines = line_index
         txt.seek(0)
 
@@ -808,20 +1032,59 @@ def read_by_base_txt_to_hdf5(
             # h5py does not appear to otherwise support vlen binary
             dt_vlen = h5py.vlen_dtype(np.dtype("uint8"))
 
-            ## Format threshold value and create dataset to store whether this data is thresholded (binary) or raw.
-            # Option 1: thresholded outputs are written as binary 0/1 vectors and the threshold dataset
-            # records the cutoff used. Raw-probability outputs are preserved only when thresh is None.
-            threshold_to_store = np.nan if thresh is None else thresh
-            if "threshold" in h5:
-                threshold_from_existing = h5["threshold"][()]
-                if threshold_from_existing != threshold_to_store and not (
-                    np.isnan(threshold_from_existing) and np.isnan(threshold_to_store)
-                ):
-                    raise ValueError(
-                        "existing threshold in output_h5 does not match provided threshold for read_by_base_txt_to_hdf5."
-                    )
+            # Threshold metadata:
+            # - `threshold` remains for backwards compatibility and for fast binarized/raw checks.
+            # - `threshold_by_motif_json` stores per-motif thresholds so different motifs can use
+            #   different binarization cutoffs in one output file.
+            threshold_for_motif = None if thresh is None else float(thresh)
+            threshold_by_motif: dict[str, float | None] = {}
+            if "threshold_by_motif_json" in h5:
+                raw_threshold_map = h5["threshold_by_motif_json"][()]
+                if isinstance(raw_threshold_map, bytes):
+                    raw_threshold_map = raw_threshold_map.decode("utf-8")
+                threshold_by_motif = json.loads(str(raw_threshold_map))
+            elif "threshold" in h5 and "motif" in h5 and h5["motif"].shape[0] > 0:
+                legacy_threshold = h5["threshold"][()]
+                legacy_threshold_value = (
+                    None if np.isnan(legacy_threshold) else float(legacy_threshold)
+                )
+                existing_motifs = np.unique(np.array(h5["motif"], dtype=str))
+                threshold_by_motif = {
+                    existing_motif: legacy_threshold_value
+                    for existing_motif in existing_motifs
+                }
+
+            threshold_by_motif[motif] = threshold_for_motif
+
+            has_raw = any(value is None for value in threshold_by_motif.values())
+            has_binary = any(value is not None for value in threshold_by_motif.values())
+            if has_raw and has_binary:
+                raise ValueError(
+                    "Cannot mix raw-probability and thresholded motifs in one output_h5 file."
+                )
+
+            if has_binary:
+                unique_thresholds = sorted(
+                    {float(value) for value in threshold_by_motif.values() if value is not None}
+                )
+                if len(unique_thresholds) == 1:
+                    threshold_to_store = unique_thresholds[0]
+                else:
+                    # Keep legacy `threshold` dataset non-NaN to indicate binarized vectors.
+                    threshold_to_store = 0.0
             else:
-                h5.create_dataset("threshold", data=threshold_to_store)
+                threshold_to_store = np.nan
+
+            if "threshold" in h5:
+                del h5["threshold"]
+            h5.create_dataset("threshold", data=threshold_to_store)
+
+            if "threshold_by_motif_json" in h5:
+                del h5["threshold_by_motif_json"]
+            h5.create_dataset(
+                "threshold_by_motif_json",
+                data=json.dumps(threshold_by_motif),
+            )
 
             ## Create read metadata datasets
             if "read_name" in h5:
@@ -979,7 +1242,28 @@ def read_by_base_txt_to_hdf5(
             # Setting up progress bars if not in quiet mode
             # Skip header
             reader = csv.reader(txt, delimiter="\t")
-            next(reader)
+            header = next(reader)
+
+            def _column_index(*candidates: str, fallback: int) -> int:
+                for candidate in candidates:
+                    if candidate in header:
+                        return header.index(candidate)
+                return fallback
+
+            read_name_idx = _column_index("read_id", "read_name", fallback=0)
+            pos_in_read_idx = _column_index(
+                "forward_read_position", "read_position", fallback=1
+            )
+            pos_in_genome_idx = _column_index(
+                "ref_position", "reference_position", fallback=2
+            )
+            read_chrom_idx = _column_index("chrom", "chromosome", fallback=3)
+            ref_strand_idx = _column_index("ref_strand", fallback=5)
+            line_read_len_idx = _column_index("read_length", fallback=9)
+            prob_idx = _column_index("mod_qual", fallback=10)
+            mod_code_idx = _column_index("mod_code", fallback=11)
+            canonical_base_idx = _column_index("canonical_base", fallback=15)
+
             iterator = reader
             if not quiet:
                 iterator = tqdm(
@@ -991,13 +1275,13 @@ def read_by_base_txt_to_hdf5(
 
             # Loop through txt file
             for fields in iterator:
-                pos_in_genome = int(fields[2])
-                canonical_base = fields[15]
-                prob = float(fields[10])
-                mod_code = fields[11]
-                pos_in_read = int(fields[1])
-                line_read_len = int(fields[9])
-                line_ref_strand = fields[5]
+                pos_in_genome = int(fields[pos_in_genome_idx])
+                canonical_base = fields[canonical_base_idx]
+                prob = float(fields[prob_idx])
+                mod_code = fields[mod_code_idx]
+                pos_in_read = int(fields[pos_in_read_idx])
+                line_read_len = int(fields[line_read_len_idx])
+                line_ref_strand = fields[ref_strand_idx]
                 pos_in_read_ref = _reference_oriented_read_offset(
                     pos_in_read=pos_in_read,
                     read_length=line_read_len,
@@ -1006,13 +1290,13 @@ def read_by_base_txt_to_hdf5(
                 start_candidate = pos_in_genome - pos_in_read_ref
                 end_candidate = start_candidate + line_read_len
 
-                if read_name != fields[0]:
+                if read_name != fields[read_name_idx]:
                     flush_current_read()
 
                     ## Set up for next read
                     # Metadata
-                    read_name = fields[0]
-                    read_chrom = fields[3]
+                    read_name = fields[read_name_idx]
+                    read_chrom = fields[read_chrom_idx]
                     ref_strand = line_ref_strand
                     read_start = start_candidate
                     read_end = end_candidate
@@ -1048,7 +1332,7 @@ def read_by_base_txt_to_hdf5(
 def prep_output_directory(
     output_directory: Path | None,
     output_name: str,
-    default_directory: Path,
+    input_file: Path,
     output_file_names: list[str],
 ) -> tuple[Path, list[Path]]:
     """
@@ -1060,7 +1344,7 @@ def prep_output_directory(
             directory.
         output_name: a string that will be used to create an output folder
             containing the intermediate and final outputs, along with any logs.
-        default_directory: default output directory when output_directory is None
+        input_file: default output directory when output_directory is None
         output_file_names: list of names of desired output files
 
     Returns:
@@ -1068,7 +1352,7 @@ def prep_output_directory(
         * List of Paths to requested output files
     """
     if output_directory is None:
-        output_directory = default_directory
+        output_directory = input_file
         print(f"No output directory provided, using input directory {output_directory}")
 
     output_path = output_directory / output_name

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 
@@ -632,6 +633,199 @@ def plot_shared_cluster_region_matplotlib(
     ax.set_xlabel("Cluster")
     ax.set_ylabel("Region / Condition" if level == "condition" else "Region / Sample")
     ax.set_title(title or "Shared cluster region occupancy")
+    return fig, ax
+
+
+def plot_read_cluster_region_association_heatmap_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+    region_label_mode: str = "auto",
+    max_region_labels: int = 50,
+    row_annotation_column: str | None = None,
+    row_annotation_title: str | None = None,
+    row_annotation_palette: Mapping[str, str] | None = None,
+    group_region_labels: bool | None = None,
+    group_label_columns: Sequence[str] | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("matrix_table", "metadata"),
+        owner="plot_read_cluster_region_association_heatmap_matplotlib",
+    )
+    matrix_table = _require_payload_table(payload, "matrix_table")
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise TypeError("plot payload key 'metadata' must be a mapping.")
+
+    if matrix_table.empty:
+        fig, ax = _make_axis(ax=ax, figsize=(8, 4))
+        ax.set_title(title or "Read-cluster association heatmap")
+        ax.set_xlabel("Cluster")
+        ax.set_ylabel("Region")
+        return fig, ax
+
+    region_column = "region_id" if "region_id" in matrix_table.columns else matrix_table.columns[0]
+    cluster_columns = [column for column in matrix_table.columns if column != region_column]
+    fig_width = max(8.0, 4.5 + (0.75 * len(cluster_columns)))
+    fig_height = max(4.5, min(16.0, 2.0 + (0.10 * len(matrix_table))))
+    fig, ax = _make_axis(ax=ax, figsize=(fig_width, fig_height))
+    value_mode = str(metadata.get("value_mode") or "fraction")
+    region_axis_table = payload.get("region_axis_table")
+    if region_axis_table is not None and not isinstance(region_axis_table, pd.DataFrame):
+        raise TypeError("plot payload key 'region_axis_table' must be a pandas DataFrame when provided.")
+    if region_label_mode not in {"auto", "region_id", "genomic", "chromosome"}:
+        raise ValueError(
+            "region_label_mode must be 'auto', 'region_id', 'genomic', or 'chromosome'."
+        )
+    max_region_labels = max(1, int(max_region_labels))
+
+    heatmap = matrix_table.loc[:, cluster_columns].copy()
+    image = ax.imshow(
+        heatmap.to_numpy(),
+        aspect="auto",
+        origin="upper",
+        interpolation="nearest",
+    )
+    ax.figure.colorbar(image, ax=ax, label=value_mode.replace("_", " ").title())
+    ax.set_xticks(range(len(cluster_columns)))
+    ax.set_xticklabels([str(value) for value in cluster_columns], rotation=45, ha="right")
+
+    n_regions = len(matrix_table)
+    default_ticks = np.arange(n_regions)
+    default_labels = matrix_table[region_column].astype(str).tolist()
+    ticks = default_ticks
+    labels = default_labels
+    step = max(1, int(np.ceil(n_regions / max_region_labels)))
+    if step > 1:
+        ticks = default_ticks[::step]
+        labels = [default_labels[idx] for idx in ticks]
+    annotation_values: list[str] | None = None
+
+    axis_table = None
+    if isinstance(region_axis_table, pd.DataFrame) and not region_axis_table.empty:
+        axis_table = region_axis_table.copy()
+        if {"chrom", "start", "end"}.issubset(axis_table.columns):
+            genomic_labels = [
+                f"{chrom}:{int(start):,}-{int(end):,}"
+                for chrom, start, end in axis_table[["chrom", "start", "end"]].itertuples(index=False)
+            ]
+            chrom_labels = axis_table["chrom"].astype(str).tolist()
+            effective_mode = region_label_mode
+            if effective_mode == "auto":
+                default_region_sort = str(metadata.get("region_sort") or "input")
+                if default_region_sort == "genomic":
+                    effective_mode = "chromosome" if n_regions > max_region_labels else "genomic"
+                else:
+                    effective_mode = "region_id"
+            if effective_mode == "genomic":
+                labels = [genomic_labels[idx] for idx in ticks]
+            elif effective_mode == "chromosome":
+                labels = [chrom_labels[idx] for idx in ticks]
+                # Mark chromosome boundaries to visually group regions.
+                chrom_codes = pd.Categorical(axis_table["chrom"].astype(str)).codes
+                boundaries = np.flatnonzero(np.diff(chrom_codes)) + 1
+                for boundary in boundaries:
+                    ax.axhline(boundary - 0.5, color="white", linewidth=0.6, alpha=0.6)
+            elif effective_mode == "region_id":
+                labels = [default_labels[idx] for idx in ticks]
+        if row_annotation_column is not None and row_annotation_column in axis_table.columns:
+            annotation_values = axis_table[row_annotation_column].astype(str).tolist()
+
+    if group_region_labels is None:
+        group_region_labels = (
+            axis_table is not None
+            and region_label_mode in {"genomic", "chromosome", "auto"}
+            and n_regions > max_region_labels
+            and (
+                ("chrom" in axis_table.columns)
+                or (row_annotation_column is not None and row_annotation_column in axis_table.columns)
+            )
+        )
+
+    if axis_table is not None and group_region_labels:
+        requested_group_cols = list(group_label_columns or [])
+        if not requested_group_cols:
+            if row_annotation_column is not None and row_annotation_column in axis_table.columns:
+                requested_group_cols = [row_annotation_column, "chrom"]
+            elif "chrom" in axis_table.columns:
+                requested_group_cols = ["chrom"]
+        requested_group_cols = [col for col in requested_group_cols if col in axis_table.columns]
+        if requested_group_cols:
+            group_parts = axis_table.loc[:, requested_group_cols].astype(str)
+            group_key = group_parts.agg(" | ".join, axis=1).tolist()
+            boundaries = np.flatnonzero(np.array(group_key[1:]) != np.array(group_key[:-1])) + 1
+            group_starts = np.concatenate(([0], boundaries))
+            group_ends = np.concatenate((boundaries, [len(group_key)]))
+            centers = ((group_starts + group_ends - 1) / 2.0).astype(float)
+            group_labels = [group_key[int(start)] for start in group_starts]
+            # Downsample grouped labels when there are still too many.
+            if len(group_labels) > max_region_labels:
+                gstep = max(1, int(np.ceil(len(group_labels) / max_region_labels)))
+                centers = centers[::gstep]
+                group_labels = group_labels[::gstep]
+            ticks = centers
+            labels = group_labels
+            for boundary in boundaries:
+                ax.axhline(boundary - 0.5, color="white", linewidth=0.6, alpha=0.6)
+
+    ax.set_yticks(np.asarray(ticks).tolist())
+    if annotation_values is not None and not group_region_labels:
+        labels = [f"{labels[pos]} | {annotation_values[idx]}" for pos, idx in enumerate(ticks)]
+    ytick_fontsize = 8 if len(labels) <= 30 else 7
+    ax.set_yticklabels(labels, fontsize=ytick_fontsize)
+    ax.set_xlabel("Cluster")
+    ax.set_ylabel("Region")
+    ax.set_title(title or "Read-cluster association heatmap")
+
+    if annotation_values is not None and n_regions > 0:
+        from matplotlib.colors import ListedColormap
+        from matplotlib.patches import Patch
+
+        ordered_annotations = _ordered_unique_values(
+            pd.DataFrame({"annotation": annotation_values}),
+            "annotation",
+        )
+        if row_annotation_palette is None:
+            plt = _import_pyplot()
+            cmap = plt.get_cmap("tab10")
+            row_annotation_palette = {
+                value: cmap(i % 10) for i, value in enumerate(ordered_annotations)
+            }
+        annotation_colors = [row_annotation_palette.get(value, "0.6") for value in ordered_annotations]
+        color_lookup = {value: i for i, value in enumerate(ordered_annotations)}
+        color_codes = np.array([color_lookup.get(value, 0) for value in annotation_values], dtype=int)
+        strip_ax = ax.inset_axes([-0.07, 0.0, 0.022, 1.0], transform=ax.transAxes)
+        strip_ax.imshow(
+            color_codes.reshape(-1, 1),
+            aspect="auto",
+            origin="upper",
+            interpolation="nearest",
+            cmap=ListedColormap(annotation_colors),
+            vmin=0,
+            vmax=max(1, len(annotation_colors) - 1),
+        )
+        strip_ax.set_xticks([])
+        strip_ax.set_yticks([])
+        strip_ax.set_title(
+            row_annotation_title or row_annotation_column,
+            fontsize=8,
+            pad=2,
+        )
+
+        legend_handles = [
+            Patch(facecolor=row_annotation_palette.get(value, "0.6"), edgecolor="none", label=str(value))
+            for value in ordered_annotations
+        ]
+        if legend_handles:
+            ax.legend(
+                handles=legend_handles,
+                title=row_annotation_title or row_annotation_column,
+                loc="upper left",
+                bbox_to_anchor=(1.01, 1.0),
+                frameon=False,
+            )
     return fig, ax
 
 

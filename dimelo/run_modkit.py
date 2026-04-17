@@ -1,4 +1,6 @@
 import os
+from dataclasses import dataclass
+from functools import lru_cache
 
 # I believe that pty does not currently work on Windows, although this may change in future releases: https://bugs.python.org/issue41663
 # However, it may be that pywinpty, which is installable from pip, would work fine. That just needs to be tested with a Windows machine
@@ -6,6 +8,7 @@ import os
 import pty
 import re
 import select
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,16 +16,38 @@ from typing import Optional, TypeAlias, cast
 
 from tqdm.auto import tqdm
 
-# This should be updated in tandem with the environment.yml nanoporetech::modkit version
-EXPECTED_MODKIT_VERSION = "0.2.4"
+SUPPORTED_MODKIT_SERIES = ("0.2.x", "0.6.x")
+SUPPORTED_MODKIT_MINOR_VERSIONS = {(0, 2), (0, 6)}
+MODKIT_EXECUTABLE_ENV = "DIMELO_MODKIT_EXECUTABLE"
 FindingProgressDict: TypeAlias = dict[str, tuple[int, int]]
+_NOISY_RUNTIME_LINES: tuple[str, ...] = (
+    "MallocStackLogging: can't turn off malloc stack logging because it was not enabled.",
+)
 
-def ensure_modkit_available(quiet: bool = False) -> None:
-    """
-    Lazily check that modkit is on PATH and matches expected version.
-    Called by parse functions to avoid import-time failures during analysis-only workflows.
-    """
 
+@dataclass(frozen=True)
+class ModkitCapabilities:
+    executable: str
+    version_raw: str
+    version: str | None
+    version_tuple: tuple[int, ...] | None
+    supports_mod_threshold: bool
+    supports_mod_thresholds: bool
+    supports_modified_bases: bool
+    supports_force_allow_implicit: bool
+    supports_extract_subcommands: bool
+    extract_supports_reference_long: bool
+    extract_supports_reference_short: bool
+
+
+def _strip_runtime_noise(text: str) -> str:
+    cleaned = text
+    for line in _NOISY_RUNTIME_LINES:
+        cleaned = cleaned.replace(line, "")
+    return cleaned
+
+
+def _prepare_modkit_path(quiet: bool = False) -> None:
     # Add conda env bin folder to path if it is not already present
     current_interpreter = sys.executable
     env_bin_path = os.path.dirname(current_interpreter)
@@ -33,23 +58,189 @@ def ensure_modkit_available(quiet: bool = False) -> None:
             )
         os.environ["PATH"] = f"{env_bin_path}:{os.environ['PATH']}"
 
-    try:
-        result = subprocess.run(
-            ["modkit", "--version"], stdout=subprocess.PIPE, text=True, check=True
+
+def _parse_modkit_semver(version_text: str) -> tuple[int, ...] | None:
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", version_text)
+    if match is None:
+        return None
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
+def _help_supports_flag(help_text: str, flag: str) -> bool:
+    return re.search(rf"(?m)^\s+{re.escape(flag)}(?:\s|$)", help_text) is not None
+
+
+def _resolve_modkit_executable(
+    executable: str | None,
+) -> str:
+    requested = executable or os.environ.get(MODKIT_EXECUTABLE_ENV) or "modkit"
+    looks_like_path = any(sep in requested for sep in ("/", "\\"))
+
+    if looks_like_path:
+        expanded = str(Path(requested).expanduser())
+        if not Path(expanded).exists():
+            raise FileNotFoundError(
+                f"Requested modkit executable does not exist: {expanded}. "
+                f"Set {MODKIT_EXECUTABLE_ENV} or pass a valid executable path/name."
+            )
+        return expanded
+
+    discovered = shutil.which(requested)
+    if discovered is None:
+        raise FileNotFoundError(
+            f"Executable not found for modkit candidate '{requested}'. "
+            'Install dimelo using "conda env create -f environment.yml" '
+            'or install modkit manually using "conda install nanoporetech::modkit==0.2.4". '
+            "Without modkit you cannot run parse_bam functions."
         )
-        modkit_version = result.stdout.split()
-        if len(modkit_version) > 1 and modkit_version[1] != EXPECTED_MODKIT_VERSION:
-            if not quiet:
-                print(
-                    f"modkit found with unexpected version {modkit_version[1]}. "
-                    f"Expected {EXPECTED_MODKIT_VERSION}."
-                )
-    except Exception:
+    return discovered
+
+
+def _modkit_cache_fingerprint(executable_path: str) -> str:
+    """
+    Build a cache fingerprint for a resolved executable path.
+    Includes file metadata so replacing/upgrading modkit in-place invalidates
+    cached capabilities.
+    """
+    path = Path(executable_path)
+    try:
+        stat = path.stat()
+        return f"{path.resolve()}:{stat.st_mtime_ns}:{stat.st_size}"
+    except OSError:
+        # Fall back to the resolved path string when stat is unavailable.
+        return str(path.resolve())
+
+
+@lru_cache(maxsize=16)
+def _get_modkit_capabilities_cached(
+    executable_path: str,
+    executable_fingerprint: str,
+    quiet: bool = False,
+) -> ModkitCapabilities:
+    # executable_fingerprint is included to invalidate cache entries when the
+    # binary file is replaced in-place (e.g., conda install modkit==new_version).
+    # It is intentionally unused beyond participating in the cache key.
+    _ = executable_fingerprint
+    executable = executable_path
+
+    try:
+        version_result = subprocess.run(
+            [executable, "--version"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True,
+        )
+    except Exception as exc:  # pragma: no cover - direct subprocess failures are environment-specific
         raise FileNotFoundError(
             'Executable not found for modkit. Install dimelo using "conda env create -f environment.yml" '
             'or install modkit manually using "conda install nanoporetech::modkit==0.2.4". '
             "Without modkit you cannot run parse_bam functions."
+        ) from exc
+
+    version_raw = (version_result.stdout or version_result.stderr).strip()
+    version_tuple = _parse_modkit_semver(version_raw)
+    version = ".".join(str(value) for value in version_tuple) if version_tuple else None
+
+    pileup_help = subprocess.run(
+        [executable, "pileup", "--help"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    pileup_help_text = (pileup_help.stdout or "") + "\n" + (pileup_help.stderr or "")
+
+    extract_help = subprocess.run(
+        [executable, "extract", "--help"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    extract_help_text = (extract_help.stdout or "") + "\n" + (extract_help.stderr or "")
+    supports_extract_subcommands = "extract <COMMAND>" in extract_help_text
+    extract_command_help_text = extract_help_text
+    if supports_extract_subcommands:
+        extract_full_help = subprocess.run(
+            [executable, "extract", "full", "--help"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True,
         )
+        extract_command_help_text = (extract_full_help.stdout or "") + "\n" + (
+            extract_full_help.stderr or ""
+        )
+
+    minor_version = (
+        (version_tuple[0], version_tuple[1]) if version_tuple and len(version_tuple) >= 2 else None
+    )
+    if minor_version is not None and minor_version not in SUPPORTED_MODKIT_MINOR_VERSIONS:
+        if not quiet:
+            print(
+                "modkit found with version "
+                f"{version or version_raw}. Officially tested series are {', '.join(SUPPORTED_MODKIT_SERIES)}."
+            )
+
+    return ModkitCapabilities(
+        executable=executable,
+        version_raw=version_raw,
+        version=version,
+        version_tuple=version_tuple,
+        supports_mod_threshold=_help_supports_flag(pileup_help_text, "--mod-threshold"),
+        supports_mod_thresholds=_help_supports_flag(pileup_help_text, "--mod-thresholds"),
+        supports_modified_bases=_help_supports_flag(pileup_help_text, "--modified-bases"),
+        supports_force_allow_implicit=_help_supports_flag(
+            pileup_help_text, "--force-allow-implicit"
+        ),
+        supports_extract_subcommands=supports_extract_subcommands,
+        extract_supports_reference_long=_help_supports_flag(
+            extract_command_help_text, "--reference"
+        ),
+        extract_supports_reference_short=_help_supports_flag(
+            extract_command_help_text, "--ref"
+        ),
+    )
+
+
+def get_modkit_capabilities(
+    quiet: bool = False,
+    executable: str | None = None,
+) -> ModkitCapabilities:
+    _prepare_modkit_path(quiet=quiet)
+    executable_key = executable or os.environ.get(MODKIT_EXECUTABLE_ENV) or "modkit"
+    resolved_executable = _resolve_modkit_executable(executable_key)
+    executable_fingerprint = _modkit_cache_fingerprint(resolved_executable)
+    return _get_modkit_capabilities_cached(
+        executable_path=resolved_executable,
+        executable_fingerprint=executable_fingerprint,
+        quiet=quiet,
+    )
+
+
+def configure_modkit_executable(executable: str | Path | None) -> None:
+    """
+    Configure which modkit binary should be used by parse operations.
+    Pass None to clear explicit override and fall back to PATH resolution.
+    """
+    if executable is None:
+        os.environ.pop(MODKIT_EXECUTABLE_ENV, None)
+    else:
+        os.environ[MODKIT_EXECUTABLE_ENV] = str(executable)
+    _get_modkit_capabilities_cached.cache_clear()
+
+
+def _ensure_modkit_available(
+    quiet: bool = False,
+    executable: str | Path | None = None,
+) -> ModkitCapabilities:
+    """
+    Lazily check that modkit is on PATH and return parsed capabilities.
+    Called by parse functions to avoid import-time failures during analysis-only workflows.
+    """
+    executable_override = None if executable is None else str(executable)
+    return get_modkit_capabilities(quiet=quiet, executable=executable_override)
 
 
 def run_with_progress_bars(
@@ -200,10 +391,12 @@ def run_with_progress_bars(
                         # If we have hit an error or modkit is done, just accumulate the rest of the output and then deal with it:
                         # no need to check the progress tracking stuff in that case
                         if err_flag or done_flag:
-                            tail_buffer += text
+                            tail_buffer = _strip_runtime_noise(tail_buffer + text)
                         # If we haven't hit an error or a done state, first check for that
                         else:
-                            tail_buffer = (tail_buffer + text)[-buffer_size:]
+                            tail_buffer = _strip_runtime_noise(
+                                (tail_buffer + text)[-buffer_size:]
+                            )
                             if err_str in tail_buffer:
                                 index = tail_buffer.find(err_str)
                                 tail_buffer = tail_buffer[index:]

@@ -41,7 +41,6 @@ def regions_to_list(
     quiet: bool = True,
     cores: int | None = None,
     split_large_regions: bool = False,
-    executor: concurrent.futures.Executor | None = None,
     **kwargs,
 ):
     """
@@ -67,6 +66,7 @@ def regions_to_list(
     Returns:
         List(function_handle return objects per region)
     """
+    executor = kwargs.pop("executor", None)
     regions_dict = utils.regions_dict_from_input(
         regions,
         window_size,
@@ -109,7 +109,7 @@ def regions_to_list(
         )
 
     process_partial = partial(
-        apply_loader_function_to_region_batch,
+        _apply_loader_function_to_region_batch,
         function_handle=function_handle,
         quiet=quiet or not split_large_regions,
         cores=cores_to_run
@@ -163,7 +163,7 @@ def apply_loader_function_to_region(region_string, function_handle, **kwargs):
     return function_handle(regions=region_string, **kwargs)
 
 
-def apply_loader_function_to_region_batch(region_batch, function_handle, **kwargs):
+def _apply_loader_function_to_region_batch(region_batch, function_handle, **kwargs):
     return [function_handle(regions=region_string, **kwargs) for region_string in region_batch]
 
 
@@ -464,8 +464,6 @@ def pileup_counts_from_bedmethyl(
     If no regions are specified, returns the sum total for the motif of interest across the
     entire bedmethyl file.
 
-    TODO: Consider renaming this method, e.g. counts_from_pileup
-
     Args:
         bedmethyl_file: Path to bedmethyl file
         regions: Path to bed file specifying regions
@@ -513,7 +511,7 @@ def pileup_counts_from_bedmethyl(
     with concurrent.futures.ProcessPoolExecutor(max_workers=cores_to_run) as executor:
         futures = [
             executor.submit(
-                pileup_counts_process_chunk_batch_local,
+                _pileup_counts_process_chunk_batch_local,
                 bedmethyl_file,
                 parsed_motif,
                 chunk_batch,
@@ -570,8 +568,6 @@ def pileup_vectors_from_bedmethyl(
     directionality to the signal (e.g. upstream v downstream relative to TSSs, TF binding sites, and so on).
     A region must be provided because otherwise there is no way to know what vector to return.
     However, a region can be a whole chromosome if desired.
-
-    TODO: Consider renaming this method, e.g. vectors_from_pileup
 
     Args:
         bedmethyl_file: Path to bedmethyl file
@@ -647,7 +643,7 @@ def pileup_vectors_from_bedmethyl(
     with concurrent.futures.ProcessPoolExecutor(max_workers=cores_to_run) as executor:
         futures = [
             executor.submit(
-                pileup_vectors_process_chunk_batch,
+                _pileup_vectors_process_chunk_batch,
                 bedmethyl_file,
                 parsed_motif,
                 chunk_batch,
@@ -688,58 +684,6 @@ def pileup_vectors_from_bedmethyl(
     shm_valid.unlink()
 
     return modified_base_counts, valid_base_counts
-
-
-def counts_from_pileup(
-    bedmethyl_file: str | Path,
-    motif: str,
-    regions: str | Path | list[str | Path],
-    window_size: int | None = None,
-    single_strand: bool = False,
-    quiet: bool = False,
-    cores: int | None = None,
-    chunk_size: int = DEFAULT_CHUNK_SIZE,
-) -> tuple[int, int]:
-    """
-    Preferred alias for `pileup_counts_from_bedmethyl`.
-    """
-    return pileup_counts_from_bedmethyl(
-        bedmethyl_file=bedmethyl_file,
-        motif=motif,
-        regions=regions,
-        window_size=window_size,
-        single_strand=single_strand,
-        quiet=quiet,
-        cores=cores,
-        chunk_size=chunk_size,
-    )
-
-
-def vectors_from_pileup(
-    bedmethyl_file: str | Path,
-    motif: str,
-    regions: str | Path | list[str | Path],
-    window_size: int | None = None,
-    single_strand: bool = False,
-    regions_5to3prime: bool = False,
-    quiet: bool = False,
-    cores: int | None = None,
-    chunk_size: int = DEFAULT_CHUNK_SIZE,
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Preferred alias for `pileup_vectors_from_bedmethyl`.
-    """
-    return pileup_vectors_from_bedmethyl(
-        bedmethyl_file=bedmethyl_file,
-        motif=motif,
-        regions=regions,
-        window_size=window_size,
-        single_strand=single_strand,
-        regions_5to3prime=regions_5to3prime,
-        quiet=quiet,
-        cores=cores,
-        chunk_size=chunk_size,
-    )
 
 
 def counts_from_fake(*args, **kwargs) -> tuple[int, int]:
@@ -783,7 +727,7 @@ def pileup_vectors_process_chunk(
     single_strand,
     regions_5to3prime,
 ) -> None:
-    pileup_vectors_process_chunk_batch(
+    _pileup_vectors_process_chunk_batch(
         bedmethyl_file=bedmethyl_file,
         parsed_motif=parsed_motif,
         chunk_batch=[chunk],
@@ -850,7 +794,7 @@ def _pileup_vectors_local_contribution(
     return subregion_offset, valid_base_subregion, modified_base_subregion
 
 
-def pileup_vectors_process_chunk_batch(
+def _pileup_vectors_process_chunk_batch(
     bedmethyl_file,
     parsed_motif,
     chunk_batch,
@@ -907,7 +851,7 @@ def pileup_counts_process_chunk(
     lock,
     single_strand,
 ) -> None:
-    modified_subregion_counts, valid_subregion_counts = pileup_counts_process_chunk_batch_local(
+    modified_subregion_counts, valid_subregion_counts = _pileup_counts_process_chunk_batch_local(
         bedmethyl_file=bedmethyl_file,
         parsed_motif=parsed_motif,
         chunk_batch=[chunk],
@@ -924,7 +868,7 @@ def pileup_counts_process_chunk(
     existing_modified.close()
 
 
-def pileup_counts_process_chunk_batch_local(
+def _pileup_counts_process_chunk_batch_local(
     bedmethyl_file,
     parsed_motif,
     chunk_batch,
@@ -1123,8 +1067,9 @@ def read_vectors_from_hdf5(
         if "threshold" in h5:
             # we are looking at an .h5 file with the new, much better compressed format that does
             # not know the data type intrinsically for mod and val vectors, so we must check
+            metadata_datasets = {"threshold", "threshold_by_motif_json"}
             readwise_datasets = [
-                dataset for dataset in datasets if dataset not in ["threshold"]
+                dataset for dataset in datasets if dataset not in metadata_datasets
             ]
             compressed_binary_datasets = ["mod_vector", "val_vector"]
             threshold_applied_to_h5 = h5["threshold"][()]

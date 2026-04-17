@@ -7,6 +7,13 @@ from matplotlib.axes import Axes
 from . import load_processed, plotting, utils
 
 
+def _looks_like_motif_spec(label: str) -> bool:
+    parts = str(label).split(",")
+    if len(parts) < 2:
+        return False
+    return bool(parts[0]) and parts[1].strip().isdigit()
+
+
 def _legacy_aggregate_axis_spec(
     *,
     window_size: int,
@@ -204,8 +211,9 @@ def by_modification(
 
 def by_regions(
     mod_file_name: str | Path,
-    regions_list: list[str | Path | list[str | Path]],
-    motif: str,
+    regions_list: list[str | Path | list[str | Path]] | None = None,
+    motif: str | None = None,
+    regions: list[str | Path | list[str | Path]] | None = None,
     sample_names: list[str] | None = None,
     **kwargs,
 ) -> Axes:
@@ -216,6 +224,17 @@ def by_regions(
 
     See plot_enrichment_profile for details.
     """
+    if regions is not None:
+        if regions_list is not None and regions_list != regions:
+            raise ValueError(
+                "Pass either regions_list or regions to by_regions, not both with different values."
+            )
+        regions_list = regions
+    if regions_list is None:
+        raise ValueError("by_regions requires regions_list (or alias regions).")
+    if motif is None:
+        raise ValueError("by_regions requires motif.")
+
     sample_names_for_plot = (
         sample_names if sample_names is not None else [str(region) for region in regions_list]
     )
@@ -358,6 +377,10 @@ def make_enrichment_profile_plot(
     """
     if not utils.check_len_equal(trace_vectors, sample_names):
         raise ValueError("Unequal number of inputs")
+    legend_title = kwargs.pop("legend_title", None)
+    if legend_title is None and sample_names and all(_looks_like_motif_spec(name) for name in sample_names):
+        legend_title = "Modifications (motif, mod_index)"
+    resolved_legend_title = "variable" if legend_title is None else str(legend_title)
     axes = utils.line_plot(
         indep_vector=np.arange(
             offset_center - len(trace_vectors[0]) // 2,
@@ -367,6 +390,7 @@ def make_enrichment_profile_plot(
         dep_vectors=trace_vectors,
         dep_names=sample_names,
         y_label="fraction modified bases",
+        legend_title=resolved_legend_title,
         **kwargs,
     )
     return axes

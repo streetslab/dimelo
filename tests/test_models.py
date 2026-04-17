@@ -6,8 +6,11 @@ import pytest
 from dimelo import models
 from dimelo.models import (
     BatchJob,
+    ChipAtlasEnrichmentResult,
     CohortSpec,
     ContrastSpec,
+    ModkitDMRMultiResult,
+    ModkitDMRPairResult,
     GlobalAnalysisResult,
     DatasetArtifact,
     SampleSpec,
@@ -25,6 +28,12 @@ def test_dimelo_package_exports_models():
     assert models.SampleSpec is SampleSpec
 
 
+def test_dimelo_package_exports_dmr_module():
+    from dimelo import dmr as root_dmr
+
+    assert root_dmr is not None
+
+
 def test_dimelo_package_root_exports_region_discovery_cluster_result():
     from dimelo import RegionDiscoveryClusterResult as RootRegionDiscoveryClusterResult
 
@@ -37,6 +46,18 @@ def test_dimelo_package_root_exports_region_discovery_cluster_contrast_result():
     )
 
     assert RootRegionDiscoveryClusterContrastResult is RegionDiscoveryClusterContrastResult
+
+
+def test_dimelo_package_root_exports_chip_atlas_enrichment_result():
+    from dimelo import ChipAtlasEnrichmentResult as RootChipAtlasEnrichmentResult
+
+    assert RootChipAtlasEnrichmentResult is ChipAtlasEnrichmentResult
+
+
+def test_dimelo_package_root_exports_modkit_dmr_pair_result():
+    from dimelo import ModkitDMRPairResult as RootModkitDMRPairResult
+
+    assert RootModkitDMRPairResult is ModkitDMRPairResult
 
 
 def test_sample_spec_fields():
@@ -55,6 +76,36 @@ def test_sample_spec_fields():
     assert sample.regions_bed == Path("sample-1.bed")
     assert sample.replicate == 2
     assert sample.metadata == {"batch": "A"}
+
+
+def test_chip_atlas_enrichment_result_requires_request_id():
+    with pytest.raises(ValueError, match="request_id"):
+        ChipAtlasEnrichmentResult(
+            request_id="",
+            status="finished",
+            results=pd.DataFrame(),
+        )
+
+
+def test_modkit_dmr_pair_result_requires_core_outputs():
+    with pytest.raises(ValueError, match="output_path"):
+        ModkitDMRPairResult(
+            output_path=None,
+            segment_path=None,
+            command=["modkit", "dmr", "pair"],
+            sites=pd.DataFrame(),
+            segments=None,
+            high_confidence_sites=pd.DataFrame(),
+        )
+
+
+def test_modkit_dmr_multi_result_requires_pair_files():
+    with pytest.raises(ValueError, match="pair_files"):
+        ModkitDMRMultiResult(
+            out_dir=Path("/tmp"),
+            command=["modkit", "dmr", "multi"],
+            pair_files=None,
+        )
 
 
 def test_dataset_artifact_stores_metadata():

@@ -100,10 +100,11 @@ For broad whole-sample summaries instead of locus discovery, use [global analysi
 
 - For formal region testing, convert discovered hits into BED and write them to disk before passing the BED path into `region_contrasts.score_regions(...)`.
 - This handoff works the same for paired discovery outputs; the paired score columns stay in `result.hits`, while `hits_to_bed()` projects the ranked loci into a plain BED table for downstream region testing.
-- For downstream clustering, use the discovered loci to focus the region set before running the clustering workflow.
+- For downstream clustering, the recommended next step is read-window clustering on the discovered loci, followed by region-level occupancy follow-up from the resulting read-cluster labels.
+- If you specifically want shape-based exploratory analysis, you can still pass the discovered loci into the optional `mode="region_anchored"` workflow.
 - Keep discovery and contrast roles separate: discovery finds candidates, contrasts tests known regions, and clustering explains state mixtures.
 
-The combined discovery-to-clustering workflow uses the same handoff, but keeps it in memory:
+The combined discovery-to-clustering workflow uses the same handoff, but keeps it in memory. It is most useful when you explicitly want the optional region-anchored exploratory path on discovery hits:
 
 - discovery produces ranked hit rows
 - `hits_to_bed()` turns those rows into BED-style `selected_regions`

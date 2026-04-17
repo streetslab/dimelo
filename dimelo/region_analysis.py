@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Sequence
 
 import numpy as np
+from tqdm.auto import tqdm
 
 from . import cluster, utils
 from .models import SampleSpec
@@ -68,6 +69,7 @@ def build_region_feature_table(
     matched_regions: str | Path | list[str | Path] | None,
     pileup_paths: dict[str, str | Path] | None = None,
     cores: int | None = None,
+    quiet: bool = True,
 ) -> tuple[np.ndarray, list[dict[str, object]]]:
     """
     Build one region-level feature row per sample and matched region.
@@ -125,8 +127,9 @@ def build_region_feature_table(
                 # create process pools; fall back to the legacy per-sample path.
                 shared_regions_executor = None
         try:
-            results = [
-                _build_sample_region_features(
+            results = []
+            for sample in tqdm(sample_list, desc="Building region features", disable=quiet):
+                result = _build_sample_region_features(
                     sample=sample,
                     motif=motifs[0],
                     matched_regions=matched_regions,
@@ -134,8 +137,7 @@ def build_region_feature_table(
                     cores=per_sample_cores,
                     regions_executor=shared_regions_executor,
                 )
-                for sample in sample_list
-            ]
+                results.append(result)
         finally:
             if shared_regions_executor is not None:
                 shared_regions_executor.shutdown(wait=True, cancel_futures=False)

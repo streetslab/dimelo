@@ -61,6 +61,7 @@ def plot_depth_histogram(
         one_depth_per_region=one_depth_per_region,
         quiet=quiet,
         cores=cores,
+        split_large_regions=split_large_regions,
     )
 
     axes = make_depth_histogram_plot(
@@ -96,8 +97,9 @@ def by_modification(
 
 def by_regions(
     mod_file_name: str | Path,
-    regions_list: list[str | Path | list[str | Path]],
-    motif: str,
+    regions_list: list[str | Path | list[str | Path]] | None = None,
+    motif: str | None = None,
+    regions: list[str | Path | list[str | Path]] | None = None,
     sample_names: list[str] | None = None,
     **kwargs,
 ) -> Axes:
@@ -108,6 +110,17 @@ def by_regions(
 
     See plot_depth_histogram for details.
     """
+    if regions is not None:
+        if regions_list is not None and regions_list != regions:
+            raise ValueError(
+                "Pass either regions_list or regions to by_regions, not both with different values."
+            )
+        regions_list = regions
+    if regions_list is None:
+        raise ValueError("by_regions requires regions_list (or alias regions).")
+    if motif is None:
+        raise ValueError("by_regions requires motif.")
+
     sample_names_for_plot = (
         sample_names if sample_names is not None else [str(region) for region in regions_list]
     )
@@ -159,6 +172,7 @@ def get_depth_counts(
     one_depth_per_region: bool = False,
     quiet: bool = False,
     cores: int | None = 1,
+    split_large_regions: bool = False,
 ) -> list[np.ndarray]:
     """
     Get the depth counts, ready for plotting.
@@ -198,6 +212,7 @@ def get_depth_counts(
                     single_strand=single_strand,
                     quiet=quiet,
                     cores=cores,
+                    split_large_regions=split_large_regions,
                 )
                 # places where read depth is zero are assumed to not have the motif present - this may not always be true,
                 # but with the available information in a pileup file it's the best we can do

@@ -83,6 +83,32 @@ conda env create -f environment.yml
 
 *If you want to handle environment creation yourself, see [the alternative installation instructions](#alternative-installations).*
 
+### Recommended one-command bootstrap (dev + notebook)
+
+For local development and notebook work, prefer the bootstrap helper. It creates/updates the conda env, installs the package in editable mode with clustering extras, registers a Jupyter kernel, and runs a full environment health check.
+
+```
+bash scripts/bootstrap_dimelo_env.sh
+```
+
+Defaults:
+- conda env: `dimelo-toolkit`
+- kernel name: `dimelo-test`
+
+Notes:
+- The bootstrap uses **flexible** conda channel priority for environment solve stability with `nanoporetech::modkit`.
+- Python scientific/user packages are installed via `pip` inside the conda env (`-e .[clustering]`) to avoid channel pin conflicts.
+
+Optional overrides:
+
+```
+bash scripts/bootstrap_dimelo_env.sh <env_name> <kernel_name> "<kernel_display_name>" <modkit_version>
+```
+
+Examples:
+- Keep default tested pin (`0.2.4`): `bash scripts/bootstrap_dimelo_env.sh`
+- Install a specific version (for example `0.6.1`): `bash scripts/bootstrap_dimelo_env.sh dimelo-toolkit dimelo-test "Python (dimelo-test)" 0.6.1`
+
 ### Install pip dependencies and core dimelo-toolkit package
 
 Activate your conda environment, which should now contain python 3.11 and a modkit executable on the path and executable on your system.
@@ -95,6 +121,12 @@ Ensure that you are still in the top-level dimelo-toolkit directory. Install the
 
 ```
 pip install .
+```
+
+To verify the active environment at any time:
+
+```
+python scripts/ensure_dimelo_kernel.py --expected-env dimelo-toolkit
 ```
 
 ## Google Colab Installation
@@ -113,12 +145,24 @@ condacolab.install()
 import dimelo
 ```
 
+`dimelo-toolkit` parsing paths support both `modkit 0.2.4` and `modkit 0.6.x`. The default environment pin remains conservative (`0.2.4`) for reproducibility, but you can install `0.6.x` when preferred.
+
+To switch versions in an existing env:
+
+```
+bash scripts/update_modkit_version.sh dimelo-toolkit 0.6.1
+```
+
 ## Alternative Installations
 
-Alternatively, you can install modkit into any conda environment you like. If you want to, you can install modkit some other way, and then add it to the path of your notebook or script. *NOTE: if you are creating the environment yourself, be sure to use python 3.10 or greater. Some dimelo-toolkit features require relatively new python releases.*
+Alternatively, you can install modkit into any conda environment you like. If you want to, you can install modkit some other way, and then add it to the path of your notebook or script. Supported series are `0.2.4` and `0.6.x`. *NOTE: if you are creating the environment yourself, be sure to use python 3.10 or greater. Some dimelo-toolkit features require relatively new python releases.*
 
 ```
 conda install nanoporetech::modkit==0.2.4
+```
+OR
+```
+conda install nanoporetech::modkit=0.6
 ```
 OR
 ```
@@ -160,6 +204,12 @@ pytest
 
 See the [tutorial](tutorial.ipynb) as a starting point.
 
+For deterministic local verification (no external network dependency), run [tutorial_offline.ipynb](tutorial_offline.ipynb) and use:
+
+```
+python scripts/run_tutorial_offline.py
+```
+
 For local operation on Mac or Linux, you will already have cloned the repo to disk in the installation step. Activate your conda environment, make sure you have jupyter installed, and then launch a jupyter notebook server and navigate to `tutorial.ipynb`. You can also use other tools to open the jupyter notebook or you can simply reference it as an example.
 
 ```
@@ -193,13 +243,14 @@ def pileup(
     output_directory: str | Path = None,
     regions: str | Path | list[str | Path] = None,
     motifs: list = ['A,0','CG,0'],
-    thresh: float = None,
+    thresh: float | dict[str, float] | None = None,
     window_size: int = None,
     cores: int = None,
     log: bool = False,
     cleanup: bool = True,
     quiet: bool = False,
-    override_checks: bool = False,) -> Path, Path:
+    override_checks: bool = False,
+    modkit_executable: str | Path | None = None,) -> Path, Path:
 ```
 
 `parse_bam.extract` creates an hdf5 file with datasets for different aspects of single read data, which can then be passed to plot single reads.
@@ -211,13 +262,14 @@ def extract(
     output_directory: str | Path = None,
     regions: str | Path | list[str | Path] = None,
     motifs: list = ['A,0','CG,0','GCH,1'],
-    thresh: float = None,
+    thresh: float | dict[str, float] | None = None,
     window_size: int = None,
     cores: int = None,
     log: bool = False,
     cleanup: bool = True,
     quiet: bool = False,
-    override_checks: bool = False,) -> Path, Path:
+    override_checks: bool = False,
+    modkit_executable: str | Path | None = None,) -> Path, Path:
 ```
 
 ## Analysis Guides
@@ -226,14 +278,36 @@ Three higher-level analysis guides now sit on top of the existing parsing layer:
 
 - [docs/global-analysis.md](docs/global-analysis.md) for pileup-backed global summaries and normalization factors
 - [docs/region-discovery.md](docs/region-discovery.md) for de novo and paired locus discovery from tiled pileup scans
-- [docs/shared-clustering.md](docs/shared-clustering.md) for shared-boundary clustering workflows
+- [docs/shared-clustering.md](docs/shared-clustering.md) for shared-boundary clustering workflows, with read-window clustering as the default path and region-anchored analysis as an exploratory option
 - [docs/region-contrasts.md](docs/region-contrasts.md) for known-region motif-abundance and cluster-occupancy contrasts
+- [docs/modkit-dmr.md](docs/modkit-dmr.md) for native `modkit dmr` pair/multi workflows and HMM segmentation
+- native `modkit dmr` wrappers in `dimelo.dmr` and `dimelo.workflows` for pairwise beta-binomial DMR testing and optional HMM segmentation (`modkit_dmr_pair_workflow`) plus multi-sample regional DMR (`modkit_dmr_multi_workflow`)
 
-Use `parse_bam.pileup()` when you want defined-region abundance testing, and use `parse_bam.extract()` when you want read-level clustering or single-read follow-up. When you want occupancy-backed region contrasts, run clustering first and pass `SharedClusterResult.region_summaries` into `region_contrasts.score_regions(..., analysis_unit="cluster_occupancy")`.
+Use `parse_bam.extract()` when you want read-level clustering or single-read follow-up. The recommended path is to cluster read windows first, then summarize those read-cluster labels at the region level with `SharedClusterResult.region_summaries` and `region_contrasts.score_regions(..., analysis_unit="cluster_occupancy")`. Use `parse_bam.pileup()` when you want defined-region abundance testing, or when you intentionally want optional region-anchored/profile clustering for exploratory shape-based analysis.
 
 For an end-to-end discovery-to-clustering run, use `workflows.discovery_cluster_workflow()`. It keeps discovery output in BED-style `selected_regions`, then derives the serializable region spec that `shared_cluster_distribution(..., matched_regions=...)` consumes.
 
 For discovery-to-clustering-to-contrast follow-up, use `workflows.discovery_cluster_contrast_workflow()`. It keeps discovery output in BED-style `selected_regions`, passes the derived serializable region spec into clustering, normalizes clustering-side `region_id` values to the same `chr:start-end,strand` key used by contrasts, scores the same selected loci by default, honors an explicit `contrasts["regions"]` override when provided, and stores the full discovery scan in `metadata["full_scan_windows"]`.
+
+For production region discovery and DMR calling across samples, prefer the native `modkit dmr` wrappers:
+- `workflows.modkit_dmr_pair_workflow(...)` for pairwise site-level DMR with optional HMM segmentation (`segment_path=...`)
+- `workflows.modkit_dmr_multi_workflow(...)` or `workflows.modkit_dmr_multi_from_samples_workflow(...)` for all-vs-all multi-sample regional DMR
+
+`dimelo_test.ipynb` stays single-sample focused. See `dmr_multi_sample.ipynb` for a multi-sample DMR template notebook.
+
+For external regulatory-context enrichment, use `dimelo.chip_atlas.run_enrichment(...)` directly on BED-like region inputs, or use `workflows.chip_atlas_cluster_enrichment_workflow(...)` to query ChIP-Atlas from read-cluster region associations (`SharedClusterResult.region_summaries`) either per cluster or as a combined region set.
+
+If your regions are in a different assembly than the requested ChIP-Atlas genome (for example CHM13 regions against `hg38`/`hg19` catalogs), pass `regions_genome=...` and the ChIP-Atlas interface can convert coordinates inline using CrossMap before submission. The helper `dimelo.chip_atlas.cache_chain_files(source_genome="chm13", target_genomes=("hg38","hg19"))` pre-fetches and caches chain files under `cache/chains/` so repeated queries reuse local chain assets.
+
+The ChIP-Atlas API currently requires class/threshold fields to be populated. `dimelo.chip_atlas` now defaults to `antigen_class="TFs and others"`, `cell_type_class="No description"`, and `threshold="100"`; override them when you want narrower biological context.
+
+For mixed-provider regulatory follow-up (e.g. SCREEN + UniBind), use `workflows.resolve_regulatory_enrichment_spec(...)` to normalize species/provider configuration before running provider-specific queries. The spec defaults to human (`homo_sapiens`) and `target_genome="hg38"`, supports explicit `reference_genome` / `target_genome` / CrossMap chain settings for arbitrary assemblies, validates species against the UniBind-supported species set, and automatically filters out `screen` requests when species is not human or mouse.
+
+For dataset-level ChIP-Atlas BED retrieval (antigen-first), use `chip_atlas.search_peak_datasets(...)` / `workflows.chip_atlas_search_peak_datasets_workflow(...)` with required `antigen` plus optional `genome`, `cell_type`, `antigen_class`, and `cell_type_class` filters. Then pass the returned table to `chip_atlas.download_peak_datasets(...)` / `workflows.chip_atlas_download_peak_datasets_workflow(...)` to generate complete sorted BEDs, top/bottom subsets (default top/bottom 3,000), optional quantile splits (`quartiles`, `quintiles`, `deciles`, or integer bin count), and optional CrossMap-converted BED6 outputs to a target assembly.
+
+For UniBind track inputs, `workflows.resolve_unibind_track_paths(...)` supports either explicit local track paths (`track_paths=[...]`) or Track Hub discovery/download to cache (`trackhub_url` or named `collection="robust"|"permissive"`), with optional `search_terms`, `max_tracks`, and `convert_bigbed_to_bed=True` (requires `bigBedToBed` on PATH).
+
+For UniBind web-tool workflows (TFBS extraction and enrichment), use `dimelo.regulatory_enrichment.run_unibind_tfbs_extraction(...)` and `run_unibind_enrichment(...)` or the workflow wrappers `workflows.unibind_tfbs_extraction_workflow(...)` / `workflows.unibind_enrichment_workflow(...)`. These functions submit CSRF-protected UniBind forms programmatically, poll job status (`Queued`/`Running`/`Completed`), expose downloadable result URLs, and can optionally cache downloads under `cache/unibind_jobs/`.
 
 `region_discovery` also exposes renderer-neutral plotting prep helpers that consume `RegionDiscoveryResult`: `prepare_region_discovery_scan_data(...)` prepares per-contig scan and hit tables by default, and `prepare_region_discovery_hit_context_data(...)` prepares local hit-context tables for small-multiple follow-up views.
 
@@ -273,7 +347,7 @@ There should not be such issues for command line operation. See below an example
 
 ```
 (dimelo-toolkit) % python dimelo_cmd.py
-modkit found with expected version 0.2.4
+modkit detected and command capabilities loaded
 No specified number of cores requested. 8 available on machine, allocating all.
 Modification threshold of 0.9 will be treated as coming from range 0-1.
 ████████████████████| Preprocessing complete for motifs ['A,0'] in chm13.draft_v1.1.fasta:  100% | 00:30
@@ -292,6 +366,8 @@ Legacy plotting entry points remain supported, but they now share a common plott
 - Aggregate profile-style plots may opt into normalized segment layouts later, but that behavior is additive rather than a changed default.
 - Single-read plots remain coordinate-preserving. They can use fixed-window coordinates and 5'->3' orientation, but they do not stretch variable-length regions onto a synthetic continuous axis.
 - Built-in Matplotlib plotting is still available, while plot-ready tables remain the stable contract for users who prefer seaborn, Plotly, Altair, or custom renderers.
+
+For legacy API compatibility, `by_regions(...)` helpers now also accept `regions=` as an alias to `regions_list=` across enrichment/depth/profile plotting modules.
 
 Newer region-contrast plotting helpers accept a `RegionContrastResult` plus an explicit `position_table` from the parsing/loading layer. This keeps region scoring and positional extraction separate while still using the shared plotting-axis system. The current helper contract expects `region_id`, `position`, `anchor`, `value`, `region_strand`, and either `condition` or `sample_id` in that positional table.
 
@@ -910,13 +986,13 @@ def regions_to_list(
 
 ## Clustering scaffolding
 
-`dimelo.cluster` wraps the loading utilities above so you can quickly build matrices for downstream clustering or dimensionality reduction.
+`dimelo.cluster` wraps the loading utilities above so you can quickly build matrices for read-window clustering, dimensionality reduction, or optional region-anchored exploratory analysis.
 
 For the higher-level shared-boundary workflows added on top of these loaders, see [docs/shared-clustering.md](docs/shared-clustering.md). The short version is:
 
-- run `parse_bam.extract()` for `mode="read_global"`
-- run `parse_bam.pileup()` for `mode="region_anchored"`
-- run both when you want region-level summaries plus read-level follow-up
+- recommended: run `parse_bam.extract()` and cluster read windows first, then feed the resulting read-cluster labels into region-level occupancy follow-up
+- optional: run `parse_bam.pileup()` and `mode="region_anchored"` when you want region-aligned exploratory clustering on shape-like summaries
+- run both when you want region-level summaries plus read-level follow-up in the same analysis
 
 ```python
 from dimelo import workflows
@@ -933,10 +1009,23 @@ result = workflows.shared_cluster_distribution(
 )
 ```
 
-```
+```python
 from dimelo import cluster
 
-# Region-level features: rows are regions, columns are aligned positions.
+# Recommended read-window clustering pipeline using extract outputs.
+read_windows = cluster.extract_read_windows(
+    hdf5_file="output/extract.h5",
+    motifs=["A,0", "CG,0"],
+    regions="regions.bed",
+    config=cluster.ReadWindowExtractionConfig(window_bp=2000, orientation_aware=True),
+)
+feature_matrix, feature_names = cluster.read_window_feature_matrix(read_windows)
+read_clusters = cluster.cluster_read_windows(feature_matrix, method="kmeans", n_clusters=8)
+
+# Use the resulting read-cluster labels as the bridge into region-level occupancy or contrasts.
+# For example, pass SharedClusterResult.region_summaries into region_contrasts.score_regions(..., analysis_unit="cluster_occupancy").
+
+# Optional region-anchored exploratory analysis from pileup-derived region vectors.
 pileup_matrix, region_info = cluster.region_feature_matrix_from_pileup(
     bedmethyl_file="output/pileup.sorted.bed.gz",
     motif="A,0",
@@ -945,16 +1034,6 @@ pileup_matrix, region_info = cluster.region_feature_matrix_from_pileup(
     regions_5to3prime=True,
 )
 labels, model = cluster.cluster_features(pileup_matrix, n_clusters=4)
-
-# Read-level feature pipeline using extract outputs.
-read_windows = cluster.extract_read_windows(
-    hdf5_file="output/extract.h5",
-    motifs=["A,0", "CG,0"],
-    regions="regions.bed",
-    config=cluster.ReadWindowExtractionConfig(window_size=2000, orientation_aware=True),
-)
-feature_matrix, feature_names = cluster.read_window_feature_matrix(read_windows)
-read_clusters = cluster.cluster_read_windows(feature_matrix, method="kmeans", n_clusters=8)
 
 # Optional visualization/export
 cluster.plot_region_cluster_profiles(pileup_matrix, labels, window_bp=1000)
@@ -989,7 +1068,7 @@ sampled_features, sampled_labels, idx = cluster.sample_rows(feature_matrix, labe
 cluster.cluster_read_windows(sampled_features, method="kmeans", n_clusters=4)
 ```
 
-`region_feature_matrix_from_pileup` delegates to `load_processed.regions_to_list`, so you inherit the same controls for multi-core execution and windowing. For read-level work you can either keep using `read_mod_fraction_table` (motif-wide fractions) or run the new window-based pipeline above: `extract_read_windows` builds a matrix of per-base modification calls (optionally enforcing strand orientation and dropping reads spanning multiple regions), `read_window_feature_matrix` augments that matrix with PCA, autocorrelation, density, and summary statistics, and `cluster_read_windows` exposes the same clustering options demonstrated in the exploratory notebook (k-means, GMM, spectral, OPTICS/HDBSCAN, etc.).
+`region_feature_matrix_from_pileup` delegates to `load_processed.regions_to_list`, so you inherit the same controls for multi-core execution and windowing. Treat it as an optional exploratory path for region-anchored/profile clustering rather than the default workflow. For read-level work you can either keep using `read_mod_fraction_table` (motif-wide fractions) or run the read-window pipeline above: `extract_read_windows` builds a matrix of per-base modification calls (optionally enforcing strand orientation and dropping reads spanning multiple regions), `read_window_feature_matrix` augments that matrix with PCA, autocorrelation, density, and summary statistics, and `cluster_read_windows` exposes the same clustering options demonstrated in the exploratory notebook (k-means, GMM, spectral, OPTICS/HDBSCAN, etc.).
 
 `cluster_features` currently offers a lightweight k-means wrapper powered by `scikit-learn`, while `cluster_read_windows` can switch between `kmeans`, `minibatch_kmeans`, `gmm`, `agglomerative`, `spectral`, `birch`, `dbscan`, `optics`, `hdbscan`, or `umap_kmeans`. These dependencies (`scikit-learn`, `scipy`, `hdbscan`, `umap-learn`) live in the `clustering` extra (`pip install dimelo[clustering]`), or feed the matrices above into your own estimator.
 
@@ -1019,9 +1098,13 @@ Many of the parsing, loading, and plotting functions share parameters. The commo
 
 `motif` and `motifs` are used to specify what base modifications you are interested in and what their sequence context is for parse, load, and plot functions. A single `motif` is a string containing several canonical bases (using the [IUPAC nucleic acid notation](https://en.wikipedia.org/wiki/Nucleic_acid_notation), e.g. **H** refers to "not a G"), followed by a comma, and then an integer specifying which coordinate in the string is your modified base. For example, 6mA is denoted "A,0" and CpG is denoted "CG,0" whereas GpC *excluding CpGs* is denoted "GCH,1". `motifs` is a list of such strings for functions that can work on multiple base modifications at once.
 
-`thresh` for parsing and some loading/plotting functions refers to a base modification probability threshold, used to transform the the output of most basecalling pipelines into a binary call for any given read position. For parsing pileup calls, this defaults to `None` which allows `modkit` to pick its own threshold based on the data. For other calls, the parameter is mandatory. The normal use is specifying between 0 and 1, but 1-255 is also supported to make the inputs more backwards compatible with old `dimelo` package versions and with examination of the raw .bam file contents. A value between and 255 will simply be converted into a 0-1 probability before being handed down to subsequent processing.
+`thresh` for parsing and some loading/plotting functions refers to a base modification probability threshold, used to transform the output of most basecalling pipelines into a binary call for any given read position. For parse functions, it accepts `None`, a single numeric threshold, or a per-motif dictionary (e.g. `{"A,0": 0.70, "CG,0": 0.80, "default": 0.75}`). `None` keeps adaptive/inferred thresholding behavior where applicable. Numeric values can be in [0,1] or [1,255] (the latter is converted to probability scale for backward compatibility).
 
-`window_size` for parsing and most loading and plotting functions is a *modification to your regions* that will redefine them to be all the same size, i.e. 2 x window_size, centered around the centers of your original regions. This is important for the parsing and plotting applications that show many genomic regions at once, but should be left blank if you don't want your regions modified. The default is `None` for functions where the parameter is optional. 
+`modkit_executable` on `parse_bam.pileup()` / `parse_bam.extract()` allows pinning parsing to a specific modkit binary path/name (for example a side-by-side `modkit-0.2.4` and `modkit-0.6.1` install). You can also set `DIMELO_MODKIT_EXECUTABLE` globally.
+
+`window_size` for parsing and most loading and plotting functions is a *modification to your regions* that will redefine them to be all the same size, i.e. `2 x window_size`, centered around the centers of your original regions. This is important for parsing/loading/plotting operations that aggregate many loci at once, but should be left blank if you do not want your regions modified. The default is `None` for functions where the parameter is optional.
+
+For **clustering read-window extraction APIs** (`cluster.extract_read_windows`, `cluster.build_multimotif_read_windows`, and `cluster.ReadWindowExtractionConfig`) the preferred parameter is `window_bp`, which is the **full extracted span in bp**. `window_size` is still accepted there only as a backward-compatible alias.
 
 `relative` is a boolean input that specifies whether loading and plotting operations adjust coordinates to be relative to some center point or simple plot in absolute genomic coordinates. In the newer shared plotting layer, `relative=True` maps to fixed-window plotting around a common anchor. Aggregate plots may grow into richer segment-based normalization later, but single-read plotting still preserves coordinate geometry rather than stretching variable-length features.
 

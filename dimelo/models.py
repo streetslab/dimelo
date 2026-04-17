@@ -325,6 +325,62 @@ class RegionDiscoveryClusterResult:
 
 
 @dataclass
+class ChipAtlasEnrichmentResult:
+    request_id: str
+    status: str
+    results: pd.DataFrame | None
+    query: dict[str, Any] = field(default_factory=dict)
+    status_history: list[dict[str, Any]] = field(default_factory=list)
+    submit_url: str | None = None
+    status_url: str | None = None
+    result_url: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.request_id:
+            raise ValueError("ChipAtlasEnrichmentResult.request_id cannot be empty.")
+        if not self.status:
+            raise ValueError("ChipAtlasEnrichmentResult.status cannot be empty.")
+        if self.query is None:
+            raise ValueError("ChipAtlasEnrichmentResult.query cannot be None.")
+        if self.status_history is None:
+            raise ValueError("ChipAtlasEnrichmentResult.status_history cannot be None.")
+        if self.metadata is None:
+            raise ValueError("ChipAtlasEnrichmentResult.metadata cannot be None.")
+
+
+@dataclass
+class UniBindJobResult:
+    job_id: str
+    status: str
+    job_url: str
+    endpoint_url: str
+    results_url: str | None = None
+    download_urls: list[str] = field(default_factory=list)
+    query: dict[str, Any] = field(default_factory=dict)
+    status_history: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.job_id:
+            raise ValueError("UniBindJobResult.job_id cannot be empty.")
+        if not self.status:
+            raise ValueError("UniBindJobResult.status cannot be empty.")
+        if not self.job_url:
+            raise ValueError("UniBindJobResult.job_url cannot be empty.")
+        if not self.endpoint_url:
+            raise ValueError("UniBindJobResult.endpoint_url cannot be empty.")
+        if self.download_urls is None:
+            raise ValueError("UniBindJobResult.download_urls cannot be None.")
+        if self.query is None:
+            raise ValueError("UniBindJobResult.query cannot be None.")
+        if self.status_history is None:
+            raise ValueError("UniBindJobResult.status_history cannot be None.")
+        if self.metadata is None:
+            raise ValueError("UniBindJobResult.metadata cannot be None.")
+
+
+@dataclass
 class CohortSpec:
     cohort_id: str
     sample_ids: list[str]
@@ -340,3 +396,44 @@ class BatchJob:
     cohorts: list[CohortSpec]
     artifact_policy: str = "prefer_cached"
     metadata: dict[str, Any] | None = None
+
+
+@dataclass
+class ModkitDMRPairResult:
+    output_path: Path
+    segment_path: Path | None
+    command: list[str]
+    sites: pd.DataFrame
+    segments: pd.DataFrame | None
+    high_confidence_sites: pd.DataFrame
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.output_path is None:
+            raise ValueError("ModkitDMRPairResult.output_path cannot be None.")
+        if self.command is None:
+            raise ValueError("ModkitDMRPairResult.command cannot be None.")
+        if self.sites is None:
+            raise ValueError("ModkitDMRPairResult.sites cannot be None.")
+        if self.high_confidence_sites is None:
+            raise ValueError("ModkitDMRPairResult.high_confidence_sites cannot be None.")
+        if self.metadata is None:
+            raise ValueError("ModkitDMRPairResult.metadata cannot be None.")
+
+
+@dataclass
+class ModkitDMRMultiResult:
+    out_dir: Path
+    command: list[str]
+    pair_files: pd.DataFrame
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.out_dir is None:
+            raise ValueError("ModkitDMRMultiResult.out_dir cannot be None.")
+        if self.command is None:
+            raise ValueError("ModkitDMRMultiResult.command cannot be None.")
+        if self.pair_files is None:
+            raise ValueError("ModkitDMRMultiResult.pair_files cannot be None.")
+        if self.metadata is None:
+            raise ValueError("ModkitDMRMultiResult.metadata cannot be None.")

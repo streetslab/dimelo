@@ -57,9 +57,14 @@ def _legacy_single_read_plot_table(
     relative: bool,
     regions_5to3prime: bool,
 ) -> pd.DataFrame:
-    plot_table = pd.DataFrame({"read_name": read_names, "mod": mods, "pos": reads}).explode(
-        "pos"
-    )
+    plot_table = pd.DataFrame(
+        {
+            "read_name": read_names,
+            "read_index": list(range(len(read_names))),
+            "mod": mods,
+            "pos": reads,
+        }
+    ).explode("pos")
     plot_table = plot_table.reset_index(drop=True)
     plot_table["anchor"] = 0.0
     if relative and regions_5to3prime:
@@ -100,6 +105,13 @@ def plot_reads(
     mod_file_name = Path(mod_file_name)
     # bed_file_name = Path(bed_file_name)
     size = kwargs.pop("s", 0.5)
+    legend_title = kwargs.pop("legend_title", "Mod, index")
+    x_axis_label = kwargs.pop("x_label", "Position (bp)")
+    y_axis_mode = kwargs.pop("y_axis", "read_index")
+    y_axis_label = kwargs.pop(
+        "y_label",
+        "Read index" if y_axis_mode == "read_index" else "Read name",
+    )
 
     palette = kwargs.pop("palette", {})
 
@@ -135,6 +147,8 @@ def plot_reads(
         relative=relative,
         regions_5to3prime=regions_5to3prime,
     )
+    if y_axis_mode not in plot_table.columns:
+        raise ValueError(f"Unsupported y_axis {y_axis_mode!r}. Use one of: {sorted(plot_table.columns)}")
     axis = _legacy_single_read_axis_spec(
         relative=relative,
         regions_5to3prime=regions_5to3prime,
@@ -158,7 +172,7 @@ def plot_reads(
     axes = sns.scatterplot(
         data=prepared["plot_table"],
         x="plot_x",
-        y="read_name",
+        y=y_axis_mode,
         hue="mod",
         # palette=colors,
         s=size,
@@ -175,7 +189,7 @@ def plot_reads(
 
     # Update legend properties.
     if legend is not None:
-        legend.set_title("Mod")
+        legend.set_title(legend_title)
 
     # Update marker size for all handles
     for handle in handles:
@@ -183,7 +197,12 @@ def plot_reads(
             handle.set_markersize(10)  # Set a larger marker size for legend
 
     # Re-apply the legend with updated marker size.
-    axes.legend(handles, labels, title="Mod")
+    axes.legend(handles, labels, title=legend_title)
+
+    if hasattr(axes, "set_xlabel"):
+        axes.set_xlabel(x_axis_label)
+    if hasattr(axes, "set_ylabel"):
+        axes.set_ylabel(y_axis_label)
 
     # regions_dict may be absent for some loader paths, so guard before reading bounds.
     if relative and regions_dict is not None and len(regions_dict) > 0:

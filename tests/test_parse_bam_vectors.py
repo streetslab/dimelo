@@ -1,4 +1,5 @@
 import gzip
+import json
 from pathlib import Path
 
 import h5py
@@ -227,6 +228,73 @@ def test_read_by_base_txt_to_hdf5_thresholds_at_write_time(tmp_path):
         sparse_val_vector,
         np.array([1, 0, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.uint8),
     )
+
+
+def test_read_by_base_txt_to_hdf5_stores_per_motif_threshold_metadata(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded_multi_motif.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.6,
+        quiet=True,
+    )
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="CG,0",
+        thresh=0.8,
+        quiet=True,
+    )
+
+    with h5py.File(output_h5, "r") as h5:
+        assert np.isclose(h5["threshold"][()], 0.0)
+        threshold_map_raw = h5["threshold_by_motif_json"][()]
+        if isinstance(threshold_map_raw, bytes):
+            threshold_map_raw = threshold_map_raw.decode("utf-8")
+    assert json.loads(threshold_map_raw) == {"A,0": 0.6, "CG,0": 0.8}
+
+    read_tuples, datasets, _ = load_processed.read_vectors_from_hdf5(
+        file=output_h5,
+        motifs=["A,0", "CG,0"],
+        calculate_mod_fractions=False,
+        quiet=True,
+    )
+    mod_vector_index = datasets.index("mod_vector")
+    val_vector_index = datasets.index("val_vector")
+
+    assert len(read_tuples) == 4
+    assert all(read_tuple[mod_vector_index].dtype == np.bool_ for read_tuple in read_tuples)
+    assert all(read_tuple[val_vector_index].dtype == np.bool_ for read_tuple in read_tuples)
+
+
+def test_read_by_base_txt_to_hdf5_rejects_mixed_raw_and_thresholded_motifs(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_mixed_threshold_modes.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=None,
+        quiet=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Cannot mix raw-probability and thresholded motifs",
+    ):
+        parse_bam.read_by_base_txt_to_hdf5(
+            input_txt=input_txt,
+            output_h5=output_h5,
+            motif="CG,0",
+            thresh=0.7,
+            quiet=True,
+        )
 
 
 def test_read_vectors_from_hdf5_loads_thresholded_vectors_as_binary(tmp_path):

@@ -4,8 +4,9 @@
 
 ## Preprocessing Choices
 
+- Recommended default: run `parse_bam.extract()`, cluster read windows, then summarize the resulting read-cluster labels at the region level with `SharedClusterResult.region_summaries` and `region_contrasts.score_regions(..., analysis_unit="cluster_occupancy")`.
 - Run `parse_bam.extract()` when you want read-level clustering or single-read pattern analysis.
-- Run `parse_bam.pileup()` when you want matched-region clustering from pileup-derived summaries.
+- Run `parse_bam.pileup()` when you specifically want matched-region or shape-based exploratory clustering from pileup-derived summaries.
 - Run both when you want region-level summaries plus read-level follow-up on the same samples.
 
 ## Workflow Entry Point
@@ -27,7 +28,9 @@ result = workflows.shared_cluster_distribution(
 )
 ```
 
-### Region-anchored clustering
+### Optional region-anchored clustering
+
+Use this when you want region-aligned exploratory clustering on pileup-derived summaries rather than the recommended read-window-first workflow.
 
 ```python
 from dimelo import workflows
@@ -258,9 +261,9 @@ Inference boundary:
 ## Current V1 Scope
 
 - `mode="read_global"` supports shared read clustering from extract outputs.
-- `mode="region_anchored"` supports matched-region clustering from pileup-derived region vectors.
-- `discovery_cluster_workflow()` composes discovery and `region_anchored` clustering by passing derived matched regions into this workflow.
-- `discovery_cluster_contrast_workflow()` composes discovery, `region_anchored` clustering, and defined-region contrasts on the selected loci by default, with an explicit custom contrast-region override.
-- `result.region_summaries` is the v1 handoff table for `cluster_occupancy` region contrasts.
+- `mode="region_anchored"` supports optional matched-region exploratory clustering from pileup-derived region vectors.
+- `discovery_cluster_workflow()` composes discovery and optional `region_anchored` clustering by passing derived matched regions into this workflow.
+- `discovery_cluster_contrast_workflow()` composes discovery, optional `region_anchored` clustering, and defined-region contrasts on the selected loci by default, with an explicit custom contrast-region override.
+- `result.region_summaries` is the v1 handoff table for `cluster_occupancy` region contrasts after read-window clustering.
 - The default supported clusterer is `minibatch_kmeans`.
 - Results are data-first: tables are the stable contract, while plotting is optional.

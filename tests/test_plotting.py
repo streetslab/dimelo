@@ -10,7 +10,14 @@ from dimelo.models import (
     SharedClusterModel,
     SharedClusterResult,
 )
-from dimelo import plot_enrichment_profile, plot_reads, plotting
+from dimelo import (
+    plot_depth_histogram,
+    plot_depth_profile,
+    plot_enrichment,
+    plot_enrichment_profile,
+    plot_reads,
+    plotting,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -33,6 +40,151 @@ def test_axis_spec_accepts_fixed_window_region_5to3():
     )
 
     plotting.validate_axis_spec(spec, plot_family="aggregate_profile")
+
+
+def test_plot_enrichment_by_regions_accepts_regions_alias(monkeypatch):
+    captured = {}
+
+    def fake_plot_enrichment(**kwargs):
+        captured.update(kwargs)
+        return "axes"
+
+    monkeypatch.setattr(plot_enrichment, "plot_enrichment", fake_plot_enrichment)
+
+    axes = plot_enrichment.by_regions(
+        mod_file_name="pileup.fake",
+        regions=["one.bed", "two.bed"],
+        motif="A,0",
+    )
+
+    assert axes == "axes"
+    assert captured["regions_list"] == ["one.bed", "two.bed"]
+    assert captured["sample_names"] == ["one.bed", "two.bed"]
+
+
+def test_plot_depth_profile_by_regions_accepts_regions_alias(monkeypatch):
+    captured = {}
+
+    def fake_plot_depth_profile(**kwargs):
+        captured.update(kwargs)
+        return "axes"
+
+    monkeypatch.setattr(plot_depth_profile, "plot_depth_profile", fake_plot_depth_profile)
+
+    axes = plot_depth_profile.by_regions(
+        mod_file_name="pileup.fake",
+        regions=["one.bed", "two.bed"],
+        motif="A,0",
+    )
+
+    assert axes == "axes"
+    assert captured["regions_list"] == ["one.bed", "two.bed"]
+    assert captured["sample_names"] == ["one.bed depth", "two.bed depth"]
+
+
+def test_plot_enrichment_profile_by_regions_accepts_regions_alias(monkeypatch):
+    captured = {}
+
+    def fake_plot_enrichment_profile(**kwargs):
+        captured.update(kwargs)
+        return "axes"
+
+    monkeypatch.setattr(
+        plot_enrichment_profile,
+        "plot_enrichment_profile",
+        fake_plot_enrichment_profile,
+    )
+
+    axes = plot_enrichment_profile.by_regions(
+        mod_file_name="pileup.fake",
+        regions=["one.bed", "two.bed"],
+        motif="A,0",
+    )
+
+    assert axes == "axes"
+    assert captured["regions_list"] == ["one.bed", "two.bed"]
+    assert captured["sample_names"] == ["one.bed", "two.bed"]
+
+
+def test_make_enrichment_profile_plot_defaults_motif_legend_title():
+    import matplotlib
+
+    matplotlib.use("Agg")
+
+    axes = plot_enrichment_profile.make_enrichment_profile_plot(
+        trace_vectors=[np.array([0.1, 0.2, 0.3]), np.array([0.2, 0.1, 0.0])],
+        sample_names=["A,0", "CG,0"],
+    )
+
+    legend = axes.get_legend()
+    assert legend is not None
+    assert legend.get_title().get_text() == "Modifications (motif, mod_index)"
+
+
+def test_make_depth_profile_plot_defaults_axis_and_legend_labels():
+    import matplotlib
+
+    matplotlib.use("Agg")
+
+    axes = plot_depth_profile.make_depth_profile_plot(
+        trace_vectors=[np.array([1.0, 2.0, 3.0]), np.array([3.0, 2.0, 1.0])],
+        sample_names=["A,0 depth", "CG,0 depth"],
+    )
+
+    assert axes.get_xlabel() == "Position (bp)"
+    legend = axes.get_legend()
+    assert legend is not None
+    assert legend.get_title().get_text() == "Mod, index"
+
+
+def test_plot_depth_histogram_by_regions_accepts_regions_alias(monkeypatch):
+    captured = {}
+
+    def fake_plot_depth_histogram(**kwargs):
+        captured.update(kwargs)
+        return "axes"
+
+    monkeypatch.setattr(
+        plot_depth_histogram,
+        "plot_depth_histogram",
+        fake_plot_depth_histogram,
+    )
+
+    axes = plot_depth_histogram.by_regions(
+        mod_file_name="pileup.fake",
+        regions=["one.bed", "two.bed"],
+        motif="A,0",
+    )
+
+    assert axes == "axes"
+    assert captured["regions_list"] == ["one.bed", "two.bed"]
+    assert captured["sample_names"] == ["one.bed depth", "two.bed depth"]
+
+
+def test_get_depth_counts_forwards_split_large_regions(monkeypatch):
+    captured = {}
+
+    def fake_regions_to_list(*, split_large_regions=False, **kwargs):
+        captured["split_large_regions"] = split_large_regions
+        return [(np.array([1, 0, 2]), np.array([4, 0, 6]))]
+
+    monkeypatch.setattr(
+        plot_depth_histogram.load_processed,
+        "regions_to_list",
+        fake_regions_to_list,
+    )
+
+    depth_vectors = plot_depth_histogram.get_depth_counts(
+        mod_file_names=["pileup.bed.gz"],
+        regions_list=["regions.bed"],
+        motifs=["A,0"],
+        window_size=1000,
+        split_large_regions=True,
+    )
+
+    assert captured["split_large_regions"] is True
+    assert len(depth_vectors) == 1
+    np.testing.assert_array_equal(depth_vectors[0], np.array([4, 6]))
 
 
 def test_axis_spec_rejects_segment_map_without_segments():
@@ -1083,6 +1235,255 @@ def test_plot_shared_cluster_region_matplotlib_rejects_duplicate_row_cluster_val
 
     with pytest.raises(ValueError, match="duplicate region occupancy values"):
         plotting_matplotlib.plot_shared_cluster_region_matplotlib(payload)
+
+
+def _make_read_cluster_region_association_table() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "chrom": "chr1",
+                "start": 10,
+                "end": 20,
+                "strand": "+",
+                "cluster": "C0",
+                "fraction": 0.25,
+                "log2_enrichment": -1.0,
+            },
+            {
+                "chrom": "chr1",
+                "start": 10,
+                "end": 20,
+                "strand": "+",
+                "cluster": "C1",
+                "fraction": 0.75,
+                "log2_enrichment": 1.5,
+            },
+            {
+                "chrom": "chr1",
+                "start": 30,
+                "end": 40,
+                "strand": "-",
+                "cluster": "C0",
+                "fraction": 0.60,
+                "log2_enrichment": 0.25,
+            },
+            {
+                "chrom": "chr1",
+                "start": 30,
+                "end": 40,
+                "strand": "-",
+                "cluster": "C1",
+                "fraction": 0.40,
+                "log2_enrichment": -0.10,
+            },
+        ]
+    )
+
+
+def test_prepare_read_cluster_region_association_data_accepts_long_form_fraction_table():
+    table = _make_read_cluster_region_association_table()
+
+    payload = plotting.prepare_read_cluster_region_association_data(table)
+
+    association_table = payload["association_table"]
+    matrix_table = payload["matrix_table"]
+    top_regions_table = payload["top_regions_table"]
+
+    assert list(association_table["region_id"].drop_duplicates()) == ["chr1:10-20:+", "chr1:30-40:-"]
+    assert list(matrix_table.columns) == ["region_id", "C0", "C1"]
+    assert list(matrix_table["region_id"]) == ["chr1:10-20:+", "chr1:30-40:-"]
+    np.testing.assert_allclose(
+        matrix_table.loc[:, ["C0", "C1"]].to_numpy(),
+        np.array([[0.25, 0.75], [0.60, 0.40]]),
+    )
+    assert top_regions_table.iloc[0]["cluster"] == "C0"
+    assert top_regions_table.iloc[0]["region_id"] == "chr1:30-40:-"
+    assert top_regions_table.iloc[0]["value"] == pytest.approx(0.60)
+
+
+def test_prepare_read_cluster_region_association_data_uses_requested_log2_enrichment_values():
+    table = _make_read_cluster_region_association_table()
+
+    payload = plotting.prepare_read_cluster_region_association_data(
+        table,
+        value_mode="log2_enrichment",
+        top_n_regions_per_cluster=1,
+    )
+
+    matrix_table = payload["matrix_table"]
+    top_regions_table = payload["top_regions_table"]
+
+    assert list(matrix_table.columns) == ["region_id", "C0", "C1"]
+    np.testing.assert_allclose(
+        matrix_table.loc[:, ["C0", "C1"]].to_numpy(),
+        np.array([[-1.0, 1.5], [0.25, -0.10]]),
+    )
+    assert list(top_regions_table["cluster"]) == ["C0", "C1"]
+    assert list(top_regions_table["region_id"]) == ["chr1:30-40:-", "chr1:10-20:+"]
+    assert list(top_regions_table["value"]) == [pytest.approx(0.25), pytest.approx(1.5)]
+
+
+def test_prepare_read_cluster_region_association_data_supports_genomic_sort():
+    table = _make_read_cluster_region_association_table()
+
+    payload = plotting.prepare_read_cluster_region_association_data(
+        table,
+        region_sort="genomic",
+    )
+
+    assert payload["metadata"]["region_sort"] == "genomic"
+    assert list(payload["matrix_table"]["region_id"]) == ["chr1:10-20:+", "chr1:30-40:-"]
+    assert "region_axis_table" in payload
+
+
+def test_prepare_read_cluster_region_association_data_supports_association_strength_sort():
+    table = _make_read_cluster_region_association_table()
+
+    payload = plotting.prepare_read_cluster_region_association_data(
+        table,
+        region_sort="association_strength",
+        association_strength_aggregate="max",
+    )
+
+    # chr1:10-20:+ has max value 0.75, chr1:30-40:- has max value 0.60
+    assert list(payload["matrix_table"]["region_id"]) == ["chr1:10-20:+", "chr1:30-40:-"]
+    assert payload["metadata"]["association_strength_aggregate"] == "max"
+
+
+def test_prepare_read_cluster_region_association_data_accepts_legacy_wide_region_summary():
+    legacy_summary = pd.DataFrame(
+        [
+            {
+                "chrom": "chr1",
+                "start": 10,
+                "end": 20,
+                "strand": "+",
+                0: 2,
+                1: 1,
+                "total_reads": 3,
+                "dominant_cluster": 0,
+                "dominant_fraction": 2 / 3,
+                "entropy": 0.6365141682948128,
+            },
+            {
+                "chrom": "chr1",
+                "start": 30,
+                "end": 40,
+                "strand": "-",
+                0: 3,
+                1: 2,
+                "total_reads": 5,
+                "dominant_cluster": 0,
+                "dominant_fraction": 3 / 5,
+                "entropy": 0.6730116670092565,
+            },
+        ]
+    )
+
+    payload = plotting.prepare_read_cluster_region_association_data(
+        legacy_summary,
+        top_n_regions_per_cluster=1,
+    )
+
+    association_table = payload["association_table"]
+    matrix_table = payload["matrix_table"]
+    top_regions_table = payload["top_regions_table"]
+
+    assert list(association_table["region_id"].drop_duplicates()) == ["chr1:10-20:+", "chr1:30-40:-"]
+    assert list(matrix_table.columns) == ["region_id", 0, 1]
+    np.testing.assert_allclose(
+        matrix_table.loc[:, [0, 1]].to_numpy(),
+        np.array([[2 / 3, 1 / 3], [3 / 5, 2 / 5]]),
+    )
+    assert list(top_regions_table["cluster"]) == [0, 1]
+    assert top_regions_table.iloc[0]["region_id"] == "chr1:10-20:+"
+    assert top_regions_table.iloc[0]["value"] == pytest.approx(2 / 3)
+
+
+def test_prepare_read_cluster_region_association_data_rejects_missing_requested_mode():
+    table = _make_read_cluster_region_association_table().drop(columns=["log2_enrichment"])
+
+    with pytest.raises(ValueError, match="log2_enrichment"):
+        plotting.prepare_read_cluster_region_association_data(
+            table,
+            value_mode="log2_enrichment",
+        )
+
+
+def test_plot_read_cluster_region_association_heatmap_matplotlib_returns_figure_and_axis():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_read_cluster_region_association_data(_make_read_cluster_region_association_table())
+
+    fig, ax = plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(payload)
+
+    assert fig is not None
+    assert ax is not None
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["C0", "C1"]
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["chr1:10-20:+", "chr1:30-40:-"]
+    np.testing.assert_allclose(
+        np.asarray(ax.images[0].get_array()),
+        np.array([[0.25, 0.75], [0.60, 0.40]]),
+    )
+
+
+def test_plot_read_cluster_region_association_heatmap_matplotlib_supports_row_annotations():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_read_cluster_region_association_data(
+        _make_read_cluster_region_association_table(),
+        region_sort="genomic",
+    )
+    axis_table = payload["region_axis_table"].copy()
+    axis_table["source_label"] = ["on_target", "off_target"]
+    payload["region_axis_table"] = axis_table
+
+    fig, ax = plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
+        payload,
+        row_annotation_column="source_label",
+        row_annotation_title="Source bed",
+        row_annotation_palette={"on_target": "#D95F02", "off_target": "#1B9E77"},
+    )
+
+    assert fig is not None
+    assert ax is not None
+    ytick_text = [tick.get_text() for tick in ax.get_yticklabels()]
+    assert "on_target" in ytick_text[0]
+    assert "off_target" in ytick_text[1]
+
+
+def test_plot_read_cluster_region_association_heatmap_matplotlib_grouped_region_labels():
+    from dimelo import plotting_matplotlib
+
+    table = pd.DataFrame(
+        [
+            {"region_id": "chr1:10-20:+", "cluster": 0, "fraction": 0.20},
+            {"region_id": "chr1:10-20:+", "cluster": 1, "fraction": 0.80},
+            {"region_id": "chr1:30-40:+", "cluster": 0, "fraction": 0.25},
+            {"region_id": "chr1:30-40:+", "cluster": 1, "fraction": 0.75},
+            {"region_id": "chr2:10-20:+", "cluster": 0, "fraction": 0.70},
+            {"region_id": "chr2:10-20:+", "cluster": 1, "fraction": 0.30},
+            {"region_id": "chr2:30-40:+", "cluster": 0, "fraction": 0.65},
+            {"region_id": "chr2:30-40:+", "cluster": 1, "fraction": 0.35},
+        ]
+    )
+    payload = plotting.prepare_read_cluster_region_association_data(table, region_sort="genomic")
+    axis_table = payload["region_axis_table"].copy()
+    axis_table["source_label"] = ["on_target", "on_target", "off_target", "off_target"]
+    payload["region_axis_table"] = axis_table
+
+    fig, ax = plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
+        payload,
+        region_label_mode="genomic",
+        row_annotation_column="source_label",
+        group_region_labels=True,
+    )
+
+    assert fig is not None
+    assert ax is not None
+    ylabels = [tick.get_text() for tick in ax.get_yticklabels()]
+    assert "on_target | chr1" in ylabels
+    assert "off_target | chr2" in ylabels
 
 
 def _minimal_region_contrast_result() -> RegionContrastResult:
@@ -2752,6 +3153,68 @@ def test_plot_reads_routes_region_5to3prime_into_shared_single_read_prep(monkeyp
     assert captured["axis"].upstream_bp == 20
     assert captured["axis"].downstream_bp == 20
     assert list(captured["table"]["region_strand"]) == ["+"]
+
+
+def test_plot_reads_defaults_read_index_axis_and_legend(monkeypatch):
+    captured = {}
+
+    def fake_loader(**kwargs):
+        return (
+            [np.array([100.0, 101.0]), np.array([200.0])],
+            np.array(["read-1", "read-2"]),
+            np.array(["A,0", "CG,0"]),
+            {"chr1": [(90, 210, "+")]},
+        )
+
+    real_prepare = plotting.prepare_single_read_plot_data
+
+    def spy_prepare(table, *, plot_family, axis, **kwargs):
+        captured["table"] = table.copy()
+        return real_prepare(table, plot_family=plot_family, axis=axis, **kwargs)
+
+    class FakeAxes:
+        def __init__(self):
+            self.legend_ = None
+            self.xlabel = None
+            self.ylabel = None
+
+        def legend(self, *args, **kwargs):
+            self.legend_args = (args, kwargs)
+
+        def get_legend_handles_labels(self):
+            return ([], [])
+
+        def set_xlim(self, limits):
+            self.xlim = limits
+
+        def set_xlabel(self, label):
+            self.xlabel = label
+
+        def set_ylabel(self, label):
+            self.ylabel = label
+
+    monkeypatch.setattr(
+        "dimelo.plot_reads.load_processed.readwise_binary_modification_arrays",
+        fake_loader,
+    )
+    monkeypatch.setattr(
+        "dimelo.plot_reads.plotting.prepare_single_read_plot_data",
+        spy_prepare,
+    )
+    monkeypatch.setattr("dimelo.plot_reads.sns.scatterplot", lambda **kwargs: FakeAxes())
+
+    axes = plot_reads.plot_reads(
+        mod_file_name="sample.h5",
+        regions="regions.bed",
+        motifs=["A,0", "CG,0"],
+        window_size=50,
+        relative=True,
+    )
+
+    assert list(captured["table"]["read_index"]) == [0, 0, 1]
+    assert axes.xlabel == "Position (bp)"
+    assert axes.ylabel == "Read index"
+    assert axes.legend_args[1]["title"] == "Mod, index"
 
 
 def test_prepare_aggregate_plot_data_builds_concatenated_segment_axis():

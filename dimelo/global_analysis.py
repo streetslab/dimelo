@@ -6,6 +6,7 @@ from typing import Iterable, Sequence
 
 import pandas as pd
 import pysam
+from tqdm.auto import tqdm
 
 from . import load_processed, utils
 from .models import GlobalAnalysisResult, SampleSpec
@@ -80,7 +81,7 @@ def summarize_global_samples(
 
     rows: list[dict[str, object]] = []
 
-    for sample in samples:
+    for sample in tqdm(samples, desc="Summarizing global samples", disable=quiet):
         if not sample.metadata or "pileup_path" not in sample.metadata:
             raise ValueError(
                 f"Sample {sample.sample_id!r} is missing metadata['pileup_path'] for global_analysis mode."
@@ -200,7 +201,7 @@ def build_window_summary(
     ]
 
     rows: list[dict[str, object]] = []
-    for sample in samples:
+    for sample in tqdm(samples, desc="Processing tiled windows", disable=quiet):
         metadata = sample.metadata or {}
         if "pileup_path" not in metadata:
             raise ValueError(

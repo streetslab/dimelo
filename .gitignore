@@ -61,6 +61,19 @@ dimelo/test/output
 
 # Checkpoint files
 .ipynb_checkpoints/
+*.executed.ipynb
 
 # Local worktrees
 .worktrees/
+
+# Local analysis artifacts and caches
+artifacts/
+cache/
+docs/benchmarks/tmp_bench/
+
+# Local benchmark/output files
+modkit_test_results.json
+pileup_0.2.4.bed.gz
+pileup_0.2.4_test.bed
+pileup_0.2.4_test.bed.gz
+pileup_0.6.1.bed.gz
