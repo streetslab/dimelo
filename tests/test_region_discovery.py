@@ -3,10 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from dimelo import global_analysis
+from dimelo import global_analysis, region_contrasts, region_discovery
 from dimelo.models import ContrastSpec, RegionDiscoveryResult, SampleSpec
-
-from dimelo import region_contrasts, region_discovery
 
 
 def _mock_window_summary() -> pd.DataFrame:
@@ -443,7 +441,9 @@ def test_scan_genome_basic_behavior_with_mocked_window_summary(monkeypatch):
         captured.update(kwargs)
         return _mock_window_summary()
 
-    monkeypatch.setattr(global_analysis, "build_window_summary", fake_build_window_summary)
+    monkeypatch.setattr(
+        global_analysis, "build_window_summary", fake_build_window_summary
+    )
 
     result = region_discovery.scan_genome(
         samples=[
@@ -503,7 +503,11 @@ def test_scan_genome_basic_behavior_with_mocked_window_summary(monkeypatch):
 
 
 def test_scan_genome_matched_pairwise_uses_only_complete_pairs(monkeypatch):
-    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_window_summary())
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: _mock_paired_window_summary(),
+    )
 
     result = region_discovery.scan_genome(
         samples=_paired_samplespecs(),
@@ -559,8 +563,14 @@ def test_scan_genome_matched_pairwise_ranks_by_mean_abs_delta(monkeypatch):
     assert result.metadata["rank_by"] == "mean_abs_delta"
 
 
-def test_scan_genome_matched_pairwise_errors_on_missing_pairs_in_strict_mode(monkeypatch):
-    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_window_summary())
+def test_scan_genome_matched_pairwise_errors_on_missing_pairs_in_strict_mode(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: _mock_paired_window_summary(),
+    )
 
     with pytest.raises(ValueError, match="incomplete matched units"):
         region_discovery.scan_genome(
@@ -607,95 +617,102 @@ def test_scan_genome_matched_pairwise_applies_min_coverage_filtering(monkeypatch
     assert pd.isna(result.windows.loc[0, "rank"])
     assert pd.isna(result.windows.loc[0, "score_value"])
 
-def test_scan_genome_matched_pairwise_reranks_surviving_hits_after_coverage_filter(monkeypatch):
-    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: pd.DataFrame(
-        [
-            {
-                "sample_id": "t1",
-                "condition": "targeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:0-500",
-                "chromosome": "chr1",
-                "start": 0,
-                "end": 500,
-                "strand": ".",
-                "modified_count": 9,
-                "valid_count": 10,
-                "window_fraction": 0.9,
-            },
-            {
-                "sample_id": "d1",
-                "condition": "nontargeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:0-500",
-                "chromosome": "chr1",
-                "start": 0,
-                "end": 500,
-                "strand": ".",
-                "modified_count": 1,
-                "valid_count": 10,
-                "window_fraction": 0.1,
-            },
-            {
-                "sample_id": "t2",
-                "condition": "targeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:500-1000",
-                "chromosome": "chr1",
-                "start": 500,
-                "end": 1000,
-                "strand": ".",
-                "modified_count": 12,
-                "valid_count": 60,
-                "window_fraction": 0.2,
-            },
-            {
-                "sample_id": "d2",
-                "condition": "nontargeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:500-1000",
-                "chromosome": "chr1",
-                "start": 500,
-                "end": 1000,
-                "strand": ".",
-                "modified_count": 6,
-                "valid_count": 60,
-                "window_fraction": 0.1,
-            },
-            {
-                "sample_id": "t1",
-                "condition": "targeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:1000-1500",
-                "chromosome": "chr1",
-                "start": 1000,
-                "end": 1500,
-                "strand": ".",
-                "modified_count": 10,
-                "valid_count": 60,
-                "window_fraction": 1 / 6,
-            },
-            {
-                "sample_id": "d1",
-                "condition": "nontargeting",
-                "replicate": 1,
-                "motif": "A,0",
-                "window_id": "chr1:1000-1500",
-                "chromosome": "chr1",
-                "start": 1000,
-                "end": 1500,
-                "strand": ".",
-                "modified_count": 6,
-                "valid_count": 60,
-                "window_fraction": 0.1,
-            },
-        ]
-    ))
+
+def test_scan_genome_matched_pairwise_reranks_surviving_hits_after_coverage_filter(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: pd.DataFrame(
+            [
+                {
+                    "sample_id": "t1",
+                    "condition": "targeting",
+                    "replicate": 1,
+                    "motif": "A,0",
+                    "window_id": "chr1:0-500",
+                    "chromosome": "chr1",
+                    "start": 0,
+                    "end": 500,
+                    "strand": ".",
+                    "modified_count": 9,
+                    "valid_count": 10,
+                    "window_fraction": 0.9,
+                },
+                {
+                    "sample_id": "d1",
+                    "condition": "nontargeting",
+                    "replicate": 1,
+                    "motif": "A,0",
+                    "window_id": "chr1:0-500",
+                    "chromosome": "chr1",
+                    "start": 0,
+                    "end": 500,
+                    "strand": ".",
+                    "modified_count": 1,
+                    "valid_count": 10,
+                    "window_fraction": 0.1,
+                },
+                {
+                    "sample_id": "t2",
+                    "condition": "targeting",
+                    "replicate": 1,
+                    "motif": "A,0",
+                    "window_id": "chr1:500-1000",
+                    "chromosome": "chr1",
+                    "start": 500,
+                    "end": 1000,
+                    "strand": ".",
+                    "modified_count": 12,
+                    "valid_count": 60,
+                    "window_fraction": 0.2,
+                },
+                {
+                    "sample_id": "d2",
+                    "condition": "nontargeting",
+                    "replicate": 1,
+                    "motif": "A,0",
+                    "window_id": "chr1:500-1000",
+                    "chromosome": "chr1",
+                    "start": 500,
+                    "end": 1000,
+                    "strand": ".",
+                    "modified_count": 6,
+                    "valid_count": 60,
+                    "window_fraction": 0.1,
+                },
+                {
+                    "sample_id": "t1",
+                    "condition": "targeting",
+                    "replicate": 1,
+                    "motif": "A,0",
+                    "window_id": "chr1:1000-1500",
+                    "chromosome": "chr1",
+                    "start": 1000,
+                    "end": 1500,
+                    "strand": ".",
+                    "modified_count": 10,
+                    "valid_count": 60,
+                    "window_fraction": 1 / 6,
+                },
+                {
+                    "sample_id": "d1",
+                    "condition": "nontargeting",
+                    "replicate": 1,
+                    "motif": "A,0",
+                    "window_id": "chr1:1000-1500",
+                    "chromosome": "chr1",
+                    "start": 1000,
+                    "end": 1500,
+                    "strand": ".",
+                    "modified_count": 6,
+                    "valid_count": 60,
+                    "window_fraction": 0.1,
+                },
+            ]
+        ),
+    )
     result = region_discovery.scan_genome(
         samples=[
             SampleSpec(
@@ -767,6 +784,8 @@ def test_scan_genome_rejects_invalid_pairing_policy(monkeypatch):
             ),
             score="effect_size_only",
         )
+
+
 def test_scan_genome_matched_pairwise_rejects_merge_hits(monkeypatch):
     monkeypatch.setattr(
         global_analysis,
@@ -799,7 +818,9 @@ def test_scan_genome_matched_pairwise_rejects_multi_condition_sides(monkeypatch)
         lambda **_: _mock_paired_pairwise_window_summary(),
     )
 
-    with pytest.raises(ValueError, match="exactly one numerator and one denominator condition"):
+    with pytest.raises(
+        ValueError, match="exactly one numerator and one denominator condition"
+    ):
         region_discovery.scan_genome(
             samples=_paired_samplespecs(),
             motifs=["A,0"],
@@ -1123,7 +1144,11 @@ def _mock_paired_time_course_window_summary() -> pd.DataFrame:
 
 
 def test_scan_genome_time_course_ranks_by_trajectory_amplitude_mean(monkeypatch):
-    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_time_course_window_summary())
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: _mock_paired_time_course_window_summary(),
+    )
 
     result = region_discovery.scan_genome(
         samples=_paired_time_course_samplespecs(),
@@ -1147,8 +1172,14 @@ def test_scan_genome_time_course_ranks_by_trajectory_amplitude_mean(monkeypatch)
     assert result.metadata["rank_by"] == "trajectory_amplitude_mean"
 
 
-def test_scan_genome_time_course_errors_when_time_order_conditions_are_missing(monkeypatch):
-    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_time_course_window_summary())
+def test_scan_genome_time_course_errors_when_time_order_conditions_are_missing(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: _mock_paired_time_course_window_summary(),
+    )
 
     with pytest.raises(ValueError, match="time_order"):
         region_discovery.scan_genome(
@@ -1165,7 +1196,10 @@ def test_scan_genome_time_course_errors_when_time_order_conditions_are_missing(m
             score="effect_size_only",
         )
 
-def test_scan_genome_time_course_filters_incomplete_trajectories_per_window(monkeypatch):
+
+def test_scan_genome_time_course_filters_incomplete_trajectories_per_window(
+    monkeypatch,
+):
     monkeypatch.setattr(
         global_analysis,
         "build_window_summary",
@@ -1350,7 +1384,9 @@ def test_scan_genome_time_course_filters_incomplete_trajectories_per_window(monk
     assert second_window["trajectory_amplitude_mean"] == pytest.approx(0.8)
 
 
-def test_scan_genome_time_course_ignores_extra_conditions_outside_time_order(monkeypatch):
+def test_scan_genome_time_course_ignores_extra_conditions_outside_time_order(
+    monkeypatch,
+):
     monkeypatch.setattr(
         global_analysis,
         "build_window_summary",
@@ -1537,8 +1573,14 @@ def test_scan_genome_time_course_ignores_extra_conditions_outside_time_order(mon
 
     assert result.hits.loc[0, "trajectory_amplitude_mean"] == pytest.approx(0.35)
     assert result.hits.loc[0, "trajectory_amplitude_sd"] == pytest.approx(0.05)
+
+
 def test_scan_genome_time_course_errors_on_missing_pairing_key(monkeypatch):
-    monkeypatch.setattr(global_analysis, "build_window_summary", lambda **_: _mock_paired_window_summary())
+    monkeypatch.setattr(
+        global_analysis,
+        "build_window_summary",
+        lambda **_: _mock_paired_window_summary(),
+    )
 
     with pytest.raises(ValueError, match="pairing_key"):
         region_discovery.scan_genome(
@@ -1556,17 +1598,35 @@ def test_scan_genome_time_course_errors_on_missing_pairing_key(monkeypatch):
 
 
 def test_merge_adjacent_hits_preserves_rank_order_and_merges_counts():
-    merged = region_discovery.merge_adjacent_hits(_merge_helper_hits(), merge_distance=1)
+    merged = region_discovery.merge_adjacent_hits(
+        _merge_helper_hits(), merge_distance=1
+    )
 
     assert list(merged["window_id"]) == ["chr2:100-200", "chr1:0-200", "chr1:500-600"]
     assert list(merged["rank"]) == [1, 2, 4]
     assert list(merged["merged_window_count"]) == [1, 2, 1]
-    assert list(merged["score_value"]) == [pytest.approx(0.95), pytest.approx(0.3), pytest.approx(0.8)]
-    assert list(merged["p_value"]) == [pytest.approx(0.01), pytest.approx(0.03), pytest.approx(0.05)]
-    assert list(merged["adjusted_p_value"]) == [pytest.approx(0.01), pytest.approx(0.06), pytest.approx(0.07)]
+    assert list(merged["score_value"]) == [
+        pytest.approx(0.95),
+        pytest.approx(0.3),
+        pytest.approx(0.8),
+    ]
+    assert list(merged["p_value"]) == [
+        pytest.approx(0.01),
+        pytest.approx(0.03),
+        pytest.approx(0.05),
+    ]
+    assert list(merged["adjusted_p_value"]) == [
+        pytest.approx(0.01),
+        pytest.approx(0.06),
+        pytest.approx(0.07),
+    ]
     assert list(merged["modified_count"]) == [19, 8, 8]
     assert list(merged["valid_count"]) == [20, 20, 10]
-    assert list(merged["window_fraction"]) == [pytest.approx(0.95), pytest.approx(0.4), pytest.approx(0.8)]
+    assert list(merged["window_fraction"]) == [
+        pytest.approx(0.95),
+        pytest.approx(0.4),
+        pytest.approx(0.8),
+    ]
     assert pd.isna(merged.loc[0, "numerator_modified_count"])
     assert merged.loc[1, "numerator_modified_count"] == 6
     assert pd.isna(merged.loc[2, "numerator_modified_count"])
@@ -1582,16 +1642,39 @@ def test_merge_adjacent_hits_preserves_rank_order_and_merges_counts():
 
 
 def test_hits_to_bed_projects_required_columns_in_order():
-    merged = region_discovery.merge_adjacent_hits(_merge_helper_hits(), merge_distance=1)
+    merged = region_discovery.merge_adjacent_hits(
+        _merge_helper_hits(), merge_distance=1
+    )
     bed = region_discovery.hits_to_bed(merged)
 
     assert list(bed.columns) == ["chrom", "start", "end", "name", "score", "strand"]
     assert pd.api.types.is_integer_dtype(bed["score"])
     assert bed["score"].between(0, 1000).all()
     assert bed.to_dict(orient="records") == [
-        {"chrom": "chr2", "start": 100, "end": 200, "name": "chr2:100-200", "score": 950, "strand": "+"},
-        {"chrom": "chr1", "start": 0, "end": 200, "name": "chr1:0-200", "score": 300, "strand": "+"},
-        {"chrom": "chr1", "start": 500, "end": 600, "name": "chr1:500-600", "score": 800, "strand": "-"},
+        {
+            "chrom": "chr2",
+            "start": 100,
+            "end": 200,
+            "name": "chr2:100-200",
+            "score": 950,
+            "strand": "+",
+        },
+        {
+            "chrom": "chr1",
+            "start": 0,
+            "end": 200,
+            "name": "chr1:0-200",
+            "score": 300,
+            "strand": "+",
+        },
+        {
+            "chrom": "chr1",
+            "start": 500,
+            "end": 600,
+            "name": "chr1:500-600",
+            "score": 800,
+            "strand": "-",
+        },
     ]
 
 
@@ -1615,7 +1698,9 @@ def test_discovery_bed_handoff_into_region_contrasts(tmp_path, monkeypatch):
         split_large_regions=False,
     ):
         pileup_path = function_handle.keywords["bedmethyl_file"]
-        regions_dict = region_contrasts.utils.regions_dict_from_input(regions, window_size)
+        regions_dict = region_contrasts.utils.regions_dict_from_input(
+            regions, window_size
+        )
         n_regions = sum(len(region_list) for region_list in regions_dict.values())
         base_counts = counts_by_pileup[pileup_path]
         if len(base_counts) >= n_regions:
@@ -1623,7 +1708,9 @@ def test_discovery_bed_handoff_into_region_contrasts(tmp_path, monkeypatch):
         repeats = (n_regions // len(base_counts)) + 1
         return (base_counts * repeats)[:n_regions]
 
-    monkeypatch.setattr(region_contrasts.load_processed, "regions_to_list", fake_regions_to_list)
+    monkeypatch.setattr(
+        region_contrasts.load_processed, "regions_to_list", fake_regions_to_list
+    )
 
     samples = [
         SampleSpec(
@@ -1698,14 +1785,25 @@ def test_paired_discovery_bed_handoff_into_region_contrasts(tmp_path, monkeypatc
         "d2.bed.gz": [(1, 10), (2, 10)],
     }
 
-    def fake_regions_to_list(function_handle, regions, window_size=None, quiet=True, cores=None, split_large_regions=False):
+    def fake_regions_to_list(
+        function_handle,
+        regions,
+        window_size=None,
+        quiet=True,
+        cores=None,
+        split_large_regions=False,
+    ):
         pileup_path = function_handle.keywords["bedmethyl_file"]
-        regions_dict = region_contrasts.utils.regions_dict_from_input(regions, window_size)
+        regions_dict = region_contrasts.utils.regions_dict_from_input(
+            regions, window_size
+        )
         n_regions = sum(len(region_list) for region_list in regions_dict.values())
         base_counts = counts_by_pileup[pileup_path]
         return (base_counts * ((n_regions // len(base_counts)) + 1))[:n_regions]
 
-    monkeypatch.setattr(region_contrasts.load_processed, "regions_to_list", fake_regions_to_list)
+    monkeypatch.setattr(
+        region_contrasts.load_processed, "regions_to_list", fake_regions_to_list
+    )
 
     result = region_contrasts.score_regions(
         samples=[
@@ -1812,7 +1910,9 @@ def test_scan_genome_filters_low_coverage_windows(monkeypatch):
             ]
         )
 
-    monkeypatch.setattr(global_analysis, "build_window_summary", fake_build_window_summary)
+    monkeypatch.setattr(
+        global_analysis, "build_window_summary", fake_build_window_summary
+    )
 
     result = region_discovery.scan_genome(
         samples=[
@@ -1848,9 +1948,11 @@ def test_scan_genome_filters_low_coverage_windows(monkeypatch):
         result.windows["window_id"] == "chr1:1000-2000", "score_value"
     ]
     assert low_coverage.isna().all()
-    assert result.windows.loc[
-        result.windows["window_id"] == "chr1:1000-2000", "rank"
-    ].isna().all()
+    assert (
+        result.windows.loc[result.windows["window_id"] == "chr1:1000-2000", "rank"]
+        .isna()
+        .all()
+    )
 
 
 def test_scan_genome_hands_include_and_exclude_contigs_to_window_builder(monkeypatch):
@@ -1875,7 +1977,9 @@ def test_scan_genome_hands_include_and_exclude_contigs_to_window_builder(monkeyp
             ]
         )
 
-    monkeypatch.setattr(global_analysis, "build_window_summary", fake_build_window_summary)
+    monkeypatch.setattr(
+        global_analysis, "build_window_summary", fake_build_window_summary
+    )
 
     region_discovery.scan_genome(
         samples=[],
@@ -1955,7 +2059,9 @@ def test_scan_genome_beta_binomial_adds_ranking_fields(monkeypatch):
             ]
         )
 
-    monkeypatch.setattr(global_analysis, "build_window_summary", fake_build_window_summary)
+    monkeypatch.setattr(
+        global_analysis, "build_window_summary", fake_build_window_summary
+    )
 
     result = region_discovery.scan_genome(
         samples=[
@@ -1990,7 +2096,10 @@ def test_scan_genome_beta_binomial_adds_ranking_fields(monkeypatch):
         result.windows.columns
     )
     assert list(result.hits["rank"]) == [1, 2]
-    assert result.windows.loc[0, "adjusted_p_value"] <= result.windows.loc[1, "adjusted_p_value"]
+    assert (
+        result.windows.loc[0, "adjusted_p_value"]
+        <= result.windows.loc[1, "adjusted_p_value"]
+    )
     assert result.hits.loc[0, "score_value"] >= result.hits.loc[1, "score_value"]
 
 
@@ -2096,8 +2205,12 @@ def test_scan_genome_excludes_low_coverage_before_beta_binomial_scoring(monkeypa
         observed_bh_inputs.append(len(p_values))
         return p_values.astype(float)
 
-    monkeypatch.setattr(global_analysis, "build_window_summary", fake_build_window_summary)
-    monkeypatch.setattr(region_discovery, "_beta_binomial_two_sided_p_value", fake_p_value)
+    monkeypatch.setattr(
+        global_analysis, "build_window_summary", fake_build_window_summary
+    )
+    monkeypatch.setattr(
+        region_discovery, "_beta_binomial_two_sided_p_value", fake_p_value
+    )
     monkeypatch.setattr(region_discovery, "_adjust_p_values_bh", fake_bh_adjustment)
 
     result = region_discovery.scan_genome(
@@ -2184,7 +2297,9 @@ def test_scan_genome_effect_size_only_ranks_by_absolute_difference(monkeypatch):
             ]
         )
 
-    monkeypatch.setattr(global_analysis, "build_window_summary", fake_build_window_summary)
+    monkeypatch.setattr(
+        global_analysis, "build_window_summary", fake_build_window_summary
+    )
 
     result = region_discovery.scan_genome(
         samples=[],
@@ -2227,7 +2342,9 @@ def test_scan_genome_raises_for_missing_contrast_condition(monkeypatch):
             ]
         )
 
-    monkeypatch.setattr(global_analysis, "build_window_summary", fake_build_window_summary)
+    monkeypatch.setattr(
+        global_analysis, "build_window_summary", fake_build_window_summary
+    )
 
     with pytest.raises(ValueError, match="treated"):
         region_discovery.scan_genome(
@@ -2367,7 +2484,9 @@ def test_scan_genome_reranks_hits_after_min_coverage_filtering(monkeypatch):
             ]
         )
 
-    monkeypatch.setattr(global_analysis, "build_window_summary", fake_build_window_summary)
+    monkeypatch.setattr(
+        global_analysis, "build_window_summary", fake_build_window_summary
+    )
 
     result = region_discovery.scan_genome(
         samples=[],
@@ -2480,7 +2599,9 @@ def test_scan_genome_merge_hits_keeps_strand_and_recomputes_window_fields(monkey
             ]
         )
 
-    monkeypatch.setattr(global_analysis, "build_window_summary", fake_build_window_summary)
+    monkeypatch.setattr(
+        global_analysis, "build_window_summary", fake_build_window_summary
+    )
 
     result = region_discovery.scan_genome(
         samples=[],

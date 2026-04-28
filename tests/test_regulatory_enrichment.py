@@ -34,11 +34,15 @@ def test_regulatory_spec_filters_screen_for_non_screen_species():
     assert spec.species == "rattus_norvegicus"
     assert spec.enabled_providers == ("unibind",)
     assert "screen" in spec.provider_notes
-    assert "supports only homo_sapiens and mus_musculus" in spec.provider_notes["screen"]
+    assert (
+        "supports only homo_sapiens and mus_musculus" in spec.provider_notes["screen"]
+    )
 
 
 def test_regulatory_spec_can_raise_on_filtered_screen_when_strict():
-    with pytest.raises(regulatory_enrichment.RegulatoryEnrichmentSpecError, match="SCREEN disabled"):
+    with pytest.raises(
+        regulatory_enrichment.RegulatoryEnrichmentSpecError, match="SCREEN disabled"
+    ):
         regulatory_enrichment.RegulatoryEnrichmentSpec(
             species="rattus norvegicus",
             providers=("screen",),
@@ -47,7 +51,9 @@ def test_regulatory_spec_can_raise_on_filtered_screen_when_strict():
 
 
 def test_regulatory_spec_rejects_species_not_supported_by_unibind():
-    with pytest.raises(regulatory_enrichment.RegulatoryEnrichmentSpecError, match="Unsupported species"):
+    with pytest.raises(
+        regulatory_enrichment.RegulatoryEnrichmentSpecError, match="Unsupported species"
+    ):
         regulatory_enrichment.RegulatoryEnrichmentSpec(
             species="bos_taurus",
             providers=("unibind",),
@@ -113,30 +119,30 @@ def test_search_unibind_trackhub_tracks_and_resolve_to_cache(monkeypatch, tmp_pa
 
     payloads = {
         hub_url: (
-            "hub test\n"
-            "shortLabel Test\n"
-            "longLabel Test\n"
-            "genomesFile genomes.txt\n"
-            "email test@example.org\n"
-        ).encode(),
+            b"hub test\n"
+            b"shortLabel Test\n"
+            b"longLabel Test\n"
+            b"genomesFile genomes.txt\n"
+            b"email test@example.org\n"
+        ),
         genomes_url: (
-            "genome hg38\n"
-            "trackDb hg38/trackDb.txt\n\n"
-            "genome mm10\n"
-            "trackDb mm10/trackDb.txt\n"
-        ).encode(),
+            b"genome hg38\n"
+            b"trackDb hg38/trackDb.txt\n\n"
+            b"genome mm10\n"
+            b"trackDb mm10/trackDb.txt\n"
+        ),
         trackdb_url: (
-            "track CTCF_track\n"
-            "shortLabel CTCF\n"
-            "longLabel CTCF example\n"
-            "type bigBed 9 .\n"
-            "bigDataUrl CTCF_track.bb\n\n"
-            "track ATAC_track\n"
-            "shortLabel ATAC\n"
-            "longLabel ATAC example\n"
-            "type bigBed 9 .\n"
-            "bigDataUrl ATAC_track.bb\n"
-        ).encode(),
+            b"track CTCF_track\n"
+            b"shortLabel CTCF\n"
+            b"longLabel CTCF example\n"
+            b"type bigBed 9 .\n"
+            b"bigDataUrl CTCF_track.bb\n\n"
+            b"track ATAC_track\n"
+            b"shortLabel ATAC\n"
+            b"longLabel ATAC example\n"
+            b"type bigBed 9 .\n"
+            b"bigDataUrl ATAC_track.bb\n"
+        ),
         bigbed_url: b"fake-ctcf-track",
         other_url: b"fake-atac-track",
     }
@@ -200,7 +206,9 @@ def test_workflow_wrapper_resolve_unibind_track_paths_uses_regulatory_spec(monke
         captured.update(kwargs)
         return [Path("/tmp/fake.bb")]
 
-    monkeypatch.setattr(regulatory_enrichment, "resolve_unibind_track_paths", fake_resolve)
+    monkeypatch.setattr(
+        regulatory_enrichment, "resolve_unibind_track_paths", fake_resolve
+    )
     spec = workflows.resolve_regulatory_enrichment_spec(
         species="human",
         target_genome="hg38",
@@ -223,7 +231,7 @@ def test_submit_unibind_tfbs_extraction_parses_job_page(monkeypatch):
     submitted_html = (
         "<table>"
         "<tr><th>Job status:</th><td>Queued</td></tr>"
-        "<tr><th>Results URL:</th><td><a href=\"https://example.org/TFBS_extraction/jobA/\">"
+        '<tr><th>Results URL:</th><td><a href="https://example.org/TFBS_extraction/jobA/">'
         "https://example.org/TFBS_extraction/jobA/"
         "</a></td></tr>"
         "</table>"
@@ -255,10 +263,14 @@ def test_submit_unibind_tfbs_extraction_parses_job_page(monkeypatch):
             if url == endpoint and data is not None:
                 assert b"performTFBSextraction" in data
                 assert b"collection" in data
-                return FakeResponse(submitted_html, "https://example.org/TFBS_extraction/jobA/")
+                return FakeResponse(
+                    submitted_html, "https://example.org/TFBS_extraction/jobA/"
+                )
             raise RuntimeError(f"Unexpected request url={url!r}")
 
-    monkeypatch.setattr(regulatory_enrichment.request, "build_opener", lambda *args: FakeOpener())
+    monkeypatch.setattr(
+        regulatory_enrichment.request, "build_opener", lambda *args: FakeOpener()
+    )
 
     result = regulatory_enrichment.submit_unibind_tfbs_extraction(
         regions=["chr1:10-20"],
@@ -319,7 +331,9 @@ def test_poll_unibind_job_waits_until_terminal(monkeypatch):
         timeout_seconds=1.0,
     )
     assert result.status == "completed"
-    assert "https://example.org/temp/jobB/extraction_results.bed" in result.download_urls
+    assert (
+        "https://example.org/temp/jobB/extraction_results.bed" in result.download_urls
+    )
     assert len(result.status_history) >= 2
 
 

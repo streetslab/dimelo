@@ -9,8 +9,9 @@ import subprocess
 import tempfile
 import time
 import zipfile
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 from urllib import error, parse, request
 
 import numpy as np
@@ -23,9 +24,7 @@ DEFAULT_STATUS_URL = DEFAULT_SUBMIT_URL
 DEFAULT_RESULT_URL = DEFAULT_SUBMIT_URL
 DEFAULT_CHAIN_CACHE_DIR = Path("cache/chains")
 DEFAULT_METADATA_CACHE_DIR = Path("cache/chip_atlas")
-DEFAULT_EXPERIMENT_LIST_URL = (
-    "https://dbarchive.biosciencedbc.jp/data/chip-atlas/LATEST/chip_atlas_experiment_list.zip"
-)
+DEFAULT_EXPERIMENT_LIST_URL = "https://dbarchive.biosciencedbc.jp/data/chip-atlas/LATEST/chip_atlas_experiment_list.zip"
 
 _SUCCESS_STATUSES = {"finished"}
 _TERMINAL_STATUSES = {"finished", "error", "cancelled", "unknown"}
@@ -63,8 +62,14 @@ _GENOME_ALIASES = {
 }
 
 _CHAIN_URL_OVERRIDES = {
-    ("hs1", "hg38"): "https://hgdownload.soe.ucsc.edu/goldenPath/hs1/liftOver/hs1ToHg38.over.chain.gz",
-    ("hs1", "hg19"): "https://hgdownload.soe.ucsc.edu/goldenPath/hs1/liftOver/hs1ToHg19.over.chain.gz",
+    (
+        "hs1",
+        "hg38",
+    ): "https://hgdownload.soe.ucsc.edu/goldenPath/hs1/liftOver/hs1ToHg38.over.chain.gz",
+    (
+        "hs1",
+        "hg19",
+    ): "https://hgdownload.soe.ucsc.edu/goldenPath/hs1/liftOver/hs1ToHg19.over.chain.gz",
 }
 
 _BED_THRESHOLD_COLUMN_MAP = {
@@ -120,7 +125,9 @@ def _http_request(
         detail = exc.read().decode("utf-8", errors="replace")
         hint = ""
         lowered = detail.lower()
-        if exc.code == 404 and ("chip-atlas: 404" in lowered or "<!doctype html>" in lowered):
+        if exc.code == 404 and (
+            "chip-atlas: 404" in lowered or "<!doctype html>" in lowered
+        ):
             hint = (
                 " The endpoint may be outdated. The current API base URL is "
                 "'https://dtn1.ddbj.nig.ac.jp/wabi/chipatlas/'."
@@ -170,7 +177,11 @@ def _resolve_chain_file(
 
     source = _normalize_genome_name(source_genome)
     target = _normalize_genome_name(target_genome)
-    cache_root = Path(chain_cache_dir) if chain_cache_dir is not None else DEFAULT_CHAIN_CACHE_DIR
+    cache_root = (
+        Path(chain_cache_dir)
+        if chain_cache_dir is not None
+        else DEFAULT_CHAIN_CACHE_DIR
+    )
     cache_root.mkdir(parents=True, exist_ok=True)
     cached_path = cache_root / f"{source}_to_{target}.over.chain.gz"
     if cached_path.exists() and cached_path.stat().st_size > 0:
@@ -179,9 +190,11 @@ def _resolve_chain_file(
     url = chain_url if chain_url is not None else _chain_url_for_pair(source, target)
     request_obj = request.Request(url, headers={"User-Agent": "dimelo-toolkit/1.0"})
     try:
-        with request.urlopen(request_obj, timeout=timeout_seconds) as response:
-            with cached_path.open("wb") as handle:
-                shutil.copyfileobj(response, handle)
+        with (
+            request.urlopen(request_obj, timeout=timeout_seconds) as response,
+            cached_path.open("wb") as handle,
+        ):
+            shutil.copyfileobj(response, handle)
     except Exception as exc:
         raise RuntimeError(
             "Failed to download CrossMap chain file for "
@@ -282,7 +295,9 @@ def _download_bytes(
             f"ChIP-Atlas download failed with HTTP {exc.code}: {url}\n{detail[:300]}"
         ) from exc
     except error.URLError as exc:
-        raise RuntimeError(f"ChIP-Atlas download failed for {url}: {exc.reason}") from exc
+        raise RuntimeError(
+            f"ChIP-Atlas download failed for {url}: {exc.reason}"
+        ) from exc
 
 
 def _ensure_experiment_list_zip(
@@ -306,13 +321,17 @@ def _ensure_experiment_list_zip(
 
 def _iter_experiment_rows(experiment_list_zip: Path) -> Iterable[dict[str, str]]:
     with zipfile.ZipFile(experiment_list_zip) as archive:
-        member = next((name for name in archive.namelist() if name.lower().endswith(".csv")), None)
+        member = next(
+            (name for name in archive.namelist() if name.lower().endswith(".csv")), None
+        )
         if member is None:
             raise RuntimeError(
                 "ChIP-Atlas experiment-list archive did not contain a CSV file."
             )
         with archive.open(member, "r") as handle:
-            reader = csv.DictReader(io.TextIOWrapper(handle, encoding="utf-8", errors="replace"))
+            reader = csv.DictReader(
+                io.TextIOWrapper(handle, encoding="utf-8", errors="replace")
+            )
             for row in reader:
                 yield {str(k): ("" if v is None else str(v)) for k, v in row.items()}
 
@@ -335,8 +354,12 @@ def _coerce_bed6(table: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(
         {
             "chrom": table.iloc[:, 0].astype(str),
-            "start": pd.to_numeric(table.iloc[:, 1], errors="coerce").fillna(-1).astype(int),
-            "end": pd.to_numeric(table.iloc[:, 2], errors="coerce").fillna(-1).astype(int),
+            "start": pd.to_numeric(table.iloc[:, 1], errors="coerce")
+            .fillna(-1)
+            .astype(int),
+            "end": pd.to_numeric(table.iloc[:, 2], errors="coerce")
+            .fillna(-1)
+            .astype(int),
             "name": table.iloc[:, 3].astype(str) if table.shape[1] > 3 else ".",
             "score": table.iloc[:, 4] if table.shape[1] > 4 else 0,
             "strand": table.iloc[:, 5].astype(str) if table.shape[1] > 5 else ".",
@@ -369,7 +392,9 @@ def _extract_request_id(body: str) -> str:
         if request_ids:
             return str(request_ids[0])
 
-    id_match = re.search(r"\b(?:id|requestId|request_id)\s*[:=]\s*['\"]?([A-Za-z0-9._-]+)", stripped)
+    id_match = re.search(
+        r"\b(?:id|requestId|request_id)\s*[:=]\s*['\"]?([A-Za-z0-9._-]+)", stripped
+    )
     if id_match:
         return id_match.group(1)
 
@@ -453,7 +478,9 @@ def region_ids_to_bed_dataframe(region_ids: Iterable[str]) -> pd.DataFrame:
                 "strand": strand,
             }
         )
-    return pd.DataFrame(rows, columns=["chrom", "start", "end", "name", "score", "strand"])
+    return pd.DataFrame(
+        rows, columns=["chrom", "start", "end", "name", "score", "strand"]
+    )
 
 
 def _regions_dataframe_from_input(
@@ -477,7 +504,9 @@ def _regions_dataframe_from_input(
     if not isinstance(source, pd.DataFrame):
         raise TypeError("Could not coerce ChIP-Atlas regions to a DataFrame.")
     if source.empty:
-        return pd.DataFrame(columns=["chrom", "start", "end", "name", "score", "strand"])
+        return pd.DataFrame(
+            columns=["chrom", "start", "end", "name", "score", "strand"]
+        )
 
     if source.columns.dtype == object and {"start", "end"}.issubset(source.columns):
         chrom_column = "chrom" if "chrom" in source.columns else "chromosome"
@@ -490,9 +519,13 @@ def _regions_dataframe_from_input(
                 "chrom": source[chrom_column].astype(str),
                 "start": source["start"].astype(int),
                 "end": source["end"].astype(int),
-                "name": source.get("name", pd.Series(".", index=source.index)).astype(str),
+                "name": source.get("name", pd.Series(".", index=source.index)).astype(
+                    str
+                ),
                 "score": source.get("score", pd.Series(0, index=source.index)),
-                "strand": source.get("strand", pd.Series(".", index=source.index)).astype(str),
+                "strand": source.get(
+                    "strand", pd.Series(".", index=source.index)
+                ).astype(str),
             }
         )
         return normalized
@@ -537,7 +570,9 @@ def _regions_dataframe_from_lines(lines: Iterable[str]) -> pd.DataFrame:
                 "strand": strand if strand in {"+", "-", "."} else ".",
             }
         )
-    return pd.DataFrame(rows, columns=["chrom", "start", "end", "name", "score", "strand"])
+    return pd.DataFrame(
+        rows, columns=["chrom", "start", "end", "name", "score", "strand"]
+    )
 
 
 def _regions_to_bed_text(regions: pd.DataFrame | str | Path | Iterable[str]) -> str:
@@ -646,12 +681,18 @@ def convert_regions_with_crossmap(
                 "chrom": mapped.iloc[:, 0].astype(str),
                 "start": mapped.iloc[:, 1].astype(int),
                 "end": mapped.iloc[:, 2].astype(int),
-                "name": mapped.iloc[:, 3].astype(str) if len(mapped.columns) > 3 else ".",
+                "name": mapped.iloc[:, 3].astype(str)
+                if len(mapped.columns) > 3
+                else ".",
                 "score": mapped.iloc[:, 4] if len(mapped.columns) > 4 else 0,
-                "strand": mapped.iloc[:, 5].astype(str) if len(mapped.columns) > 5 else ".",
+                "strand": mapped.iloc[:, 5].astype(str)
+                if len(mapped.columns) > 5
+                else ".",
             }
         )
-    normalized = normalized[normalized["end"] > normalized["start"]].reset_index(drop=True)
+    normalized = normalized[normalized["end"] > normalized["start"]].reset_index(
+        drop=True
+    )
     if normalized.empty:
         raise RuntimeError(
             "CrossMap conversion filtered all regions after coordinate validation."
@@ -660,7 +701,9 @@ def convert_regions_with_crossmap(
 
 
 def _build_url(base_url: str, params_dict: Mapping[str, Any]) -> str:
-    query = parse.urlencode({key: value for key, value in params_dict.items() if value is not None})
+    query = parse.urlencode(
+        {key: value for key, value in params_dict.items() if value is not None}
+    )
     return f"{base_url}?{query}" if query else base_url
 
 
@@ -767,7 +810,9 @@ def submit_enrichment(
         payload.update(dict(params))
     encoded = parse.urlencode(
         {
-            key: ",".join(map(str, value)) if isinstance(value, (list, tuple, set)) else str(value)
+            key: ",".join(map(str, value))
+            if isinstance(value, (list, tuple, set))
+            else str(value)
             for key, value in payload.items()
             if value is not None
         }
@@ -980,7 +1025,9 @@ def run_enrichment(
         submit_url=submit_url,
         status_url=status_url,
         result_url=result_url,
-        metadata={"submission": {k: v for k, v in submission.items() if k != "response"}},
+        metadata={
+            "submission": {k: v for k, v in submission.items() if k != "response"}
+        },
     )
 
 
@@ -1044,9 +1091,13 @@ def search_peak_datasets(
             continue
         if not _matches(raw.get("Antigen", ""), antigen_norm):
             continue
-        if antigen_class_query and not _matches(raw.get("Antigen class", ""), antigen_class_query):
+        if antigen_class_query and not _matches(
+            raw.get("Antigen class", ""), antigen_class_query
+        ):
             continue
-        if cell_type_class_query and not _matches(raw.get("Cell type class", ""), cell_type_class_query):
+        if cell_type_class_query and not _matches(
+            raw.get("Cell type class", ""), cell_type_class_query
+        ):
             continue
         if cell_type_query and not _matches(raw.get("Cell type", ""), cell_type_query):
             continue
@@ -1062,7 +1113,9 @@ def search_peak_datasets(
                 "antigen": str(raw.get("Antigen", "")).strip(),
                 "cell_type_class": str(raw.get("Cell type class", "")).strip(),
                 "cell_type": str(raw.get("Cell type", "")).strip(),
-                "cell_type_description": str(raw.get("Cell type description", "")).strip(),
+                "cell_type_description": str(
+                    raw.get("Cell type description", "")
+                ).strip(),
                 "processing_logs": str(raw.get("Processing logs", "")).strip(),
                 "title": str(raw.get("Title", "")).strip(),
                 "metadata": str(raw.get("Meta data", "")).strip(),
@@ -1113,8 +1166,7 @@ def download_peak_datasets(
     missing = required - set(datasets.columns)
     if missing:
         raise ValueError(
-            "datasets is missing required columns: "
-            f"{', '.join(sorted(missing))}"
+            f"datasets is missing required columns: {', '.join(sorted(missing))}"
         )
     if include_top_n is not None and int(include_top_n) < 0:
         raise ValueError("include_top_n must be non-negative.")
@@ -1124,7 +1176,11 @@ def download_peak_datasets(
     stratify_bins = _resolve_stratification_bins(stratify)
     selected = datasets.copy()
     if dataset_ids is not None:
-        wanted = {str(dataset_id).strip() for dataset_id in dataset_ids if str(dataset_id).strip()}
+        wanted = {
+            str(dataset_id).strip()
+            for dataset_id in dataset_ids
+            if str(dataset_id).strip()
+        }
         selected = selected.loc[selected["dataset_id"].astype(str).isin(wanted)].copy()
     if selected.empty:
         return pd.DataFrame(
@@ -1150,9 +1206,9 @@ def download_peak_datasets(
         return path
 
     for row in selected.itertuples(index=False):
-        dataset_id = str(getattr(row, "dataset_id"))
-        bed_url = str(getattr(row, "bed_url"))
-        source_genome = str(getattr(row, "genome_assembly"))
+        dataset_id = str(row.dataset_id)
+        bed_url = str(row.bed_url)
+        source_genome = str(row.genome_assembly)
         dataset_dir = output_root / dataset_id
         raw_path = dataset_dir / "raw.bed"
 
@@ -1171,9 +1227,19 @@ def download_peak_datasets(
         if include_complete_sorted:
             variants.append(("full_sorted", sorted_table))
         if include_top_n is not None and int(include_top_n) > 0:
-            variants.append((f"top_{int(include_top_n)}", sorted_table.head(int(include_top_n)).copy()))
+            variants.append(
+                (
+                    f"top_{int(include_top_n)}",
+                    sorted_table.head(int(include_top_n)).copy(),
+                )
+            )
         if include_bottom_n is not None and int(include_bottom_n) > 0:
-            variants.append((f"bottom_{int(include_bottom_n)}", sorted_table.tail(int(include_bottom_n)).copy()))
+            variants.append(
+                (
+                    f"bottom_{int(include_bottom_n)}",
+                    sorted_table.tail(int(include_bottom_n)).copy(),
+                )
+            )
         if stratify_bins is not None and len(sorted_table) > 0:
             chunks = np.array_split(np.arange(len(sorted_table)), stratify_bins)
             for i, idx in enumerate(chunks, start=1):
@@ -1207,7 +1273,9 @@ def download_peak_datasets(
             )
             if crossmap_target_genome is None:
                 continue
-            if _normalize_genome_name(source_genome) == _normalize_genome_name(target_genome):
+            if _normalize_genome_name(source_genome) == _normalize_genome_name(
+                target_genome
+            ):
                 continue
             bed6 = _coerce_bed6(variant_table)
             if bed6.empty:

@@ -10,7 +10,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_NOTEBOOK = REPO_ROOT / "tutorial_offline.ipynb"
 DEFAULT_ARTIFACT_DIR = REPO_ROOT / "artifacts" / "tutorial_offline"

@@ -2,6 +2,7 @@ import concurrent.futures
 import gzip
 import multiprocessing
 import os
+import warnings
 from functools import partial
 from multiprocessing import shared_memory
 from pathlib import Path
@@ -164,7 +165,10 @@ def apply_loader_function_to_region(region_string, function_handle, **kwargs):
 
 
 def _apply_loader_function_to_region_batch(region_batch, function_handle, **kwargs):
-    return [function_handle(regions=region_string, **kwargs) for region_string in region_batch]
+    return [
+        function_handle(regions=region_string, **kwargs)
+        for region_string in region_batch
+    ]
 
 
 def _iter_batches(items: list[str], *, batch_size: int):
@@ -190,7 +194,9 @@ def _clear_tabix_cache() -> None:
     _TABIX_CACHE.clear()
 
 
-def _resolve_cores_for_task_count(*, requested_cores: int | None, task_count: int) -> int:
+def _resolve_cores_for_task_count(
+    *, requested_cores: int | None, task_count: int
+) -> int:
     """
     Resolve worker count for loader-style fanout.
 
@@ -315,7 +321,9 @@ def _memory_limited_cores(
     if available is None:
         return baseline
 
-    budget = int(available * AUTO_PARALLEL_MEMORY_FRACTION) - max(0, int(extra_shared_bytes))
+    budget = int(available * AUTO_PARALLEL_MEMORY_FRACTION) - max(
+        0, int(extra_shared_bytes)
+    )
     if budget <= 0:
         return 1
 
@@ -352,7 +360,9 @@ def _pileup_counts_from_bedmethyl_single_core(
         if chromosome not in source_tabix.contigs:
             continue
 
-        for row in source_tabix.fetch(chromosome, max(subregion_start, 0), subregion_end):
+        for row in source_tabix.fetch(
+            chromosome, max(subregion_start, 0), subregion_end
+        ):
             keep_basemod, _, modified_in_row, valid_in_row = process_pileup_row(
                 row=row,
                 parsed_motif=parsed_motif,
@@ -411,12 +421,16 @@ def _pileup_vectors_from_bedmethyl_single_core(
         modified_base_subregion = np.zeros(subregion_len, dtype=np.int32)
 
         if chromosome in source_tabix.contigs:
-            for row in source_tabix.fetch(chromosome, max(subregion_start, 0), subregion_end):
-                keep_basemod, genomic_coord, modified_in_row, valid_in_row = process_pileup_row(
-                    row=row,
-                    parsed_motif=parsed_motif,
-                    region_strand=strand,
-                    single_strand=single_strand,
+            for row in source_tabix.fetch(
+                chromosome, max(subregion_start, 0), subregion_end
+            ):
+                keep_basemod, genomic_coord, modified_in_row, valid_in_row = (
+                    process_pileup_row(
+                        row=row,
+                        parsed_motif=parsed_motif,
+                        region_strand=strand,
+                        single_strand=single_strand,
+                    )
                 )
                 if keep_basemod:
                     if flip_coords:
@@ -425,12 +439,16 @@ def _pileup_vectors_from_bedmethyl_single_core(
                         pileup_coord_in_subregion = genomic_coord - subregion_start
                     if pileup_coord_in_subregion < subregion_len:
                         valid_base_subregion[pileup_coord_in_subregion] += valid_in_row
-                        modified_base_subregion[pileup_coord_in_subregion] += modified_in_row
+                        modified_base_subregion[pileup_coord_in_subregion] += (
+                            modified_in_row
+                        )
 
-        valid_base_counts[subregion_offset : subregion_offset + subregion_len] += valid_base_subregion
-        modified_base_counts[
-            subregion_offset : subregion_offset + subregion_len
-        ] += modified_base_subregion
+        valid_base_counts[subregion_offset : subregion_offset + subregion_len] += (
+            valid_base_subregion
+        )
+        modified_base_counts[subregion_offset : subregion_offset + subregion_len] += (
+            modified_base_subregion
+        )
 
     return modified_base_counts, valid_base_counts
 
@@ -811,8 +829,12 @@ def _pileup_vectors_process_chunk_batch(
     source_tabix = _get_tabix_file(bedmethyl_file)
     existing_valid = shared_memory.SharedMemory(name=shm_name_valid)
     existing_modified = shared_memory.SharedMemory(name=shm_name_modified)
-    valid_base_counts = np.ndarray((region_len,), dtype=np.int32, buffer=existing_valid.buf)
-    modified_base_counts = np.ndarray((region_len,), dtype=np.int32, buffer=existing_modified.buf)
+    valid_base_counts = np.ndarray(
+        (region_len,), dtype=np.int32, buffer=existing_valid.buf
+    )
+    modified_base_counts = np.ndarray(
+        (region_len,), dtype=np.int32, buffer=existing_modified.buf
+    )
 
     updates: list[tuple[int, np.ndarray, np.ndarray]] = []
     for chunk in chunk_batch:
@@ -829,11 +851,15 @@ def _pileup_vectors_process_chunk_batch(
 
     if updates:
         with lock:
-            for subregion_offset, valid_base_subregion, modified_base_subregion in updates:
+            for (
+                subregion_offset,
+                valid_base_subregion,
+                modified_base_subregion,
+            ) in updates:
                 subregion_span = len(valid_base_subregion)
-                valid_base_counts[subregion_offset : subregion_offset + subregion_span] += (
-                    valid_base_subregion
-                )
+                valid_base_counts[
+                    subregion_offset : subregion_offset + subregion_span
+                ] += valid_base_subregion
                 modified_base_counts[
                     subregion_offset : subregion_offset + subregion_span
                 ] += modified_base_subregion
@@ -851,16 +877,20 @@ def pileup_counts_process_chunk(
     lock,
     single_strand,
 ) -> None:
-    modified_subregion_counts, valid_subregion_counts = _pileup_counts_process_chunk_batch_local(
-        bedmethyl_file=bedmethyl_file,
-        parsed_motif=parsed_motif,
-        chunk_batch=[chunk],
-        single_strand=single_strand,
+    modified_subregion_counts, valid_subregion_counts = (
+        _pileup_counts_process_chunk_batch_local(
+            bedmethyl_file=bedmethyl_file,
+            parsed_motif=parsed_motif,
+            chunk_batch=[chunk],
+            single_strand=single_strand,
+        )
     )
     existing_valid = shared_memory.SharedMemory(name=shm_name_valid)
     existing_modified = shared_memory.SharedMemory(name=shm_name_modified)
     valid_base_counts = np.ndarray((1,), dtype=np.int32, buffer=existing_valid.buf)
-    modified_base_counts = np.ndarray((1,), dtype=np.int32, buffer=existing_modified.buf)
+    modified_base_counts = np.ndarray(
+        (1,), dtype=np.int32, buffer=existing_modified.buf
+    )
     with lock:
         valid_base_counts[0] += valid_subregion_counts
         modified_base_counts[0] += modified_subregion_counts
@@ -889,7 +919,9 @@ def _pileup_counts_process_chunk_batch_local(
 
         if chromosome not in source_tabix.contigs:
             continue
-        for row in source_tabix.fetch(chromosome, max(subregion_start, 0), subregion_end):
+        for row in source_tabix.fetch(
+            chromosome, max(subregion_start, 0), subregion_end
+        ):
             keep_basemod, _, modified_in_row, valid_in_row = process_pileup_row(
                 row=row,
                 parsed_motif=parsed_motif,
@@ -950,10 +982,32 @@ def process_pileup_row(
     if not keep_basemod:
         return (False, 0, 0, 0)
 
-    pileup_info = tabix_fields[9].split()
     genomic_coord = int(tabix_fields[1])
-    valid_in_row = int(pileup_info[0])
-    modified_in_row = int(pileup_info[2])
+
+    # Modern modkit pileup bedMethyl format (0.6.x) emits full 18-column rows:
+    # chrom, start, end, mod, score, strand, thickStart, thickEnd, color,
+    # valid_cov, frac_mod, N_mod, N_canonical, N_other_mod, N_delete, N_fail,
+    # N_diff, N_nocall.
+    # Legacy/older formats may encode summary info in tabix_fields[9] as a
+    # whitespace-delimited payload where [0]=valid and [2]=modified.
+    try:
+        if len(tabix_fields) >= 13:
+            valid_in_row = int(float(tabix_fields[9]))
+            modified_in_row = int(float(tabix_fields[11]))
+        else:
+            pileup_info = tabix_fields[9].split()
+            valid_in_row = int(float(pileup_info[0]))
+            modified_in_row = int(float(pileup_info[2]))
+    except Exception:
+        if not getattr(process_pileup_row, "_warned_malformed_bedmethyl_row", False):
+            warnings.warn(
+                "Skipping malformed bedMethyl row while loading pileup data. "
+                "This warning is shown once per process.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            process_pileup_row._warned_malformed_bedmethyl_row = True
+        return (False, 0, 0, 0)
 
     return (True, genomic_coord, modified_in_row, valid_in_row)
 
@@ -997,6 +1051,8 @@ def read_vectors_from_hdf5(
     cores: int | None = None,  # currently unused
     subset_parameters: dict | None = None,
     span_full_window: bool = False,
+    random_sample_n_reads: int | None = None,
+    min_read_length_bp: int | None = None,
 ) -> tuple[list[tuple], list[str], dict | None]:
     """
     User-facing function.
@@ -1048,6 +1104,10 @@ def read_vectors_from_hdf5(
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
         span_full_window: If True, only load reads that fully span the window defined by region_start-region_end
+        random_sample_n_reads: Optional global random sample size applied after filtering and
+            region/motif selection. Samples unique read names (not tuple rows), then retains all
+            motif rows associated with those reads.
+        min_read_length_bp: Optional minimum read length filter (bp) applied before loading vectors.
 
     Returns:
         a list of tuples, each tuple containing all datasets corresponding to an individual read that
@@ -1059,6 +1119,16 @@ def read_vectors_from_hdf5(
         the available parameters.
     """
     _validate_subset_parameters(subset_parameters)
+    if random_sample_n_reads is not None and int(random_sample_n_reads) <= 0:
+        raise ValueError("random_sample_n_reads must be > 0 when provided.")
+    if min_read_length_bp is not None and int(min_read_length_bp) < 0:
+        raise ValueError("min_read_length_bp must be >= 0 when provided.")
+    random_sample_n_reads = (
+        int(random_sample_n_reads) if random_sample_n_reads is not None else None
+    )
+    min_read_length_bp = (
+        int(min_read_length_bp) if min_read_length_bp is not None else None
+    )
 
     with h5py.File(file, "r") as h5:
         datasets: list[str] = [
@@ -1085,6 +1155,7 @@ def read_vectors_from_hdf5(
         read_chromosomes = np.array(h5["chromosome"], dtype=str)
         read_starts = np.array(h5["read_start"])
         read_ends = np.array(h5["read_end"])
+        read_lengths = read_ends - read_starts
         read_motifs = np.array(h5["motif"], dtype=str)
         ref_strands = np.array(h5["strand"], dtype=str)
 
@@ -1105,6 +1176,11 @@ def read_vectors_from_hdf5(
                         & (read_starts < region_end)
                         & (read_starts <= region_start if span_full_window else True)
                         & (read_ends >= region_end if span_full_window else True)
+                        & (
+                            read_lengths >= min_read_length_bp
+                            if min_read_length_bp is not None
+                            else True
+                        )
                         & np.isin(read_motifs, motifs)
                         & (read_chromosomes == chrom)
                         & (
@@ -1133,11 +1209,19 @@ def read_vectors_from_hdf5(
                             [region_start for _ in relevant_read_indices],
                             [region_end for _ in relevant_read_indices],
                             [region_strand for _ in relevant_read_indices],
+                            strict=False,
                         )
                     )
         else:
             regions_dict = None
-            relevant_read_indices = np.flatnonzero(np.isin(read_motifs, motifs))
+            relevant_read_indices = np.flatnonzero(
+                np.isin(read_motifs, motifs)
+                & (
+                    read_lengths >= min_read_length_bp
+                    if min_read_length_bp is not None
+                    else True
+                )
+            )
             relevant_read_indices = _subset_indices(
                 relevant_read_indices, subset_parameters=subset_parameters
             )
@@ -1158,6 +1242,7 @@ def read_vectors_from_hdf5(
                     [-1 for _ in relevant_read_indices],
                     [-1 for _ in relevant_read_indices],
                     ["." for _ in relevant_read_indices],
+                    strict=False,
                 )
             )
     #  We add region information (start, end, and strand; chromosome is already present!)
@@ -1178,6 +1263,22 @@ def read_vectors_from_hdf5(
             )
             for tup in read_tuples_raw
         ]
+
+    # Optional global random sample by unique read name, applied after filtering/loading.
+    if random_sample_n_reads is not None and read_tuples_processed:
+        read_name_idx_pre = readwise_datasets.index("read_name")
+        unique_read_names = np.array(
+            sorted({row[read_name_idx_pre] for row in read_tuples_processed}, key=str)
+        )
+        if random_sample_n_reads < unique_read_names.size:
+            sampled_names = set(
+                utils.random_sample(unique_read_names, n=random_sample_n_reads).tolist()
+            )
+            read_tuples_processed = [
+                row
+                for row in read_tuples_processed
+                if row[read_name_idx_pre] in sampled_names
+            ]
 
     read_start_idx = readwise_datasets.index("read_start")
     read_end_idx = readwise_datasets.index("read_end")
@@ -1294,6 +1395,8 @@ def readwise_binary_modification_arrays(
     quiet: bool = True,  # currently unused; change to default False when pbars are implemented
     cores: int | None = None,  # currently unused
     subset_parameters: dict | None = None,
+    random_sample_n_reads: int | None = None,
+    min_read_length_bp: int | None = None,
 ) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str], dict | None]:
     """
     Primarily designed as a helper function for single-read plotting, but can be used by a user.
@@ -1344,6 +1447,8 @@ def readwise_binary_modification_arrays(
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
+        random_sample_n_reads: Optional global random sample size by unique read name.
+        min_read_length_bp: Optional minimum read length filter (bp) applied before loading vectors.
 
     Returns:
         Returns a tuple of three arrays, of length (N_READS * len(mod_names)), and a dict of regions.
@@ -1369,6 +1474,8 @@ def readwise_binary_modification_arrays(
             quiet=quiet,
             cores=cores,
             subset_parameters=subset_parameters,
+            random_sample_n_reads=random_sample_n_reads,
+            min_read_length_bp=min_read_length_bp,
         )
         read_name_index = datasets.index("read_name")
         mod_vector_index = datasets.index("mod_vector")
@@ -1416,7 +1523,9 @@ def readwise_binary_modification_arrays(
                 next_read_int += 1
             read_ints[idx] = read_int
 
-        for read_int, read_data in zip(read_ints, sorted_read_data_converted):
+        for read_int, read_data in zip(
+            read_ints, sorted_read_data_converted, strict=False
+        ):
             if thresh is None:
                 mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index])
             else:

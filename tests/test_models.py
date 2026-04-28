@@ -9,18 +9,18 @@ from dimelo.models import (
     ChipAtlasEnrichmentResult,
     CohortSpec,
     ContrastSpec,
+    DatasetArtifact,
+    GlobalAnalysisResult,
     ModkitDMRMultiResult,
     ModkitDMRPairResult,
-    GlobalAnalysisResult,
-    DatasetArtifact,
-    SampleSpec,
-    RegionDiscoveryResult,
+    RegionContrastResult,
     RegionDiscoveryClusterContrastResult,
     RegionDiscoveryClusterResult,
-    RegionContrastResult,
+    RegionDiscoveryResult,
+    SampleSpec,
+    SharedClusterContrastResult,
     SharedClusterModel,
     SharedClusterResult,
-    SharedClusterContrastResult,
 )
 
 
@@ -45,7 +45,9 @@ def test_dimelo_package_root_exports_region_discovery_cluster_contrast_result():
         RegionDiscoveryClusterContrastResult as RootRegionDiscoveryClusterContrastResult,
     )
 
-    assert RootRegionDiscoveryClusterContrastResult is RegionDiscoveryClusterContrastResult
+    assert (
+        RootRegionDiscoveryClusterContrastResult is RegionDiscoveryClusterContrastResult
+    )
 
 
 def test_dimelo_package_root_exports_chip_atlas_enrichment_result():
@@ -502,9 +504,7 @@ def test_region_discovery_cluster_result_supports_wrapped_outputs():
         figures={},
         metadata={"notes": "ok"},
     )
-    selected_regions = pd.DataFrame(
-        [{"chromosome": "chr1", "start": 0, "end": 1000}]
-    )
+    selected_regions = pd.DataFrame([{"chromosome": "chr1", "start": 0, "end": 1000}])
 
     result = RegionDiscoveryClusterResult(
         discovery=discovery,
@@ -663,9 +663,7 @@ def test_region_discovery_cluster_contrast_result_supports_wrapped_outputs():
         metadata={"notes": "ok"},
         figures={},
     )
-    selected_regions = pd.DataFrame(
-        [{"chromosome": "chr1", "start": 0, "end": 1000}]
-    )
+    selected_regions = pd.DataFrame([{"chromosome": "chr1", "start": 0, "end": 1000}])
 
     result = RegionDiscoveryClusterContrastResult(
         discovery=discovery,

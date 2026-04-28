@@ -55,7 +55,9 @@ def validate_axis_spec(axis: AxisSpec, *, plot_family: str) -> None:
         raise ValueError("AxisSpec.orientation must be 'genomic' or 'region_5to3'.")
 
     if axis.coordinate_mode not in {"fixed_window", "segment_map"}:
-        raise ValueError("AxisSpec.coordinate_mode must be 'fixed_window' or 'segment_map'.")
+        raise ValueError(
+            "AxisSpec.coordinate_mode must be 'fixed_window' or 'segment_map'."
+        )
 
     if axis.coordinate_mode == "segment_map" and not axis.segments:
         raise ValueError("segment_map requires segments.")
@@ -67,13 +69,18 @@ def validate_axis_spec(axis: AxisSpec, *, plot_family: str) -> None:
         if axis.upstream_bp is None or axis.downstream_bp is None:
             raise ValueError("fixed_window requires upstream_bp and downstream_bp.")
         if axis.upstream_bp < 0 or axis.downstream_bp < 0:
-            raise ValueError("fixed_window upstream_bp and downstream_bp must be non-negative.")
-
-    if plot_family == "single_read_raster" and axis.segments:
-        if any(segment.mode == "scaled" for segment in axis.segments):
             raise ValueError(
-                "single_read_raster plots must preserve coordinates and cannot use scaled segments."
+                "fixed_window upstream_bp and downstream_bp must be non-negative."
             )
+
+    if (
+        plot_family == "single_read_raster"
+        and axis.segments
+        and any(segment.mode == "scaled" for segment in axis.segments)
+    ):
+        raise ValueError(
+            "single_read_raster plots must preserve coordinates and cannot use scaled segments."
+        )
 
 
 def validate_aggregation_spec(spec: AggregationSpec) -> None:
@@ -83,7 +90,12 @@ def validate_aggregation_spec(spec: AggregationSpec) -> None:
     if spec.within_region_summary not in {"mean", "fraction", "density"}:
         raise ValueError("Unsupported within_region_summary.")
 
-    if spec.signal_normalization not in {"none", "per_region", "global", "control_regions"}:
+    if spec.signal_normalization not in {
+        "none",
+        "per_region",
+        "global",
+        "control_regions",
+    }:
         raise ValueError("Unsupported signal_normalization.")
 
     if spec.layout not in {"concatenated", "faceted"}:
@@ -91,7 +103,11 @@ def validate_aggregation_spec(spec: AggregationSpec) -> None:
 
 
 def _region_contrast_grouping_key(result, position_table: pd.DataFrame) -> str:
-    available_keys = [column for column in ("sample_id", "condition") if column in position_table.columns]
+    available_keys = [
+        column
+        for column in ("sample_id", "condition")
+        if column in position_table.columns
+    ]
     if not available_keys:
         raise ValueError(
             "region contrast plotting requires position_table to include sample_id or condition."
@@ -177,7 +193,9 @@ def _ordered_non_null_values(table: pd.DataFrame, column: str) -> list[object]:
     return table.loc[table[column].notna(), column].drop_duplicates().tolist()
 
 
-def _filter_motif_table(table: pd.DataFrame, motifs: list[str] | None, *, owner: str) -> pd.DataFrame:
+def _filter_motif_table(
+    table: pd.DataFrame, motifs: list[str] | None, *, owner: str
+) -> pd.DataFrame:
     _require_columns(table, ("motif",), owner)
     if motifs is None:
         return table.copy()
@@ -191,18 +209,26 @@ def _filter_motif_table(table: pd.DataFrame, motifs: list[str] | None, *, owner:
 def _validate_region_discovery_result(result) -> None:
     if result is None:
         raise ValueError("plotting helpers require a RegionDiscoveryResult.")
-    if not hasattr(result, "windows") or not hasattr(result, "hits") or not hasattr(result, "metadata"):
+    if (
+        not hasattr(result, "windows")
+        or not hasattr(result, "hits")
+        or not hasattr(result, "metadata")
+    ):
         raise TypeError("plotting helpers require a RegionDiscoveryResult-like object.")
 
 
-def _select_discovery_score_column(windows: pd.DataFrame, score_column: str | None) -> str:
+def _select_discovery_score_column(
+    windows: pd.DataFrame, score_column: str | None
+) -> str:
     if score_column is not None:
         if score_column not in windows.columns:
             raise ValueError(f"Unknown discovery score column: {score_column}")
         return score_column
     if "score_value" in windows.columns or windows.empty:
         return "score_value"
-    raise ValueError("Could not infer a discovery score column from RegionDiscoveryResult.windows.")
+    raise ValueError(
+        "Could not infer a discovery score column from RegionDiscoveryResult.windows."
+    )
 
 
 def _empty_discovery_scan_table(score_column: str) -> pd.DataFrame:
@@ -273,12 +299,16 @@ def _relative_position(position: float, anchor: float) -> float:
     return float(position) - float(anchor)
 
 
-def _orient_position(relative_position: float, region_strand: str, orientation: str) -> float:
+def _orient_position(
+    relative_position: float, region_strand: str, orientation: str
+) -> float:
     if orientation != "region_5to3":
         return relative_position
 
     if region_strand not in {"+", "-"}:
-        raise ValueError("region_5to3 fixed_window prep requires region_strand values of '+' or '-'.")
+        raise ValueError(
+            "region_5to3 fixed_window prep requires region_strand values of '+' or '-'."
+        )
 
     if region_strand == "-":
         return -relative_position
@@ -294,20 +324,32 @@ def _prepare_fixed_window_plot_data(
     region_strand_column: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     if axis.coordinate_mode != "fixed_window":
-        raise ValueError("fixed_window prep only supports coordinate_mode='fixed_window'.")
+        raise ValueError(
+            "fixed_window prep only supports coordinate_mode='fixed_window'."
+        )
 
     _require_columns(table, (position_column, anchor_column), "plot_table")
     if axis.orientation == "region_5to3":
         if region_strand_column is None:
-            raise ValueError("region_5to3 fixed_window prep requires region_strand_column.")
+            raise ValueError(
+                "region_5to3 fixed_window prep requires region_strand_column."
+            )
         _require_columns(table, (region_strand_column,), "plot_table")
 
     plot_table = table.copy()
-    relative_position = plot_table[position_column].astype(float) - plot_table[anchor_column].astype(float)
+    relative_position = plot_table[position_column].astype(float) - plot_table[
+        anchor_column
+    ].astype(float)
     if axis.orientation == "region_5to3":
         plot_table["plot_x"] = [
-            _orient_position(relative_position=rel, region_strand=strand, orientation=axis.orientation)
-            for rel, strand in zip(relative_position, plot_table[region_strand_column], strict=True)
+            _orient_position(
+                relative_position=rel,
+                region_strand=strand,
+                orientation=axis.orientation,
+            )
+            for rel, strand in zip(
+                relative_position, plot_table[region_strand_column], strict=True
+            )
         ]
     else:
         plot_table["plot_x"] = relative_position
@@ -329,7 +371,9 @@ def _prepare_fixed_window_plot_data(
 
 def _build_segment_axis_table(segments: list[SegmentSpec]) -> pd.DataFrame:
     segment_id_counts = Counter(segment.segment_id for segment in segments)
-    duplicate_segment_ids = sorted(segment_id for segment_id, count in segment_id_counts.items() if count > 1)
+    duplicate_segment_ids = sorted(
+        segment_id for segment_id, count in segment_id_counts.items() if count > 1
+    )
     if duplicate_segment_ids:
         raise ValueError(
             "segment_map axis.segments contains duplicate segment_id values: "
@@ -350,7 +394,11 @@ def _build_segment_axis_table(segments: list[SegmentSpec]) -> pd.DataFrame:
                 "segment_map axis.segments contains invalid bins values: "
                 f"{segment.segment_id} has bins={segment.bins!r}."
             )
-        if segment.mode == "scaled" and segment.bins is None and segment.end_ref <= segment.start_ref:
+        if (
+            segment.mode == "scaled"
+            and segment.bins is None
+            and segment.end_ref <= segment.start_ref
+        ):
             raise ValueError(
                 "segment_map axis.segments contains invalid scaled span values: "
                 f"{segment.segment_id} has start_ref={segment.start_ref!r} and end_ref={segment.end_ref!r}."
@@ -361,7 +409,11 @@ def _build_segment_axis_table(segments: list[SegmentSpec]) -> pd.DataFrame:
                 f"{segment.segment_id} has start_ref={segment.start_ref!r} and end_ref={segment.end_ref!r}."
             )
 
-        span = segment.bins if segment.bins is not None else segment.end_ref - segment.start_ref
+        span = (
+            segment.bins
+            if segment.bins is not None
+            else segment.end_ref - segment.start_ref
+        )
         rows.append(
             {
                 "segment_id": segment.segment_id,
@@ -411,7 +463,8 @@ def _prepare_segment_map_plot_data(
         }
     )
     axis_lookup[_SEGMENT_AXIS_INTERNAL_SEGMENT_SPAN] = (
-        axis_lookup[_SEGMENT_AXIS_INTERNAL_PLOT_END] - axis_lookup[_SEGMENT_AXIS_INTERNAL_PLOT_START]
+        axis_lookup[_SEGMENT_AXIS_INTERNAL_PLOT_END]
+        - axis_lookup[_SEGMENT_AXIS_INTERNAL_PLOT_START]
     )
     plot_table = plot_table.merge(
         axis_lookup,
@@ -421,34 +474,46 @@ def _prepare_segment_map_plot_data(
     )
     unknown_segment_mask = plot_table[_SEGMENT_AXIS_INTERNAL_PLOT_START].isna()
     if unknown_segment_mask.any():
-        unknown_segment_ids = sorted(plot_table.loc[unknown_segment_mask, segment_id_column].astype(str).unique())
+        unknown_segment_ids = sorted(
+            plot_table.loc[unknown_segment_mask, segment_id_column].astype(str).unique()
+        )
         raise ValueError(
             "segment_map plotting received unknown segment_id values: "
             f"{', '.join(unknown_segment_ids)}."
         )
 
-    segment_positions = pd.to_numeric(plot_table[segment_position_column], errors="raise")
+    segment_positions = pd.to_numeric(
+        plot_table[segment_position_column], errors="raise"
+    )
     missing_position_mask = segment_positions.isna()
     if missing_position_mask.any():
-        invalid_rows = plot_table.loc[missing_position_mask, [segment_id_column, segment_position_column]]
+        invalid_rows = plot_table.loc[
+            missing_position_mask, [segment_id_column, segment_position_column]
+        ]
         raise ValueError(
             "segment_position_column contains missing or NaN values. "
             f"Invalid rows: {invalid_rows.to_dict(orient='records')}."
         )
 
-    invalid_position_mask = (
-        (segment_positions < 0) | (segment_positions >= plot_table[_SEGMENT_AXIS_INTERNAL_SEGMENT_SPAN])
+    invalid_position_mask = (segment_positions < 0) | (
+        segment_positions >= plot_table[_SEGMENT_AXIS_INTERNAL_SEGMENT_SPAN]
     )
     if invalid_position_mask.any():
-        invalid_rows = plot_table.loc[invalid_position_mask, [segment_id_column, segment_position_column]].copy()
-        invalid_rows["segment_span"] = plot_table.loc[invalid_position_mask, _SEGMENT_AXIS_INTERNAL_SEGMENT_SPAN].values
+        invalid_rows = plot_table.loc[
+            invalid_position_mask, [segment_id_column, segment_position_column]
+        ].copy()
+        invalid_rows["segment_span"] = plot_table.loc[
+            invalid_position_mask, _SEGMENT_AXIS_INTERNAL_SEGMENT_SPAN
+        ].values
         raise ValueError(
             "segment_position_column values must stay within the declared segment span "
             "for each segment."
             f" Invalid rows: {invalid_rows.to_dict(orient='records')}."
         )
 
-    plot_table["plot_x"] = plot_table[_SEGMENT_AXIS_INTERNAL_PLOT_START] + segment_positions
+    plot_table["plot_x"] = (
+        plot_table[_SEGMENT_AXIS_INTERNAL_PLOT_START] + segment_positions
+    )
     plot_table = plot_table.drop(
         columns=[
             _SEGMENT_AXIS_INTERNAL_SEGMENT_ID,
@@ -473,7 +538,9 @@ def _prepare_region_contrast_position_table(
         "position_table",
     )
     summary_region_ids = result.summary["region_id"].dropna().astype(str)
-    filtered = position_table[position_table["region_id"].astype(str).isin(summary_region_ids)].copy()
+    filtered = position_table[
+        position_table["region_id"].astype(str).isin(summary_region_ids)
+    ].copy()
     if filtered.empty:
         raise ValueError(
             "position_table does not contain any region_id values present in the contrast result."
@@ -494,11 +561,21 @@ def _prepare_region_contrast_value_modes(
     numerator = position_table.loc[numerator_mask].copy()
     denominator = position_table.loc[denominator_mask].copy()
     if numerator.empty or denominator.empty:
-        raise ValueError("position_table does not contain rows for both contrast sides.")
+        raise ValueError(
+            "position_table does not contain rows for both contrast sides."
+        )
 
     join_keys = ["region_id", "position", "anchor", "region_strand"]
-    numerator = numerator.loc[:, join_keys + ["value"]].groupby(join_keys, as_index=False, sort=False).mean(numeric_only=True)
-    denominator = denominator.loc[:, join_keys + ["value"]].groupby(join_keys, as_index=False, sort=False).mean(numeric_only=True)
+    numerator = (
+        numerator.loc[:, join_keys + ["value"]]
+        .groupby(join_keys, as_index=False, sort=False)
+        .mean(numeric_only=True)
+    )
+    denominator = (
+        denominator.loc[:, join_keys + ["value"]]
+        .groupby(join_keys, as_index=False, sort=False)
+        .mean(numeric_only=True)
+    )
 
     coordinate_match = numerator.loc[:, join_keys].merge(
         denominator.loc[:, join_keys],
@@ -507,7 +584,9 @@ def _prepare_region_contrast_value_modes(
         indicator=True,
     )
     if not (coordinate_match["_merge"] == "both").all():
-        mismatched_rows = coordinate_match.loc[coordinate_match["_merge"] != "both", join_keys + ["_merge"]].copy()
+        mismatched_rows = coordinate_match.loc[
+            coordinate_match["_merge"] != "both", join_keys + ["_merge"]
+        ].copy()
         raise ValueError(
             "position_table contains mismatched coordinates between contrast sides. "
             f"Mismatched rows: {mismatched_rows.to_dict(orient='records')}."
@@ -520,11 +599,15 @@ def _prepare_region_contrast_value_modes(
         how="inner",
     )
     if paired.empty:
-        raise ValueError("Unable to compute delta because numerator and denominator positions do not align.")
+        raise ValueError(
+            "Unable to compute delta because numerator and denominator positions do not align."
+        )
 
     if "rank" in result.summary.columns:
         _require_columns(result.summary, ("region_id", "rank"), "result.summary")
-        rank_table = result.summary.loc[:, ["region_id", "rank"]].drop_duplicates(subset=["region_id"])
+        rank_table = result.summary.loc[:, ["region_id", "rank"]].drop_duplicates(
+            subset=["region_id"]
+        )
     else:
         rank_table = None
 
@@ -533,12 +616,16 @@ def _prepare_region_contrast_value_modes(
             return table
         return table.merge(rank_table, on="region_id", how="left")
 
-    numerator_table = numerator.loc[:, ["region_id", "position", "anchor", "value", "region_strand"]].copy()
+    numerator_table = numerator.loc[
+        :, ["region_id", "position", "anchor", "value", "region_strand"]
+    ].copy()
     numerator_table["value_mode"] = "numerator"
     numerator_table[grouping_key] = "numerator"
     numerator_table = _attach_rank(numerator_table)
 
-    denominator_table = denominator.loc[:, ["region_id", "position", "anchor", "value", "region_strand"]].copy()
+    denominator_table = denominator.loc[
+        :, ["region_id", "position", "anchor", "value", "region_strand"]
+    ].copy()
     denominator_table["value_mode"] = "denominator"
     denominator_table[grouping_key] = "denominator"
     denominator_table = _attach_rank(denominator_table)
@@ -554,16 +641,34 @@ def _prepare_region_contrast_value_modes(
             "value_denominator",
         ],
     ].copy()
-    delta_table["value"] = delta_table["value_numerator"] - delta_table["value_denominator"]
+    delta_table["value"] = (
+        delta_table["value_numerator"] - delta_table["value_denominator"]
+    )
     delta_table[grouping_key] = "delta"
     delta_table["value_mode"] = "delta"
     delta_table = delta_table.loc[
         :,
-        ["region_id", grouping_key, "position", "anchor", "value", "region_strand", "value_mode"]
+        [
+            "region_id",
+            grouping_key,
+            "position",
+            "anchor",
+            "value",
+            "region_strand",
+            "value_mode",
+        ],
     ]
     delta_table = _attach_rank(delta_table)
 
-    ordered_columns = ["region_id", grouping_key, "position", "anchor", "value", "region_strand", "value_mode"]
+    ordered_columns = [
+        "region_id",
+        grouping_key,
+        "position",
+        "anchor",
+        "value",
+        "region_strand",
+        "value_mode",
+    ]
     if rank_table is not None:
         ordered_columns.append("rank")
 
@@ -603,7 +708,9 @@ def prepare_region_contrast_profile_data(
     if value_mode != "all":
         if value_mode not in {"numerator", "denominator", "delta"}:
             raise ValueError("Unsupported region contrast value_mode.")
-        contrast_table = contrast_table.loc[contrast_table["value_mode"] == value_mode].copy()
+        contrast_table = contrast_table.loc[
+            contrast_table["value_mode"] == value_mode
+        ].copy()
 
     prepared = prepare_aggregate_plot_data(
         contrast_table,
@@ -640,7 +747,8 @@ def prepare_region_contrast_heatmap_data(
 
     _require_columns(result.summary, ("region_id", "rank"), "result.summary")
     plot_region_ids = (
-        profile_payload["plot_table"].loc[:, ["region_id"]]
+        profile_payload["plot_table"]
+        .loc[:, ["region_id"]]
         .drop_duplicates()
         .reset_index(drop=True)
     )
@@ -658,7 +766,11 @@ def prepare_region_contrast_heatmap_data(
         ),
         rank_count=("rank", lambda values: pd.Series(values).dropna().nunique()),
     )
-    conflicting_rank_ids = sorted(summary_ranks.loc[summary_ranks["rank_count"] > 1, "region_id"].astype(str).unique())
+    conflicting_rank_ids = sorted(
+        summary_ranks.loc[summary_ranks["rank_count"] > 1, "region_id"]
+        .astype(str)
+        .unique()
+    )
     if conflicting_rank_ids:
         raise ValueError(
             "result.summary must provide exactly one rank value per plotted region. "
@@ -666,13 +778,19 @@ def prepare_region_contrast_heatmap_data(
         )
 
     row_order = summary_ranks.loc[:, ["region_id", "rank"]].copy()
-    missing_rank_ids = sorted(summary_ranks.loc[summary_ranks["rank_count"] == 0, "region_id"].astype(str).unique())
+    missing_rank_ids = sorted(
+        summary_ranks.loc[summary_ranks["rank_count"] == 0, "region_id"]
+        .astype(str)
+        .unique()
+    )
     if missing_rank_ids:
         raise ValueError(
             "result.summary does not provide rank values for all plotted regions. "
             f"Missing region_id values: {', '.join(missing_rank_ids)}."
         )
-    row_order = row_order.sort_values(["rank", "region_id"], kind="stable").reset_index(drop=True)
+    row_order = row_order.sort_values(["rank", "region_id"], kind="stable").reset_index(
+        drop=True
+    )
     row_order["row_order"] = range(len(row_order))
 
     plot_table = profile_payload["plot_table"].merge(
@@ -680,7 +798,9 @@ def prepare_region_contrast_heatmap_data(
         on="region_id",
         how="left",
     )
-    plot_table = plot_table.sort_values(["row_order", "value_mode", "position"], kind="stable").reset_index(drop=True)
+    plot_table = plot_table.sort_values(
+        ["row_order", "value_mode", "position"], kind="stable"
+    ).reset_index(drop=True)
 
     profile_payload["plot_table"] = plot_table
     profile_payload["metadata"] = {
@@ -745,7 +865,9 @@ def prepare_global_analysis_summary_data(
         motif_values = sample_summary["motif"].drop_duplicates().tolist()
         if aggregate_conditions:
             condition_summary = (
-                sample_summary.groupby(["condition", "motif"], as_index=False, sort=False)
+                sample_summary.groupby(
+                    ["condition", "motif"], as_index=False, sort=False
+                )
                 .agg(
                     global_fraction_mean=("global_fraction", "mean"),
                     global_fraction_median=("global_fraction", "median"),
@@ -851,7 +973,9 @@ def prepare_global_analysis_window_data(
         }
 
     window_table = window_table.copy()
-    windows_contig_column = _discovery_contig_column(window_table, owner="result.windows")
+    windows_contig_column = _discovery_contig_column(
+        window_table, owner="result.windows"
+    )
     window_table["contig"] = window_table[windows_contig_column]
 
     if contigs is not None:
@@ -862,7 +986,9 @@ def prepare_global_analysis_window_data(
     else:
         contig_order = window_table["contig"].drop_duplicates().tolist()
 
-    window_table["window_midpoint"] = (window_table["start"] + window_table["end"]) / 2.0
+    window_table["window_midpoint"] = (
+        window_table["start"] + window_table["end"]
+    ) / 2.0
     window_table = _sort_discovery_table(
         window_table,
         contig_order=contig_order,
@@ -939,7 +1065,14 @@ def prepare_region_discovery_scan_data(
     if windows.empty:
         empty_scan = _empty_discovery_scan_table(active_score_column)
         empty_hits = pd.DataFrame(
-            columns=["window_id", "contig", "start", "end", "strand", active_score_column]
+            columns=[
+                "window_id",
+                "contig",
+                "start",
+                "end",
+                "strand",
+                active_score_column,
+            ]
         )
         return {
             "scan_table": empty_scan,
@@ -969,7 +1102,9 @@ def prepare_region_discovery_scan_data(
         windows = windows.loc[windows["contig"].isin(contigs)].copy()
         hits = hits.loc[hits["contig"].isin(contigs)].copy()
         if windows.empty:
-            raise ValueError("Requested contigs are not present in RegionDiscoveryResult.windows.")
+            raise ValueError(
+                "Requested contigs are not present in RegionDiscoveryResult.windows."
+            )
         contig_order = list(contigs)
     else:
         contig_order = windows["contig"].drop_duplicates().tolist()
@@ -993,7 +1128,9 @@ def prepare_region_discovery_scan_data(
     windows["window_midpoint"] = (windows["start"] + windows["end"]) / 2.0
     windows["is_hit"] = windows["window_id"].isin(hit_window_ids)
 
-    scan_table = windows if include_all_windows else windows.loc[windows["is_hit"]].copy()
+    scan_table = (
+        windows if include_all_windows else windows.loc[windows["is_hit"]].copy()
+    )
     scan_table = _sort_discovery_table(
         scan_table,
         contig_order=contig_order,
@@ -1034,7 +1171,9 @@ def prepare_region_discovery_hit_context_data(
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     _validate_region_discovery_result(result)
     if padding_bp is not None:
-        raise ValueError("padding_bp is not supported for region discovery hit context prep.")
+        raise ValueError(
+            "padding_bp is not supported for region discovery hit context prep."
+        )
     if padding_windows is not None and padding_windows < 0:
         raise ValueError("padding_windows must be non-negative.")
 
@@ -1086,7 +1225,9 @@ def prepare_region_discovery_hit_context_data(
     )
 
     if hit_ids is not None:
-        selected_hits = hits.loc[hits["window_id"].isin(hit_ids)].copy().reset_index(drop=True)
+        selected_hits = (
+            hits.loc[hits["window_id"].isin(hit_ids)].copy().reset_index(drop=True)
+        )
     else:
         selected_hits, selection_mode = _select_region_discovery_hits(hits, top_n=top_n)
 
@@ -1143,7 +1284,7 @@ def prepare_region_discovery_hit_context_data(
         end_index = min(len(contig_windows), hit_position + padding + 1)
         context = contig_windows.iloc[start_index:end_index].copy()
         context["selected_hit_id"] = hit_window_id
-        context["selected_hit_rank"] = getattr(hit, "rank") if has_rank else np.nan
+        context["selected_hit_rank"] = hit.rank if has_rank else np.nan
         context["relative_window_offset"] = np.arange(
             start_index - hit_position, end_index - hit_position
         )
@@ -1212,7 +1353,9 @@ def prepare_aggregate_plot_data(
 
     if axis.coordinate_mode == "segment_map":
         if segment_id_column is None or segment_position_column is None:
-            raise ValueError("segment_map plotting requires segment_id_column and segment_position_column.")
+            raise ValueError(
+                "segment_map plotting requires segment_id_column and segment_position_column."
+            )
         plot_table, axis_table = _prepare_segment_map_plot_data(
             table,
             axis=axis,
@@ -1221,7 +1364,9 @@ def prepare_aggregate_plot_data(
         )
     else:
         if position_column is None or anchor_column is None:
-            raise ValueError("fixed_window plotting requires position_column and anchor_column.")
+            raise ValueError(
+                "fixed_window plotting requires position_column and anchor_column."
+            )
         plot_table, axis_table = _prepare_fixed_window_plot_data(
             table,
             axis=axis,
@@ -1244,23 +1389,31 @@ def prepare_aggregate_plot_data(
     return {"plot_table": plot_table, "axis_table": axis_table, "metadata": metadata}
 
 
-def prepare_cluster_distribution_bar_data(cluster_distribution: pd.DataFrame) -> pd.DataFrame:
+def prepare_cluster_distribution_bar_data(
+    cluster_distribution: pd.DataFrame,
+) -> pd.DataFrame:
     _require_columns(
         cluster_distribution,
         ("sample_id", "condition", "cluster", "count", "fraction"),
         "cluster_distribution",
     )
     if cluster_distribution.empty:
-        return cluster_distribution.loc[:, ["sample_id", "condition", "cluster", "count", "fraction"]].copy()
+        return cluster_distribution.loc[
+            :, ["sample_id", "condition", "cluster", "count", "fraction"]
+        ].copy()
 
     return (
-        cluster_distribution.loc[:, ["sample_id", "condition", "cluster", "count", "fraction"]]
+        cluster_distribution.loc[
+            :, ["sample_id", "condition", "cluster", "count", "fraction"]
+        ]
         .sort_values(["sample_id", "condition", "cluster"], kind="stable")
         .reset_index(drop=True)
     )
 
 
-def prepare_cluster_distribution_heatmap_data(condition_distribution: pd.DataFrame) -> pd.DataFrame:
+def prepare_cluster_distribution_heatmap_data(
+    condition_distribution: pd.DataFrame,
+) -> pd.DataFrame:
     _require_columns(
         condition_distribution,
         ("condition", "cluster", "fraction"),
@@ -1278,7 +1431,9 @@ def prepare_cluster_distribution_heatmap_data(condition_distribution: pd.DataFra
             fill_value=0.0,
         )
         .sort_index(axis=0)
-        .reindex(sorted(condition_distribution["cluster"].unique()), axis=1, fill_value=0.0)
+        .reindex(
+            sorted(condition_distribution["cluster"].unique()), axis=1, fill_value=0.0
+        )
         .reset_index()
     )
     heatmap.columns.name = None
@@ -1291,7 +1446,9 @@ def prepare_shared_cluster_distribution_data(
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     _validate_shared_cluster_result(result)
 
-    sample_distribution = prepare_cluster_distribution_bar_data(result.cluster_distribution)
+    sample_distribution = prepare_cluster_distribution_bar_data(
+        result.cluster_distribution
+    )
 
     _require_columns(
         result.condition_distribution,
@@ -1345,7 +1502,9 @@ def prepare_shared_cluster_distribution_data(
         "mode": result.model.mode,
         "cluster_labels": list(result.model.cluster_labels),
         "has_distribution_change": not distribution_change.empty,
-        "change_condition_order": distribution_change["condition"].drop_duplicates().tolist(),
+        "change_condition_order": distribution_change["condition"]
+        .drop_duplicates()
+        .tolist(),
     }
     return {
         "sample_distribution": sample_distribution,
@@ -1375,13 +1534,21 @@ def prepare_shared_cluster_profile_data(
                 "Requested features are not present in cluster_profiles: "
                 f"{', '.join(missing)}"
             )
-        requested_features = [feature for feature in feature_names if feature in features]
+        requested_features = [
+            feature for feature in feature_names if feature in features
+        ]
 
-    _require_columns(cluster_profiles, ("cluster", "count", *feature_names), "result.cluster_profiles")
+    _require_columns(
+        cluster_profiles,
+        ("cluster", "count", *feature_names),
+        "result.cluster_profiles",
+    )
 
     if cluster_profiles.empty:
         return {
-            "profile_table": pd.DataFrame(columns=["cluster", "feature", "value", "count"]),
+            "profile_table": pd.DataFrame(
+                columns=["cluster", "feature", "value", "count"]
+            ),
             "metadata": {
                 "feature_names": requested_features,
                 "cluster_labels": list(result.model.cluster_labels),
@@ -1410,7 +1577,9 @@ def prepare_shared_cluster_region_data(
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     _validate_shared_cluster_result(result)
     if result.region_summaries is None:
-        raise ValueError("SharedClusterResult.region_summaries is required for region plotting.")
+        raise ValueError(
+            "SharedClusterResult.region_summaries is required for region plotting."
+        )
 
     _require_columns(
         result.region_summaries,
@@ -1427,7 +1596,9 @@ def prepare_shared_cluster_region_data(
 
     if aggregate_conditions and not region_table.empty:
         condition_region_table = (
-            region_table.groupby(["region_id", "condition", "cluster"], as_index=False, sort=False)
+            region_table.groupby(
+                ["region_id", "condition", "cluster"], as_index=False, sort=False
+            )
             .agg(
                 count=("count", "sum"),
                 fraction_mean=("fraction", "mean"),
@@ -1462,7 +1633,14 @@ def prepare_shared_cluster_region_data(
 
 
 _READ_CLUSTER_ASSOCIATION_VALUE_MODES = {"fraction", "log2_enrichment"}
-_READ_CLUSTER_ASSOCIATION_REGION_COLUMNS = ("region_id", "chrom", "chromosome", "start", "end", "strand")
+_READ_CLUSTER_ASSOCIATION_REGION_COLUMNS = (
+    "region_id",
+    "chrom",
+    "chromosome",
+    "start",
+    "end",
+    "strand",
+)
 _READ_CLUSTER_ASSOCIATION_LEGACY_EXCLUDE_COLUMNS = {
     "count",
     "fraction",
@@ -1513,12 +1691,16 @@ def _synthesize_read_cluster_region_id(table: pd.DataFrame, *, owner: str) -> pd
 def _ensure_read_cluster_region_ids(table: pd.DataFrame, *, owner: str) -> pd.DataFrame:
     normalized = table.copy()
     if "region_id" not in normalized.columns:
-        normalized["region_id"] = _synthesize_read_cluster_region_id(normalized, owner=owner)
+        normalized["region_id"] = _synthesize_read_cluster_region_id(
+            normalized, owner=owner
+        )
         return normalized
 
     missing_region_ids = normalized["region_id"].isna()
     if missing_region_ids.any():
-        replacement_ids = _synthesize_read_cluster_region_id(normalized.loc[missing_region_ids], owner=owner)
+        replacement_ids = _synthesize_read_cluster_region_id(
+            normalized.loc[missing_region_ids], owner=owner
+        )
         normalized.loc[missing_region_ids, "region_id"] = replacement_ids
     normalized["region_id"] = normalized["region_id"].astype(str)
     return normalized
@@ -1556,8 +1738,14 @@ def _infer_read_cluster_columns(table: pd.DataFrame) -> list[object]:
         for column in _READ_CLUSTER_ASSOCIATION_REGION_COLUMNS
         if column in table.columns
     }
-    excluded_columns.update(col for col in _READ_CLUSTER_ASSOCIATION_LEGACY_EXCLUDE_COLUMNS if col in table.columns)
-    cluster_columns = [column for column in table.columns if column not in excluded_columns]
+    excluded_columns.update(
+        col
+        for col in _READ_CLUSTER_ASSOCIATION_LEGACY_EXCLUDE_COLUMNS
+        if col in table.columns
+    )
+    cluster_columns = [
+        column for column in table.columns if column not in excluded_columns
+    ]
     if "region_id" in cluster_columns:
         cluster_columns.remove("region_id")
     return cluster_columns
@@ -1575,7 +1763,9 @@ def _normalize_legacy_read_cluster_region_association(
 
     cluster_columns = _infer_read_cluster_columns(table)
     if not cluster_columns:
-        raise ValueError("Could not infer cluster columns from the legacy association table.")
+        raise ValueError(
+            "Could not infer cluster columns from the legacy association table."
+        )
 
     normalized = _ensure_read_cluster_region_ids(table, owner="association_table")
     if normalized["region_id"].isna().any():
@@ -1586,7 +1776,9 @@ def _normalize_legacy_read_cluster_region_association(
     if "total_reads" not in normalized.columns:
         normalized["total_reads"] = normalized.loc[:, cluster_columns].sum(axis=1)
     if (normalized["total_reads"] <= 0).any():
-        raise ValueError("Legacy association rows must have positive total_reads or cluster counts.")
+        raise ValueError(
+            "Legacy association rows must have positive total_reads or cluster counts."
+        )
 
     id_vars = [column for column in normalized.columns if column not in cluster_columns]
     melted = normalized.melt(
@@ -1635,15 +1827,23 @@ def _region_coordinate_table_for_association(table: pd.DataFrame) -> pd.DataFram
     if has_chrom and has_start_end:
         chrom_col = "chrom" if "chrom" in table.columns else "chromosome"
         coords = (
-            table.loc[:, ["region_id", chrom_col, "start", "end"] + (["strand"] if "strand" in table.columns else [])]
+            table.loc[
+                :,
+                ["region_id", chrom_col, "start", "end"]
+                + (["strand"] if "strand" in table.columns else []),
+            ]
             .drop_duplicates(subset=["region_id"])
             .copy()
         )
         coords = coords.rename(columns={chrom_col: "chrom"})
         if "strand" not in coords.columns:
             coords["strand"] = "."
-        coords["start"] = pd.to_numeric(coords["start"], errors="coerce").fillna(-1).astype(int)
-        coords["end"] = pd.to_numeric(coords["end"], errors="coerce").fillna(-1).astype(int)
+        coords["start"] = (
+            pd.to_numeric(coords["start"], errors="coerce").fillna(-1).astype(int)
+        )
+        coords["end"] = (
+            pd.to_numeric(coords["end"], errors="coerce").fillna(-1).astype(int)
+        )
         return coords.loc[:, ["region_id", "chrom", "start", "end", "strand"]]
 
     parsed = regions["region_id"].map(_parse_region_id_components)
@@ -1682,17 +1882,16 @@ def _read_cluster_region_association_region_order(
     coords = _region_coordinate_table_for_association(table)
     coords = coords.copy()
     coords["chrom_sort"] = coords["chrom"].map(_chromosome_sort_key)
-    coords = coords.sort_values(["chrom_sort", "start", "end", "region_id"], kind="stable")
+    coords = coords.sort_values(
+        ["chrom_sort", "start", "end", "region_id"], kind="stable"
+    )
 
     if region_sort == "genomic":
         return coords["region_id"].tolist()
 
     if region_sort == "association_strength":
         grouped = table.groupby("region_id", sort=False)["value"]
-        if strength_aggregate == "mean":
-            strength = grouped.mean()
-        else:
-            strength = grouped.max()
+        strength = grouped.mean() if strength_aggregate == "mean" else grouped.max()
         coords = coords.merge(
             strength.rename("association_strength"),
             left_on="region_id",
@@ -1706,7 +1905,60 @@ def _read_cluster_region_association_region_order(
         )
         return coords["region_id"].tolist()
 
-    raise ValueError("region_sort must be 'input', 'genomic', or 'association_strength'.")
+    if region_sort == "cluster_fraction":
+        # Assign each region to its dominant cluster, then rank by dominant fraction.
+        cluster_order = _read_cluster_region_association_cluster_order(table)
+        cluster_rank = {cluster: index for index, cluster in enumerate(cluster_order)}
+        dominant_rows = table.copy()
+        dominant_rows["cluster_rank"] = (
+            dominant_rows["cluster"]
+            .map(cluster_rank)
+            .fillna(len(cluster_order))
+            .astype(int)
+        )
+        dominant_rows["value"] = pd.to_numeric(
+            dominant_rows["value"], errors="coerce"
+        ).fillna(0.0)
+        dominant_rows = dominant_rows.sort_values(
+            ["region_id", "value", "cluster_rank"],
+            ascending=[True, False, True],
+            kind="stable",
+        )
+        dominant_rows = dominant_rows.drop_duplicates(
+            subset=["region_id"], keep="first"
+        )
+        dominant_rows = dominant_rows.rename(
+            columns={"cluster": "dominant_cluster", "value": "dominant_sort_value"}
+        ).loc[
+            :, ["region_id", "dominant_cluster", "dominant_sort_value", "cluster_rank"]
+        ]
+
+        coords = coords.merge(dominant_rows, on="region_id", how="left")
+        coords["cluster_rank"] = (
+            pd.to_numeric(coords["cluster_rank"], errors="coerce")
+            .fillna(len(cluster_order))
+            .astype(int)
+        )
+        coords["dominant_sort_value"] = pd.to_numeric(
+            coords["dominant_sort_value"], errors="coerce"
+        ).fillna(0.0)
+        coords = coords.sort_values(
+            [
+                "cluster_rank",
+                "dominant_sort_value",
+                "chrom_sort",
+                "start",
+                "end",
+                "region_id",
+            ],
+            ascending=[True, False, True, True, True, True],
+            kind="stable",
+        )
+        return coords["region_id"].tolist()
+
+    raise ValueError(
+        "region_sort must be 'cluster_fraction', 'input', 'genomic', or 'association_strength'."
+    )
 
 
 def prepare_read_cluster_region_association_data(
@@ -1714,7 +1966,7 @@ def prepare_read_cluster_region_association_data(
     *,
     value_mode: str = "fraction",
     top_n_regions_per_cluster: int | None = 5,
-    region_sort: str = "input",
+    region_sort: str = "cluster_fraction",
     association_strength_aggregate: str = "max",
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     if not isinstance(association_table, pd.DataFrame):
@@ -1723,8 +1975,15 @@ def prepare_read_cluster_region_association_data(
         raise ValueError("value_mode must be 'fraction' or 'log2_enrichment'.")
     if top_n_regions_per_cluster is not None and top_n_regions_per_cluster < 0:
         raise ValueError("top_n_regions_per_cluster must be non-negative.")
-    if region_sort not in {"input", "genomic", "association_strength"}:
-        raise ValueError("region_sort must be 'input', 'genomic', or 'association_strength'.")
+    if region_sort not in {
+        "cluster_fraction",
+        "input",
+        "genomic",
+        "association_strength",
+    }:
+        raise ValueError(
+            "region_sort must be 'cluster_fraction', 'input', 'genomic', or 'association_strength'."
+        )
     if association_strength_aggregate not in {"max", "mean"}:
         raise ValueError("association_strength_aggregate must be 'max' or 'mean'.")
 
@@ -1741,7 +2000,9 @@ def prepare_read_cluster_region_association_data(
 
     normalized = normalized.copy()
     if normalized.duplicated(["region_id", "cluster"]).any():
-        raise ValueError("association_table contains duplicate region and cluster rows.")
+        raise ValueError(
+            "association_table contains duplicate region and cluster rows."
+        )
 
     region_order = _read_cluster_region_association_region_order(
         normalized,
@@ -1749,9 +2010,15 @@ def prepare_read_cluster_region_association_data(
         strength_aggregate=association_strength_aggregate,
     )
     cluster_order = _read_cluster_region_association_cluster_order(normalized)
-    normalized["region_id"] = pd.Categorical(normalized["region_id"], categories=region_order, ordered=True)
-    normalized["cluster"] = pd.Categorical(normalized["cluster"], categories=cluster_order, ordered=True)
-    normalized = normalized.sort_values(["region_id", "cluster"], kind="stable").reset_index(drop=True)
+    normalized["region_id"] = pd.Categorical(
+        normalized["region_id"], categories=region_order, ordered=True
+    )
+    normalized["cluster"] = pd.Categorical(
+        normalized["cluster"], categories=cluster_order, ordered=True
+    )
+    normalized = normalized.sort_values(
+        ["region_id", "cluster"], kind="stable"
+    ).reset_index(drop=True)
     normalized["region_id"] = normalized["region_id"].astype(str)
     normalized["cluster"] = normalized["cluster"].astype(object)
 
@@ -1764,9 +2031,7 @@ def prepare_read_cluster_region_association_data(
     matrix_table.columns.name = None
     region_axis_table = _region_coordinate_table_for_association(normalized).copy()
     region_axis_table = (
-        region_axis_table.set_index("region_id")
-        .reindex(region_order)
-        .reset_index()
+        region_axis_table.set_index("region_id").reindex(region_order).reset_index()
     )
     region_axis_table["axis_index"] = np.arange(len(region_axis_table))
     chromosome_blocks: list[dict[str, object]] = []
@@ -1806,18 +2071,28 @@ def prepare_read_cluster_region_association_data(
     else:
         top_regions_table = (
             normalized.loc[:, top_columns]
-            .sort_values(["cluster", "value", "region_id"], ascending=[True, False, True], kind="stable")
+            .sort_values(
+                ["cluster", "value", "region_id"],
+                ascending=[True, False, True],
+                kind="stable",
+            )
             .groupby("cluster", as_index=False, sort=False, group_keys=False)
             .head(top_n_regions_per_cluster)
             .copy()
         )
-        top_regions_table["rank"] = top_regions_table.groupby("cluster", sort=False).cumcount() + 1
-        top_regions_table = top_regions_table.sort_values(["cluster", "rank"], kind="stable").reset_index(drop=True)
+        top_regions_table["rank"] = (
+            top_regions_table.groupby("cluster", sort=False).cumcount() + 1
+        )
+        top_regions_table = top_regions_table.sort_values(
+            ["cluster", "rank"], kind="stable"
+        ).reset_index(drop=True)
 
     metadata = {
         "plot_family": "read_cluster_region_association_heatmap",
         "value_mode": value_mode,
-        "source_format": normalized["source_format"].iloc[0] if not normalized.empty else "long_form",
+        "source_format": normalized["source_format"].iloc[0]
+        if not normalized.empty
+        else "long_form",
         "region_order": [str(value) for value in region_order],
         "cluster_order": cluster_order,
         "top_n_regions_per_cluster": top_n_regions_per_cluster,

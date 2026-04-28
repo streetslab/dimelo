@@ -1,29 +1,30 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-from .artifacts import resolve_artifact
 from . import (
     chip_atlas,
     cluster,
-    dmr,
     distribution,
+    dmr,
     plotting,
-    regulatory_enrichment,
     region_analysis,
     region_contrasts,
     region_discovery,
+    regulatory_enrichment,
 )
+from .artifacts import resolve_artifact
 from .models import (
     ChipAtlasEnrichmentResult,
+    DatasetArtifact,
     ModkitDMRMultiResult,
     ModkitDMRPairResult,
-    DatasetArtifact,
     RegionDiscoveryClusterContrastResult,
     RegionDiscoveryClusterResult,
     SampleSpec,
@@ -192,13 +193,23 @@ def _normalize_read_windows(
         raise ValueError(f"Unsupported signal_normalization: {signal_normalization}")
 
     data_matrix = np.asarray(result.data_matrix, dtype=float)
-    val_matrix = None if result.val_matrix is None else np.asarray(result.val_matrix, dtype=float)
-    offset_source = result if signal_normalization == "per_sample_global" else control_result
+    val_matrix = (
+        None
+        if result.val_matrix is None
+        else np.asarray(result.val_matrix, dtype=float)
+    )
+    offset_source = (
+        result if signal_normalization == "per_sample_global" else control_result
+    )
     if offset_source is None:
-        raise ValueError("control_regions normalization requires control-region read windows.")
+        raise ValueError(
+            "control_regions normalization requires control-region read windows."
+        )
     offset_matrix = np.asarray(offset_source.data_matrix, dtype=float)
     offset_val_matrix = (
-        None if offset_source.val_matrix is None else np.asarray(offset_source.val_matrix, dtype=float)
+        None
+        if offset_source.val_matrix is None
+        else np.asarray(offset_source.val_matrix, dtype=float)
     )
     if offset_val_matrix is not None and offset_val_matrix.sum() > 0:
         global_offset = float(offset_matrix.sum() / offset_val_matrix.sum())
@@ -231,7 +242,9 @@ def _select_feature_columns(
     else:
         keep = [name in _LEVEL_FEATURES for name in feature_names]
 
-    selected_names = [name for name, keep_name in zip(feature_names, keep) if keep_name]
+    selected_names = [
+        name for name, keep_name in zip(feature_names, keep, strict=False) if keep_name
+    ]
     if not selected_names:
         raise ValueError(f"No features available for cluster_basis={cluster_basis!r}.")
     selected_matrix = feature_matrix[:, keep]
@@ -276,7 +289,9 @@ def _cluster_profiles(
     labels = np.asarray(cluster_labels, dtype=str)
     unique_labels = np.unique(labels)
     codes = pd.Categorical(labels, categories=unique_labels, ordered=True).codes
-    counts = np.bincount(codes, minlength=len(unique_labels)).astype(np.int64, copy=False)
+    counts = np.bincount(codes, minlength=len(unique_labels)).astype(
+        np.int64, copy=False
+    )
 
     sums = np.zeros((len(unique_labels), feature_matrix.shape[1]), dtype=np.float64)
     np.add.at(sums, codes, np.asarray(feature_matrix, dtype=np.float64))
@@ -329,7 +344,9 @@ def _build_region_summary(assignments: pd.DataFrame) -> pd.DataFrame:
         .size()
         .reset_index(name="count")
     )
-    totals = summary.groupby(["region_id", "sample_id", "condition"])["count"].transform("sum")
+    totals = summary.groupby(["region_id", "sample_id", "condition"])[
+        "count"
+    ].transform("sum")
     summary["fraction"] = summary["count"] / totals
     return summary
 
@@ -390,12 +407,21 @@ def _build_read_global_region_summary(assignments: pd.DataFrame) -> pd.DataFrame
 
         if association_frames:
             region_summaries = pd.concat(association_frames, ignore_index=True)
-            required_columns = {"region_id", "sample_id", "condition", "cluster", "count", "fraction"}
+            required_columns = {
+                "region_id",
+                "sample_id",
+                "condition",
+                "cluster",
+                "count",
+                "fraction",
+            }
             if required_columns.issubset(region_summaries.columns):
                 return region_summaries
 
     summary_source = assignments.copy()
-    summary_source["region_id"] = summary_source.apply(_region_id_from_coordinates, axis=1)
+    summary_source["region_id"] = summary_source.apply(
+        _region_id_from_coordinates, axis=1
+    )
     return _build_region_summary(summary_source)
 
 
@@ -468,8 +494,8 @@ def _selected_regions_to_region_spec(selected_regions: pd.DataFrame) -> list[str
     region_spec: list[str] = []
     for row in selected_regions.itertuples(index=False):
         chrom = getattr(row, chrom_column)
-        start = int(getattr(row, "start"))
-        end = int(getattr(row, "end"))
+        start = int(row.start)
+        end = int(row.end)
         strand = getattr(row, "strand", ".")
         strand_value = strand if strand in {"+", "-", "."} else "."
         region_spec.append(f"{chrom}:{start}-{end},{strand_value}")
@@ -576,7 +602,9 @@ def _require_region_summary_table_for_chip_atlas(
         assignments = cluster_result.assignments.copy()
         if "region_id" not in assignments.columns:
             if _assignments_have_region_coordinates(assignments):
-                assignments["region_id"] = assignments.apply(_region_id_from_coordinates, axis=1)
+                assignments["region_id"] = assignments.apply(
+                    _region_id_from_coordinates, axis=1
+                )
             else:
                 raise ValueError(
                     "SharedClusterResult does not include region_summaries, and assignments "
@@ -601,7 +629,9 @@ def _rank_cluster_regions_for_chip_atlas(
     min_fraction: float | None,
     top_n_regions: int | None,
 ) -> list[str]:
-    cluster_rows = region_summaries.loc[region_summaries["cluster"] == cluster_label].copy()
+    cluster_rows = region_summaries.loc[
+        region_summaries["cluster"] == cluster_label
+    ].copy()
     if cluster_rows.empty:
         return []
 
@@ -631,7 +661,11 @@ def _rank_cluster_regions_for_chip_atlas(
 
     if top_n_regions is not None:
         ranked = ranked.head(int(top_n_regions))
-    return [str(region_id) for region_id in ranked["region_id"].tolist() if pd.notna(region_id)]
+    return [
+        str(region_id)
+        for region_id in ranked["region_id"].tolist()
+        if pd.notna(region_id)
+    ]
 
 
 def resolve_regulatory_enrichment_spec(
@@ -645,7 +679,7 @@ def resolve_regulatory_enrichment_spec(
     crossmap_chain_cache_dir: str | Path | None = None,
     crossmap_executable: str | None = "CrossMap.py",
     strict_provider_support: bool = False,
-    ) -> regulatory_enrichment.RegulatoryEnrichmentSpec:
+) -> regulatory_enrichment.RegulatoryEnrichmentSpec:
     return regulatory_enrichment.RegulatoryEnrichmentSpec(
         providers=tuple(providers),
         species=species,
@@ -928,7 +962,9 @@ def chip_atlas_cluster_enrichment_workflow(
         raise ValueError("mode must be 'per_cluster' or 'combined'.")
 
     region_summaries = _require_region_summary_table_for_chip_atlas(cluster_result)
-    available_clusters = [str(value) for value in pd.unique(region_summaries["cluster"])]
+    available_clusters = [
+        str(value) for value in pd.unique(region_summaries["cluster"])
+    ]
     selected_clusters = (
         [str(cluster_label) for cluster_label in clusters]
         if clusters is not None
@@ -953,11 +989,15 @@ def chip_atlas_cluster_enrichment_workflow(
             per_cluster_region_ids[cluster_label] = region_ids
 
     if not per_cluster_region_ids:
-        raise ValueError("No regions met the requested filters for ChIP-Atlas enrichment.")
+        raise ValueError(
+            "No regions met the requested filters for ChIP-Atlas enrichment."
+        )
 
     queries: dict[str, list[str]]
     if mode == "combined":
-        union_region_ids = sorted({region_id for ids in per_cluster_region_ids.values() for region_id in ids})
+        union_region_ids = sorted(
+            {region_id for ids in per_cluster_region_ids.values() for region_id in ids}
+        )
         queries = {"combined": union_region_ids}
     else:
         queries = per_cluster_region_ids
@@ -1138,7 +1178,9 @@ def modkit_dmr_multi_from_samples_workflow(
 ) -> ModkitDMRMultiResult:
     sample_list = list(samples)
     if len(sample_list) < 2:
-        raise ValueError("modkit_dmr_multi_from_samples_workflow requires at least two samples.")
+        raise ValueError(
+            "modkit_dmr_multi_from_samples_workflow requires at least two samples."
+        )
 
     dmr_samples: dict[str, str | Path] = {}
     for sample in sample_list:
@@ -1252,7 +1294,9 @@ def discovery_cluster_contrast_workflow(
     contrast_config = dict(contrasts)
     contrast_spec = contrast_config.get("contrast")
     if contrast_spec is None:
-        raise ValueError("discovery_cluster_contrast_workflow requires contrasts['contrast'].")
+        raise ValueError(
+            "discovery_cluster_contrast_workflow requires contrasts['contrast']."
+        )
 
     region_contrasts.validate_region_contrast_request(
         analysis_unit=str(contrast_config.get("analysis_unit", "ensemble_region")),
@@ -1269,7 +1313,9 @@ def discovery_cluster_contrast_workflow(
         clustering=clustering,
         selection=selection,
     )
-    selected_region_spec = _selected_regions_to_region_spec(discovery_cluster_result.selected_regions)
+    selected_region_spec = _selected_regions_to_region_spec(
+        discovery_cluster_result.selected_regions
+    )
     contrast_regions = contrast_config.pop("regions", None)
     contrast_scope = "selected"
     if contrast_regions is None:
@@ -1352,15 +1398,21 @@ def _build_shared_cluster_result(
         clustering_result.labels_size_ordered,
     )
     if not hasattr(clustering_result.model, "predict"):
-        raise TypeError("Fitted clustering model does not support prediction for full assignment.")
+        raise TypeError(
+            "Fitted clustering model does not support prediction for full assignment."
+        )
     predicted_raw = _predict_in_chunks(clustering_result.model, full_scaled)
-    predicted_ordered = cluster.apply_cluster_label_mapping(predicted_raw, label_mapping)
+    predicted_ordered = cluster.apply_cluster_label_mapping(
+        predicted_raw, label_mapping
+    )
 
     assignments = pd.DataFrame(metadata_rows)
     assignments["cluster"] = _cluster_label_strings(predicted_ordered)
 
     cluster_distribution = distribution.build_cluster_distribution(assignments)
-    condition_distribution = distribution.build_condition_distribution(cluster_distribution)
+    condition_distribution = distribution.build_condition_distribution(
+        cluster_distribution
+    )
     cluster_profiles = _cluster_profiles(
         full_matrix,
         feature_names,

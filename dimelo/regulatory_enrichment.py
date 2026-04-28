@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import html
 import http.cookiejar
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import time
-from typing import Any, Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 from urllib import error, parse, request
 
 from .models import UniBindJobResult
@@ -175,7 +176,9 @@ def normalize_species_name(species: str) -> str:
     return canonical
 
 
-def _infer_species_from_genomes(*, reference_genome: str | None, target_genome: str | None) -> str | None:
+def _infer_species_from_genomes(
+    *, reference_genome: str | None, target_genome: str | None
+) -> str | None:
     for genome in (target_genome, reference_genome):
         if genome is None:
             continue
@@ -292,24 +295,22 @@ def _build_multipart_form(
     boundary = f"----dimelo-{int(time.time() * 1000)}"
     chunks: list[bytes] = []
     for key, value in fields.items():
-        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
-        chunks.append(
-            f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8")
-        )
+        chunks.append(f"--{boundary}\r\n".encode())
+        chunks.append(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode())
         chunks.append(str(value).encode("utf-8"))
         chunks.append(b"\r\n")
     for key, (filename, payload, content_type) in files.items():
-        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(f"--{boundary}\r\n".encode())
         chunks.append(
             (
                 f'Content-Disposition: form-data; name="{key}"; '
                 f'filename="{filename}"\r\n'
-            ).encode("utf-8")
+            ).encode()
         )
-        chunks.append(f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"))
+        chunks.append(f"Content-Type: {content_type}\r\n\r\n".encode())
         chunks.append(payload)
         chunks.append(b"\r\n")
-    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    chunks.append(f"--{boundary}--\r\n".encode())
     return b"".join(chunks), boundary
 
 
@@ -460,7 +461,9 @@ def _fetch_bytes(url: str, *, timeout_seconds: float = 60.0) -> bytes:
 
 
 def _fetch_text(url: str, *, timeout_seconds: float = 60.0) -> str:
-    return _fetch_bytes(url, timeout_seconds=timeout_seconds).decode("utf-8", errors="replace")
+    return _fetch_bytes(url, timeout_seconds=timeout_seconds).decode(
+        "utf-8", errors="replace"
+    )
 
 
 def _parse_kv_blocks(text: str) -> list[dict[str, str]]:
@@ -550,7 +553,9 @@ def _select_trackdb_url(
         )
 
     genomes_url = parse.urljoin(hub_url, genomes_file)
-    genome_blocks = _parse_kv_blocks(_fetch_text(genomes_url, timeout_seconds=timeout_seconds))
+    genome_blocks = _parse_kv_blocks(
+        _fetch_text(genomes_url, timeout_seconds=timeout_seconds)
+    )
     candidates: list[tuple[str, str]] = []
     for block in genome_blocks:
         genome = block.get("genome")
@@ -642,7 +647,9 @@ def search_unibind_trackhub_tracks(
     search_terms: Iterable[str] | None = None,
     timeout_seconds: float = 60.0,
 ) -> list[dict[str, str]]:
-    resolved_hub_url = trackhub_url if trackhub_url is not None else unibind_trackhub_url(collection)
+    resolved_hub_url = (
+        trackhub_url if trackhub_url is not None else unibind_trackhub_url(collection)
+    )
     resolved_assembly, trackdb_url = _select_trackdb_url(
         hub_url=resolved_hub_url,
         assembly=assembly,
@@ -650,7 +657,9 @@ def search_unibind_trackhub_tracks(
     )
     stanzas = _load_trackdb_stanzas(trackdb_url, timeout_seconds=timeout_seconds)
 
-    terms = [str(term).strip().lower() for term in (search_terms or []) if str(term).strip()]
+    terms = [
+        str(term).strip().lower() for term in (search_terms or []) if str(term).strip()
+    ]
 
     rows: list[dict[str, str]] = []
     for stanza in stanzas:
@@ -703,7 +712,9 @@ def resolve_unibind_track_paths(
         for raw in track_paths:
             candidate = Path(raw).expanduser().resolve()
             if not candidate.exists():
-                raise FileNotFoundError(f"UniBind track path does not exist: {candidate}")
+                raise FileNotFoundError(
+                    f"UniBind track path does not exist: {candidate}"
+                )
             resolved_paths.append(candidate)
         if not resolved_paths:
             raise ValueError("track_paths was provided but empty.")
@@ -898,9 +909,13 @@ def poll_unibind_job(
     output_urls = list(current.download_urls)
 
     while True:
-        page_html = _fetch_text(current.job_url, timeout_seconds=request_timeout_seconds)
+        page_html = _fetch_text(
+            current.job_url, timeout_seconds=request_timeout_seconds
+        )
         status = _extract_unibind_job_status(page_html)
-        extracted_results_url = _extract_unibind_results_url(page_html, base_url=current.job_url)
+        extracted_results_url = _extract_unibind_results_url(
+            page_html, base_url=current.job_url
+        )
         results_url = extracted_results_url or results_url or current.job_url
         output_urls = _extract_unibind_output_urls(page_html, base_url=current.job_url)
 
@@ -1089,19 +1104,26 @@ class RegulatoryEnrichmentSpec:
 
     def __post_init__(self) -> None:
         requested = self.providers if self.providers else ("screen", "unibind")
-        normalized_providers = _unique_preserve_order(_normalize_provider(p) for p in requested)
+        normalized_providers = _unique_preserve_order(
+            _normalize_provider(p) for p in requested
+        )
 
         inferred = _infer_species_from_genomes(
             reference_genome=self.reference_genome,
             target_genome=self.target_genome,
         )
-        resolved_species = self.species if self.species is not None else (inferred or _DEFAULT_SPECIES)
+        resolved_species = (
+            self.species if self.species is not None else (inferred or _DEFAULT_SPECIES)
+        )
         canonical_species = normalize_species_name(str(resolved_species))
 
         enabled: list[str] = []
         notes: dict[str, str] = {}
         for provider in normalized_providers:
-            if provider == "screen" and canonical_species not in _SCREEN_SUPPORTED_SPECIES:
+            if (
+                provider == "screen"
+                and canonical_species not in _SCREEN_SUPPORTED_SPECIES
+            ):
                 message = (
                     "SCREEN disabled for species "
                     f"{canonical_species!r}; SCREEN supports only "
@@ -1119,7 +1141,10 @@ class RegulatoryEnrichmentSpec:
                 f"Requested providers={normalized_providers}, species={canonical_species!r}."
             )
 
-        if self.target_genome is None and canonical_species in _DEFAULT_TARGET_GENOME_BY_SPECIES:
+        if (
+            self.target_genome is None
+            and canonical_species in _DEFAULT_TARGET_GENOME_BY_SPECIES
+        ):
             self.target_genome = _DEFAULT_TARGET_GENOME_BY_SPECIES[canonical_species]
 
         self.providers = tuple(normalized_providers)

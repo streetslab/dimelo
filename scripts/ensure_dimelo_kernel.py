@@ -20,11 +20,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MODKIT_REQUIREMENT = "supported"
-DEFAULT_MODKIT_INSTALL_VERSION = "0.2.4"
-SUPPORTED_MODKIT_PREFIXES = ("0.2.4", "0.6.")
+DEFAULT_MODKIT_REQUIREMENT = "0.6.1"
+DEFAULT_MODKIT_INSTALL_VERSION = "0.6.1"
+SUPPORTED_MODKIT_PREFIXES = ("0.6.",)
 
 # setup.py install_requires
 CORE_MODULES = {
@@ -83,7 +82,9 @@ def _module_installed(module_name: str) -> bool:
 
 def _check_python_modules() -> tuple[list[str], list[str]]:
     missing_core = [
-        package for package, module in CORE_MODULES.items() if not _module_installed(module)
+        package
+        for package, module in CORE_MODULES.items()
+        if not _module_installed(module)
     ]
     missing_clustering = [
         package
@@ -95,7 +96,7 @@ def _check_python_modules() -> tuple[list[str], list[str]]:
 
 def _modkit_version_ok(version_text: str, required_version: str) -> bool:
     normalized = required_version.strip().lower()
-    if normalized in {"supported", "dual", "auto"}:
+    if normalized in {"supported", "auto"}:
         return any(prefix in version_text for prefix in SUPPORTED_MODKIT_PREFIXES)
     return required_version in version_text
 
@@ -180,7 +181,7 @@ def fix_python_packages(report: CheckReport) -> None:
 def fix_modkit(required_modkit_version: str) -> None:
     requested_version = (
         DEFAULT_MODKIT_INSTALL_VERSION
-        if required_modkit_version.strip().lower() in {"supported", "dual", "auto"}
+        if required_modkit_version.strip().lower() in {"supported", "auto"}
         else required_modkit_version
     )
     conda_path = shutil.which("conda")
@@ -255,8 +256,8 @@ def print_report(
         print("modkit check: skipped")
     else:
         requirement_text = (
-            "any supported version (0.2.4 or 0.6.x)"
-            if required_modkit_version.strip().lower() in {"supported", "dual", "auto"}
+            "any supported version (0.6.x)"
+            if required_modkit_version.strip().lower() in {"supported", "auto"}
             else f"version containing '{required_modkit_version}'"
         )
         if report.missing_modkit:
@@ -296,7 +297,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MODKIT_REQUIREMENT,
         help=(
             "Required modkit version marker. "
-            "Use 'supported' (default) to allow 0.2.4 or 0.6.x, or pass an explicit marker."
+            "Use 'supported' (default) to allow 0.6.x, or pass an explicit marker."
         ),
     )
     parser.add_argument(
@@ -334,7 +335,9 @@ def main() -> int:
                 f"Activate expected env first: `conda activate {report.expected_env}`"
             )
         if report.runtime_failures:
-            print("For runtime linker/import issues, run scripts/bootstrap_dimelo_env.sh")
+            print(
+                "For runtime linker/import issues, run scripts/bootstrap_dimelo_env.sh"
+            )
         return 1
 
     try:

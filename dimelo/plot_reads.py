@@ -1,7 +1,7 @@
 """Single-read plotting entrypoints and legacy axis routing helpers."""
 
-from collections.abc import Sequence
 import math
+from collections.abc import Sequence
 from pathlib import Path
 
 import pandas as pd
@@ -148,7 +148,9 @@ def plot_reads(
         regions_5to3prime=regions_5to3prime,
     )
     if y_axis_mode not in plot_table.columns:
-        raise ValueError(f"Unsupported y_axis {y_axis_mode!r}. Use one of: {sorted(plot_table.columns)}")
+        raise ValueError(
+            f"Unsupported y_axis {y_axis_mode!r}. Use one of: {sorted(plot_table.columns)}"
+        )
     axis = _legacy_single_read_axis_spec(
         relative=relative,
         regions_5to3prime=regions_5to3prime,

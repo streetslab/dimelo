@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 import pandas as pd
 
@@ -26,12 +26,17 @@ def _validate_motifs(motifs: Iterable[str]) -> list[str]:
 
 
 def _safe_fraction(modified_count: pd.Series, valid_count: pd.Series) -> pd.Series:
-    return modified_count.div(valid_count.where(valid_count != 0), fill_value=0).fillna(0.0)
+    return modified_count.div(valid_count.where(valid_count != 0), fill_value=0).fillna(
+        0.0
+    )
 
 
 def _aggregate_window_counts(summary: pd.DataFrame) -> pd.DataFrame:
     if summary.empty:
-        return pd.DataFrame(columns=_WINDOW_KEY_COLUMNS + ["modified_count", "valid_count", "window_fraction"])
+        return pd.DataFrame(
+            columns=_WINDOW_KEY_COLUMNS
+            + ["modified_count", "valid_count", "window_fraction"]
+        )
 
     aggregated = (
         summary.groupby(_WINDOW_KEY_COLUMNS, as_index=False, sort=False)
@@ -50,7 +55,8 @@ def _aggregate_window_counts(summary: pd.DataFrame) -> pd.DataFrame:
 def _aggregate_condition_counts(summary: pd.DataFrame) -> pd.DataFrame:
     if summary.empty:
         return pd.DataFrame(
-            columns=_WINDOW_KEY_COLUMNS + ["condition", "modified_count", "valid_count", "window_fraction"]
+            columns=_WINDOW_KEY_COLUMNS
+            + ["condition", "modified_count", "valid_count", "window_fraction"]
         )
 
     aggregated = (
@@ -74,7 +80,10 @@ def _condition_spread_scores(condition_counts: pd.DataFrame) -> pd.DataFrame:
     spread = (
         condition_counts.groupby(_WINDOW_KEY_COLUMNS, as_index=False, sort=False)
         .agg(
-            score_value=("window_fraction", lambda values: float(values.max() - values.min())),
+            score_value=(
+                "window_fraction",
+                lambda values: float(values.max() - values.min()),
+            ),
         )
         .copy()
     )
@@ -89,11 +98,19 @@ def _side_counts(
 ) -> pd.DataFrame:
     side_conditions = list(conditions)
     if not side_conditions:
-        return pd.DataFrame(columns=_WINDOW_KEY_COLUMNS + [f"{side_name}_modified_count", f"{side_name}_valid_count"])
+        return pd.DataFrame(
+            columns=_WINDOW_KEY_COLUMNS
+            + [f"{side_name}_modified_count", f"{side_name}_valid_count"]
+        )
 
-    side = condition_counts.loc[condition_counts["condition"].isin(side_conditions)].copy()
+    side = condition_counts.loc[
+        condition_counts["condition"].isin(side_conditions)
+    ].copy()
     if side.empty:
-        return pd.DataFrame(columns=_WINDOW_KEY_COLUMNS + [f"{side_name}_modified_count", f"{side_name}_valid_count"])
+        return pd.DataFrame(
+            columns=_WINDOW_KEY_COLUMNS
+            + [f"{side_name}_modified_count", f"{side_name}_valid_count"]
+        )
 
     grouped = (
         side.groupby(_WINDOW_KEY_COLUMNS, as_index=False, sort=False)
@@ -128,8 +145,7 @@ def _validate_contrast_conditions(
 
     if missing:
         raise ValueError(
-            "scan_genome contrast requested missing condition(s): "
-            + "; ".join(missing)
+            "scan_genome contrast requested missing condition(s): " + "; ".join(missing)
         )
 
 
@@ -149,7 +165,9 @@ def _is_paired_contrast(contrast: ContrastSpec | None) -> bool:
 
 def _resolve_pair_ids(samples, pairing_key: str) -> dict[str, object]:
     if not pairing_key:
-        raise ValueError("scan_genome paired discovery requires an explicit pairing_key.")
+        raise ValueError(
+            "scan_genome paired discovery requires an explicit pairing_key."
+        )
 
     pair_ids: dict[str, object] = {}
     for sample in samples:
@@ -184,25 +202,33 @@ def _build_paired_window_table(
     )
     required_condition_set = set(required_conditions)
     complete_pair_ids = [
-        pair_id for pair_id, conditions in pair_conditions.items() if required_condition_set.issubset(conditions)
+        pair_id
+        for pair_id, conditions in pair_conditions.items()
+        if required_condition_set.issubset(conditions)
     ]
     dropped_pair_count = int(len(pair_conditions) - len(complete_pair_ids))
 
     if pairing_policy == "error_on_missing" and dropped_pair_count:
         raise ValueError("scan_genome paired discovery found incomplete matched units.")
     if not complete_pair_ids:
-        raise ValueError("scan_genome paired discovery found no complete matched units.")
+        raise ValueError(
+            "scan_genome paired discovery found no complete matched units."
+        )
 
     paired = paired.loc[paired["pair_id"].isin(complete_pair_ids)].copy()
     paired = (
-        paired.groupby(_WINDOW_KEY_COLUMNS + ["pair_id", "condition"], as_index=False, sort=False)
+        paired.groupby(
+            _WINDOW_KEY_COLUMNS + ["pair_id", "condition"], as_index=False, sort=False
+        )
         .agg(
             modified_count=("modified_count", "sum"),
             valid_count=("valid_count", "sum"),
         )
         .copy()
     )
-    paired["window_fraction"] = _safe_fraction(paired["modified_count"], paired["valid_count"])
+    paired["window_fraction"] = _safe_fraction(
+        paired["modified_count"], paired["valid_count"]
+    )
     return paired, {
         "n_pairs_used": len(complete_pair_ids),
         "n_pairs_dropped": dropped_pair_count,
@@ -216,7 +242,9 @@ def _score_matched_pairwise(
     rank_by: str = "mean_abs_delta",
 ) -> pd.DataFrame:
     if rank_by != "mean_abs_delta":
-        raise ValueError("scan_genome matched_pairwise currently supports rank_by='mean_abs_delta'.")
+        raise ValueError(
+            "scan_genome matched_pairwise currently supports rank_by='mean_abs_delta'."
+        )
 
     numerator = paired_window_table.loc[
         paired_window_table["condition"].isin(contrast.numerator or [])
@@ -255,7 +283,12 @@ def _score_matched_pairwise(
     merged = numerator.merge(
         denominator[
             _WINDOW_KEY_COLUMNS
-            + ["pair_id", "denominator_modified_count", "denominator_valid_count", "denominator_fraction"]
+            + [
+                "pair_id",
+                "denominator_modified_count",
+                "denominator_valid_count",
+                "denominator_fraction",
+            ]
         ],
         on=_WINDOW_KEY_COLUMNS + ["pair_id"],
         how="inner",
@@ -283,7 +316,9 @@ def _score_matched_pairwise(
             sign_agreement=(
                 "delta",
                 lambda values: float(
-                    max((values.gt(0)).mean(), (values.lt(0)).mean()) if len(values) else 0.0
+                    max((values.gt(0)).mean(), (values.lt(0)).mean())
+                    if len(values)
+                    else 0.0
                 ),
             ),
             n_pairs_used=("pair_id", "nunique"),
@@ -296,9 +331,13 @@ def _score_matched_pairwise(
     return scored
 
 
-def _validate_time_order(paired_window_table: pd.DataFrame, time_order: list[str]) -> None:
+def _validate_time_order(
+    paired_window_table: pd.DataFrame, time_order: list[str]
+) -> None:
     available_conditions = set(paired_window_table["condition"].dropna().tolist())
-    missing = [condition for condition in time_order if condition not in available_conditions]
+    missing = [
+        condition for condition in time_order if condition not in available_conditions
+    ]
     if missing:
         raise ValueError(
             "scan_genome paired time_course requested missing time_order condition(s): "
@@ -321,7 +360,9 @@ def _score_paired_time_course(
         scored["adjusted_p_value"] = pd.Series(dtype="object")
         return scored
 
-    ordered = paired_window_table.loc[paired_window_table["condition"].isin(time_order)].copy()
+    ordered = paired_window_table.loc[
+        paired_window_table["condition"].isin(time_order)
+    ].copy()
     _validate_time_order(ordered, time_order)
     ordered["condition"] = pd.Categorical(
         ordered["condition"],
@@ -363,7 +404,10 @@ def _score_paired_time_course(
     per_pair = (
         ordered.groupby(_WINDOW_KEY_COLUMNS + ["pair_id"], as_index=False, sort=False)
         .agg(
-            trajectory_amplitude=("window_fraction", lambda values: float(values.max() - values.min())),
+            trajectory_amplitude=(
+                "window_fraction",
+                lambda values: float(values.max() - values.min()),
+            ),
         )
         .copy()
     )
@@ -372,7 +416,10 @@ def _score_paired_time_course(
         per_pair.groupby(_WINDOW_KEY_COLUMNS, as_index=False, sort=False)
         .agg(
             trajectory_amplitude_mean=("trajectory_amplitude", "mean"),
-            trajectory_amplitude_sd=("trajectory_amplitude", lambda values: float(values.std(ddof=0))),
+            trajectory_amplitude_sd=(
+                "trajectory_amplitude",
+                lambda values: float(values.std(ddof=0)),
+            ),
             n_pairs_used=("pair_id", "nunique"),
         )
         .copy()
@@ -391,7 +438,9 @@ def _score_with_contrast(
     score: str,
 ) -> pd.DataFrame:
     if score == "beta_binomial":
-        available_conditions = sorted(condition_counts["condition"].dropna().unique().tolist())
+        available_conditions = sorted(
+            condition_counts["condition"].dropna().unique().tolist()
+        )
         if contrast is not None and contrast.numerator and contrast.denominator:
             numerator_conditions = list(contrast.numerator)
             denominator_conditions = list(contrast.denominator)
@@ -416,7 +465,9 @@ def _score_with_contrast(
             condition_counts, conditions=denominator_conditions, side_name="denominator"
         )
 
-        scored = window_totals.merge(numerator_counts, on=_WINDOW_KEY_COLUMNS, how="left")
+        scored = window_totals.merge(
+            numerator_counts, on=_WINDOW_KEY_COLUMNS, how="left"
+        )
         scored = scored.merge(denominator_counts, on=_WINDOW_KEY_COLUMNS, how="left")
 
         for column in [
@@ -427,11 +478,18 @@ def _score_with_contrast(
         ]:
             scored[column] = scored[column].fillna(0).astype(int)
 
-        scored["score_value"] = _safe_fraction(
-            scored["numerator_modified_count"], scored["numerator_valid_count"]
-        ).sub(
-            _safe_fraction(scored["denominator_modified_count"], scored["denominator_valid_count"])
-        ).abs()
+        scored["score_value"] = (
+            _safe_fraction(
+                scored["numerator_modified_count"], scored["numerator_valid_count"]
+            )
+            .sub(
+                _safe_fraction(
+                    scored["denominator_modified_count"],
+                    scored["denominator_valid_count"],
+                )
+            )
+            .abs()
+        )
 
         scored["p_value"] = [
             _beta_binomial_two_sided_p_value(
@@ -447,6 +505,7 @@ def _score_with_contrast(
                 scored["numerator_valid_count"],
                 scored["denominator_modified_count"],
                 scored["denominator_valid_count"],
+                strict=False,
             )
         ]
         scored["adjusted_p_value"] = _adjust_p_values_bh(scored["p_value"])
@@ -478,11 +537,17 @@ def _score_with_contrast(
     ]:
         scored[column] = scored[column].fillna(0).astype(int)
 
-    scored["score_value"] = _safe_fraction(
-        scored["numerator_modified_count"], scored["numerator_valid_count"]
-    ).sub(
-        _safe_fraction(scored["denominator_modified_count"], scored["denominator_valid_count"])
-    ).abs()
+    scored["score_value"] = (
+        _safe_fraction(
+            scored["numerator_modified_count"], scored["numerator_valid_count"]
+        )
+        .sub(
+            _safe_fraction(
+                scored["denominator_modified_count"], scored["denominator_valid_count"]
+            )
+        )
+        .abs()
+    )
 
     if score == "beta_binomial":
         scored["p_value"] = [
@@ -499,6 +564,7 @@ def _score_with_contrast(
                 scored["numerator_valid_count"],
                 scored["denominator_modified_count"],
                 scored["denominator_valid_count"],
+                strict=False,
             )
         ]
     else:
@@ -514,7 +580,14 @@ def _rank_windows(scored: pd.DataFrame, *, score: str) -> pd.DataFrame:
 
     if score == "beta_binomial":
         ranked = scored.sort_values(
-            by=["adjusted_p_value", "p_value", "score_value", "chromosome", "start", "end"],
+            by=[
+                "adjusted_p_value",
+                "p_value",
+                "score_value",
+                "chromosome",
+                "start",
+                "end",
+            ],
             ascending=[True, True, False, True, True, True],
             kind="mergesort",
             na_position="last",
@@ -541,7 +614,9 @@ def _apply_min_coverage(
 
     filtered = scored.copy()
     covered = filtered["valid_count"] >= min_coverage
-    filtered.loc[~covered, ["score_value", "p_value", "adjusted_p_value", "rank"]] = pd.NA
+    filtered.loc[~covered, ["score_value", "p_value", "adjusted_p_value", "rank"]] = (
+        pd.NA
+    )
     hits = filtered.loc[covered].copy()
     return filtered, hits
 
@@ -601,14 +676,18 @@ def _build_merged_hit(group: pd.DataFrame) -> dict[str, object]:
     if {"modified_count", "valid_count"}.issubset(merged):
         valid_count = int(merged.get("valid_count", 0))
         modified_count = int(merged.get("modified_count", 0))
-        merged["window_fraction"] = 0.0 if valid_count == 0 else modified_count / valid_count
+        merged["window_fraction"] = (
+            0.0 if valid_count == 0 else modified_count / valid_count
+        )
 
     if "score_value" in group.columns:
         merged["score_value"] = _merge_value(group["score_value"], prefer="max")
     if "p_value" in group.columns:
         merged["p_value"] = _merge_value(group["p_value"], prefer="min")
     if "adjusted_p_value" in group.columns:
-        merged["adjusted_p_value"] = _merge_value(group["adjusted_p_value"], prefer="min")
+        merged["adjusted_p_value"] = _merge_value(
+            group["adjusted_p_value"], prefer="min"
+        )
     if "rank" in group.columns:
         rank_values = group["rank"].dropna()
         if not rank_values.empty:
@@ -621,7 +700,8 @@ def _build_merged_hit(group: pd.DataFrame) -> dict[str, object]:
         "denominator_valid_count",
     ]
     contrast_counts_present = any(
-        field in group.columns and group[field].notna().any() for field in contrast_count_fields
+        field in group.columns and group[field].notna().any()
+        for field in contrast_count_fields
     )
     if contrast_counts_present:
         for field in contrast_count_fields:
@@ -636,7 +716,8 @@ def _build_merged_hit(group: pd.DataFrame) -> dict[str, object]:
     merged["merged_window_count"] = merged_window_count
 
     if contrast_counts_present and all(
-        field in merged and not pd.isna(merged[field]) for field in contrast_count_fields
+        field in merged and not pd.isna(merged[field])
+        for field in contrast_count_fields
     ):
         numerator_fraction = _safe_fraction(
             pd.Series([merged["numerator_modified_count"]], dtype="float64"),
@@ -646,10 +727,14 @@ def _build_merged_hit(group: pd.DataFrame) -> dict[str, object]:
             pd.Series([merged["denominator_modified_count"]], dtype="float64"),
             pd.Series([merged["denominator_valid_count"]], dtype="float64"),
         ).iloc[0]
-        merged["score_value"] = abs(float(numerator_fraction) - float(denominator_fraction))
+        merged["score_value"] = abs(
+            float(numerator_fraction) - float(denominator_fraction)
+        )
 
     if {"chromosome", "start", "end"}.issubset(merged):
-        merged["window_id"] = f"{merged['chromosome']}:{int(merged['start'])}-{int(merged['end'])}"
+        merged["window_id"] = (
+            f"{merged['chromosome']}:{int(merged['start'])}-{int(merged['end'])}"
+        )
 
     return merged
 
@@ -696,7 +781,9 @@ def merge_adjacent_hits(hits: pd.DataFrame, merge_distance: int) -> pd.DataFrame
         same_strand = ordered["strand"].eq(ordered["strand"].shift())
 
     within_distance = ordered["start"].le(ordered["end"].shift().add(merge_distance))
-    merge_with_previous = (same_chromosome & same_strand & within_distance).fillna(False)
+    merge_with_previous = (same_chromosome & same_strand & within_distance).fillna(
+        False
+    )
     merge_group = (~merge_with_previous).cumsum()
 
     merged_rows = [
@@ -706,14 +793,20 @@ def merge_adjacent_hits(hits: pd.DataFrame, merge_distance: int) -> pd.DataFrame
     merged = pd.DataFrame.from_records(merged_rows)
     merged = _sort_hits_for_output(merged)
 
-    if "window_id" not in merged.columns and {"chromosome", "start", "end"}.issubset(merged.columns):
+    if "window_id" not in merged.columns and {"chromosome", "start", "end"}.issubset(
+        merged.columns
+    ):
         merged["window_id"] = _build_window_id_series(merged)
 
     if "merged_window_count" not in merged.columns:
         merged["merged_window_count"] = 1
 
-    if {"modified_count", "valid_count"}.issubset(merged.columns) and "window_fraction" not in merged.columns:
-        merged["window_fraction"] = _safe_fraction(merged["modified_count"], merged["valid_count"])
+    if {"modified_count", "valid_count"}.issubset(
+        merged.columns
+    ) and "window_fraction" not in merged.columns:
+        merged["window_fraction"] = _safe_fraction(
+            merged["modified_count"], merged["valid_count"]
+        )
 
     ordered_columns = list(hits.columns)
     if "rank" in merged.columns and "rank" not in ordered_columns:
@@ -721,7 +814,9 @@ def merge_adjacent_hits(hits: pd.DataFrame, merge_distance: int) -> pd.DataFrame
     for column in ["window_id", "window_fraction", "merged_window_count"]:
         if column in merged.columns and column not in ordered_columns:
             ordered_columns.append(column)
-    merged = merged.loc[:, [column for column in ordered_columns if column in merged.columns]]
+    merged = merged.loc[
+        :, [column for column in ordered_columns if column in merged.columns]
+    ]
     return merged.reset_index(drop=True)
 
 
@@ -737,7 +832,9 @@ def hits_to_bed(hits: pd.DataFrame) -> pd.DataFrame:
         name = ordered["window_id"]
     else:
         name = ordered.apply(
-            lambda row: f"{row.get('chromosome', row.get('chrom'))}:{int(row['start'])}-{int(row['end'])}",
+            lambda row: (
+                f"{row.get('chromosome', row.get('chrom'))}:{int(row['start'])}-{int(row['end'])}"
+            ),
             axis=1,
         )
     if "score_value" in ordered.columns:
@@ -752,7 +849,11 @@ def hits_to_bed(hits: pd.DataFrame) -> pd.DataFrame:
     else:
         score = pd.Series([0] * len(ordered), index=ordered.index, dtype="int64")
     strand = ordered["strand"] if "strand" in ordered.columns else "."
-    strand = strand.where(strand.isin({"+", "-"}), ".") if isinstance(strand, pd.Series) else strand
+    strand = (
+        strand.where(strand.isin({"+", "-"}), ".")
+        if isinstance(strand, pd.Series)
+        else strand
+    )
 
     bed = pd.DataFrame(
         {
@@ -792,9 +893,13 @@ def scan_genome(
 ) -> RegionDiscoveryResult:
     motif_list = _validate_motifs(motifs)
     if score not in {"effect_size_only", "beta_binomial"}:
-        raise ValueError("scan_genome requires score in {'effect_size_only', 'beta_binomial'}.")
+        raise ValueError(
+            "scan_genome requires score in {'effect_size_only', 'beta_binomial'}."
+        )
     if score == "beta_binomial" and contrast is None:
-        raise ValueError("scan_genome score='beta_binomial' requires an explicit contrast.")
+        raise ValueError(
+            "scan_genome score='beta_binomial' requires an explicit contrast."
+        )
     if contrast is not None and contrast.mode not in {
         "pairwise",
         "group_vs_group",
@@ -823,7 +928,9 @@ def scan_genome(
     if _is_paired_contrast(contrast):
         if contrast.mode == "time_course":
             if not contrast.pairing_key:
-                raise ValueError("scan_genome paired discovery requires an explicit pairing_key.")
+                raise ValueError(
+                    "scan_genome paired discovery requires an explicit pairing_key."
+                )
             active_rank_by = active_rank_by or "trajectory_amplitude_mean"
             if active_rank_by != "trajectory_amplitude_mean":
                 raise ValueError(
@@ -831,7 +938,11 @@ def scan_genome(
                 )
             time_order = list(dict.fromkeys(contrast.time_order or []))
             available_conditions = set(window_summary["condition"].dropna().tolist())
-            missing_time_order = [condition for condition in time_order if condition not in available_conditions]
+            missing_time_order = [
+                condition
+                for condition in time_order
+                if condition not in available_conditions
+            ]
             if missing_time_order:
                 raise ValueError(
                     "scan_genome paired time_course requested missing time_order condition(s): "
@@ -844,8 +955,12 @@ def scan_genome(
                 raise ValueError(
                     "scan_genome matched_pairwise requires exactly one numerator and one denominator condition."
                 )
-        required_conditions = list(contrast.time_order or []) if contrast.mode == "time_course" else list(
-            dict.fromkeys((contrast.numerator or []) + (contrast.denominator or []))
+        required_conditions = (
+            list(contrast.time_order or [])
+            if contrast.mode == "time_course"
+            else list(
+                dict.fromkeys((contrast.numerator or []) + (contrast.denominator or []))
+            )
         )
         window_summary, pairing_metadata = _build_paired_window_table(
             window_summary,
@@ -856,9 +971,13 @@ def scan_genome(
         )
         if contrast.mode == "matched_pairwise":
             if score != "effect_size_only":
-                raise ValueError("scan_genome matched_pairwise currently supports score='effect_size_only'.")
+                raise ValueError(
+                    "scan_genome matched_pairwise currently supports score='effect_size_only'."
+                )
             if merge_hits:
-                raise ValueError("scan_genome matched_pairwise does not support merge_hits=True.")
+                raise ValueError(
+                    "scan_genome matched_pairwise does not support merge_hits=True."
+                )
             active_rank_by = active_rank_by or "mean_abs_delta"
             window_totals = _aggregate_window_counts(window_summary)
             scored = _score_matched_pairwise(
@@ -897,7 +1016,11 @@ def scan_genome(
             ]
             window_table.loc[~covered_mask, paired_score_columns] = pd.NA
             covered_hits = ranked.merge(
-                window_totals.loc[:, _WINDOW_KEY_COLUMNS + ["modified_count", "valid_count", "window_fraction"]],
+                window_totals.loc[
+                    :,
+                    _WINDOW_KEY_COLUMNS
+                    + ["modified_count", "valid_count", "window_fraction"],
+                ],
                 on=_WINDOW_KEY_COLUMNS,
                 how="left",
                 sort=False,
@@ -923,8 +1046,12 @@ def scan_genome(
                 "merge_hits": merge_hits,
                 "merge_distance": merge_distance,
                 "motifs": motif_list,
-                "include_contigs": list(include_contigs) if include_contigs is not None else None,
-                "exclude_contigs": list(exclude_contigs) if exclude_contigs is not None else None,
+                "include_contigs": list(include_contigs)
+                if include_contigs is not None
+                else None,
+                "exclude_contigs": list(exclude_contigs)
+                if exclude_contigs is not None
+                else None,
                 "contrast_mode": contrast.mode,
                 "contrast_numerator": list(contrast.numerator or []),
                 "contrast_denominator": list(contrast.denominator or []),
@@ -945,9 +1072,13 @@ def scan_genome(
             )
         if contrast.mode == "time_course":
             if score != "effect_size_only":
-                raise ValueError("scan_genome time_course currently supports score='effect_size_only'.")
+                raise ValueError(
+                    "scan_genome time_course currently supports score='effect_size_only'."
+                )
             if merge_hits:
-                raise ValueError("scan_genome time_course does not support merge_hits=True.")
+                raise ValueError(
+                    "scan_genome time_course does not support merge_hits=True."
+                )
             time_order = list(dict.fromkeys(contrast.time_order or []))
             window_totals = _aggregate_window_counts(window_summary)
             scored = _score_paired_time_course(window_summary, time_order=time_order)
@@ -980,7 +1111,11 @@ def scan_genome(
             ]
             window_table.loc[~covered_mask, paired_score_columns] = pd.NA
             covered_hits = ranked.merge(
-                window_totals.loc[:, _WINDOW_KEY_COLUMNS + ["modified_count", "valid_count", "window_fraction"]],
+                window_totals.loc[
+                    :,
+                    _WINDOW_KEY_COLUMNS
+                    + ["modified_count", "valid_count", "window_fraction"],
+                ],
                 on=_WINDOW_KEY_COLUMNS,
                 how="left",
                 sort=False,
@@ -1006,8 +1141,12 @@ def scan_genome(
                 "merge_hits": merge_hits,
                 "merge_distance": merge_distance,
                 "motifs": motif_list,
-                "include_contigs": list(include_contigs) if include_contigs is not None else None,
-                "exclude_contigs": list(exclude_contigs) if exclude_contigs is not None else None,
+                "include_contigs": list(include_contigs)
+                if include_contigs is not None
+                else None,
+                "exclude_contigs": list(exclude_contigs)
+                if exclude_contigs is not None
+                else None,
                 "contrast_mode": contrast.mode,
                 "contrast_numerator": list(contrast.numerator or []),
                 "contrast_denominator": list(contrast.denominator or []),
@@ -1080,8 +1219,12 @@ def scan_genome(
         "merge_hits": merge_hits,
         "merge_distance": merge_distance,
         "motifs": motif_list,
-        "include_contigs": list(include_contigs) if include_contigs is not None else None,
-        "exclude_contigs": list(exclude_contigs) if exclude_contigs is not None else None,
+        "include_contigs": list(include_contigs)
+        if include_contigs is not None
+        else None,
+        "exclude_contigs": list(exclude_contigs)
+        if exclude_contigs is not None
+        else None,
     }
     if contrast is not None:
         metadata["contrast_mode"] = contrast.mode

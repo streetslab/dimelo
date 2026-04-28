@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from dimelo.artifacts import artifact_fingerprint, artifact_is_compatible, resolve_artifact
+from dimelo.artifacts import (
+    artifact_fingerprint,
+    artifact_is_compatible,
+    resolve_artifact,
+)
 from dimelo.models import DatasetArtifact
 
 

@@ -2,14 +2,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dimelo.models import (
-    ContrastSpec,
-    GlobalAnalysisResult,
-    RegionContrastResult,
-    RegionDiscoveryResult,
-    SharedClusterModel,
-    SharedClusterResult,
-)
 from dimelo import (
     plot_depth_histogram,
     plot_depth_profile,
@@ -17,6 +9,14 @@ from dimelo import (
     plot_enrichment_profile,
     plot_reads,
     plotting,
+)
+from dimelo.models import (
+    ContrastSpec,
+    GlobalAnalysisResult,
+    RegionContrastResult,
+    RegionDiscoveryResult,
+    SharedClusterModel,
+    SharedClusterResult,
 )
 
 
@@ -69,7 +69,9 @@ def test_plot_depth_profile_by_regions_accepts_regions_alias(monkeypatch):
         captured.update(kwargs)
         return "axes"
 
-    monkeypatch.setattr(plot_depth_profile, "plot_depth_profile", fake_plot_depth_profile)
+    monkeypatch.setattr(
+        plot_depth_profile, "plot_depth_profile", fake_plot_depth_profile
+    )
 
     axes = plot_depth_profile.by_regions(
         mod_file_name="pileup.fake",
@@ -231,7 +233,13 @@ def test_prepare_cluster_distribution_bar_data_handles_empty_input_shape():
 
     result = plotting.prepare_cluster_distribution_bar_data(cluster_distribution)
 
-    assert list(result.columns) == ["sample_id", "condition", "cluster", "count", "fraction"]
+    assert list(result.columns) == [
+        "sample_id",
+        "condition",
+        "cluster",
+        "count",
+        "fraction",
+    ]
     assert result.empty
 
 
@@ -541,13 +549,23 @@ def test_prepare_shared_cluster_distribution_data_returns_distribution_payload()
         "metadata",
     }
     assert sample_distribution["sample_id"].tolist() == ["s1", "s1", "s2", "s2"]
-    assert sample_distribution["condition"].tolist() == ["NS", "NS", "treated", "treated"]
+    assert sample_distribution["condition"].tolist() == [
+        "NS",
+        "NS",
+        "treated",
+        "treated",
+    ]
     assert sample_distribution["cluster"].tolist() == ["C0", "C1", "C0", "C1"]
     assert sample_distribution["count"].tolist() == [2, 1, 1, 3]
     assert sample_distribution["fraction"].tolist() == pytest.approx(
         [2 / 3, 1 / 3, 1 / 4, 3 / 4]
     )
-    assert condition_distribution["condition"].tolist() == ["NS", "NS", "treated", "treated"]
+    assert condition_distribution["condition"].tolist() == [
+        "NS",
+        "NS",
+        "treated",
+        "treated",
+    ]
     assert condition_distribution["cluster"].tolist() == ["C0", "C1", "C0", "C1"]
     assert condition_distribution["count"].tolist() == [2, 1, 1, 3]
     assert condition_distribution["fraction"].tolist() == pytest.approx(
@@ -558,8 +576,12 @@ def test_prepare_shared_cluster_distribution_data_returns_distribution_payload()
     assert distribution_change["cluster"].tolist() == ["C0", "C1"]
     assert distribution_change["count"].tolist() == [1, 3]
     assert distribution_change["fraction"].tolist() == pytest.approx([1 / 4, 3 / 4])
-    assert distribution_change["reference_fraction"].tolist() == pytest.approx([2 / 3, 1 / 3])
-    assert distribution_change["delta_fraction"].tolist() == pytest.approx([-5 / 12, 5 / 12])
+    assert distribution_change["reference_fraction"].tolist() == pytest.approx(
+        [2 / 3, 1 / 3]
+    )
+    assert distribution_change["delta_fraction"].tolist() == pytest.approx(
+        [-5 / 12, 5 / 12]
+    )
     assert distribution_change["log2_fc"].tolist() == pytest.approx(
         [-1.415037499278844, 1.1699250014423124]
     )
@@ -578,6 +600,7 @@ def test_plotting_matplotlib_module_exports_save_figure():
 
 def test_save_figure_writes_png(tmp_path):
     from matplotlib import pyplot as plt
+
     from dimelo import plotting_matplotlib
 
     fig, ax = plt.subplots()
@@ -615,7 +638,12 @@ def test_prepare_shared_cluster_distribution_data_handles_missing_change_table()
     assert sample_distribution["fraction"].tolist() == pytest.approx(
         [2 / 3, 1 / 3, 1 / 4, 3 / 4]
     )
-    assert condition_distribution["condition"].tolist() == ["NS", "NS", "treated", "treated"]
+    assert condition_distribution["condition"].tolist() == [
+        "NS",
+        "NS",
+        "treated",
+        "treated",
+    ]
     assert condition_distribution["cluster"].tolist() == ["C0", "C1", "C0", "C1"]
     assert condition_distribution["count"].tolist() == [2, 1, 1, 3]
     assert condition_distribution["fraction"].tolist() == pytest.approx(
@@ -630,7 +658,12 @@ def test_plot_shared_cluster_distribution_matplotlib_returns_figure_and_axis():
     payload = plotting.prepare_shared_cluster_distribution_data(
         result=_make_shared_cluster_result_with_explicit_display_order()
     )
-    assert payload["sample_distribution"]["sample_id"].tolist() == ["s1", "s1", "s2", "s2"]
+    assert payload["sample_distribution"]["sample_id"].tolist() == [
+        "s1",
+        "s1",
+        "s2",
+        "s2",
+    ]
     assert payload["condition_distribution"]["condition"].tolist() == [
         "NS",
         "NS",
@@ -638,25 +671,37 @@ def test_plot_shared_cluster_distribution_matplotlib_returns_figure_and_axis():
         "treated",
     ]
 
-    fig, ax = plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(payload, level="sample")
+    fig, ax = plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(
+        payload, level="sample"
+    )
 
     assert fig is not None
     assert ax is not None
     assert [text.get_text() for text in ax.get_legend().texts] == ["C1", "C0"]
-    assert [tick.get_text() for tick in ax.get_xticklabels() if tick.get_text()] == ["s1", "s2"]
+    assert [tick.get_text() for tick in ax.get_xticklabels() if tick.get_text()] == [
+        "s1",
+        "s2",
+    ]
 
-    fig, ax = plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(payload, level="condition")
+    fig, ax = plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(
+        payload, level="condition"
+    )
 
     assert fig is not None
     assert ax is not None
     assert [text.get_text() for text in ax.get_legend().texts] == ["C1", "C0"]
-    assert [tick.get_text() for tick in ax.get_xticklabels() if tick.get_text()] == ["NS", "treated"]
+    assert [tick.get_text() for tick in ax.get_xticklabels() if tick.get_text()] == [
+        "NS",
+        "treated",
+    ]
 
 
 def test_plot_shared_cluster_distribution_matplotlib_rejects_duplicate_x_cluster_rows():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_shared_cluster_distribution_data(result=_make_shared_cluster_result())
+    payload = plotting.prepare_shared_cluster_distribution_data(
+        result=_make_shared_cluster_result()
+    )
     duplicate_row = payload["sample_distribution"].iloc[[0]]
     payload["sample_distribution"] = pd.concat(
         [payload["sample_distribution"], duplicate_row],
@@ -664,7 +709,9 @@ def test_plot_shared_cluster_distribution_matplotlib_rejects_duplicate_x_cluster
     )
 
     with pytest.raises(ValueError, match="duplicate cluster fractions"):
-        plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(payload, level="sample")
+        plotting_matplotlib.plot_shared_cluster_distribution_matplotlib(
+            payload, level="sample"
+        )
 
 
 def test_plot_shared_cluster_change_matplotlib_returns_figure_and_axis():
@@ -698,7 +745,9 @@ def test_plot_shared_cluster_change_matplotlib_returns_figure_and_axis():
 def test_plot_shared_cluster_change_matplotlib_rejects_duplicate_condition_cluster_rows():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_shared_cluster_distribution_data(result=_make_shared_cluster_result())
+    payload = plotting.prepare_shared_cluster_distribution_data(
+        result=_make_shared_cluster_result()
+    )
     duplicate_row = payload["distribution_change"].iloc[[0]]
     payload["distribution_change"] = pd.concat(
         [payload["distribution_change"], duplicate_row],
@@ -715,7 +764,9 @@ def test_plot_shared_cluster_change_matplotlib_preserves_sparse_missing_pairs():
     payload = plotting.prepare_shared_cluster_distribution_data(
         result=_make_shared_cluster_result_with_explicit_display_order()
     )
-    payload["distribution_change"] = payload["distribution_change"].iloc[[1, 2]].reset_index(drop=True)
+    payload["distribution_change"] = (
+        payload["distribution_change"].iloc[[1, 2]].reset_index(drop=True)
+    )
 
     fig, ax = plotting_matplotlib.plot_shared_cluster_change_matplotlib(payload)
 
@@ -739,9 +790,11 @@ def test_plot_shared_cluster_change_matplotlib_preserves_missing_condition_row()
     payload = plotting.prepare_shared_cluster_distribution_data(
         result=_make_shared_cluster_result_with_explicit_display_order()
     )
-    payload["distribution_change"] = payload["distribution_change"].loc[
-        payload["distribution_change"]["condition"] == "treated"
-    ].reset_index(drop=True)
+    payload["distribution_change"] = (
+        payload["distribution_change"]
+        .loc[payload["distribution_change"]["condition"] == "treated"]
+        .reset_index(drop=True)
+    )
 
     fig, ax = plotting_matplotlib.plot_shared_cluster_change_matplotlib(payload)
 
@@ -764,9 +817,11 @@ def test_plot_shared_cluster_change_matplotlib_preserves_missing_cluster_column(
     payload = plotting.prepare_shared_cluster_distribution_data(
         result=_make_shared_cluster_result_with_explicit_display_order()
     )
-    payload["distribution_change"] = payload["distribution_change"].loc[
-        payload["distribution_change"]["cluster"] == "C1"
-    ].reset_index(drop=True)
+    payload["distribution_change"] = (
+        payload["distribution_change"]
+        .loc[payload["distribution_change"]["cluster"] == "C1"]
+        .reset_index(drop=True)
+    )
 
     fig, ax = plotting_matplotlib.plot_shared_cluster_change_matplotlib(payload)
 
@@ -814,7 +869,9 @@ def _make_shared_cluster_profile_result() -> SharedClusterResult:
     )
 
 
-def _make_shared_cluster_profile_result_with_explicit_display_order() -> SharedClusterResult:
+def _make_shared_cluster_profile_result_with_explicit_display_order() -> (
+    SharedClusterResult
+):
     return SharedClusterResult(
         model=SharedClusterModel(
             mode="region_anchored",
@@ -865,7 +922,9 @@ def test_prepare_shared_cluster_profile_data_returns_long_form_profiles():
 def test_prepare_shared_cluster_profile_data_respects_feature_subset():
     result = _make_shared_cluster_profile_result()
 
-    payload = plotting.prepare_shared_cluster_profile_data(result=result, features=["f1"])
+    payload = plotting.prepare_shared_cluster_profile_data(
+        result=result, features=["f1"]
+    )
     profile_table = payload["profile_table"]
 
     assert profile_table.to_dict("records") == [
@@ -877,9 +936,13 @@ def test_prepare_shared_cluster_profile_data_respects_feature_subset():
 def test_plot_shared_cluster_profile_heatmap_matplotlib_returns_figure_and_axis():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_shared_cluster_profile_data(result=_make_shared_cluster_profile_result())
+    payload = plotting.prepare_shared_cluster_profile_data(
+        result=_make_shared_cluster_profile_result()
+    )
 
-    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_heatmap_matplotlib(payload)
+    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_heatmap_matplotlib(
+        payload
+    )
 
     assert fig is not None
     assert ax is not None
@@ -892,7 +955,9 @@ def test_plot_shared_cluster_profile_heatmap_matplotlib_preserves_payload_order(
         result=_make_shared_cluster_profile_result_with_explicit_display_order()
     )
 
-    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_heatmap_matplotlib(payload)
+    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_heatmap_matplotlib(
+        payload
+    )
 
     assert fig is not None
     assert ax is not None
@@ -910,7 +975,9 @@ def test_plot_shared_cluster_profile_heatmap_matplotlib_preserves_payload_order(
 def test_plot_shared_cluster_profile_heatmap_matplotlib_rejects_duplicate_cluster_feature_rows():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_shared_cluster_profile_data(result=_make_shared_cluster_profile_result())
+    payload = plotting.prepare_shared_cluster_profile_data(
+        result=_make_shared_cluster_profile_result()
+    )
     duplicate_row = payload["profile_table"].iloc[[0]]
     payload["profile_table"] = pd.concat(
         [payload["profile_table"], duplicate_row],
@@ -928,7 +995,9 @@ def test_plot_shared_cluster_profile_heatmap_matplotlib_handles_empty_payload():
     result.cluster_profiles = pd.DataFrame(columns=["cluster", "count", "f0", "f1"])
     payload = plotting.prepare_shared_cluster_profile_data(result=result)
 
-    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_heatmap_matplotlib(payload)
+    fig, ax = plotting_matplotlib.plot_shared_cluster_profile_heatmap_matplotlib(
+        payload
+    )
 
     assert fig is not None
     assert ax is not None
@@ -940,7 +1009,9 @@ def test_plot_shared_cluster_profile_heatmap_matplotlib_handles_empty_payload():
 def test_plot_shared_cluster_profile_series_matplotlib_returns_figure_and_axis():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_shared_cluster_profile_data(result=_make_shared_cluster_profile_result())
+    payload = plotting.prepare_shared_cluster_profile_data(
+        result=_make_shared_cluster_profile_result()
+    )
 
     fig, ax = plotting_matplotlib.plot_shared_cluster_profile_series_matplotlib(payload)
 
@@ -970,7 +1041,9 @@ def test_plot_shared_cluster_profile_series_matplotlib_preserves_payload_order()
 def test_plot_shared_cluster_profile_series_matplotlib_rejects_duplicate_cluster_feature_rows():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_shared_cluster_profile_data(result=_make_shared_cluster_profile_result())
+    payload = plotting.prepare_shared_cluster_profile_data(
+        result=_make_shared_cluster_profile_result()
+    )
     duplicate_row = payload["profile_table"].iloc[[0]]
     payload["profile_table"] = pd.concat(
         [payload["profile_table"], duplicate_row],
@@ -987,9 +1060,11 @@ def test_plot_shared_cluster_profile_series_matplotlib_preserves_missing_cluster
     payload = plotting.prepare_shared_cluster_profile_data(
         result=_make_shared_cluster_profile_result_with_explicit_display_order()
     )
-    payload["profile_table"] = payload["profile_table"].loc[
-        payload["profile_table"]["cluster"] == "C1"
-    ].reset_index(drop=True)
+    payload["profile_table"] = (
+        payload["profile_table"]
+        .loc[payload["profile_table"]["cluster"] == "C1"]
+        .reset_index(drop=True)
+    )
 
     fig, ax = plotting_matplotlib.plot_shared_cluster_profile_series_matplotlib(payload)
 
@@ -1183,7 +1258,9 @@ def test_prepare_shared_cluster_region_data_rejects_missing_region_summaries():
 def test_plot_shared_cluster_region_matplotlib_defaults_to_condition_level():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_shared_cluster_region_data(result=_make_shared_cluster_region_result())
+    payload = plotting.prepare_shared_cluster_region_data(
+        result=_make_shared_cluster_region_result()
+    )
 
     fig, ax = plotting_matplotlib.plot_shared_cluster_region_matplotlib(payload)
 
@@ -1192,7 +1269,10 @@ def test_plot_shared_cluster_region_matplotlib_defaults_to_condition_level():
     image = ax.images[0]
 
     assert [tick.get_text() for tick in ax.get_xticklabels()] == ["C0", "C1"]
-    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["reg1 | NS", "reg1 | treated"]
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == [
+        "reg1 | NS",
+        "reg1 | treated",
+    ]
     assert image.origin == "upper"
     np.testing.assert_allclose(
         np.asarray(image.get_array()),
@@ -1203,7 +1283,9 @@ def test_plot_shared_cluster_region_matplotlib_defaults_to_condition_level():
 def test_plot_shared_cluster_region_matplotlib_supports_sample_level():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_shared_cluster_region_data(result=_make_shared_cluster_region_result())
+    payload = plotting.prepare_shared_cluster_region_data(
+        result=_make_shared_cluster_region_result()
+    )
 
     fig, ax = plotting_matplotlib.plot_shared_cluster_region_matplotlib(
         payload,
@@ -1215,7 +1297,10 @@ def test_plot_shared_cluster_region_matplotlib_supports_sample_level():
     image = ax.images[0]
 
     assert [tick.get_text() for tick in ax.get_xticklabels()] == ["C0", "C1"]
-    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["reg1 | s1", "reg1 | s2"]
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == [
+        "reg1 | s1",
+        "reg1 | s2",
+    ]
     assert image.origin == "upper"
     np.testing.assert_allclose(
         np.asarray(image.get_array()),
@@ -1226,7 +1311,9 @@ def test_plot_shared_cluster_region_matplotlib_supports_sample_level():
 def test_plot_shared_cluster_region_matplotlib_rejects_duplicate_row_cluster_values():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_shared_cluster_region_data(result=_make_shared_cluster_region_result())
+    payload = plotting.prepare_shared_cluster_region_data(
+        result=_make_shared_cluster_region_result()
+    )
     duplicate_row = payload["condition_region_table"].iloc[[0]]
     payload["condition_region_table"] = pd.concat(
         [payload["condition_region_table"], duplicate_row],
@@ -1289,16 +1376,37 @@ def test_prepare_read_cluster_region_association_data_accepts_long_form_fraction
     matrix_table = payload["matrix_table"]
     top_regions_table = payload["top_regions_table"]
 
-    assert list(association_table["region_id"].drop_duplicates()) == ["chr1:10-20:+", "chr1:30-40:-"]
+    assert list(association_table["region_id"].drop_duplicates()) == [
+        "chr1:30-40:-",
+        "chr1:10-20:+",
+    ]
     assert list(matrix_table.columns) == ["region_id", "C0", "C1"]
-    assert list(matrix_table["region_id"]) == ["chr1:10-20:+", "chr1:30-40:-"]
+    assert list(matrix_table["region_id"]) == ["chr1:30-40:-", "chr1:10-20:+"]
     np.testing.assert_allclose(
         matrix_table.loc[:, ["C0", "C1"]].to_numpy(),
-        np.array([[0.25, 0.75], [0.60, 0.40]]),
+        np.array([[0.60, 0.40], [0.25, 0.75]]),
     )
+    assert payload["metadata"]["region_sort"] == "cluster_fraction"
     assert top_regions_table.iloc[0]["cluster"] == "C0"
     assert top_regions_table.iloc[0]["region_id"] == "chr1:30-40:-"
     assert top_regions_table.iloc[0]["value"] == pytest.approx(0.60)
+
+
+def test_prepare_read_cluster_region_association_data_supports_cluster_fraction_sort():
+    table = _make_read_cluster_region_association_table()
+
+    payload = plotting.prepare_read_cluster_region_association_data(
+        table,
+        region_sort="cluster_fraction",
+    )
+
+    assert payload["metadata"]["region_sort"] == "cluster_fraction"
+    # Region chr1:30-40:- is dominant in C0 at 0.60; chr1:10-20:+ is dominant in C1 at 0.75.
+    # Cluster order is C0, C1, so C0-dominant regions appear first.
+    assert list(payload["matrix_table"]["region_id"]) == [
+        "chr1:30-40:-",
+        "chr1:10-20:+",
+    ]
 
 
 def test_prepare_read_cluster_region_association_data_uses_requested_log2_enrichment_values():
@@ -1316,7 +1424,7 @@ def test_prepare_read_cluster_region_association_data_uses_requested_log2_enrich
     assert list(matrix_table.columns) == ["region_id", "C0", "C1"]
     np.testing.assert_allclose(
         matrix_table.loc[:, ["C0", "C1"]].to_numpy(),
-        np.array([[-1.0, 1.5], [0.25, -0.10]]),
+        np.array([[0.25, -0.10], [-1.0, 1.5]]),
     )
     assert list(top_regions_table["cluster"]) == ["C0", "C1"]
     assert list(top_regions_table["region_id"]) == ["chr1:30-40:-", "chr1:10-20:+"]
@@ -1332,7 +1440,10 @@ def test_prepare_read_cluster_region_association_data_supports_genomic_sort():
     )
 
     assert payload["metadata"]["region_sort"] == "genomic"
-    assert list(payload["matrix_table"]["region_id"]) == ["chr1:10-20:+", "chr1:30-40:-"]
+    assert list(payload["matrix_table"]["region_id"]) == [
+        "chr1:10-20:+",
+        "chr1:30-40:-",
+    ]
     assert "region_axis_table" in payload
 
 
@@ -1346,7 +1457,10 @@ def test_prepare_read_cluster_region_association_data_supports_association_stren
     )
 
     # chr1:10-20:+ has max value 0.75, chr1:30-40:- has max value 0.60
-    assert list(payload["matrix_table"]["region_id"]) == ["chr1:10-20:+", "chr1:30-40:-"]
+    assert list(payload["matrix_table"]["region_id"]) == [
+        "chr1:10-20:+",
+        "chr1:30-40:-",
+    ]
     assert payload["metadata"]["association_strength_aggregate"] == "max"
 
 
@@ -1389,7 +1503,10 @@ def test_prepare_read_cluster_region_association_data_accepts_legacy_wide_region
     matrix_table = payload["matrix_table"]
     top_regions_table = payload["top_regions_table"]
 
-    assert list(association_table["region_id"].drop_duplicates()) == ["chr1:10-20:+", "chr1:30-40:-"]
+    assert list(association_table["region_id"].drop_duplicates()) == [
+        "chr1:10-20:+",
+        "chr1:30-40:-",
+    ]
     assert list(matrix_table.columns) == ["region_id", 0, 1]
     np.testing.assert_allclose(
         matrix_table.loc[:, [0, 1]].to_numpy(),
@@ -1401,7 +1518,9 @@ def test_prepare_read_cluster_region_association_data_accepts_legacy_wide_region
 
 
 def test_prepare_read_cluster_region_association_data_rejects_missing_requested_mode():
-    table = _make_read_cluster_region_association_table().drop(columns=["log2_enrichment"])
+    table = _make_read_cluster_region_association_table().drop(
+        columns=["log2_enrichment"]
+    )
 
     with pytest.raises(ValueError, match="log2_enrichment"):
         plotting.prepare_read_cluster_region_association_data(
@@ -1413,18 +1532,60 @@ def test_prepare_read_cluster_region_association_data_rejects_missing_requested_
 def test_plot_read_cluster_region_association_heatmap_matplotlib_returns_figure_and_axis():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_read_cluster_region_association_data(_make_read_cluster_region_association_table())
+    payload = plotting.prepare_read_cluster_region_association_data(
+        _make_read_cluster_region_association_table()
+    )
 
-    fig, ax = plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(payload)
+    fig, ax = (
+        plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
+            payload
+        )
+    )
 
     assert fig is not None
     assert ax is not None
     assert [tick.get_text() for tick in ax.get_xticklabels()] == ["C0", "C1"]
-    assert [tick.get_text() for tick in ax.get_yticklabels()] == ["chr1:10-20:+", "chr1:30-40:-"]
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == [
+        "chr1:30-40:-",
+        "chr1:10-20:+",
+    ]
     np.testing.assert_allclose(
         np.asarray(ax.images[0].get_array()),
-        np.array([[0.25, 0.75], [0.60, 0.40]]),
+        np.array([[0.60, 0.40], [0.25, 0.75]]),
     )
+
+
+def test_plot_read_cluster_region_association_heatmap_matplotlib_accepts_region_sort_override():
+    from dimelo import plotting_matplotlib
+
+    table = pd.DataFrame(
+        [
+            {"region_id": "chr1:100-110:+", "cluster": "C0", "fraction": 0.90},
+            {"region_id": "chr1:100-110:+", "cluster": "C1", "fraction": 0.10},
+            {"region_id": "chr1:10-20:+", "cluster": "C0", "fraction": 0.80},
+            {"region_id": "chr1:10-20:+", "cluster": "C1", "fraction": 0.20},
+        ]
+    )
+    payload = plotting.prepare_read_cluster_region_association_data(
+        table, region_sort="genomic"
+    )
+    axis_table = payload["region_axis_table"].copy()
+    axis_table["source_label"] = ["late", "early"]
+    payload["region_axis_table"] = axis_table
+
+    fig, ax = (
+        plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
+            payload,
+            region_sort="association_strength",
+            row_annotation_column="source_label",
+        )
+    )
+
+    assert fig is not None
+    assert ax is not None
+    # association_strength sort should place chr1:100-110:+ before chr1:10-20:+
+    ytick_text = [tick.get_text() for tick in ax.get_yticklabels()]
+    assert ytick_text[0].startswith("chr1:100-110:+")
 
 
 def test_plot_read_cluster_region_association_heatmap_matplotlib_supports_row_annotations():
@@ -1438,11 +1599,13 @@ def test_plot_read_cluster_region_association_heatmap_matplotlib_supports_row_an
     axis_table["source_label"] = ["on_target", "off_target"]
     payload["region_axis_table"] = axis_table
 
-    fig, ax = plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
-        payload,
-        row_annotation_column="source_label",
-        row_annotation_title="Source bed",
-        row_annotation_palette={"on_target": "#D95F02", "off_target": "#1B9E77"},
+    fig, ax = (
+        plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
+            payload,
+            row_annotation_column="source_label",
+            row_annotation_title="Source bed",
+            row_annotation_palette={"on_target": "#D95F02", "off_target": "#1B9E77"},
+        )
     )
 
     assert fig is not None
@@ -1450,6 +1613,15 @@ def test_plot_read_cluster_region_association_heatmap_matplotlib_supports_row_an
     ytick_text = [tick.get_text() for tick in ax.get_yticklabels()]
     assert "on_target" in ytick_text[0]
     assert "off_target" in ytick_text[1]
+    main_pos = ax.get_position()
+    left_side_axes = [
+        axis
+        for axis in fig.axes
+        if axis is not ax and axis.get_position().x1 <= main_pos.x0
+    ]
+    assert left_side_axes
+    # The source-bed strip should live fully to the left of the heatmap.
+    assert max(axis.get_position().x1 for axis in left_side_axes) <= main_pos.x0
 
 
 def test_plot_read_cluster_region_association_heatmap_matplotlib_grouped_region_labels():
@@ -1467,16 +1639,20 @@ def test_plot_read_cluster_region_association_heatmap_matplotlib_grouped_region_
             {"region_id": "chr2:30-40:+", "cluster": 1, "fraction": 0.35},
         ]
     )
-    payload = plotting.prepare_read_cluster_region_association_data(table, region_sort="genomic")
+    payload = plotting.prepare_read_cluster_region_association_data(
+        table, region_sort="genomic"
+    )
     axis_table = payload["region_axis_table"].copy()
     axis_table["source_label"] = ["on_target", "on_target", "off_target", "off_target"]
     payload["region_axis_table"] = axis_table
 
-    fig, ax = plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
-        payload,
-        region_label_mode="genomic",
-        row_annotation_column="source_label",
-        group_region_labels=True,
+    fig, ax = (
+        plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
+            payload,
+            region_label_mode="genomic",
+            row_annotation_column="source_label",
+            group_region_labels=True,
+        )
     )
 
     assert fig is not None
@@ -1489,10 +1665,30 @@ def test_plot_read_cluster_region_association_heatmap_matplotlib_grouped_region_
 def _minimal_region_contrast_result() -> RegionContrastResult:
     regions = pd.DataFrame(
         [
-            {"region_id": "chr1:90-110,+", "condition": "NS", "fraction": 0.20, "rank": 2},
-            {"region_id": "chr1:90-110,+", "condition": "15min", "fraction": 0.55, "rank": 2},
-            {"region_id": "chr1:190-210,-", "condition": "NS", "fraction": 0.30, "rank": 1},
-            {"region_id": "chr1:190-210,-", "condition": "15min", "fraction": 0.70, "rank": 1},
+            {
+                "region_id": "chr1:90-110,+",
+                "condition": "NS",
+                "fraction": 0.20,
+                "rank": 2,
+            },
+            {
+                "region_id": "chr1:90-110,+",
+                "condition": "15min",
+                "fraction": 0.55,
+                "rank": 2,
+            },
+            {
+                "region_id": "chr1:190-210,-",
+                "condition": "NS",
+                "fraction": 0.30,
+                "rank": 1,
+            },
+            {
+                "region_id": "chr1:190-210,-",
+                "condition": "15min",
+                "fraction": 0.70,
+                "rank": 1,
+            },
         ]
     )
     summary = pd.DataFrame(
@@ -1547,9 +1743,24 @@ def _group_vs_group_region_contrast_result() -> RegionContrastResult:
     return RegionContrastResult(
         regions=pd.DataFrame(
             [
-                {"region_id": "chr1:90-110,+", "condition": "NS", "fraction": 0.10, "rank": 1},
-                {"region_id": "chr1:90-110,+", "condition": "15min", "fraction": 0.50, "rank": 1},
-                {"region_id": "chr1:90-110,+", "condition": "30min", "fraction": 0.70, "rank": 1},
+                {
+                    "region_id": "chr1:90-110,+",
+                    "condition": "NS",
+                    "fraction": 0.10,
+                    "rank": 1,
+                },
+                {
+                    "region_id": "chr1:90-110,+",
+                    "condition": "15min",
+                    "fraction": 0.50,
+                    "rank": 1,
+                },
+                {
+                    "region_id": "chr1:90-110,+",
+                    "condition": "30min",
+                    "fraction": 0.70,
+                    "rank": 1,
+                },
             ]
         ),
         summary=summary,
@@ -1569,7 +1780,9 @@ def _group_vs_group_region_contrast_result() -> RegionContrastResult:
     )
 
 
-def _region_contrast_plot_setup(position_rows: list[dict[str, object]]) -> tuple[
+def _region_contrast_plot_setup(
+    position_rows: list[dict[str, object]],
+) -> tuple[
     RegionContrastResult,
     pd.DataFrame,
     plotting.AxisSpec,
@@ -1589,7 +1802,9 @@ def _region_contrast_plot_setup(position_rows: list[dict[str, object]]) -> tuple
     )
 
 
-def _region_contrast_position_rows(*, include_grouping_key: bool = True) -> list[dict[str, object]]:
+def _region_contrast_position_rows(
+    *, include_grouping_key: bool = True
+) -> list[dict[str, object]]:
     base_rows = [
         {
             "region_id": "chr1:90-110,+",
@@ -1962,7 +2177,10 @@ def test_prepare_region_discovery_scan_data_rejects_hits_missing_from_filtered_w
         figures=result.figures,
     )
 
-    with pytest.raises(ValueError, match="result.hits contains window_id values not present in the filtered windows table"):
+    with pytest.raises(
+        ValueError,
+        match="result.hits contains window_id values not present in the filtered windows table",
+    ):
         plotting.prepare_region_discovery_scan_data(
             result=inconsistent_result,
             contigs=["chr2"],
@@ -1981,8 +2199,14 @@ def test_prepare_region_discovery_hit_context_data_uses_top_ranked_hits():
     assert set(payload) == {"context_table", "selected_hits", "metadata"}
     assert payload["selected_hits"]["window_id"].tolist() == ["chr1:100-200:+"]
     assert payload["selected_hits"]["rank"].tolist() == [1]
-    assert payload["context_table"]["selected_hit_id"].tolist() == ["chr1:100-200:+", "chr1:100-200:+"]
-    assert payload["context_table"]["window_id"].tolist() == ["chr1:0-100:+", "chr1:100-200:+"]
+    assert payload["context_table"]["selected_hit_id"].tolist() == [
+        "chr1:100-200:+",
+        "chr1:100-200:+",
+    ]
+    assert payload["context_table"]["window_id"].tolist() == [
+        "chr1:0-100:+",
+        "chr1:100-200:+",
+    ]
     assert payload["context_table"]["selected_hit_rank"].nunique() == 1
     assert payload["context_table"]["selected_hit_rank"].iloc[0] == 1
     assert payload["context_table"]["is_selected_hit"].sum() == 1
@@ -1997,7 +2221,10 @@ def test_prepare_region_discovery_hit_context_data_adds_relative_window_offsets(
         padding_windows=1,
     )
 
-    assert payload["context_table"]["window_id"].tolist() == ["chr1:0-100:+", "chr1:100-200:+"]
+    assert payload["context_table"]["window_id"].tolist() == [
+        "chr1:0-100:+",
+        "chr1:100-200:+",
+    ]
     assert payload["context_table"]["relative_window_offset"].tolist() == [-1, 0]
 
 
@@ -2008,7 +2235,11 @@ def test_prepare_region_discovery_hit_context_data_returns_empty_payload_for_no_
         hits=pd.DataFrame(columns=base_result.hits.columns),
         contrast=None,
         plot_data={},
-        metadata={"score": "effect_size_only", "contrast_mode": "pairwise", "merge_hits": False},
+        metadata={
+            "score": "effect_size_only",
+            "contrast_mode": "pairwise",
+            "merge_hits": False,
+        },
     )
 
     payload = plotting.prepare_region_discovery_hit_context_data(result=result)
@@ -2021,7 +2252,9 @@ def test_prepare_region_discovery_hit_context_data_returns_empty_payload_for_no_
 def test_plot_region_discovery_scan_matplotlib_returns_figure_and_axes():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_region_discovery_scan_data(result=_make_region_discovery_result())
+    payload = plotting.prepare_region_discovery_scan_data(
+        result=_make_region_discovery_result()
+    )
 
     fig, axes = plotting_matplotlib.plot_region_discovery_scan_matplotlib(payload)
 
@@ -2037,7 +2270,9 @@ def test_plot_region_discovery_hit_context_matplotlib_returns_figure_and_axes():
         top_n=2,
     )
 
-    fig, axes = plotting_matplotlib.plot_region_discovery_hit_context_matplotlib(payload)
+    fig, axes = plotting_matplotlib.plot_region_discovery_hit_context_matplotlib(
+        payload
+    )
 
     assert fig is not None
     assert axes is not None
@@ -2048,13 +2283,22 @@ def test_prepare_global_analysis_summary_data_returns_expected_tables():
 
     payload = plotting.prepare_global_analysis_summary_data(result=result)
 
-    assert set(payload) == {"sample_summary", "condition_summary", "normalization_table", "metadata"}
+    assert set(payload) == {
+        "sample_summary",
+        "condition_summary",
+        "normalization_table",
+        "metadata",
+    }
     assert payload["sample_summary"]["sample_id"].tolist() == ["s1", "s2", "s3", "s1"]
-    assert payload["normalization_table"]["sample_id"].tolist() == ["s1", "s2", "s3", "s1"]
-    assert (
-        payload["condition_summary"][["condition", "motif"]].apply(tuple, axis=1).tolist()
-        == [("NS", "A,0"), ("treated", "A,0"), ("NS", "CG,0")]
-    )
+    assert payload["normalization_table"]["sample_id"].tolist() == [
+        "s1",
+        "s2",
+        "s3",
+        "s1",
+    ]
+    assert payload["condition_summary"][["condition", "motif"]].apply(
+        tuple, axis=1
+    ).tolist() == [("NS", "A,0"), ("treated", "A,0"), ("NS", "CG,0")]
     assert payload["condition_summary"]["sample_n"].tolist() == [1, 2, 1]
     assert payload["metadata"]["motifs"] == ["A,0", "CG,0"]
 
@@ -2065,9 +2309,15 @@ def test_prepare_global_analysis_summary_data_computes_condition_means():
     payload = plotting.prepare_global_analysis_summary_data(result=result)
     condition_summary = payload["condition_summary"].set_index(["condition", "motif"])
 
-    assert condition_summary.loc[("NS", "A,0"), "global_fraction_mean"] == pytest.approx(0.5)
-    assert condition_summary.loc[("treated", "A,0"), "global_fraction_mean"] == pytest.approx(0.7)
-    assert condition_summary.loc[("treated", "A,0"), "global_fraction_median"] == pytest.approx(0.7)
+    assert condition_summary.loc[
+        ("NS", "A,0"), "global_fraction_mean"
+    ] == pytest.approx(0.5)
+    assert condition_summary.loc[
+        ("treated", "A,0"), "global_fraction_mean"
+    ] == pytest.approx(0.7)
+    assert condition_summary.loc[
+        ("treated", "A,0"), "global_fraction_median"
+    ] == pytest.approx(0.7)
 
 
 def test_prepare_global_analysis_summary_data_filters_motifs():
@@ -2099,7 +2349,9 @@ def test_prepare_global_analysis_summary_data_skips_condition_aggregation_when_d
 def test_plot_global_analysis_summary_matplotlib_returns_figure_and_axis():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_global_analysis_summary_data(result=_make_global_analysis_result())
+    payload = plotting.prepare_global_analysis_summary_data(
+        result=_make_global_analysis_result()
+    )
 
     fig, ax = plotting_matplotlib.plot_global_analysis_summary_matplotlib(payload)
 
@@ -2113,8 +2365,18 @@ def test_prepare_global_analysis_window_data_returns_expected_tables():
     payload = plotting.prepare_global_analysis_window_data(result=result)
 
     assert set(payload) == {"window_table", "condition_window_table", "metadata"}
-    assert payload["window_table"]["contig"].tolist() == ["chr1", "chr1", "chr1", "chr2"]
-    assert payload["window_table"]["window_midpoint"].tolist() == [50.0, 50.0, 50.0, 50.0]
+    assert payload["window_table"]["contig"].tolist() == [
+        "chr1",
+        "chr1",
+        "chr1",
+        "chr2",
+    ]
+    assert payload["window_table"]["window_midpoint"].tolist() == [
+        50.0,
+        50.0,
+        50.0,
+        50.0,
+    ]
     assert payload["condition_window_table"].empty
     assert payload["metadata"]["contig_order"] == ["chr1", "chr2"]
 
@@ -2122,7 +2384,9 @@ def test_prepare_global_analysis_window_data_returns_expected_tables():
 def test_plot_global_analysis_window_matplotlib_returns_figure_and_axes():
     from dimelo import plotting_matplotlib
 
-    payload = plotting.prepare_global_analysis_window_data(result=_make_global_window_result())
+    payload = plotting.prepare_global_analysis_window_data(
+        result=_make_global_window_result()
+    )
 
     fig, axes = plotting_matplotlib.plot_global_analysis_window_matplotlib(payload)
 
@@ -2182,9 +2446,9 @@ def test_prepare_global_analysis_window_data_aggregates_per_sample_windows_acros
             }
         ]
     )
-    result.windows = pd.concat([result.windows, duplicate_sample_window], ignore_index=True).rename(
-        columns={"chromosome": "chrom"}
-    )
+    result.windows = pd.concat(
+        [result.windows, duplicate_sample_window], ignore_index=True
+    ).rename(columns={"chromosome": "chrom"})
     result.plot_data["window_fraction_table"] = result.windows.copy()
 
     payload = plotting.prepare_global_analysis_window_data(
@@ -2192,10 +2456,14 @@ def test_prepare_global_analysis_window_data_aggregates_per_sample_windows_acros
         aggregate_conditions=True,
     )
 
-    treated_chr1 = payload["condition_window_table"].loc[
-        (payload["condition_window_table"]["condition"] == "treated")
-        & (payload["condition_window_table"]["contig"] == "chr1")
-    ].iloc[0]
+    treated_chr1 = (
+        payload["condition_window_table"]
+        .loc[
+            (payload["condition_window_table"]["condition"] == "treated")
+            & (payload["condition_window_table"]["contig"] == "chr1")
+        ]
+        .iloc[0]
+    )
 
     assert treated_chr1["window_fraction_mean"] == pytest.approx(0.45)
     assert treated_chr1["window_fraction_median"] == pytest.approx(0.45)
@@ -2261,8 +2529,14 @@ def test_prepare_region_contrast_profile_data_returns_all_value_modes():
 
     plot_table = payload["plot_table"]
     assert len(plot_table) == 12
-    assert set(payload["plot_table"]["value_mode"]) == {"numerator", "denominator", "delta"}
-    assert plot_table.groupby(["region_id", "position", "value_mode"]).size().to_dict() == {
+    assert set(payload["plot_table"]["value_mode"]) == {
+        "numerator",
+        "denominator",
+        "delta",
+    }
+    assert plot_table.groupby(
+        ["region_id", "position", "value_mode"]
+    ).size().to_dict() == {
         ("chr1:90-110,+", 95, "numerator"): 1,
         ("chr1:90-110,+", 95, "denominator"): 1,
         ("chr1:90-110,+", 95, "delta"): 1,
@@ -2352,8 +2626,9 @@ def test_prepare_region_contrast_profile_data_returns_all_value_modes():
 
 
 def test_plot_region_contrast_profile_matplotlib_defaults_to_delta_and_honors_ax_title():
-    from dimelo import plotting_matplotlib
     from matplotlib import pyplot as plt
+
+    from dimelo import plotting_matplotlib
 
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
         _region_contrast_position_rows()
@@ -2386,8 +2661,12 @@ def test_plot_region_contrast_profile_matplotlib_defaults_to_delta_and_honors_ax
     assert ax is provided_ax
     assert ax.get_title() == "Custom region contrast profile"
     assert len(ax.lines) == 1
-    np.testing.assert_allclose(np.asarray(ax.lines[0].get_xdata()), expected[x_column].to_numpy())
-    np.testing.assert_allclose(np.asarray(ax.lines[0].get_ydata()), expected["value"].to_numpy())
+    np.testing.assert_allclose(
+        np.asarray(ax.lines[0].get_xdata()), expected[x_column].to_numpy()
+    )
+    np.testing.assert_allclose(
+        np.asarray(ax.lines[0].get_ydata()), expected["value"].to_numpy()
+    )
     plt.close(fig)
 
 
@@ -2520,7 +2799,7 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
                         "reference_fraction": 0.05,
                         "delta_fraction": 0.11,
                         "rank": 8,
-                    }
+                    },
                 ]
             ),
         ],
@@ -2535,7 +2814,9 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
         value_mode="all",
     )
 
-    rank_rows = payload["plot_table"].loc[:, ["region_id", "row_order"]].drop_duplicates()
+    rank_rows = (
+        payload["plot_table"].loc[:, ["region_id", "row_order"]].drop_duplicates()
+    )
     assert list(rank_rows.sort_values("row_order")["region_id"]) == [
         "chr1:190-210,-",
         "chr1:90-110,+",
@@ -2548,8 +2829,9 @@ def test_prepare_region_contrast_heatmap_data_orders_rows_by_rank():
 
 
 def test_plot_region_contrast_heatmap_matplotlib_defaults_to_delta_and_honors_ax_title():
-    from dimelo import plotting_matplotlib
     from matplotlib import pyplot as plt
+
+    from dimelo import plotting_matplotlib
 
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
         _region_contrast_position_rows()
@@ -2566,8 +2848,13 @@ def test_plot_region_contrast_heatmap_matplotlib_defaults_to_delta_and_honors_ax
     x_column = "plot_x" if "plot_x" in payload["plot_table"].columns else "position"
     expected = (
         payload["plot_table"]
-        .loc[lambda table: table["value_mode"] == "delta", [x_column, "row_order", "value"]]
-        .pivot_table(index="row_order", columns=x_column, values="value", aggfunc="mean")
+        .loc[
+            lambda table: table["value_mode"] == "delta",
+            [x_column, "row_order", "value"],
+        ]
+        .pivot_table(
+            index="row_order", columns=x_column, values="value", aggfunc="mean"
+        )
         .sort_index(axis=0)
         .sort_index(axis=1)
         .to_numpy()
@@ -2589,8 +2876,9 @@ def test_plot_region_contrast_heatmap_matplotlib_defaults_to_delta_and_honors_ax
 
 
 def test_plot_region_contrast_heatmap_matplotlib_accepts_minimal_payload_without_summary_table():
-    from dimelo import plotting_matplotlib
     from matplotlib import pyplot as plt
+
+    from dimelo import plotting_matplotlib
 
     result, position_table, axis, aggregation = _region_contrast_plot_setup(
         _region_contrast_position_rows()
@@ -2721,7 +3009,9 @@ def test_prepare_region_contrast_profile_data_requires_grouping_key():
         ],
     ],
 )
-def test_prepare_region_contrast_profile_data_rejects_ambiguous_grouping_key(position_rows):
+def test_prepare_region_contrast_profile_data_rejects_ambiguous_grouping_key(
+    position_rows,
+):
     result, _, _, _ = _region_contrast_plot_setup(_region_contrast_position_rows())
     position_table = pd.DataFrame(position_rows)
     axis = plotting.AxisSpec(
@@ -2859,7 +3149,9 @@ def test_prepare_single_read_plot_data_filters_rows_outside_fixed_window_bounds(
 
 
 @pytest.mark.parametrize("upstream_bp, downstream_bp", [(-1, 10), (10, -1)])
-def test_validate_axis_spec_rejects_negative_fixed_window_bounds(upstream_bp, downstream_bp):
+def test_validate_axis_spec_rejects_negative_fixed_window_bounds(
+    upstream_bp, downstream_bp
+):
     axis = plotting.AxisSpec(
         orientation="genomic",
         coordinate_mode="fixed_window",
@@ -2906,8 +3198,20 @@ def test_prepare_single_read_plot_data_rejects_invalid_region_strand_in_region_5
 def test_prepare_aggregate_plot_data_retains_metadata_for_fixed_window():
     table = pd.DataFrame(
         [
-            {"region_id": "reg1", "region_strand": "+", "event_pos": 95, "anchor": 100, "signal": 1.0},
-            {"region_id": "reg1", "region_strand": "+", "event_pos": 105, "anchor": 100, "signal": 3.0},
+            {
+                "region_id": "reg1",
+                "region_strand": "+",
+                "event_pos": 95,
+                "anchor": 100,
+                "signal": 1.0,
+            },
+            {
+                "region_id": "reg1",
+                "region_strand": "+",
+                "event_pos": 105,
+                "anchor": 100,
+                "signal": 3.0,
+            },
         ]
     )
     axis = plotting.AxisSpec(
@@ -2958,7 +3262,9 @@ def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(
 
     real_prepare_aggregate_plot_data = plotting.prepare_aggregate_plot_data
 
-    def spy_prepare_aggregate_plot_data(table, *, plot_family, axis, aggregation, **kwargs):
+    def spy_prepare_aggregate_plot_data(
+        table, *, plot_family, axis, aggregation, **kwargs
+    ):
         called["table"] = table
         called["plot_family"] = plot_family
         called["axis"] = axis
@@ -2971,7 +3277,9 @@ def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(
             **kwargs,
         )
 
-    monkeypatch.setattr(plotting, "prepare_aggregate_plot_data", spy_prepare_aggregate_plot_data)
+    monkeypatch.setattr(
+        plotting, "prepare_aggregate_plot_data", spy_prepare_aggregate_plot_data
+    )
     monkeypatch.setattr(
         "dimelo.plot_enrichment_profile.get_enrichment_profiles",
         lambda **kwargs: [np.array([0.25, 0.75])],
@@ -2982,7 +3290,9 @@ def test_legacy_enrichment_profile_routes_regions_5to3prime_through_shared_prep(
             lambda *args, **kwargs: regions_dict,
         )
 
-    def fake_make_enrichment_profile_plot(*, trace_vectors, sample_names, offset_center=0, **kwargs):
+    def fake_make_enrichment_profile_plot(
+        *, trace_vectors, sample_names, offset_center=0, **kwargs
+    ):
         captured["trace_vectors"] = trace_vectors
         captured["sample_names"] = sample_names
         captured["offset_center"] = offset_center
@@ -3134,7 +3444,9 @@ def test_plot_reads_routes_region_5to3prime_into_shared_single_read_prep(monkeyp
         "dimelo.plot_reads.plotting.prepare_single_read_plot_data",
         spy_prepare,
     )
-    monkeypatch.setattr("dimelo.plot_reads.sns.scatterplot", lambda **kwargs: FakeAxes())
+    monkeypatch.setattr(
+        "dimelo.plot_reads.sns.scatterplot", lambda **kwargs: FakeAxes()
+    )
 
     axes = plot_reads.plot_reads(
         mod_file_name="sample.h5",
@@ -3201,7 +3513,9 @@ def test_plot_reads_defaults_read_index_axis_and_legend(monkeypatch):
         "dimelo.plot_reads.plotting.prepare_single_read_plot_data",
         spy_prepare,
     )
-    monkeypatch.setattr("dimelo.plot_reads.sns.scatterplot", lambda **kwargs: FakeAxes())
+    monkeypatch.setattr(
+        "dimelo.plot_reads.sns.scatterplot", lambda **kwargs: FakeAxes()
+    )
 
     axes = plot_reads.plot_reads(
         mod_file_name="sample.h5",
@@ -3220,8 +3534,18 @@ def test_plot_reads_defaults_read_index_axis_and_legend(monkeypatch):
 def test_prepare_aggregate_plot_data_builds_concatenated_segment_axis():
     table = pd.DataFrame(
         [
-            {"region_id": "reg1", "segment_id": "upstream", "segment_pos": 0, "signal": 1.0},
-            {"region_id": "reg1", "segment_id": "body", "segment_pos": 10, "signal": 2.0},
+            {
+                "region_id": "reg1",
+                "segment_id": "upstream",
+                "segment_pos": 0,
+                "signal": 1.0,
+            },
+            {
+                "region_id": "reg1",
+                "segment_id": "body",
+                "segment_pos": 10,
+                "signal": 2.0,
+            },
         ]
     )
     axis = plotting.AxisSpec(
@@ -3229,7 +3553,15 @@ def test_prepare_aggregate_plot_data_builds_concatenated_segment_axis():
         coordinate_mode="segment_map",
         segments=[
             plotting.SegmentSpec("upstream", "Upstream", 0, 100, "raw", bins=20),
-            plotting.SegmentSpec("body", "Body", 100, 400, "scaled", bins=50, contiguous_with_previous=True),
+            plotting.SegmentSpec(
+                "body",
+                "Body",
+                100,
+                400,
+                "scaled",
+                bins=50,
+                contiguous_with_previous=True,
+            ),
         ],
     )
     aggregation = plotting.AggregationSpec(
@@ -3258,7 +3590,14 @@ def test_prepare_aggregate_plot_data_builds_concatenated_segment_axis():
 
 def test_prepare_aggregate_plot_data_rejects_duplicate_segment_ids_in_axis_segments():
     table = pd.DataFrame(
-        [{"region_id": "reg1", "segment_id": "upstream", "segment_pos": 1, "signal": 1.0}]
+        [
+            {
+                "region_id": "reg1",
+                "segment_id": "upstream",
+                "segment_pos": 1,
+                "signal": 1.0,
+            }
+        ]
     )
     axis = plotting.AxisSpec(
         orientation="region_5to3",
@@ -3289,7 +3628,14 @@ def test_prepare_aggregate_plot_data_rejects_duplicate_segment_ids_in_axis_segme
 
 def test_prepare_aggregate_plot_data_rejects_unknown_segment_ids():
     table = pd.DataFrame(
-        [{"region_id": "reg1", "segment_id": "unknown", "segment_pos": 1, "signal": 1.0}]
+        [
+            {
+                "region_id": "reg1",
+                "segment_id": "unknown",
+                "segment_pos": 1,
+                "signal": 1.0,
+            }
+        ]
     )
     axis = plotting.AxisSpec(
         orientation="region_5to3",
@@ -3319,7 +3665,14 @@ def test_prepare_aggregate_plot_data_rejects_unknown_segment_ids():
 
 def test_prepare_aggregate_plot_data_rejects_missing_segment_positions():
     table = pd.DataFrame(
-        [{"region_id": "reg1", "segment_id": "upstream", "segment_pos": float("nan"), "signal": 1.0}]
+        [
+            {
+                "region_id": "reg1",
+                "segment_id": "upstream",
+                "segment_pos": float("nan"),
+                "signal": 1.0,
+            }
+        ]
     )
     axis = plotting.AxisSpec(
         orientation="region_5to3",
@@ -3348,9 +3701,18 @@ def test_prepare_aggregate_plot_data_rejects_missing_segment_positions():
 
 
 @pytest.mark.parametrize("segment_pos", [-1, 20])
-def test_prepare_aggregate_plot_data_rejects_segment_positions_outside_declared_span(segment_pos):
+def test_prepare_aggregate_plot_data_rejects_segment_positions_outside_declared_span(
+    segment_pos,
+):
     table = pd.DataFrame(
-        [{"region_id": "reg1", "segment_id": "upstream", "segment_pos": segment_pos, "signal": 1.0}]
+        [
+            {
+                "region_id": "reg1",
+                "segment_id": "upstream",
+                "segment_pos": segment_pos,
+                "signal": 1.0,
+            }
+        ]
     )
     axis = plotting.AxisSpec(
         orientation="region_5to3",
@@ -3424,14 +3786,25 @@ def test_prepare_aggregate_plot_data_marks_non_contiguous_segment_breaks():
     "segment",
     [
         plotting.SegmentSpec("bad_bins", "Bad bins", 0, 100, "raw", bins=0),
-        plotting.SegmentSpec("bad_bins_neg", "Bad bins negative", 0, 100, "scaled", bins=-5),
+        plotting.SegmentSpec(
+            "bad_bins_neg", "Bad bins negative", 0, 100, "scaled", bins=-5
+        ),
         plotting.SegmentSpec("bad_raw", "Bad raw", 100, 100, "raw"),
-        plotting.SegmentSpec("bad_raw_reverse", "Bad raw reverse", 200, 100, "raw", bins=20),
+        plotting.SegmentSpec(
+            "bad_raw_reverse", "Bad raw reverse", 200, 100, "raw", bins=20
+        ),
     ],
 )
 def test_prepare_aggregate_plot_data_rejects_malformed_segment_spans(segment):
     table = pd.DataFrame(
-        [{"region_id": "reg1", "segment_id": "bad_raw", "segment_pos": 1, "signal": 1.0}]
+        [
+            {
+                "region_id": "reg1",
+                "segment_id": "bad_raw",
+                "segment_pos": 1,
+                "signal": 1.0,
+            }
+        ]
     )
     axis = plotting.AxisSpec(
         orientation="region_5to3",
@@ -3459,7 +3832,14 @@ def test_prepare_aggregate_plot_data_rejects_malformed_segment_spans(segment):
 
 def test_prepare_aggregate_plot_data_rejects_invalid_segment_mode():
     table = pd.DataFrame(
-        [{"region_id": "reg1", "segment_id": "upstream", "segment_pos": 1, "signal": 1.0}]
+        [
+            {
+                "region_id": "reg1",
+                "segment_id": "upstream",
+                "segment_pos": 1,
+                "signal": 1.0,
+            }
+        ]
     )
     axis = plotting.AxisSpec(
         orientation="region_5to3",

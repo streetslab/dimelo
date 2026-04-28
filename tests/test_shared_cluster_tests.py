@@ -25,22 +25,94 @@ def _make_shared_cluster_test_result() -> SharedClusterResult:
         ),
         cluster_distribution=pd.DataFrame(
             [
-                {"sample_id": "s1", "condition": "NS", "cluster": "C0", "count": 80, "fraction": 0.80},
-                {"sample_id": "s1", "condition": "NS", "cluster": "C1", "count": 20, "fraction": 0.20},
-                {"sample_id": "s2", "condition": "NS", "cluster": "C0", "count": 75, "fraction": 0.75},
-                {"sample_id": "s2", "condition": "NS", "cluster": "C1", "count": 25, "fraction": 0.25},
-                {"sample_id": "s3", "condition": "treated", "cluster": "C0", "count": 30, "fraction": 0.30},
-                {"sample_id": "s3", "condition": "treated", "cluster": "C1", "count": 70, "fraction": 0.70},
-                {"sample_id": "s4", "condition": "treated", "cluster": "C0", "count": 25, "fraction": 0.25},
-                {"sample_id": "s4", "condition": "treated", "cluster": "C1", "count": 75, "fraction": 0.75},
+                {
+                    "sample_id": "s1",
+                    "condition": "NS",
+                    "cluster": "C0",
+                    "count": 80,
+                    "fraction": 0.80,
+                },
+                {
+                    "sample_id": "s1",
+                    "condition": "NS",
+                    "cluster": "C1",
+                    "count": 20,
+                    "fraction": 0.20,
+                },
+                {
+                    "sample_id": "s2",
+                    "condition": "NS",
+                    "cluster": "C0",
+                    "count": 75,
+                    "fraction": 0.75,
+                },
+                {
+                    "sample_id": "s2",
+                    "condition": "NS",
+                    "cluster": "C1",
+                    "count": 25,
+                    "fraction": 0.25,
+                },
+                {
+                    "sample_id": "s3",
+                    "condition": "treated",
+                    "cluster": "C0",
+                    "count": 30,
+                    "fraction": 0.30,
+                },
+                {
+                    "sample_id": "s3",
+                    "condition": "treated",
+                    "cluster": "C1",
+                    "count": 70,
+                    "fraction": 0.70,
+                },
+                {
+                    "sample_id": "s4",
+                    "condition": "treated",
+                    "cluster": "C0",
+                    "count": 25,
+                    "fraction": 0.25,
+                },
+                {
+                    "sample_id": "s4",
+                    "condition": "treated",
+                    "cluster": "C1",
+                    "count": 75,
+                    "fraction": 0.75,
+                },
             ]
         ),
         condition_distribution=pd.DataFrame(
             [
-                {"condition": "NS", "cluster": "C0", "count": 155, "fraction": 0.775, "replicate_n": 2},
-                {"condition": "NS", "cluster": "C1", "count": 45, "fraction": 0.225, "replicate_n": 2},
-                {"condition": "treated", "cluster": "C0", "count": 55, "fraction": 0.275, "replicate_n": 2},
-                {"condition": "treated", "cluster": "C1", "count": 145, "fraction": 0.725, "replicate_n": 2},
+                {
+                    "condition": "NS",
+                    "cluster": "C0",
+                    "count": 155,
+                    "fraction": 0.775,
+                    "replicate_n": 2,
+                },
+                {
+                    "condition": "NS",
+                    "cluster": "C1",
+                    "count": 45,
+                    "fraction": 0.225,
+                    "replicate_n": 2,
+                },
+                {
+                    "condition": "treated",
+                    "cluster": "C0",
+                    "count": 55,
+                    "fraction": 0.275,
+                    "replicate_n": 2,
+                },
+                {
+                    "condition": "treated",
+                    "cluster": "C1",
+                    "count": 145,
+                    "fraction": 0.725,
+                    "replicate_n": 2,
+                },
             ]
         ),
         distribution_change=None,
@@ -64,22 +136,94 @@ def _make_shared_cluster_time_course_result() -> SharedClusterResult:
     )
     result.cluster_distribution = pd.DataFrame(
         [
-            {"sample_id": "t0_a", "condition": "t0", "cluster": "C0", "count": 80, "fraction": 0.80},
-            {"sample_id": "t0_a", "condition": "t0", "cluster": "C1", "count": 20, "fraction": 0.20},
-            {"sample_id": "t1_a", "condition": "t1", "cluster": "C0", "count": 55, "fraction": 0.55},
-            {"sample_id": "t1_a", "condition": "t1", "cluster": "C1", "count": 45, "fraction": 0.45},
-            {"sample_id": "t2_a", "condition": "t2", "cluster": "C0", "count": 25, "fraction": 0.25},
-            {"sample_id": "t2_a", "condition": "t2", "cluster": "C1", "count": 75, "fraction": 0.75},
+            {
+                "sample_id": "t0_a",
+                "condition": "t0",
+                "cluster": "C0",
+                "count": 80,
+                "fraction": 0.80,
+            },
+            {
+                "sample_id": "t0_a",
+                "condition": "t0",
+                "cluster": "C1",
+                "count": 20,
+                "fraction": 0.20,
+            },
+            {
+                "sample_id": "t1_a",
+                "condition": "t1",
+                "cluster": "C0",
+                "count": 55,
+                "fraction": 0.55,
+            },
+            {
+                "sample_id": "t1_a",
+                "condition": "t1",
+                "cluster": "C1",
+                "count": 45,
+                "fraction": 0.45,
+            },
+            {
+                "sample_id": "t2_a",
+                "condition": "t2",
+                "cluster": "C0",
+                "count": 25,
+                "fraction": 0.25,
+            },
+            {
+                "sample_id": "t2_a",
+                "condition": "t2",
+                "cluster": "C1",
+                "count": 75,
+                "fraction": 0.75,
+            },
         ]
     )
     result.condition_distribution = pd.DataFrame(
         [
-            {"condition": "t0", "cluster": "C0", "count": 80, "fraction": 0.80, "replicate_n": 1},
-            {"condition": "t0", "cluster": "C1", "count": 20, "fraction": 0.20, "replicate_n": 1},
-            {"condition": "t1", "cluster": "C0", "count": 55, "fraction": 0.55, "replicate_n": 1},
-            {"condition": "t1", "cluster": "C1", "count": 45, "fraction": 0.45, "replicate_n": 1},
-            {"condition": "t2", "cluster": "C0", "count": 25, "fraction": 0.25, "replicate_n": 1},
-            {"condition": "t2", "cluster": "C1", "count": 75, "fraction": 0.75, "replicate_n": 1},
+            {
+                "condition": "t0",
+                "cluster": "C0",
+                "count": 80,
+                "fraction": 0.80,
+                "replicate_n": 1,
+            },
+            {
+                "condition": "t0",
+                "cluster": "C1",
+                "count": 20,
+                "fraction": 0.20,
+                "replicate_n": 1,
+            },
+            {
+                "condition": "t1",
+                "cluster": "C0",
+                "count": 55,
+                "fraction": 0.55,
+                "replicate_n": 1,
+            },
+            {
+                "condition": "t1",
+                "cluster": "C1",
+                "count": 45,
+                "fraction": 0.45,
+                "replicate_n": 1,
+            },
+            {
+                "condition": "t2",
+                "cluster": "C0",
+                "count": 25,
+                "fraction": 0.25,
+                "replicate_n": 1,
+            },
+            {
+                "condition": "t2",
+                "cluster": "C1",
+                "count": 75,
+                "fraction": 0.75,
+                "replicate_n": 1,
+            },
         ]
     )
     return result
@@ -114,7 +258,9 @@ def test_shared_cluster_tests_pairwise_returns_summary_details_and_plot_data():
 
     result = shared_cluster_tests.shared_cluster_tests(
         result=_make_shared_cluster_test_result(),
-        contrast=ContrastSpec(mode="pairwise", numerator=["treated"], denominator=["NS"]),
+        contrast=ContrastSpec(
+            mode="pairwise", numerator=["treated"], denominator=["NS"]
+        ),
         test="permutation",
         n_permutations=50,
         random_state=7,
@@ -163,7 +309,9 @@ def test_shared_cluster_tests_supports_chi_squared_screen():
 
     result = shared_cluster_tests.shared_cluster_tests(
         result=_make_shared_cluster_test_result(),
-        contrast=ContrastSpec(mode="pairwise", numerator=["treated"], denominator=["NS"]),
+        contrast=ContrastSpec(
+            mode="pairwise", numerator=["treated"], denominator=["NS"]
+        ),
         test="chi_squared",
     )
 
@@ -177,7 +325,9 @@ def test_shared_cluster_tests_supports_g_test_screen():
 
     result = shared_cluster_tests.shared_cluster_tests(
         result=_make_shared_cluster_test_result(),
-        contrast=ContrastSpec(mode="pairwise", numerator=["treated"], denominator=["NS"]),
+        contrast=ContrastSpec(
+            mode="pairwise", numerator=["treated"], denominator=["NS"]
+        ),
         test="g_test",
     )
 

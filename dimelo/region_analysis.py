@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import concurrent.futures
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -99,7 +99,9 @@ def build_region_feature_table(
         ordered_results: list[tuple[np.ndarray, list[dict[str, object]]] | None] = [
             None
         ] * len(sample_list)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=sample_workers) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=sample_workers
+        ) as executor:
             future_by_index = {
                 index: executor.submit(
                     _build_sample_region_features,
@@ -128,7 +130,9 @@ def build_region_feature_table(
                 shared_regions_executor = None
         try:
             results = []
-            for sample in tqdm(sample_list, desc="Building region features", disable=quiet):
+            for sample in tqdm(
+                sample_list, desc="Building region features", disable=quiet
+            ):
                 result = _build_sample_region_features(
                     sample=sample,
                     motif=motifs[0],

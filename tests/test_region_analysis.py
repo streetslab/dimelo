@@ -10,8 +10,18 @@ from dimelo.models import SampleSpec
 
 def _samples() -> list[SampleSpec]:
     return [
-        SampleSpec(sample_id="s1", condition="NS", extract_h5="s1.h5", metadata={"pileup_path": "s1.bed.gz"}),
-        SampleSpec(sample_id="s2", condition="TR", extract_h5="s2.h5", metadata={"pileup_path": "s2.bed.gz"}),
+        SampleSpec(
+            sample_id="s1",
+            condition="NS",
+            extract_h5="s1.h5",
+            metadata={"pileup_path": "s1.bed.gz"},
+        ),
+        SampleSpec(
+            sample_id="s2",
+            condition="TR",
+            extract_h5="s2.h5",
+            metadata={"pileup_path": "s2.bed.gz"},
+        ),
     ]
 
 
@@ -20,7 +30,9 @@ def test_build_region_feature_table_parallelizes_across_samples(monkeypatch):
     started_lock = threading.Lock()
     second_started = threading.Event()
 
-    def fake_region_feature_matrix_from_pileup(*, bedmethyl_file, motif, regions, cores, **kwargs):
+    def fake_region_feature_matrix_from_pileup(
+        *, bedmethyl_file, motif, regions, cores, **kwargs
+    ):
         nonlocal started
         with started_lock:
             started += 1
@@ -59,7 +71,9 @@ def test_build_region_feature_table_parallelizes_across_samples(monkeypatch):
     assert metadata_rows[1]["sample_id"] == "s2"
 
 
-def test_build_region_feature_table_reuses_regions_executor_in_serial_sample_mode(monkeypatch):
+def test_build_region_feature_table_reuses_regions_executor_in_serial_sample_mode(
+    monkeypatch,
+):
     class _FakeProcessPoolExecutor:
         instances = []
 

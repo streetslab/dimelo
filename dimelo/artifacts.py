@@ -40,11 +40,15 @@ def _normalize_source_files(values: object) -> tuple[str, ...] | None:
     return tuple(sorted(str(value) for value in normalized))
 
 
-def _normalize_source_fingerprints(values: object) -> tuple[dict[str, object], ...] | None:
+def _normalize_source_fingerprints(
+    values: object,
+) -> tuple[dict[str, object], ...] | None:
     if values is None:
         return None
     normalized = [dict(value) for value in values]
-    normalized.sort(key=lambda value: json.dumps(value, sort_keys=True, separators=(",", ":")))
+    normalized.sort(
+        key=lambda value: json.dumps(value, sort_keys=True, separators=(",", ":"))
+    )
     return tuple(normalized)
 
 
@@ -78,7 +82,9 @@ def artifact_fingerprint(artifact: DatasetArtifact) -> dict[str, object]:
         "schema_version": artifact.metadata.get("schema_version"),
         "package_version": artifact.metadata.get("package_version"),
         "source_files": _normalize_source_files(
-            artifact.provenance.get("source_files", artifact.metadata.get("source_files"))
+            artifact.provenance.get(
+                "source_files", artifact.metadata.get("source_files")
+            )
         ),
         "source_fingerprints": _normalize_source_fingerprints(
             artifact.provenance.get(
@@ -86,7 +92,9 @@ def artifact_fingerprint(artifact: DatasetArtifact) -> dict[str, object]:
             )
         ),
         "upstream_lineage": _normalize_sequence(
-            artifact.provenance.get("upstream_lineage", artifact.metadata.get("upstream_lineage"))
+            artifact.provenance.get(
+                "upstream_lineage", artifact.metadata.get("upstream_lineage")
+            )
         ),
         "params_hash": _params_hash(artifact.params),
     }
@@ -102,7 +110,9 @@ def _has_required_fingerprint_fields(fingerprint: dict[str, object]) -> bool:
     )
     if any(fingerprint[field] is None for field in required_fields):
         return False
-    return bool(fingerprint["source_files"]) and bool(fingerprint["source_fingerprints"])
+    return bool(fingerprint["source_files"]) and bool(
+        fingerprint["source_fingerprints"]
+    )
 
 
 def artifact_is_compatible(

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from itertools import combinations
 from typing import Any
 
 import numpy as np
@@ -40,9 +39,13 @@ def _require_requested_conditions_present(
             )
 
 
-def _require_time_order_present(sample_table: pd.DataFrame, time_order: list[str]) -> None:
+def _require_time_order_present(
+    sample_table: pd.DataFrame, time_order: list[str]
+) -> None:
     available_conditions = set(sample_table["condition"].dropna().unique())
-    missing = [condition for condition in time_order if condition not in available_conditions]
+    missing = [
+        condition for condition in time_order if condition not in available_conditions
+    ]
     if missing:
         raise ValueError(
             "Shared cluster time_course requested missing time_order condition(s): "
@@ -83,7 +86,11 @@ def _cluster_order(result: SharedClusterResult) -> list[str]:
     if cluster_labels:
         return cluster_labels
     return (
-        result.cluster_distribution["cluster"].drop_duplicates().astype(str).sort_values().tolist()
+        result.cluster_distribution["cluster"]
+        .drop_duplicates()
+        .astype(str)
+        .sort_values()
+        .tolist()
     )
 
 
@@ -91,7 +98,9 @@ def _composition_effect_size(summary_table: pd.DataFrame) -> float:
     return float(summary_table["delta_fraction"].abs().sum() / 2.0)
 
 
-def _composition_effect_size_from_vectors(observed: np.ndarray, reference: np.ndarray) -> float:
+def _composition_effect_size_from_vectors(
+    observed: np.ndarray, reference: np.ndarray
+) -> float:
     return float(np.abs(observed - reference).sum() / 2.0)
 
 
@@ -174,7 +183,9 @@ def _add_pairing_metadata(
         )
 
     pairing = assignments.loc[:, ["sample_id", pairing_key]].drop_duplicates()
-    pair_counts = pairing.groupby("sample_id", dropna=False)[pairing_key].nunique(dropna=False)
+    pair_counts = pairing.groupby("sample_id", dropna=False)[pairing_key].nunique(
+        dropna=False
+    )
     if (pair_counts > 1).any():
         raise ValueError(
             "Shared cluster matched_pairwise requires each sample_id to map to exactly one pairing key."
@@ -199,7 +210,9 @@ def _prepare_unpaired_group_table(
     }
     _require_requested_conditions_present(sample_matrix, side_specs=side_specs)
     requested_conditions = set(side_specs["numerator"]) | set(side_specs["denominator"])
-    filtered = sample_matrix.loc[sample_matrix["condition"].isin(requested_conditions)].copy()
+    filtered = sample_matrix.loc[
+        sample_matrix["condition"].isin(requested_conditions)
+    ].copy()
     filtered["contrast_side"] = np.where(
         filtered["condition"].isin(side_specs["numerator"]),
         "numerator",
@@ -232,19 +245,18 @@ def _prepare_paired_group_table(
     }
     _require_requested_conditions_present(sample_matrix, side_specs=side_specs)
     requested_conditions = set(side_specs["numerator"]) | set(side_specs["denominator"])
-    filtered = sample_matrix.loc[sample_matrix["condition"].isin(requested_conditions)].copy()
+    filtered = sample_matrix.loc[
+        sample_matrix["condition"].isin(requested_conditions)
+    ].copy()
     filtered["contrast_side"] = np.where(
         filtered["condition"].isin(side_specs["numerator"]),
         "numerator",
         "denominator",
     )
 
-    grouped = (
-        filtered.groupby([contrast.pairing_key, "contrast_side"], as_index=False, sort=False)[
-            cluster_order
-        ]
-        .mean()
-    )
+    grouped = filtered.groupby(
+        [contrast.pairing_key, "contrast_side"], as_index=False, sort=False
+    )[cluster_order].mean()
     side_sets = (
         grouped.loc[:, [contrast.pairing_key, "contrast_side"]]
         .drop_duplicates()
@@ -252,16 +264,24 @@ def _prepare_paired_group_table(
         .agg(lambda values: set(values))
     )
     complete_pairs = [
-        pair_id for pair_id, sides in side_sets.items() if {"numerator", "denominator"} <= sides
+        pair_id
+        for pair_id, sides in side_sets.items()
+        if {"numerator", "denominator"} <= sides
     ]
     if not complete_pairs:
-        raise ValueError("Shared cluster matched_pairwise found no complete matched units.")
+        raise ValueError(
+            "Shared cluster matched_pairwise found no complete matched units."
+        )
 
-    return grouped.loc[grouped[contrast.pairing_key].isin(complete_pairs)].copy(), cluster_order
+    return grouped.loc[
+        grouped[contrast.pairing_key].isin(complete_pairs)
+    ].copy(), cluster_order
 
 
 def _permutation_p_value(observed: float, permuted: np.ndarray) -> float:
-    return float((1 + np.count_nonzero(permuted >= observed - 1e-12)) / (len(permuted) + 1))
+    return float(
+        (1 + np.count_nonzero(permuted >= observed - 1e-12)) / (len(permuted) + 1)
+    )
 
 
 def _run_unpaired_permutations(
@@ -312,10 +332,16 @@ def _score_unpaired_group(
     n_permutations: int,
     random_state: int | None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    numerator = group_table.loc[group_table["contrast_side"] == "numerator", cluster_order]
-    denominator = group_table.loc[group_table["contrast_side"] == "denominator", cluster_order]
+    numerator = group_table.loc[
+        group_table["contrast_side"] == "numerator", cluster_order
+    ]
+    denominator = group_table.loc[
+        group_table["contrast_side"] == "denominator", cluster_order
+    ]
     if numerator.empty or denominator.empty:
-        raise ValueError("Shared cluster tests require evidence for both contrast sides.")
+        raise ValueError(
+            "Shared cluster tests require evidence for both contrast sides."
+        )
 
     observed_fraction = numerator.mean(axis=0)
     reference_fraction = denominator.mean(axis=0)
@@ -367,7 +393,9 @@ def _score_paired_group(
     )
     common_pairs = numerator.index.intersection(denominator.index)
     if common_pairs.empty:
-        raise ValueError("Shared cluster matched_pairwise found no complete matched units.")
+        raise ValueError(
+            "Shared cluster matched_pairwise found no complete matched units."
+        )
 
     numerator = numerator.loc[common_pairs]
     denominator = denominator.loc[common_pairs]
@@ -479,7 +507,9 @@ def _build_pooled_omnibus_p_value(
     }
     _require_requested_conditions_present(condition_table, side_specs=side_specs)
     requested_conditions = side_specs["numerator"] + side_specs["denominator"]
-    filtered = condition_table.loc[condition_table["condition"].isin(requested_conditions)].copy()
+    filtered = condition_table.loc[
+        condition_table["condition"].isin(requested_conditions)
+    ].copy()
     contingency = (
         filtered.pivot_table(
             index="condition",
@@ -488,11 +518,15 @@ def _build_pooled_omnibus_p_value(
             aggfunc="sum",
             fill_value=0,
         )
-        .reindex(index=requested_conditions, columns=_cluster_order(result), fill_value=0)
+        .reindex(
+            index=requested_conditions, columns=_cluster_order(result), fill_value=0
+        )
         .astype(float)
     )
     if contingency.shape[0] < 2 or contingency.shape[1] < 2:
-        raise ValueError("shared_cluster_tests pooled screening requires at least 2x2 counts.")
+        raise ValueError(
+            "shared_cluster_tests pooled screening requires at least 2x2 counts."
+        )
 
     if test == "chi_squared":
         _, omnibus_p_value, _, _ = stats.chi2_contingency(
@@ -539,20 +573,30 @@ def _score_time_course(
     cluster_order = _cluster_order(result)
 
     filtered = sample_matrix.loc[sample_matrix["condition"].isin(time_order)].copy()
-    filtered["condition"] = pd.Categorical(filtered["condition"], categories=time_order, ordered=True)
-    filtered = filtered.sort_values(["condition", "sample_id"], kind="stable").reset_index(drop=True)
+    filtered["condition"] = pd.Categorical(
+        filtered["condition"], categories=time_order, ordered=True
+    )
+    filtered = filtered.sort_values(
+        ["condition", "sample_id"], kind="stable"
+    ).reset_index(drop=True)
 
     n_timepoints = len(time_order)
-    condition_codes = filtered["condition"].cat.codes.to_numpy(dtype=np.int64, copy=False)
+    condition_codes = filtered["condition"].cat.codes.to_numpy(
+        dtype=np.int64, copy=False
+    )
     if (condition_codes < 0).any():
-        raise ValueError("Shared cluster time_course found rows with conditions outside time_order.")
+        raise ValueError(
+            "Shared cluster time_course found rows with conditions outside time_order."
+        )
     value_matrix = filtered.loc[:, cluster_order].to_numpy(dtype=float)
     observed_matrix = _mean_by_group_codes(
         value_matrix,
         condition_codes,
         n_groups=n_timepoints,
     )
-    counts = np.bincount(condition_codes, minlength=n_timepoints).astype(int, copy=False)
+    counts = np.bincount(condition_codes, minlength=n_timepoints).astype(
+        int, copy=False
+    )
     time_course_table = pd.DataFrame(observed_matrix, columns=cluster_order)
     time_course_table.insert(0, "timepoint", time_order)
     time_course_table["n_samples"] = counts
@@ -560,7 +604,9 @@ def _score_time_course(
     observed_first = observed_matrix[0]
     observed_last = observed_matrix[-1]
     observed_delta = observed_last - observed_first
-    observed_omnibus = _composition_effect_size_from_vectors(observed_last, observed_first)
+    observed_omnibus = _composition_effect_size_from_vectors(
+        observed_last, observed_first
+    )
     observed_trend = _trend_statistic(observed_matrix)
 
     rng = np.random.default_rng(random_state)
@@ -577,9 +623,11 @@ def _score_time_course(
         )
         permuted_delta = permuted_matrix[-1] - permuted_matrix[0]
         permuted_cluster_stats[permutation_index] = np.abs(permuted_delta)
-        permuted_omnibus_stats[permutation_index] = _composition_effect_size_from_vectors(
-            permuted_matrix[-1],
-            permuted_matrix[0],
+        permuted_omnibus_stats[permutation_index] = (
+            _composition_effect_size_from_vectors(
+                permuted_matrix[-1],
+                permuted_matrix[0],
+            )
         )
         permuted_trend_stats[permutation_index] = _trend_statistic(permuted_matrix)
 
@@ -619,7 +667,9 @@ def _score_time_course(
 
     if include_pairwise:
         pairwise_rows = []
-        for left_timepoint, right_timepoint in zip(time_order[:-1], time_order[1:]):
+        for left_timepoint, right_timepoint in zip(
+            time_order[:-1], time_order[1:], strict=False
+        ):
             pair_table = filtered.loc[
                 filtered["condition"].isin([left_timepoint, right_timepoint])
             ].copy()
@@ -695,13 +745,17 @@ def shared_cluster_tests(
 ) -> SharedClusterContrastResult:
     _require_supported_shared_cluster_mode(contrast)
     if multiple_testing != "fdr_bh":
-        raise ValueError("shared_cluster_tests currently requires multiple_testing='fdr_bh'.")
+        raise ValueError(
+            "shared_cluster_tests currently requires multiple_testing='fdr_bh'."
+        )
     if n_permutations <= 0:
         raise ValueError("shared_cluster_tests requires n_permutations > 0.")
 
     if contrast.mode == "time_course":
         if test != "permutation":
-            raise ValueError("shared_cluster_tests time_course currently requires test='permutation'.")
+            raise ValueError(
+                "shared_cluster_tests time_course currently requires test='permutation'."
+            )
         return _score_time_course(
             result=result,
             contrast=contrast,
@@ -712,7 +766,9 @@ def shared_cluster_tests(
 
     if test == "permutation":
         if contrast.mode == "matched_pairwise":
-            pair_table, cluster_order = _prepare_paired_group_table(result, contrast=contrast)
+            pair_table, cluster_order = _prepare_paired_group_table(
+                result, contrast=contrast
+            )
             details, stats_metadata = _score_paired_group(
                 pair_table,
                 cluster_order=cluster_order,
@@ -722,7 +778,9 @@ def shared_cluster_tests(
             )
             sample_plot_table = pair_table.copy()
         else:
-            group_table, cluster_order = _prepare_unpaired_group_table(result, contrast=contrast)
+            group_table, cluster_order = _prepare_unpaired_group_table(
+                result, contrast=contrast
+            )
             details, stats_metadata = _score_unpaired_group(
                 group_table,
                 cluster_order=cluster_order,
@@ -750,14 +808,22 @@ def shared_cluster_tests(
             "contrast_mode": contrast.mode,
             "contrast_id": _contrast_id(contrast),
             "paired": bool(stats_metadata["paired"]),
-            "pairing_key": contrast.pairing_key if contrast.mode == "matched_pairwise" else None,
+            "pairing_key": contrast.pairing_key
+            if contrast.mode == "matched_pairwise"
+            else None,
             "test": test,
             "multiple_testing": multiple_testing,
             "n_permutations": int(n_permutations),
             "random_state": random_state,
             "inference_level": "replicate_aware",
         }
-        metadata.update({key: value for key, value in stats_metadata.items() if key.startswith("n_")})
+        metadata.update(
+            {
+                key: value
+                for key, value in stats_metadata.items()
+                if key.startswith("n_")
+            }
+        )
         plot_data = {
             "summary_table": summary.copy(),
             "cluster_effect_table": details.copy(),
@@ -776,7 +842,9 @@ def shared_cluster_tests(
             "'chi_squared', or 'g_test'."
         )
 
-    group_table, cluster_order = _prepare_unpaired_group_table(result, contrast=contrast)
+    group_table, cluster_order = _prepare_unpaired_group_table(
+        result, contrast=contrast
+    )
     details, stats_metadata = _score_unpaired_group(
         group_table,
         cluster_order=cluster_order,
@@ -787,7 +855,9 @@ def shared_cluster_tests(
         details,
         permuted_cluster_stats=stats_metadata["permuted_cluster_stats"],
     )
-    omnibus_p_value = _build_pooled_omnibus_p_value(result=result, contrast=contrast, test=test)
+    omnibus_p_value = _build_pooled_omnibus_p_value(
+        result=result, contrast=contrast, test=test
+    )
     summary = _build_summary(
         details,
         contrast=contrast,
@@ -806,7 +876,9 @@ def shared_cluster_tests(
         "random_state": random_state,
         "inference_level": "pooled_screen",
     }
-    metadata.update({key: value for key, value in stats_metadata.items() if key.startswith("n_")})
+    metadata.update(
+        {key: value for key, value in stats_metadata.items() if key.startswith("n_")}
+    )
     plot_data = {
         "summary_table": summary.copy(),
         "cluster_effect_table": details.copy(),

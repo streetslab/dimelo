@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,9 @@ def test_ensure_modkit_available_forwards_executable_override(monkeypatch):
         captured["executable"] = executable
         return capabilities
 
-    monkeypatch.setattr(run_modkit, "get_modkit_capabilities", fake_get_modkit_capabilities)
+    monkeypatch.setattr(
+        run_modkit, "get_modkit_capabilities", fake_get_modkit_capabilities
+    )
 
     result = run_modkit._ensure_modkit_available(
         quiet=True,
@@ -46,7 +49,9 @@ def test_ensure_modkit_available_forwards_executable_override(monkeypatch):
 
 def test_resolve_modkit_executable_prefers_env_override(monkeypatch):
     monkeypatch.setenv(run_modkit.MODKIT_EXECUTABLE_ENV, "modkit-0.6")
-    monkeypatch.setattr(run_modkit.shutil, "which", lambda name: f"/usr/local/bin/{name}")
+    monkeypatch.setattr(
+        run_modkit.shutil, "which", lambda name: f"/usr/local/bin/{name}"
+    )
 
     resolved = run_modkit._resolve_modkit_executable(None)
 
@@ -105,8 +110,12 @@ def test_get_modkit_capabilities_uses_resolved_path_and_fingerprint(monkeypatch)
         return capabilities
 
     monkeypatch.setattr(run_modkit, "_prepare_modkit_path", fake_prepare_modkit_path)
-    monkeypatch.setattr(run_modkit, "_resolve_modkit_executable", fake_resolve_modkit_executable)
-    monkeypatch.setattr(run_modkit, "_modkit_cache_fingerprint", fake_modkit_cache_fingerprint)
+    monkeypatch.setattr(
+        run_modkit, "_resolve_modkit_executable", fake_resolve_modkit_executable
+    )
+    monkeypatch.setattr(
+        run_modkit, "_modkit_cache_fingerprint", fake_modkit_cache_fingerprint
+    )
     monkeypatch.setattr(run_modkit, "_get_modkit_capabilities_cached", fake_cached)
 
     result = run_modkit.get_modkit_capabilities(
@@ -123,3 +132,58 @@ def test_get_modkit_capabilities_uses_resolved_path_and_fingerprint(monkeypatch)
         "cached_executable_fingerprint": "fingerprint-123",
         "cached_quiet": True,
     }
+
+
+def test_should_render_live_progress_respects_env_off(monkeypatch):
+    monkeypatch.setenv("DIMELO_PROGRESS_MODE", "off")
+    monkeypatch.setattr(run_modkit.sys.stderr, "isatty", lambda: True)
+
+    assert run_modkit._should_render_live_progress() is False
+
+
+def test_should_render_live_progress_auto_disables_notebook(monkeypatch):
+    monkeypatch.delenv("DIMELO_PROGRESS_MODE", raising=False)
+    monkeypatch.setenv("JPY_PARENT_PID", "12345")
+    monkeypatch.setattr(run_modkit.sys.stderr, "isatty", lambda: True)
+
+    assert run_modkit._should_render_live_progress() is False
+
+
+def test_get_modkit_capabilities_extract_subcommands_fallback_for_modkit_0_6(
+    monkeypatch,
+):
+    run_modkit._get_modkit_capabilities_cached.cache_clear()
+
+    def fake_run(
+        cmd, stdout=None, stderr=None, text=None, check=None, capture_output=None
+    ):
+        if cmd == ["modkit", "--version"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout="modkit 0.6.1", stderr="")
+        if cmd == ["modkit", "pileup", "--help"]:
+            return subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout="  --mod-threshold\n  --modified-bases\n",
+                stderr="",
+            )
+        if cmd == ["modkit", "extract", "--help"]:
+            # Simulate help text that does not include the exact usage marker.
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout="Extract command\n", stderr=""
+            )
+        if cmd == ["modkit", "extract", "full", "--help"]:
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout="  --reference\n", stderr=""
+            )
+        raise AssertionError(f"unexpected subprocess command: {cmd}")
+
+    monkeypatch.setattr(run_modkit.subprocess, "run", fake_run)
+
+    caps = run_modkit._get_modkit_capabilities_cached(
+        executable_path="modkit",
+        executable_fingerprint="fingerprint-test",
+        quiet=True,
+    )
+
+    assert caps.supports_extract_subcommands is True
+    assert caps.extract_supports_reference_long is True

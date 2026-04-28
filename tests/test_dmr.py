@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 
 from dimelo import dmr, run_modkit
@@ -41,11 +39,15 @@ def test_run_dmr_pair_builds_command_and_parses_outputs(tmp_path, monkeypatch):
             "chr1\t1\t2\t0.3\t0.001\t0.4\t10\n"
             "chr1\t3\t4\t0.01\t0.6\t0.01\t3\n"
         )
-        seg.write_text("#chrom\tchrom_start\tchrom_end\tname\tscore\nchr1\t1\t10\tdiff\t0.2\n")
+        seg.write_text(
+            "#chrom\tchrom_start\tchrom_end\tname\tscore\nchr1\t1\t10\tdiff\t0.2\n"
+        )
         return None
 
     monkeypatch.setattr(dmr.subprocess, "run", fake_run)
-    monkeypatch.setattr(run_modkit, "_ensure_modkit_available", lambda **_: _fake_capabilities())
+    monkeypatch.setattr(
+        run_modkit, "_ensure_modkit_available", lambda **_: _fake_capabilities()
+    )
 
     result = dmr.run_dmr_pair(
         control_bed_methyl=a,
@@ -109,7 +111,9 @@ def test_run_dmr_multi_collects_pair_files(tmp_path, monkeypatch):
         return None
 
     monkeypatch.setattr(dmr.subprocess, "run", fake_run)
-    monkeypatch.setattr(run_modkit, "_ensure_modkit_available", lambda **_: _fake_capabilities())
+    monkeypatch.setattr(
+        run_modkit, "_ensure_modkit_available", lambda **_: _fake_capabilities()
+    )
 
     result = dmr.run_dmr_multi(
         samples={"s1": sample_a, "s2": sample_b},

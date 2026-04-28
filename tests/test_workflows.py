@@ -5,9 +5,10 @@ import pandas as pd
 import pytest
 
 from dimelo import plotting, workflows
-from dimelo.models import ContrastSpec, DatasetArtifact
 from dimelo.models import (
     ChipAtlasEnrichmentResult,
+    ContrastSpec,
+    DatasetArtifact,
     RegionContrastResult,
     RegionDiscoveryResult,
     SampleSpec,
@@ -96,14 +97,31 @@ def _mock_cluster_result(*args, **kwargs):
         assignments=assignments,
         cluster_distribution=pd.DataFrame(
             [
-                {"sample_id": "s1", "condition": "NS", "cluster": "C0", "count": 1, "fraction": 1.0},
-                {"sample_id": "s2", "condition": "15min", "cluster": "C1", "count": 1, "fraction": 1.0},
+                {
+                    "sample_id": "s1",
+                    "condition": "NS",
+                    "cluster": "C0",
+                    "count": 1,
+                    "fraction": 1.0,
+                },
+                {
+                    "sample_id": "s2",
+                    "condition": "15min",
+                    "cluster": "C1",
+                    "count": 1,
+                    "fraction": 1.0,
+                },
             ]
         ),
         condition_distribution=pd.DataFrame(
             [
                 {"condition": "NS", "cluster": "C0", "fraction": 1.0, "replicate_n": 1},
-                {"condition": "15min", "cluster": "C1", "fraction": 1.0, "replicate_n": 1},
+                {
+                    "condition": "15min",
+                    "cluster": "C1",
+                    "fraction": 1.0,
+                    "replicate_n": 1,
+                },
             ]
         ),
         distribution_change=None,
@@ -203,7 +221,9 @@ def _fake_region_anchored_extract(*args, **kwargs):
 
 
 def test_discovery_cluster_workflow_returns_both_results(monkeypatch):
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
 
     result = workflows.discovery_cluster_workflow(
@@ -216,13 +236,22 @@ def test_discovery_cluster_workflow_returns_both_results(monkeypatch):
 
     assert result.discovery.hits.shape[0] == 3
     assert result.clustering.model.mode == "region_anchored"
-    assert list(result.selected_regions.columns) == ["chrom", "start", "end", "name", "score", "strand"]
+    assert list(result.selected_regions.columns) == [
+        "chrom",
+        "start",
+        "end",
+        "name",
+        "score",
+        "strand",
+    ]
     assert result.metadata["selection"]["mode"] == "top_n"
     assert result.metadata["selection"]["top_n"] == 250
 
 
 def test_discovery_cluster_workflow_selects_top_n_hits(monkeypatch):
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
 
     result = workflows.discovery_cluster_workflow(
@@ -238,7 +267,9 @@ def test_discovery_cluster_workflow_selects_top_n_hits(monkeypatch):
 
 
 def test_discovery_cluster_workflow_selects_all_hits(monkeypatch):
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
 
     result = workflows.discovery_cluster_workflow(
@@ -258,14 +289,18 @@ def test_discovery_cluster_workflow_selects_all_hits(monkeypatch):
     assert result.metadata["selection"]["top_n"] is None
 
 
-def test_discovery_cluster_workflow_passes_selected_regions_into_clustering(monkeypatch):
+def test_discovery_cluster_workflow_passes_selected_regions_into_clustering(
+    monkeypatch,
+):
     captured = {}
 
     def fake_cluster(**kwargs):
         captured["matched_regions"] = kwargs["matched_regions"]
         return _mock_cluster_result(**kwargs)
 
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "shared_cluster_distribution", fake_cluster)
 
     result = workflows.discovery_cluster_workflow(
@@ -278,12 +313,21 @@ def test_discovery_cluster_workflow_passes_selected_regions_into_clustering(monk
     )
 
     assert captured["matched_regions"] == ["chr1:0-500,+", "chr1:500-1000,-"]
-    assert list(result.selected_regions.columns) == ["chrom", "start", "end", "name", "score", "strand"]
+    assert list(result.selected_regions.columns) == [
+        "chrom",
+        "start",
+        "end",
+        "name",
+        "score",
+        "strand",
+    ]
     assert list(result.selected_regions["name"]) == ["chr1:0-500", "chr1:500-1000"]
 
 
 def test_discovery_cluster_workflow_errors_when_no_hits_survive_selection(monkeypatch):
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
 
     with pytest.raises(ValueError, match="No discovery hits remained after selection"):
@@ -302,7 +346,9 @@ def test_discovery_cluster_workflow_rejects_unknown_selection_mode(monkeypatch):
 
     def fake_scan_genome(*args, **kwargs):
         called["scan_genome"] = True
-        raise AssertionError("scan_genome should not be called for invalid selection config")
+        raise AssertionError(
+            "scan_genome should not be called for invalid selection config"
+        )
 
     monkeypatch.setattr(workflows.region_discovery, "scan_genome", fake_scan_genome)
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
@@ -319,12 +365,16 @@ def test_discovery_cluster_workflow_rejects_unknown_selection_mode(monkeypatch):
     assert called["scan_genome"] is False
 
 
-def test_discovery_cluster_workflow_rejects_invalid_clustering_config_before_scan(monkeypatch):
+def test_discovery_cluster_workflow_rejects_invalid_clustering_config_before_scan(
+    monkeypatch,
+):
     called = {"scan_genome": False}
 
     def fake_scan_genome(*args, **kwargs):
         called["scan_genome"] = True
-        raise AssertionError("scan_genome should not be called for invalid clustering config")
+        raise AssertionError(
+            "scan_genome should not be called for invalid clustering config"
+        )
 
     monkeypatch.setattr(workflows.region_discovery, "scan_genome", fake_scan_genome)
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
@@ -335,12 +385,18 @@ def test_discovery_cluster_workflow_rejects_invalid_clustering_config_before_sca
             motifs=["A,0"],
             genome_sizes={"chr1": 1500},
             discovery={"window_size": 500, "step_size": 500},
-            clustering={"mode": "region_anchored", "clusterer": "agglomerative", "n_clusters": 2},
+            clustering={
+                "mode": "region_anchored",
+                "clusterer": "agglomerative",
+                "n_clusters": 2,
+            },
         )
     assert called["scan_genome"] is False
 
 
-def test_discovery_cluster_workflow_region_anchored_uses_serializable_matched_regions(monkeypatch):
+def test_discovery_cluster_workflow_region_anchored_uses_serializable_matched_regions(
+    monkeypatch,
+):
     captured = {"resolve_params": []}
 
     def fake_resolve_artifact(requested_artifact, available_artifacts, artifact_policy):
@@ -352,7 +408,9 @@ def test_discovery_cluster_workflow_region_anchored_uses_serializable_matched_re
         captured["regions"] = regions
         return _fake_region_anchored_extract(*args, **kwargs)
 
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "resolve_artifact", fake_resolve_artifact)
     monkeypatch.setattr(
         workflows.cluster,
@@ -374,10 +432,15 @@ def test_discovery_cluster_workflow_region_anchored_uses_serializable_matched_re
         ["chr1:0-500,+", "chr1:500-1000,-"],
         ["chr1:0-500,+", "chr1:500-1000,-"],
     ]
-    assert result.clustering.metadata["matched_regions"] == ["chr1:0-500,+", "chr1:500-1000,-"]
+    assert result.clustering.metadata["matched_regions"] == [
+        "chr1:0-500,+",
+        "chr1:500-1000,-",
+    ]
 
 
-def test_discovery_cluster_workflow_artifact_params_keep_matched_regions_json_serializable(monkeypatch):
+def test_discovery_cluster_workflow_artifact_params_keep_matched_regions_json_serializable(
+    monkeypatch,
+):
     captured = {}
     region_spec = ["chr1:0-500,+", "chr1:500-1000,-"]
     artifact_samples = []
@@ -403,7 +466,11 @@ def test_discovery_cluster_workflow_artifact_params_keep_matched_regions_json_se
                                 "feature_scaling": "robust_zscore",
                                 "cluster_basis": "shape_plus_level",
                             },
-                            provenance={"pipeline": "parse_bam", "source_files": [], "source_fingerprints": []},
+                            provenance={
+                                "pipeline": "parse_bam",
+                                "source_files": [],
+                                "source_fingerprints": [],
+                            },
                         )
                     ],
                 },
@@ -411,10 +478,14 @@ def test_discovery_cluster_workflow_artifact_params_keep_matched_regions_json_se
         )
 
     def fake_resolve_artifact(requested_artifact, available_artifacts, artifact_policy):
-        captured.setdefault("params", []).append(requested_artifact.params["matched_regions"])
+        captured.setdefault("params", []).append(
+            requested_artifact.params["matched_regions"]
+        )
         return available_artifacts[0]
 
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "resolve_artifact", fake_resolve_artifact)
     monkeypatch.setattr(
         workflows.cluster,
@@ -432,14 +503,19 @@ def test_discovery_cluster_workflow_artifact_params_keep_matched_regions_json_se
     )
 
     assert captured["params"] == [region_spec, region_spec]
-    assert result.clustering.metadata["cache_hits"] == {"s1": "s1.bed.gz", "s2": "s2.bed.gz"}
+    assert result.clustering.metadata["cache_hits"] == {
+        "s1": "s1.bed.gz",
+        "s2": "s2.bed.gz",
+    }
 
 
 def test_discovery_cluster_workflow_materializes_samples_iterable(monkeypatch):
     captured = {}
 
     def fake_discovery(*args, **kwargs):
-        captured["discovery_sample_ids"] = [sample.sample_id for sample in kwargs["samples"]]
+        captured["discovery_sample_ids"] = [
+            sample.sample_id for sample in kwargs["samples"]
+        ]
         return _mock_discovery_result(*args, **kwargs)
 
     def fake_cluster(**kwargs):
@@ -493,9 +569,13 @@ def test_discovery_cluster_workflow_materializes_motif_generator(monkeypatch):
 
 
 def test_discovery_cluster_contrast_workflow_returns_all_results(monkeypatch):
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
-    monkeypatch.setattr(workflows.region_contrasts, "score_regions", _mock_region_contrast_result)
+    monkeypatch.setattr(
+        workflows.region_contrasts, "score_regions", _mock_region_contrast_result
+    )
 
     result = workflows.discovery_cluster_contrast_workflow(
         samples=_workflow_samples(),
@@ -517,18 +597,29 @@ def test_discovery_cluster_contrast_workflow_returns_all_results(monkeypatch):
     assert result.clustering.model.mode == "region_anchored"
     assert result.contrasts.metadata["test"] == "effect_size_only"
     assert result.metadata["contrast_scope"] == "selected"
-    assert list(result.selected_regions.columns) == ["chrom", "start", "end", "name", "score", "strand"]
+    assert list(result.selected_regions.columns) == [
+        "chrom",
+        "start",
+        "end",
+        "name",
+        "score",
+        "strand",
+    ]
     assert result.metadata["full_scan_windows"].equals(result.discovery.windows)
 
 
-def test_discovery_cluster_contrast_workflow_scores_selected_regions_by_default(monkeypatch):
+def test_discovery_cluster_contrast_workflow_scores_selected_regions_by_default(
+    monkeypatch,
+):
     captured = {}
 
     def fake_score_regions(**kwargs):
         captured["regions"] = kwargs["regions"]
         return _mock_region_contrast_result(**kwargs)
 
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
     monkeypatch.setattr(workflows.region_contrasts, "score_regions", fake_score_regions)
 
@@ -595,9 +686,13 @@ def test_discovery_cluster_contrast_workflow_normalizes_clustering_region_ids_fo
         )
         return result
 
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "shared_cluster_distribution", fake_cluster)
-    monkeypatch.setattr(workflows.region_contrasts, "score_regions", _mock_region_contrast_result)
+    monkeypatch.setattr(
+        workflows.region_contrasts, "score_regions", _mock_region_contrast_result
+    )
 
     result = workflows.discovery_cluster_contrast_workflow(
         samples=_workflow_samples(),
@@ -632,7 +727,9 @@ def test_discovery_cluster_contrast_workflow_uses_custom_contrast_regions_when_p
         captured["regions"] = kwargs["regions"]
         return _mock_region_contrast_result(**kwargs)
 
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
     monkeypatch.setattr(workflows.region_contrasts, "score_regions", fake_score_regions)
 
@@ -659,10 +756,16 @@ def test_discovery_cluster_contrast_workflow_uses_custom_contrast_regions_when_p
     assert result.selected_regions["name"].tolist() == ["chr1:0-500", "chr1:500-1000"]
 
 
-def test_discovery_cluster_contrast_workflow_preserves_full_scan_windows_context(monkeypatch):
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+def test_discovery_cluster_contrast_workflow_preserves_full_scan_windows_context(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
-    monkeypatch.setattr(workflows.region_contrasts, "score_regions", _mock_region_contrast_result)
+    monkeypatch.setattr(
+        workflows.region_contrasts, "score_regions", _mock_region_contrast_result
+    )
 
     result = workflows.discovery_cluster_contrast_workflow(
         samples=_workflow_samples(),
@@ -682,8 +785,12 @@ def test_discovery_cluster_contrast_workflow_preserves_full_scan_windows_context
     assert result.metadata["full_scan_windows"].equals(result.discovery.windows)
 
 
-def test_discovery_cluster_contrast_workflow_rejects_missing_contrast_config(monkeypatch):
-    monkeypatch.setattr(workflows.region_discovery, "scan_genome", _mock_discovery_result)
+def test_discovery_cluster_contrast_workflow_rejects_missing_contrast_config(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        workflows.region_discovery, "scan_genome", _mock_discovery_result
+    )
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
 
     with pytest.raises(ValueError, match=r"requires contrasts\['contrast'\]"):
@@ -704,7 +811,9 @@ def test_discovery_cluster_contrast_workflow_fast_fails_invalid_contrast_config_
 
     def fake_scan_genome(*args, **kwargs):
         called["scan_genome"] = True
-        raise AssertionError("scan_genome should not be called for invalid contrast config")
+        raise AssertionError(
+            "scan_genome should not be called for invalid contrast config"
+        )
 
     monkeypatch.setattr(workflows.region_discovery, "scan_genome", fake_scan_genome)
     monkeypatch.setattr(workflows, "shared_cluster_distribution", _mock_cluster_result)
@@ -742,14 +851,34 @@ def test_shared_cluster_distribution_read_global(monkeypatch):
             if hdf5_file == "s1.h5":
                 data_matrix = np.array([[0.0, 0.0, 0.1, 0.1], [0.0, 0.1, 0.0, 0.1]])
                 metadata = [
-                    {"read_name": "s1-r1", "chromosome": "chr1", "region_start": 0, "region_end": 4},
-                    {"read_name": "s1-r2", "chromosome": "chr1", "region_start": 10, "region_end": 14},
+                    {
+                        "read_name": "s1-r1",
+                        "chromosome": "chr1",
+                        "region_start": 0,
+                        "region_end": 4,
+                    },
+                    {
+                        "read_name": "s1-r2",
+                        "chromosome": "chr1",
+                        "region_start": 10,
+                        "region_end": 14,
+                    },
                 ]
             else:
                 data_matrix = np.array([[1.0, 0.9, 1.0, 0.9], [0.9, 1.0, 0.9, 1.0]])
                 metadata = [
-                    {"read_name": "s2-r1", "chromosome": "chr1", "region_start": 20, "region_end": 24},
-                    {"read_name": "s2-r2", "chromosome": "chr1", "region_start": 30, "region_end": 34},
+                    {
+                        "read_name": "s2-r1",
+                        "chromosome": "chr1",
+                        "region_start": 20,
+                        "region_end": 24,
+                    },
+                    {
+                        "read_name": "s2-r2",
+                        "chromosome": "chr1",
+                        "region_start": 30,
+                        "region_end": 34,
+                    },
                 ]
             val_matrix = np.ones((2, 4), dtype=float)
             datasets = []
@@ -853,9 +982,14 @@ def test_shared_cluster_distribution_read_global_builds_region_summaries_from_co
     )
 
     assert result.region_summaries is not None
-    assert {"region_id", "sample_id", "condition", "cluster", "count", "fraction"} <= set(
-        result.region_summaries.columns
-    )
+    assert {
+        "region_id",
+        "sample_id",
+        "condition",
+        "cluster",
+        "count",
+        "fraction",
+    } <= set(result.region_summaries.columns)
     assert set(result.region_summaries["sample_id"]) == {"s1", "s2"}
     assert set(result.region_summaries["condition"]) == {"NS", "15min"}
 
@@ -897,7 +1031,9 @@ def test_shared_cluster_distribution_read_global_leaves_region_summaries_empty_w
     assert result.region_summaries is None
 
 
-def test_shared_cluster_distribution_read_global_prefers_cluster_summarizer(monkeypatch):
+def test_shared_cluster_distribution_read_global_prefers_cluster_summarizer(
+    monkeypatch,
+):
     fake_samples = [
         SampleSpec(sample_id="s1", condition="NS", extract_h5="s1.h5"),
         SampleSpec(sample_id="s2", condition="15min", extract_h5="s2.h5"),
@@ -1041,14 +1177,34 @@ def test_shared_cluster_distribution_propagates_sample_metadata_into_assignments
             if hdf5_file == "s1.h5":
                 data_matrix = np.array([[0.0, 0.0, 0.1, 0.1], [0.0, 0.1, 0.0, 0.1]])
                 metadata = [
-                    {"read_name": "s1-r1", "chromosome": "chr1", "region_start": 0, "region_end": 4},
-                    {"read_name": "s1-r2", "chromosome": "chr1", "region_start": 10, "region_end": 14},
+                    {
+                        "read_name": "s1-r1",
+                        "chromosome": "chr1",
+                        "region_start": 0,
+                        "region_end": 4,
+                    },
+                    {
+                        "read_name": "s1-r2",
+                        "chromosome": "chr1",
+                        "region_start": 10,
+                        "region_end": 14,
+                    },
                 ]
             else:
                 data_matrix = np.array([[1.0, 0.9, 1.0, 0.9], [0.9, 1.0, 0.9, 1.0]])
                 metadata = [
-                    {"read_name": "s2-r1", "chromosome": "chr1", "region_start": 20, "region_end": 24},
-                    {"read_name": "s2-r2", "chromosome": "chr1", "region_start": 30, "region_end": 34},
+                    {
+                        "read_name": "s2-r1",
+                        "chromosome": "chr1",
+                        "region_start": 20,
+                        "region_end": 24,
+                    },
+                    {
+                        "read_name": "s2-r2",
+                        "chromosome": "chr1",
+                        "region_start": 30,
+                        "region_end": 34,
+                    },
                 ]
             val_matrix = np.ones((2, 4), dtype=float)
             datasets = []
@@ -1175,7 +1331,9 @@ def test_shared_cluster_distribution_propagates_sample_metadata_into_assignments
             },
         ]
 
-    monkeypatch.setattr(workflows.region_analysis, "build_region_feature_table", fake_region_table)
+    monkeypatch.setattr(
+        workflows.region_analysis, "build_region_feature_table", fake_region_table
+    )
 
     result = workflows.shared_cluster_distribution(
         samples=fake_samples,
@@ -1275,7 +1433,9 @@ def test_shared_cluster_distribution_region_anchored(monkeypatch):
             },
         ]
 
-    monkeypatch.setattr(workflows.region_analysis, "build_region_feature_table", fake_region_table)
+    monkeypatch.setattr(
+        workflows.region_analysis, "build_region_feature_table", fake_region_table
+    )
 
     result = workflows.shared_cluster_distribution(
         samples=fake_samples,
@@ -1289,9 +1449,14 @@ def test_shared_cluster_distribution_region_anchored(monkeypatch):
     assert not result.assignments.empty
     assert "region_id" in result.assignments.columns
     assert result.region_summaries is not None
-    assert {"region_id", "sample_id", "condition", "cluster", "count", "fraction"} <= set(
-        result.region_summaries.columns
-    )
+    assert {
+        "region_id",
+        "sample_id",
+        "condition",
+        "cluster",
+        "count",
+        "fraction",
+    } <= set(result.region_summaries.columns)
 
 
 def test_shared_cluster_region_data_region_anchored_region_summaries_feed_region_plotting(
@@ -1338,7 +1503,9 @@ def test_shared_cluster_region_data_region_anchored_region_summaries_feed_region
             },
         ]
 
-    monkeypatch.setattr(workflows.region_analysis, "build_region_feature_table", fake_region_table)
+    monkeypatch.setattr(
+        workflows.region_analysis, "build_region_feature_table", fake_region_table
+    )
 
     result = workflows.shared_cluster_distribution(
         samples=fake_samples,
@@ -1380,7 +1547,9 @@ def test_shared_cluster_distribution_region_anchored_requires_matched_regions():
         )
 
 
-def test_shared_cluster_distribution_region_anchored_accepts_list_matched_regions(monkeypatch):
+def test_shared_cluster_distribution_region_anchored_accepts_list_matched_regions(
+    monkeypatch,
+):
     captured = {}
 
     def fake_region_table(*args, **kwargs):
@@ -1408,7 +1577,9 @@ def test_shared_cluster_distribution_region_anchored_accepts_list_matched_region
             },
         ]
 
-    monkeypatch.setattr(workflows.region_analysis, "build_region_feature_table", fake_region_table)
+    monkeypatch.setattr(
+        workflows.region_analysis, "build_region_feature_table", fake_region_table
+    )
 
     result = workflows.shared_cluster_distribution(
         samples=_workflow_samples(),
@@ -1443,8 +1614,18 @@ def test_shared_cluster_distribution_tracks_condition_replicates(monkeypatch):
             data_matrix = data
             val_matrix = np.ones_like(data)
             metadata = [
-                {"read_name": f"{kwargs['hdf5_file']}-r1", "chromosome": "chr1", "region_start": 0, "region_end": 2},
-                {"read_name": f"{kwargs['hdf5_file']}-r2", "chromosome": "chr1", "region_start": 2, "region_end": 4},
+                {
+                    "read_name": f"{kwargs['hdf5_file']}-r1",
+                    "chromosome": "chr1",
+                    "region_start": 0,
+                    "region_end": 2,
+                },
+                {
+                    "read_name": f"{kwargs['hdf5_file']}-r2",
+                    "chromosome": "chr1",
+                    "region_start": 2,
+                    "region_end": 4,
+                },
             ]
             datasets = []
             regions_dict = None
@@ -1466,7 +1647,9 @@ def test_shared_cluster_distribution_tracks_condition_replicates(monkeypatch):
         training_sample_per_dataset=2,
     )
 
-    ns_rows = result.condition_distribution[result.condition_distribution["condition"] == "NS"]
+    ns_rows = result.condition_distribution[
+        result.condition_distribution["condition"] == "NS"
+    ]
     assert set(ns_rows["replicate_n"]) == {2}
 
 
@@ -1566,7 +1749,9 @@ def test_shared_cluster_distribution_region_anchored_control_regions(monkeypatch
             }
         ]
 
-    monkeypatch.setattr(workflows.region_analysis, "build_region_feature_table", fake_region_table)
+    monkeypatch.setattr(
+        workflows.region_analysis, "build_region_feature_table", fake_region_table
+    )
 
     result = workflows.shared_cluster_distribution(
         samples=fake_samples,
@@ -1621,8 +1806,18 @@ def test_shared_cluster_distribution_prefers_cached_extract_artifact(monkeypatch
             data_matrix = np.array([[0.0, 0.0], [1.0, 1.0]])
             val_matrix = np.ones((2, 2), dtype=float)
             metadata = [
-                {"read_name": "r1", "chromosome": "chr1", "region_start": 0, "region_end": 2},
-                {"read_name": "r2", "chromosome": "chr1", "region_start": 2, "region_end": 4},
+                {
+                    "read_name": "r1",
+                    "chromosome": "chr1",
+                    "region_start": 0,
+                    "region_end": 2,
+                },
+                {
+                    "read_name": "r2",
+                    "chromosome": "chr1",
+                    "region_start": 2,
+                    "region_end": 4,
+                },
             ]
             datasets = []
             regions_dict = None
@@ -1648,7 +1843,9 @@ def test_shared_cluster_distribution_prefers_cached_extract_artifact(monkeypatch
     assert result.metadata["cache_hits"]["s1"] == "cached-s1.h5"
 
 
-def test_shared_cluster_distribution_rebuilds_when_source_fingerprint_mismatches(monkeypatch):
+def test_shared_cluster_distribution_rebuilds_when_source_fingerprint_mismatches(
+    monkeypatch,
+):
     stale_artifact = DatasetArtifact(
         sample_id="s1",
         artifact_type="extract",
@@ -1688,8 +1885,18 @@ def test_shared_cluster_distribution_rebuilds_when_source_fingerprint_mismatches
             data_matrix = np.array([[0.0, 0.0], [1.0, 1.0]])
             val_matrix = np.ones((2, 2), dtype=float)
             metadata = [
-                {"read_name": "r1", "chromosome": "chr1", "region_start": 0, "region_end": 2},
-                {"read_name": "r2", "chromosome": "chr1", "region_start": 2, "region_end": 4},
+                {
+                    "read_name": "r1",
+                    "chromosome": "chr1",
+                    "region_start": 0,
+                    "region_end": 2,
+                },
+                {
+                    "read_name": "r2",
+                    "chromosome": "chr1",
+                    "region_start": 2,
+                    "region_end": 4,
+                },
             ]
             datasets = []
             regions_dict = None
@@ -1774,7 +1981,15 @@ def test_chip_atlas_cluster_enrichment_workflow_per_cluster(monkeypatch):
             ]
         ),
         cluster_distribution=pd.DataFrame(
-            [{"sample_id": "s1", "condition": "NS", "cluster": "C0", "count": 1, "fraction": 1.0}]
+            [
+                {
+                    "sample_id": "s1",
+                    "condition": "NS",
+                    "cluster": "C0",
+                    "count": 1,
+                    "fraction": 1.0,
+                }
+            ]
         ),
         condition_distribution=pd.DataFrame(
             [{"condition": "NS", "cluster": "C0", "fraction": 1.0, "replicate_n": 1}]
@@ -1795,7 +2010,9 @@ def test_chip_atlas_cluster_enrichment_workflow_per_cluster(monkeypatch):
             results=pd.DataFrame({"target": ["CTCF"]}),
         )
 
-    monkeypatch.setattr(workflows, "chip_atlas_enrichment_workflow", fake_chip_atlas_workflow)
+    monkeypatch.setattr(
+        workflows, "chip_atlas_enrichment_workflow", fake_chip_atlas_workflow
+    )
 
     results = workflows.chip_atlas_cluster_enrichment_workflow(
         cluster_result=cluster_result,
@@ -1807,7 +2024,9 @@ def test_chip_atlas_cluster_enrichment_workflow_per_cluster(monkeypatch):
     assert set(results.keys()) == {"C0", "C1"}
     assert len(called) == 2
     assert all(frame.shape[0] >= 1 for frame in called)
-    assert all({"chrom", "start", "end", "strand"}.issubset(frame.columns) for frame in called)
+    assert all(
+        {"chrom", "start", "end", "strand"}.issubset(frame.columns) for frame in called
+    )
 
 
 def test_chip_atlas_search_peak_datasets_workflow_forwards(monkeypatch):
@@ -1815,7 +2034,9 @@ def test_chip_atlas_search_peak_datasets_workflow_forwards(monkeypatch):
 
     def fake_search(**kwargs):
         captured.update(kwargs)
-        return pd.DataFrame([{"dataset_id": "SRX1", "bed_url": "http://example.org/srx1.bed"}])
+        return pd.DataFrame(
+            [{"dataset_id": "SRX1", "bed_url": "http://example.org/srx1.bed"}]
+        )
 
     monkeypatch.setattr(workflows.chip_atlas, "search_peak_datasets", fake_search)
     out = workflows.chip_atlas_search_peak_datasets_workflow(
@@ -1837,7 +2058,15 @@ def test_chip_atlas_download_peak_datasets_workflow_forwards(monkeypatch):
         return pd.DataFrame([{"dataset_id": "SRX1", "variant": "top_3000"}])
 
     monkeypatch.setattr(workflows.chip_atlas, "download_peak_datasets", fake_download)
-    datasets = pd.DataFrame([{"dataset_id": "SRX1", "bed_url": "http://example.org/srx1.bed", "genome_assembly": "hg38"}])
+    datasets = pd.DataFrame(
+        [
+            {
+                "dataset_id": "SRX1",
+                "bed_url": "http://example.org/srx1.bed",
+                "genome_assembly": "hg38",
+            }
+        ]
+    )
     out = workflows.chip_atlas_download_peak_datasets_workflow(
         datasets=datasets,
         dataset_ids=["SRX1"],

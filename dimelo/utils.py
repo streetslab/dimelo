@@ -1,3 +1,4 @@
+import contextlib
 import multiprocessing
 import os
 from collections import defaultdict
@@ -65,10 +66,8 @@ def _parse_positive_int(value: str | None) -> int | None:
 def _effective_cpu_count() -> int:
     candidates: list[int] = []
 
-    try:
+    with contextlib.suppress(Exception):
         candidates.append(int(multiprocessing.cpu_count()))
-    except Exception:
-        pass
 
     try:
         affinity = os.sched_getaffinity(0)
@@ -393,7 +392,9 @@ def line_plot(
         ValueError: raised if any vectors are of unequal length
     """
     # construct dict of {vector_name: vector}, including the x vector using dict union operations
-    data_dict = {indep_name: indep_vector} | dict(zip(dep_names, dep_vectors))
+    data_dict = {indep_name: indep_vector} | dict(
+        zip(dep_names, dep_vectors, strict=False)
+    )
     hue_column = legend_title if legend_title else "variable"
     # construct long-form data table for plotting
     try:

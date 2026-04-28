@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 import pandas as pd
 
@@ -162,9 +163,13 @@ def run_dmr_pair(
     region_path = None if regions_bed is None else _coerce_path(regions_bed)
     segment_output_path = None if segment_path is None else _coerce_path(segment_path)
     if not control_path.exists():
-        raise FileNotFoundError(f"Control bedMethyl file does not exist: {control_path}")
+        raise FileNotFoundError(
+            f"Control bedMethyl file does not exist: {control_path}"
+        )
     if not experiment_path.exists():
-        raise FileNotFoundError(f"Experiment bedMethyl file does not exist: {experiment_path}")
+        raise FileNotFoundError(
+            f"Experiment bedMethyl file does not exist: {experiment_path}"
+        )
     if not reference_path.exists():
         raise FileNotFoundError(f"Reference FASTA does not exist: {reference_path}")
     if region_path is not None and not region_path.exists():
@@ -210,12 +215,18 @@ def run_dmr_pair(
     _append_if_value(command, "--interval-size", interval_size)
     if prior_alpha is not None or prior_beta is not None:
         if prior_alpha is None or prior_beta is None:
-            raise ValueError("prior_alpha and prior_beta must both be provided together.")
+            raise ValueError(
+                "prior_alpha and prior_beta must both be provided together."
+            )
         command.extend(["--prior", str(prior_alpha), str(prior_beta)])
     if max_coverages is not None:
         if len(max_coverages) != 2:
-            raise ValueError("max_coverages must be a 2-tuple: (control_max, experiment_max).")
-        command.extend(["--max-coverages", str(max_coverages[0]), str(max_coverages[1])])
+            raise ValueError(
+                "max_coverages must be a 2-tuple: (control_max, experiment_max)."
+            )
+        command.extend(
+            ["--max-coverages", str(max_coverages[0]), str(max_coverages[1])]
+        )
 
     resolved_threads = utils.cores_to_run(threads)
     command.extend(["--threads", str(resolved_threads)])

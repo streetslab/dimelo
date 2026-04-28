@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from functools import partial
 import math
-from typing import Iterable
+from collections.abc import Iterable
+from functools import partial
 
 import pandas as pd
 from scipy import stats
@@ -118,7 +118,9 @@ def build_region_evidence_table(
 ) -> pd.DataFrame:
     motifs = list(motifs)
     if len(motifs) != 1:
-        raise ValueError("build_region_evidence_table currently supports exactly one motif.")
+        raise ValueError(
+            "build_region_evidence_table currently supports exactly one motif."
+        )
 
     motif = motifs[0]
     regions_dict = utils.regions_dict_from_input(regions, window_size)
@@ -157,7 +159,7 @@ def build_region_evidence_table(
         for (chromosome, start, end, strand), (
             modified_count,
             valid_count,
-        ) in zip(ordered_regions, counts_by_region):
+        ) in zip(ordered_regions, counts_by_region, strict=False):
             mod_fraction = 0.0 if valid_count == 0 else modified_count / valid_count
             rows.append(
                 {
@@ -215,7 +217,9 @@ def build_single_read_mod_fraction_evidence_table(
         :,
         selected_columns,
     ].copy()
-    evidence["modified_count"] = pd.to_numeric(evidence["modified_count"], errors="coerce")
+    evidence["modified_count"] = pd.to_numeric(
+        evidence["modified_count"], errors="coerce"
+    )
     evidence["valid_count"] = pd.to_numeric(evidence["valid_count"], errors="coerce")
     invalid_counts = (
         evidence["modified_count"].isna()
@@ -235,10 +239,14 @@ def build_single_read_mod_fraction_evidence_table(
         )
     evidence["modified_count"] = evidence["modified_count"].astype(int)
     evidence["valid_count"] = evidence["valid_count"].astype(int)
-    evidence["read_mod_fraction"] = evidence["modified_count"].div(
-        evidence["valid_count"].where(evidence["valid_count"] != 0),
-        fill_value=0,
-    ).fillna(0.0)
+    evidence["read_mod_fraction"] = (
+        evidence["modified_count"]
+        .div(
+            evidence["valid_count"].where(evidence["valid_count"] != 0),
+            fill_value=0,
+        )
+        .fillna(0.0)
+    )
     return evidence
 
 
@@ -259,9 +267,7 @@ def build_single_read_feature_evidence_table(
         )
 
     feature_columns = [
-        column
-        for column in feature_table.columns
-        if column not in required_columns
+        column for column in feature_table.columns if column not in required_columns
     ]
     if not feature_columns:
         raise ValueError(
@@ -272,19 +278,20 @@ def build_single_read_feature_evidence_table(
         selected_columns.append(pairing_key)
     selected_columns.extend(feature_columns)
     evidence = feature_table.loc[:, selected_columns].copy()
-    evidence.loc[:, feature_columns] = evidence.loc[:, feature_columns].apply(
+    numeric_features = evidence.loc[:, feature_columns].apply(
         pd.to_numeric,
         errors="coerce",
     )
-    finite_feature_values = evidence.loc[:, feature_columns].apply(
+    finite_feature_values = numeric_features.apply(
         lambda column: column.map(math.isfinite)
     )
-    invalid_feature_values = evidence.loc[:, feature_columns].isna() | ~finite_feature_values
+    invalid_feature_values = numeric_features.isna() | ~finite_feature_values
     if invalid_feature_values.to_numpy().any():
         raise ValueError(
             "build_single_read_feature_evidence_table feature columns must be numeric "
             "and finite."
         )
+    evidence.loc[:, feature_columns] = numeric_features
     return evidence
 
 
@@ -324,14 +331,11 @@ def _validate_single_read_matched_sample_summary(
             "to exactly one pairing key."
         )
 
-    side_counts = (
-        sample_summary.groupby(
-            ["region_id", pairing_key, "condition"],
-            dropna=False,
-            sort=False,
-        )["sample_id"]
-        .nunique()
-    )
+    side_counts = sample_summary.groupby(
+        ["region_id", pairing_key, "condition"],
+        dropna=False,
+        sort=False,
+    )["sample_id"].nunique()
     if (side_counts > 1).any():
         raise ValueError(
             "single_read matched_pairwise scoring requires exactly one sample "
@@ -371,7 +375,9 @@ def _load_builtin_single_read_feature_table(*, samples, regions, motifs):
             )
 
         rows = []
-        for metadata, feature_values in zip(extracted.metadata, feature_rows):
+        for metadata, feature_values in zip(
+            extracted.metadata, feature_rows, strict=False
+        ):
             chromosome = metadata.get("chromosome")
             start = metadata.get("region_start")
             end = metadata.get("region_end")
@@ -395,7 +401,9 @@ def _load_builtin_single_read_feature_table(*, samples, regions, motifs):
             row.update(
                 {
                     feature_name: float(feature_value)
-                    for feature_name, feature_value in zip(feature_names, feature_values)
+                    for feature_name, feature_value in zip(
+                        feature_names, feature_values, strict=False
+                    )
                 }
             )
             rows.append(row)
@@ -403,7 +411,13 @@ def _load_builtin_single_read_feature_table(*, samples, regions, motifs):
 
     if not sample_frames:
         return pd.DataFrame(
-            columns=["region_id", "sample_id", "condition", "read_id", *(selected_feature_names or [])]
+            columns=[
+                "region_id",
+                "sample_id",
+                "condition",
+                "read_id",
+                *(selected_feature_names or []),
+            ]
         )
     return pd.concat(sample_frames, ignore_index=True)
 
@@ -493,7 +507,9 @@ def _estimate_beta_binomial_prior(
         )
 
     denominator_unmodified_count = denominator_valid_count - denominator_modified_count
-    return float(denominator_modified_count + 1), float(denominator_unmodified_count + 1)
+    return float(denominator_modified_count + 1), float(
+        denominator_unmodified_count + 1
+    )
 
 
 def _log_beta_function(alpha: float, beta: float) -> float:
@@ -512,7 +528,9 @@ def _beta_binomial_logpmf(k: int, n: int, alpha: float, beta: float) -> float:
     )
 
 
-def _beta_binomial_two_sided_p_value(k: int, n: int, alpha: float, beta: float) -> float:
+def _beta_binomial_two_sided_p_value(
+    k: int, n: int, alpha: float, beta: float
+) -> float:
     if k < 0:
         raise ValueError("beta-binomial modified_count must be >= 0.")
     if n < 0:
@@ -526,9 +544,7 @@ def _beta_binomial_two_sided_p_value(k: int, n: int, alpha: float, beta: float) 
     logpmf = [_beta_binomial_logpmf(x, n, alpha, beta) for x in support]
     observed_logpmf = logpmf[k]
     tail_probability = sum(
-        math.exp(value)
-        for value in logpmf
-        if value <= observed_logpmf + 1e-12
+        math.exp(value) for value in logpmf if value <= observed_logpmf + 1e-12
     )
     return min(max(tail_probability, 0.0), 1.0)
 
@@ -537,7 +553,9 @@ def _adjust_p_values_bh(p_values: pd.Series) -> pd.Series:
     if p_values.empty:
         return pd.Series(dtype=float, index=p_values.index)
 
-    ranked = sorted(enumerate(p_values.tolist()), key=lambda item: item[1], reverse=True)
+    ranked = sorted(
+        enumerate(p_values.tolist()), key=lambda item: item[1], reverse=True
+    )
     total = len(ranked)
     adjusted = [1.0] * total
     running_min = 1.0
@@ -577,6 +595,7 @@ def _add_beta_binomial_scores(
             scored["numerator_valid_count"],
             scored["denominator_modified_count"],
             scored["denominator_valid_count"],
+            strict=False,
         )
     ]
     scored["adjusted_p_value"] = _adjust_p_values_bh(scored["p_value"])
@@ -665,7 +684,9 @@ def _validate_occupancy_table_numeric_columns(occupancy_table: pd.DataFrame) -> 
         (
             "fraction",
             "occupancy_table fraction values must be finite and between 0 and 1.",
-            lambda values: values.isna() | ~values.map(math.isfinite) | (values < 0) | (values > 1),
+            lambda values: (
+                values.isna() | ~values.map(math.isfinite) | (values < 0) | (values > 1)
+            ),
         ),
         (
             "cluster_entropy",
@@ -744,7 +765,10 @@ def _pool_cluster_occupancy_groups(
             .agg(
                 value=(value_column, "mean"),
                 replicate_n=("sample_id", "nunique"),
-                sample_values=(value_column, lambda values: tuple(float(v) for v in values)),
+                sample_values=(
+                    value_column,
+                    lambda values: tuple(float(v) for v in values),
+                ),
             )
             .reset_index()
             .assign(contrast_side=side)
@@ -813,7 +837,9 @@ def _select_complete_matched_pairs(
         complete_pair_index,
         names=["region_id", pairing_key],
     )
-    paired_index = pd.MultiIndex.from_frame(pair_summary.loc[:, ["region_id", pairing_key]])
+    paired_index = pd.MultiIndex.from_frame(
+        pair_summary.loc[:, ["region_id", pairing_key]]
+    )
     return pair_summary.loc[paired_index.isin(complete_pairs)].copy()
 
 
@@ -899,17 +925,16 @@ def _score_single_read_mod_fraction(
             (regions_table["sample_summary_numerator_mean"] + 1e-6)
             / (regions_table["sample_summary_denominator_mean"] + 1e-6)
         ).map(math.log2)
-        regions_table = (
-            regions_table.groupby("region_id", as_index=False, sort=False)
-            .agg(
-                sample_summary_numerator_mean=("sample_summary_numerator_mean", "mean"),
-                sample_summary_denominator_mean=("sample_summary_denominator_mean", "mean"),
-                delta_summary_mean=("delta_summary_mean", "mean"),
-                numerator_read_n=("numerator_read_n", "sum"),
-                denominator_read_n=("denominator_read_n", "sum"),
-                numerator_replicate_n=("numerator_sample_n", "size"),
-                denominator_replicate_n=("denominator_sample_n", "size"),
-            )
+        regions_table = regions_table.groupby(
+            "region_id", as_index=False, sort=False
+        ).agg(
+            sample_summary_numerator_mean=("sample_summary_numerator_mean", "mean"),
+            sample_summary_denominator_mean=("sample_summary_denominator_mean", "mean"),
+            delta_summary_mean=("delta_summary_mean", "mean"),
+            numerator_read_n=("numerator_read_n", "sum"),
+            denominator_read_n=("denominator_read_n", "sum"),
+            numerator_replicate_n=("numerator_sample_n", "size"),
+            denominator_replicate_n=("denominator_sample_n", "size"),
         )
         regions_table["log2_fc"] = (
             (regions_table["sample_summary_numerator_mean"] + 1e-6)
@@ -941,14 +966,19 @@ def _score_single_read_mod_fraction(
 
     pooled_frames = []
     for side, conditions in side_specs.items():
-        side_evidence = sample_summary.loc[sample_summary["condition"].isin(conditions)].copy()
+        side_evidence = sample_summary.loc[
+            sample_summary["condition"].isin(conditions)
+        ].copy()
         pooled = (
             side_evidence.groupby("region_id", dropna=False, sort=False)
             .agg(
                 sample_summary_mean=("sample_summary_mean", "mean"),
                 read_n=("read_n", "sum"),
                 replicate_n=("sample_id", "nunique"),
-                sample_values=("sample_summary_mean", lambda values: tuple(float(v) for v in values)),
+                sample_values=(
+                    "sample_summary_mean",
+                    lambda values: tuple(float(v) for v in values),
+                ),
             )
             .reset_index()
             .assign(contrast_side=side)
@@ -991,7 +1021,9 @@ def _score_single_read_mod_fraction(
     regions_table["sample_summary_denominator_mean"] = regions_table[
         "sample_summary_denominator_mean"
     ].fillna(0.0)
-    regions_table["numerator_read_n"] = regions_table["numerator_read_n"].fillna(0).astype(int)
+    regions_table["numerator_read_n"] = (
+        regions_table["numerator_read_n"].fillna(0).astype(int)
+    )
     regions_table["denominator_read_n"] = (
         regions_table["denominator_read_n"].fillna(0).astype(int)
     )
@@ -1048,11 +1080,11 @@ def _summarize_single_read_features_by_sample(
         group_columns.append(pairing_key)
         excluded_columns.add(pairing_key)
     feature_columns = [
-        column
-        for column in evidence.columns
-        if column not in excluded_columns
+        column for column in evidence.columns if column not in excluded_columns
     ]
-    return evidence.groupby(group_columns, as_index=False, sort=False)[feature_columns].mean()
+    return evidence.groupby(group_columns, as_index=False, sort=False)[
+        feature_columns
+    ].mean()
 
 
 def _score_single_read_features(
@@ -1138,8 +1170,12 @@ def _score_single_read_features(
             row = {"region_id": region_id}
             effect_sizes = []
             for feature_name in feature_columns:
-                numerator_mean = float(region_table[f"{feature_name}_numerator_mean"].mean())
-                denominator_mean = float(region_table[f"{feature_name}_denominator_mean"].mean())
+                numerator_mean = float(
+                    region_table[f"{feature_name}_numerator_mean"].mean()
+                )
+                denominator_mean = float(
+                    region_table[f"{feature_name}_denominator_mean"].mean()
+                )
                 delta_mean = numerator_mean - denominator_mean
                 row[f"{feature_name}_numerator_mean"] = numerator_mean
                 row[f"{feature_name}_denominator_mean"] = denominator_mean
@@ -1162,8 +1198,12 @@ def _score_single_read_features(
 
     summary_rows = []
     for region_id, region_table in sample_summary.groupby("region_id", sort=False):
-        numerator_table = region_table[region_table["condition"].isin(contrast.numerator)]
-        denominator_table = region_table[region_table["condition"].isin(contrast.denominator)]
+        numerator_table = region_table[
+            region_table["condition"].isin(contrast.numerator)
+        ]
+        denominator_table = region_table[
+            region_table["condition"].isin(contrast.denominator)
+        ]
         row = {"region_id": region_id}
         effect_sizes = []
         for feature_name in feature_columns:
@@ -1259,7 +1299,13 @@ def _score_cluster_occupancy(
     if representation == "cluster_fraction":
         _require_occupancy_columns(
             evidence,
-            required_columns={"region_id", "sample_id", "condition", "cluster", "fraction"},
+            required_columns={
+                "region_id",
+                "sample_id",
+                "condition",
+                "cluster",
+                "fraction",
+            },
         )
         pooled = _pool_cluster_occupancy_groups(
             evidence,
@@ -1296,7 +1342,9 @@ def _score_cluster_occupancy(
             sort=False,
         )
         regions_table["fraction"] = regions_table["fraction"].fillna(0.0)
-        regions_table["reference_fraction"] = regions_table["reference_fraction"].fillna(0.0)
+        regions_table["reference_fraction"] = regions_table[
+            "reference_fraction"
+        ].fillna(0.0)
         regions_table["numerator_replicate_n"] = (
             regions_table["numerator_replicate_n"].fillna(0).astype(int)
         )
@@ -1324,7 +1372,13 @@ def _score_cluster_occupancy(
                 multiple_testing=multiple_testing,
             )
             regions_table = regions_table.sort_values(
-                by=["adjusted_p_value", "p_value", "effect_size", "region_id", "cluster"],
+                by=[
+                    "adjusted_p_value",
+                    "p_value",
+                    "effect_size",
+                    "region_id",
+                    "cluster",
+                ],
                 ascending=[True, True, False, True, True],
                 kind="mergesort",
             ).reset_index(drop=True)
@@ -1355,7 +1409,12 @@ def _score_cluster_occupancy(
     if representation == "dominant_cluster":
         _require_occupancy_columns(
             evidence,
-            required_columns={"region_id", "sample_id", "condition", "dominant_cluster"},
+            required_columns={
+                "region_id",
+                "sample_id",
+                "condition",
+                "dominant_cluster",
+            },
         )
         side_specs = {
             "numerator": contrast.numerator or [],
@@ -1392,9 +1451,10 @@ def _score_cluster_occupancy(
             how="outer",
             sort=False,
         )
-        missing_region_side = regions_table["numerator_replicate_n"].isna() ^ regions_table[
-            "denominator_replicate_n"
-        ].isna()
+        missing_region_side = (
+            regions_table["numerator_replicate_n"].isna()
+            ^ regions_table["denominator_replicate_n"].isna()
+        )
         if missing_region_side.any():
             raise ValueError(
                 "Missing dominant_cluster evidence for one or more requested contrast "
@@ -1413,7 +1473,9 @@ def _score_cluster_occupancy(
             ),
             axis=1,
         )
-        regions_table["effect_size"] = regions_table["dominant_cluster_changed"].astype(int)
+        regions_table["effect_size"] = regions_table["dominant_cluster_changed"].astype(
+            int
+        )
         regions_table = regions_table.sort_values(
             by=["effect_size", "region_id"],
             ascending=[False, True],
@@ -1439,8 +1501,9 @@ def _score_cluster_occupancy(
         required_columns={"region_id", "sample_id", "condition", "cluster_entropy"},
     )
     pooled = _pool_cluster_occupancy_groups(
-        evidence.loc[:, ["region_id", "sample_id", "condition", "cluster_entropy"]]
-        .drop_duplicates(),
+        evidence.loc[
+            :, ["region_id", "sample_id", "condition", "cluster_entropy"]
+        ].drop_duplicates(),
         contrast,
         value_column="cluster_entropy",
         group_columns=["region_id"],
@@ -1537,7 +1600,9 @@ def score_regions(
                 )
             evidence = build_single_read_mod_fraction_evidence_table(
                 extract_table=read_table,
-                pairing_key=contrast.pairing_key if contrast.mode == "matched_pairwise" else None,
+                pairing_key=contrast.pairing_key
+                if contrast.mode == "matched_pairwise"
+                else None,
             )
             regions_table, summary = _score_single_read_mod_fraction(
                 evidence=evidence,
@@ -1550,7 +1615,9 @@ def score_regions(
                 "signal_source": signal_source,
                 "test": test,
                 "multiple_testing": multiple_testing,
-                "normalization_mode": contrast_metadata.get("normalization_mode", "none"),
+                "normalization_mode": contrast_metadata.get(
+                    "normalization_mode", "none"
+                ),
                 "biological_interpretation": contrast_metadata.get(
                     "biological_interpretation",
                     "region-level difference in sample-level read modification fraction",
@@ -1575,7 +1642,9 @@ def score_regions(
                 )
             evidence = build_single_read_feature_evidence_table(
                 feature_table=feature_table,
-                pairing_key=contrast.pairing_key if contrast.mode == "matched_pairwise" else None,
+                pairing_key=contrast.pairing_key
+                if contrast.mode == "matched_pairwise"
+                else None,
             )
             regions_table, summary = _score_single_read_features(
                 evidence=evidence,
@@ -1588,7 +1657,9 @@ def score_regions(
                 "signal_source": signal_source,
                 "test": test,
                 "multiple_testing": multiple_testing,
-                "normalization_mode": contrast_metadata.get("normalization_mode", "none"),
+                "normalization_mode": contrast_metadata.get(
+                    "normalization_mode", "none"
+                ),
                 "biological_interpretation": contrast_metadata.get(
                     "biological_interpretation",
                     "region-level difference in sample-level read feature summaries",
@@ -1698,7 +1769,8 @@ def score_regions(
     merged["delta_fraction"] = merged["fraction"] - merged["reference_fraction"]
     pseudocount = 1e-6
     merged["log2_fc"] = (
-        (merged["fraction"] + pseudocount) / (merged["reference_fraction"] + pseudocount)
+        (merged["fraction"] + pseudocount)
+        / (merged["reference_fraction"] + pseudocount)
     ).map(math.log2)
 
     integer_columns = [
@@ -1757,7 +1829,9 @@ def score_regions(
     if test == "beta_binomial":
         summary_columns.extend(["p_value", "adjusted_p_value"])
     if representation == "modified_count":
-        summary_columns.extend(["count", "reference_count", "delta_count", "log2_fc_count"])
+        summary_columns.extend(
+            ["count", "reference_count", "delta_count", "log2_fc_count"]
+        )
     summary = regions_table.loc[:, summary_columns].copy()
 
     metadata = {

@@ -316,7 +316,9 @@ def test_build_window_summary_from_regions_to_list(monkeypatch):
         captured["split_large_regions"] = split_large_regions
         return [(5, 10), (0, 0)]
 
-    monkeypatch.setattr(global_analysis, "tile_genome_windows", fake_tile_genome_windows)
+    monkeypatch.setattr(
+        global_analysis, "tile_genome_windows", fake_tile_genome_windows
+    )
     monkeypatch.setattr(
         global_analysis.load_processed,
         "regions_to_list",
@@ -362,8 +364,12 @@ def test_compute_global_normalization_factors_from_summary():
         "reference_fraction",
         "global_offset",
     }
-    assert factors.loc[factors["sample_id"] == "s1", "global_offset"].iloc[0] == pytest.approx(-0.1)
-    assert factors.loc[factors["sample_id"] == "s2", "global_offset"].iloc[0] == pytest.approx(0.1)
+    assert factors.loc[factors["sample_id"] == "s1", "global_offset"].iloc[
+        0
+    ] == pytest.approx(-0.1)
+    assert factors.loc[factors["sample_id"] == "s2", "global_offset"].iloc[
+        0
+    ] == pytest.approx(0.1)
 
 
 def test_run_global_analysis_returns_result(monkeypatch):
@@ -452,12 +458,18 @@ def test_run_global_analysis_supports_multiple_motifs(monkeypatch):
             }
         )
 
-    monkeypatch.setattr(global_analysis, "build_window_summary", fake_build_window_summary)
+    monkeypatch.setattr(
+        global_analysis, "build_window_summary", fake_build_window_summary
+    )
     monkeypatch.setattr(
         global_analysis,
         "compute_global_normalization_factors",
         lambda summary: pd.DataFrame(
-            {"sample_id": ["s1", "s1"], "motif": ["A,0", "CG,0"], "global_offset": [0.0, 0.0]}
+            {
+                "sample_id": ["s1", "s1"],
+                "motif": ["A,0", "CG,0"],
+                "global_offset": [0.0, 0.0],
+            }
         ),
     )
 

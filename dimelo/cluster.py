@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import contextlib
+import math
+import warnings
 from collections import Counter, defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
-import math
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -61,6 +64,11 @@ class ReadWindowExtractionConfig:
     window_size: int | None = None
     orientation_aware: bool = True
     filter_multi_region_reads: bool = False
+    # Require thresholded/binary read vectors for downstream clustering/classification.
+    # If raw probabilities are detected, apply this threshold automatically unless set to None.
+    auto_threshold_if_raw: float | int | None = 190
+    enforce_thresholded_vectors: bool = True
+    warn_on_auto_threshold: bool = True
 
 
 @dataclass
@@ -167,7 +175,9 @@ def region_feature_matrix_from_pileup(
             modified = np.asarray(vector[0], dtype=np.float32)
             valid = np.asarray(vector[1], dtype=np.float32)
             if modified.shape != valid.shape:
-                raise ValueError("Modified and valid vectors must have matching shapes.")
+                raise ValueError(
+                    "Modified and valid vectors must have matching shapes."
+                )
             denominator = valid + (2 * pseudo_count)
             with np.errstate(divide="ignore", invalid="ignore"):
                 fraction = np.divide(
@@ -357,7 +367,9 @@ def cluster_features(
 def _get_kmeans():
     try:
         from sklearn.cluster import KMeans
-    except ImportError as exc:  # pragma: no cover - exercised in environments w/o sklearn
+    except (
+        ImportError
+    ) as exc:  # pragma: no cover - exercised in environments w/o sklearn
         raise ImportError(
             "scikit-learn is required for k-means clustering. "
             "Install it with `pip install scikit-learn`."
@@ -370,8 +382,7 @@ def _get_xgb_classifier():
         from xgboost import XGBClassifier
     except Exception as exc:  # pragma: no cover - optional dependency
         raise ImportError(
-            "Install xgboost to use classifier='xgboost'. "
-            "Try `pip install xgboost`."
+            "Install xgboost to use classifier='xgboost'. Try `pip install xgboost`."
         ) from exc
     return XGBClassifier
 
@@ -585,7 +596,9 @@ def merge_read_window_results(
         A merged ReadWindowExtractionResult.
     """
     if len(results) == 0:
-        raise ValueError("results must contain at least one ReadWindowExtractionResult.")
+        raise ValueError(
+            "results must contain at least one ReadWindowExtractionResult."
+        )
     if source_labels is not None and len(source_labels) != len(results):
         raise ValueError("source_labels length must match results length.")
     if align not in {"error", "center_crop"}:
@@ -641,7 +654,9 @@ def merge_read_window_results(
     )
 
 
-def _prepare_group_labels(labels: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _prepare_group_labels(
+    labels: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     labels_arr = np.asarray(labels)
     codes, uniques = pd.factorize(labels_arr, sort=True)
     # Handle NaN/None labels from factorize (-1 code): convert to explicit category name
@@ -684,6 +699,10 @@ def _extract_window_from_record(
     idx: dict[str, int],
     window_span: int,
     orientation_aware: bool,
+    *,
+    enforce_thresholded_vectors: bool,
+    auto_threshold_if_raw: float | None,
+    notify_auto_threshold,
 ) -> tuple[np.ndarray, np.ndarray | None] | None:
     required = ["read_start", "read_end", "region_start", "region_end", "mod_vector"]
     for key in required:
@@ -695,9 +714,7 @@ def _extract_window_from_record(
     region_start = int(record[idx["region_start"]])
     region_end = int(record[idx["region_end"]])
     mod_vector = np.asarray(record[idx["mod_vector"]])
-    val_vector = (
-        np.asarray(record[idx["val_vector"]]) if "val_vector" in idx else None
-    )
+    val_vector = np.asarray(record[idx["val_vector"]]) if "val_vector" in idx else None
 
     if read_end <= read_start or region_end <= region_start:
         return None
@@ -717,9 +734,25 @@ def _extract_window_from_record(
         return None
 
     mod_window = mod_vector[slice_start:slice_end]
-    val_window = (
-        val_vector[slice_start:slice_end] if val_vector is not None else None
-    )
+    val_window = val_vector[slice_start:slice_end] if val_vector is not None else None
+
+    if enforce_thresholded_vectors and not _is_binary_mod_window(
+        mod_window=mod_window,
+        val_window=val_window,
+    ):
+        if auto_threshold_if_raw is None:
+            raise ValueError(
+                "Loaded extract vectors appear unthresholded (ML/probability values), "
+                "but thresholded vectors are required. "
+                "Set ReadWindowExtractionConfig.auto_threshold_if_raw to a value "
+                "(for example 190) or disable enforcement explicitly."
+            )
+        mod_window = _threshold_mod_window(
+            mod_window=mod_window,
+            val_window=val_window,
+            threshold=auto_threshold_if_raw,
+        )
+        notify_auto_threshold(auto_threshold_if_raw)
 
     if orientation_aware:
         region_strand = (
@@ -727,9 +760,7 @@ def _extract_window_from_record(
             if "region_strand" in idx
             else None
         )
-        read_strand = (
-            _coerce_strand(record[idx["strand"]]) if "strand" in idx else None
-        )
+        read_strand = _coerce_strand(record[idx["strand"]]) if "strand" in idx else None
         # If read/reference strands disagree, flip to align everything 5'->3'
         if _should_flip(region_strand, read_strand):
             mod_window = np.flip(mod_window)
@@ -737,6 +768,51 @@ def _extract_window_from_record(
                 val_window = np.flip(val_window)
 
     return mod_window, val_window
+
+
+def _resolve_raw_vector_threshold(threshold: float | int | None) -> float | None:
+    if threshold is None:
+        return None
+    try:
+        numeric = float(threshold)
+    except Exception as exc:
+        raise ValueError("auto_threshold_if_raw must be numeric or None.") from exc
+    if numeric <= 0:
+        raise ValueError("auto_threshold_if_raw must be > 0 when provided.")
+    return float(utils.adjust_threshold(numeric, quiet=True))
+
+
+def _is_binary_mod_window(
+    mod_window: np.ndarray, val_window: np.ndarray | None
+) -> bool:
+    arr = np.asarray(mod_window)
+    if arr.size == 0:
+        return True
+    if arr.dtype == np.bool_:
+        return True
+    if val_window is not None:
+        valid = np.asarray(val_window).astype(bool)
+        if valid.shape == arr.shape:
+            arr = arr[valid]
+            if arr.size == 0:
+                return True
+    unique_vals = np.unique(arr)
+    return bool(np.all(np.isin(unique_vals, [0, 1])))
+
+
+def _threshold_mod_window(
+    *,
+    mod_window: np.ndarray,
+    val_window: np.ndarray | None,
+    threshold: float,
+) -> np.ndarray:
+    arr = np.asarray(mod_window, dtype=float)
+    if val_window is None:
+        return (arr >= threshold).astype(float)
+    valid = np.asarray(val_window).astype(bool)
+    out = np.zeros(arr.shape, dtype=float)
+    out[valid] = (arr[valid] >= threshold).astype(float)
+    return out
 
 
 def build_multimotif_read_windows(
@@ -750,6 +826,9 @@ def build_multimotif_read_windows(
     subset_parameters: dict | None = None,
     span_full_window: bool = False,
     require_all_motifs: bool = True,
+    enforce_thresholded_vectors: bool = True,
+    auto_threshold_if_raw: float | int | None = 190,
+    warn_on_auto_threshold: bool = True,
 ) -> ReadWindowExtractionResult:
     """
     Group per-motif rows by read and return a combined window per read, concatenating motifs.
@@ -770,6 +849,10 @@ def build_multimotif_read_windows(
         subset_parameters: passed to loader for subsetting
         span_full_window: passed to loader (if True, only reads spanning the region are loaded)
         require_all_motifs: if True, drop reads that are missing any requested motif
+        enforce_thresholded_vectors: require thresholded/binary vectors for clustering-style workflows
+        auto_threshold_if_raw: threshold applied when raw probability vectors are detected
+            (default 190 interpreted in 0-255 space)
+        warn_on_auto_threshold: emit a warning when auto-thresholding is applied
 
     Returns:
         ReadWindowExtractionResult with data_matrix shape
@@ -790,7 +873,9 @@ def build_multimotif_read_windows(
     idx = _build_dataset_index(dataset_names)
 
     # Group rows by read+region key
-    groups: defaultdict[tuple[Any, Any, Any, Any, Any], dict[str, tuple]] = defaultdict(dict)
+    groups: defaultdict[tuple[Any, Any, Any, Any, Any], dict[str, tuple]] = defaultdict(
+        dict
+    )
     for rec in read_tuples:
         key = (
             rec[idx.get("read_name")],
@@ -818,21 +903,47 @@ def build_multimotif_read_windows(
         if requested_window_span is not None
         else _infer_window_span_from_records(read_tuples, idx)
     )
+    resolved_threshold = _resolve_raw_vector_threshold(auto_threshold_if_raw)
+    auto_threshold_notified = False
+
+    def _notify_auto_threshold(thresh_scaled: float) -> None:
+        nonlocal auto_threshold_notified
+        if auto_threshold_notified or not warn_on_auto_threshold:
+            return
+        auto_threshold_notified = True
+        threshold_255 = int(round(thresh_scaled * 255))
+        warnings.warn(
+            "Detected unthresholded extract vectors; applying automatic thresholding "
+            f"at {thresh_scaled:.6f} (~{threshold_255}/255) for clustering/classification.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     for key, motif_map in groups.items():
         motif_windows = []
         motif_val_windows = []
         motifs_present = []
+        representative_record: tuple | None = None
         for motif in motifs:
             if motif in motif_map:
+                if representative_record is None:
+                    representative_record = motif_map[motif]
                 extracted = _extract_window_from_record(
-                    motif_map[motif], idx, effective_window_span, orientation_aware
+                    motif_map[motif],
+                    idx,
+                    effective_window_span,
+                    orientation_aware,
+                    enforce_thresholded_vectors=enforce_thresholded_vectors,
+                    auto_threshold_if_raw=resolved_threshold,
+                    notify_auto_threshold=_notify_auto_threshold,
                 )
                 if extracted is None:
                     # If window cannot be extracted, treat as missing
                     motif_windows.append(np.zeros(effective_window_span, dtype=float))
                     motif_val_windows.append(
-                        np.zeros(effective_window_span, dtype=float) if has_val else None
+                        np.zeros(effective_window_span, dtype=float)
+                        if has_val
+                        else None
                     )
                 else:
                     mw, vw = extracted
@@ -854,7 +965,12 @@ def build_multimotif_read_windows(
         if has_val:
             combined_vals.append(
                 np.concatenate(
-                    [vw if vw is not None else np.zeros(effective_window_span, dtype=float) for vw in motif_val_windows],
+                    [
+                        vw
+                        if vw is not None
+                        else np.zeros(effective_window_span, dtype=float)
+                        for vw in motif_val_windows
+                    ],
                     axis=0,
                 )
             )
@@ -862,6 +978,21 @@ def build_multimotif_read_windows(
             {
                 "read_name": key[0],
                 "chromosome": key[1],
+                "read_start": (
+                    int(representative_record[idx["read_start"]])
+                    if representative_record is not None and "read_start" in idx
+                    else None
+                ),
+                "read_end": (
+                    int(representative_record[idx["read_end"]])
+                    if representative_record is not None and "read_end" in idx
+                    else None
+                ),
+                "read_length": (
+                    int(representative_record[idx["read_length"]])
+                    if representative_record is not None and "read_length" in idx
+                    else None
+                ),
                 "region_start": key[2],
                 "region_end": key[3],
                 "region_strand": key[4],
@@ -870,7 +1001,9 @@ def build_multimotif_read_windows(
         )
 
     if not combined_windows:
-        raise ValueError("No reads produced combined motif windows; check inputs and window_size.")
+        raise ValueError(
+            "No reads produced combined motif windows; check inputs and window_size."
+        )
 
     data_matrix = np.vstack(combined_windows)
     val_matrix = np.vstack(combined_vals) if has_val and combined_vals else None
@@ -904,13 +1037,14 @@ def extract_read_windows(
         hdf5_file: path to the extract .h5 file
         motifs: motifs to pull from the file
         regions: optional region specifier
-        config: controls windowing and orientation handling
+        config: controls windowing, orientation handling, and raw-vector threshold enforcement
         window_size: half-window override in bp (full span = 2 * window_size);
             when omitted, falls back to config.window_size.
             When omitted in both places, full span is inferred from the shortest selected region length.
 
     Returns:
-        ReadWindowExtractionResult containing raw mod/val matrices and metadata
+        ReadWindowExtractionResult containing thresholded/binary mod windows by default,
+        plus val matrices and metadata.
     """
 
     cfg = config or ReadWindowExtractionConfig()
@@ -923,6 +1057,21 @@ def extract_read_windows(
         else None
     )
     effective_window_span = requested_window_span
+    resolved_threshold = _resolve_raw_vector_threshold(cfg.auto_threshold_if_raw)
+    auto_threshold_notified = False
+
+    def _notify_auto_threshold(thresh_scaled: float) -> None:
+        nonlocal auto_threshold_notified
+        if auto_threshold_notified or not cfg.warn_on_auto_threshold:
+            return
+        auto_threshold_notified = True
+        threshold_255 = int(round(thresh_scaled * 255))
+        warnings.warn(
+            "Detected unthresholded extract vectors; applying automatic thresholding "
+            f"at {thresh_scaled:.6f} (~{threshold_255}/255) for clustering/classification.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     # Load all requested reads/vectors from extract output
     read_tuples, dataset_names, regions_dict = load_processed.read_vectors_from_hdf5(
@@ -954,7 +1103,13 @@ def extract_read_windows(
             continue
 
         extracted = _extract_window_from_record(
-            rec, idx, effective_window_span, cfg.orientation_aware
+            rec,
+            idx,
+            effective_window_span,
+            cfg.orientation_aware,
+            enforce_thresholded_vectors=cfg.enforce_thresholded_vectors,
+            auto_threshold_if_raw=resolved_threshold,
+            notify_auto_threshold=_notify_auto_threshold,
         )
         if extracted is None:
             continue
@@ -968,6 +1123,9 @@ def extract_read_windows(
         meta_fields = [
             "read_name",
             "chromosome",
+            "read_start",
+            "read_end",
+            "read_length",
             "region_start",
             "region_end",
             "region_strand",
@@ -975,10 +1133,7 @@ def extract_read_windows(
             "motif",
         ]
         metadata.append(
-            {
-                field: rec[idx[field]] if field in idx else None
-                for field in meta_fields
-            }
+            {field: rec[idx[field]] if field in idx else None for field in meta_fields}
         )
 
     if not matrices:
@@ -1068,7 +1223,9 @@ def read_window_feature_matrix(
     cumsum = np.pad(cumsum, ((0, 0), (1, 0)), mode="constant", constant_values=0)
 
     for lag in autocorr_lags:
-        values = np.array([compute_autocorrelation_feature(row, lag) for row in data_matrix])
+        values = np.array(
+            [compute_autocorrelation_feature(row, lag) for row in data_matrix]
+        )
         columns.append(values[:, None])
         names.append(f"autocorr_{lag}")
 
@@ -1155,18 +1312,12 @@ def _safe_scores(X: np.ndarray, labels: np.ndarray) -> dict[str, float | None]:
     )
     if not valid:
         return scores
-    try:
+    with contextlib.suppress(Exception):
         scores["silhouette"] = float(silhouette_score(X, labels))
-    except Exception:  # pragma: no cover
-        pass
-    try:
+    with contextlib.suppress(Exception):
         scores["calinski_harabasz"] = float(calinski_harabasz_score(X, labels))
-    except Exception:  # pragma: no cover
-        pass
-    try:
+    with contextlib.suppress(Exception):
         scores["davies_bouldin"] = float(davies_bouldin_score(X, labels))
-    except Exception:  # pragma: no cover
-        pass
     return scores
 
 
@@ -1197,7 +1348,7 @@ def cluster_label_mapping(
     """
 
     mapping: dict[int, int] = {}
-    for raw_label, ordered_label in zip(labels_raw, labels_size_ordered):
+    for raw_label, ordered_label in zip(labels_raw, labels_size_ordered, strict=False):
         raw = int(raw_label)
         ordered = int(ordered_label)
         if raw in mapping and mapping[raw] != ordered:
@@ -1259,7 +1410,7 @@ def sample_rows(
         unique, counts = np.unique(labels_arr, return_counts=True)
         probs = counts / counts.sum()
         selected = []
-        for lbl, p in zip(unique, probs):
+        for lbl, p in zip(unique, probs, strict=False):
             k = max(1, int(round(p * n)))
             choices = np.flatnonzero(labels_arr == lbl)
             k = min(k, len(choices))
@@ -1292,12 +1443,12 @@ def cluster_read_windows(
     """
 
     from sklearn.cluster import (
+        DBSCAN,
+        OPTICS,
         AgglomerativeClustering,
         Birch,
-        DBSCAN,
         KMeans,
         MiniBatchKMeans,
-        OPTICS,
         SpectralClustering,
     )
     from sklearn.mixture import GaussianMixture
@@ -1376,7 +1527,7 @@ def cluster_read_windows(
                 raise ImportError("Install hdbscan to use method='hdbscan'.")
             model = _hdbscan_lib.HDBSCAN(
                 min_cluster_size=kwargs.get("min_cluster_size", 30),
-                min_samples=kwargs.get("min_samples", None),
+                min_samples=kwargs.get("min_samples"),
             )
             labels = model.fit_predict(X)
             noise_label = -1
@@ -1488,8 +1639,8 @@ def plot_cluster_profiles(
 
     import matplotlib.pyplot as plt
     from matplotlib import gridspec
-    from matplotlib.lines import Line2D
     from matplotlib.colors import Normalize
+    from matplotlib.lines import Line2D
 
     X_full = np.asarray(data_matrix)
     labs = np.asarray(labels)
@@ -1504,7 +1655,7 @@ def plot_cluster_profiles(
         if val_matrix is not None:
             val_matrix = np.asarray(val_matrix)[mask]
         if metadata is not None:
-            metadata = [row for row, keep in zip(metadata, mask) if keep]
+            metadata = [row for row, keep in zip(metadata, mask, strict=False) if keep]
 
     V_full = np.asarray(val_matrix) if val_matrix is not None else None
     if V_full is not None and V_full.shape != X_full.shape:
@@ -1524,8 +1675,12 @@ def plot_cluster_profiles(
         view_window_size=view_window_size,
     )
     if motif_index < 0 or motif_index >= n_motifs:
-        raise ValueError(f"motif_index {motif_index} out of range for {n_motifs} motif slices.")
-    motif_ids = list(range(n_motifs)) if plot_all_motifs and n_motifs > 1 else [motif_index]
+        raise ValueError(
+            f"motif_index {motif_index} out of range for {n_motifs} motif slices."
+        )
+    motif_ids = (
+        list(range(n_motifs)) if plot_all_motifs and n_motifs > 1 else [motif_index]
+    )
 
     if motif_labels is None:
         motif_labels = [f"motif_{i}" for i in range(n_motifs)]
@@ -1554,8 +1709,14 @@ def plot_cluster_profiles(
         if window_size is not None
         else primary_matrix.shape[1]
     )
-    view_span = _window_span_from_size(view_window_size) if view_window_size is not None else None
-    x_axis = _centered_x_axis(primary_matrix.shape[1], view_span or inferred_window_span)
+    view_span = (
+        _window_span_from_size(view_window_size)
+        if view_window_size is not None
+        else None
+    )
+    x_axis = _centered_x_axis(
+        primary_matrix.shape[1], view_span or inferred_window_span
+    )
 
     mod_fraction = primary_matrix.mean(axis=1)
     labs_arr, lab_codes, unique_codes = _prepare_group_labels(labs)
@@ -1565,7 +1726,9 @@ def plot_cluster_profiles(
     lab_codes = lab_codes[order]
     V_full = V_full[order] if V_full is not None else None
 
-    unique_labels = np.array([np.unique(labs_arr[lab_codes == code])[0] for code in unique_codes])
+    unique_labels = np.array(
+        [np.unique(labs_arr[lab_codes == code])[0] for code in unique_codes]
+    )
     cmap = plt.get_cmap(cmap_name)
     norm = Normalize(vmin=int(unique_codes.min()), vmax=int(unique_codes.max() or 1))
 
@@ -1648,8 +1811,12 @@ def plot_cluster_profiles(
                     color=motif_colors[motif_id],
                     linewidth=1.5,
                 )
-                motif_ax.set_ylabel(str(motif_labels[motif_id]), color=motif_colors[motif_id])
-                motif_ax.tick_params(axis="y", colors=motif_colors[motif_id], labelsize=8)
+                motif_ax.set_ylabel(
+                    str(motif_labels[motif_id]), color=motif_colors[motif_id]
+                )
+                motif_ax.tick_params(
+                    axis="y", colors=motif_colors[motif_id], labelsize=8
+                )
                 if show_valid_profile and V_full is not None:
                     mean_val_raw = V_full[row_mask, s:e].mean(axis=0)
                     mean_val = _smooth_profile_vector(
@@ -1685,14 +1852,18 @@ def plot_cluster_profiles(
                     ax.plot(
                         x_axis,
                         mean_profile_raw,
-                        color=motif_colors[motif_id] if len(motif_ids) > 1 else cmap(norm(code)),
+                        color=motif_colors[motif_id]
+                        if len(motif_ids) > 1
+                        else cmap(norm(code)),
                         linewidth=1.0,
                         alpha=0.25,
                     )
                 ax.plot(
                     x_axis,
                     mean_profile,
-                    color=motif_colors[motif_id] if len(motif_ids) > 1 else cmap(norm(code)),
+                    color=motif_colors[motif_id]
+                    if len(motif_ids) > 1
+                    else cmap(norm(code)),
                     linewidth=1.5,
                 )
                 if show_valid_profile and V_full is not None:
@@ -1720,15 +1891,35 @@ def plot_cluster_profiles(
     if len(motif_ids) > 1 or color_points_by == "motif":
         legend_handles.extend(
             [
-                Line2D([0], [0], color=motif_colors[m], linewidth=2, label=str(motif_labels[m]))
+                Line2D(
+                    [0],
+                    [0],
+                    color=motif_colors[m],
+                    linewidth=2,
+                    label=str(motif_labels[m]),
+                )
                 for m in motif_ids
             ]
         )
     if show_valid_profile and V_full is not None:
         legend_handles.extend(
             [
-                Line2D([0], [0], color="black", linewidth=2, linestyle="-", label=signal_label),
-                Line2D([0], [0], color="black", linewidth=1, linestyle="--", label=valid_label),
+                Line2D(
+                    [0],
+                    [0],
+                    color="black",
+                    linewidth=2,
+                    linestyle="-",
+                    label=signal_label,
+                ),
+                Line2D(
+                    [0],
+                    [0],
+                    color="black",
+                    linewidth=1,
+                    linestyle="--",
+                    label=valid_label,
+                ),
             ]
         )
     if legend_handles:
@@ -1842,7 +2033,7 @@ def classify_read_features_binary(
 
         model = RandomForestClassifier(
             n_estimators=kwargs.get("n_estimators", 200),
-            max_depth=kwargs.get("max_depth", None),
+            max_depth=kwargs.get("max_depth"),
             random_state=random_state,
             n_jobs=kwargs.get("n_jobs", -1),
             class_weight=kwargs.get("class_weight", "balanced_subsample"),
@@ -1863,7 +2054,7 @@ def classify_read_features_binary(
         model = KNeighborsClassifier(
             n_neighbors=kwargs.get("n_neighbors", 5),
             weights=kwargs.get("weights", "distance"),
-            n_jobs=kwargs.get("n_jobs", None),
+            n_jobs=kwargs.get("n_jobs"),
         )
     else:
         raise ValueError(f"Unknown classifier '{classifier}'.")
@@ -1917,7 +2108,10 @@ def classify_read_features_binary(
         "model": model,
         "metrics": metrics,
         "predictions": all_preds,
-        "label_mapping": {cls: int(code) for cls, code in zip(classes, le.transform(classes))},
+        "label_mapping": {
+            cls: int(code)
+            for cls, code in zip(classes, le.transform(classes), strict=False)
+        },
     }
 
 
@@ -1930,7 +2124,7 @@ def plot_confusion_matrices(predictions: pd.DataFrame, *, cmap: str = "Blues"):
     from sklearn.metrics import confusion_matrix
 
     fig, axes = plt.subplots(1, 2, figsize=(8, 4))
-    for ax, split in zip(axes, ["train", "test"]):
+    for ax, split in zip(axes, ["train", "test"], strict=False):
         df_split = predictions[predictions["split"] == split]
         labels_true = df_split["true_label"]
         labels_pred = df_split["pred_label"]
@@ -2043,7 +2237,9 @@ def plot_classification_profiles(
     M_full = list(metadata) if metadata is not None else None
 
     if V_full is not None:
-        row_idx_max = int(row_idx.max()) if row_idx is not None and row_idx.size > 0 else -1
+        row_idx_max = (
+            int(row_idx.max()) if row_idx is not None and row_idx.size > 0 else -1
+        )
         if row_idx is not None and row_idx.size > 0 and row_idx_max < V_full.shape[0]:
             V = V_full[row_idx]
         elif V_full.shape[0] == len(preds):
@@ -2057,7 +2253,9 @@ def plot_classification_profiles(
         V = None
 
     if M_full is not None:
-        row_idx_max = int(row_idx.max()) if row_idx is not None and row_idx.size > 0 else -1
+        row_idx_max = (
+            int(row_idx.max()) if row_idx is not None and row_idx.size > 0 else -1
+        )
         if row_idx is not None and row_idx.size > 0 and row_idx_max < len(M_full):
             M = [M_full[i] for i in row_idx]
         elif len(M_full) == len(preds):
@@ -2071,7 +2269,9 @@ def plot_classification_profiles(
         M = None
 
     if group_by not in {"pred_label", "true_label", "confusion"}:
-        raise ValueError("group_by must be one of {'pred_label', 'true_label', 'confusion'}.")
+        raise ValueError(
+            "group_by must be one of {'pred_label', 'true_label', 'confusion'}."
+        )
 
     if group_by == "confusion":
         class_values = sorted(pd.unique(preds["true_label"]))
@@ -2153,7 +2353,9 @@ def plot_region_classification_profiles(
     )
 
     if group_by not in {"pred_label", "true_label", "confusion"}:
-        raise ValueError("group_by must be one of {'pred_label', 'true_label', 'confusion'}.")
+        raise ValueError(
+            "group_by must be one of {'pred_label', 'true_label', 'confusion'}."
+        )
 
     if group_by == "confusion":
         class_values = sorted(pd.unique(preds["true_label"]))
@@ -2202,21 +2404,36 @@ def plot_multisite_read_raster(
     motif_count: int | None = None,
     plot_all_motifs: bool = False,
     motif_labels: Sequence[str] | None = None,
+    window_centers_bp: Sequence[int] | None = None,
+    window_widths_bp: int | Sequence[int] | None = None,
+    window_match_tolerance_bp: int | None = None,
+    symmetric_side_windows: int | None = None,
+    symmetric_max_offset_bp: int | None = None,
+    enforce_full_window_span: bool = True,
+    # Legacy aliases
     window_center_offsets: Sequence[int] | None = None,
     center_tolerance_bp: int | None = None,
     min_read_length_bp: int | None = None,
     smoothing: str | None = "gaussian",  # None, "boxcar", "gaussian"
     smooth_win: int = 21,
     smooth_sigma_bp: float = 6.0,
-    max_rows: int = 500,
-    cmap: str = "viridis",
+    max_rows: int | None = 500,
+    downsample_method: str = "bin_mean",  # "bin_mean" | "uniform"
+    cmap: str = "magma",
     vmin: float | None = None,
     vmax: float | None = None,
     render_mode: str = "scatter",  # "scatter" | "heatmap"
+    render_values: str = "auto",  # "auto" | "raw" | "smoothed"
+    axis_orientation: str | None = None,  # "position_x" | "position_y"
     scatter_size: float = 4.0,
     scatter_alpha: float = 0.7,
-    x_axis_mode: str = "relative_to_primary",  # "relative_to_primary" | "centered"
-    sort_by: str = "mod_fraction",  # or "cluster"
+    scatter_color_values: str = "ml_score",  # "auto" | "ml_score" | "raw" | "smoothed"
+    ml_score_thresholds: Sequence[float] | None = None,
+    motif_colors: Sequence[str] | None = None,
+    x_axis_mode: str | None = None,  # "relative_to_primary" | "centered"
+    sort_by: str = "mod_fraction",  # "mod_fraction" | "cluster" | "window_center" | "read_name" | "region_start" | "read_length" | "none"
+    sort_window_index: int | None = None,
+    sort_descending: bool | None = None,
     sort_labels: Sequence[int] | None = None,
     beds: Sequence[str | Path] | None = None,
     rotate: bool = True,
@@ -2226,7 +2443,7 @@ def plot_multisite_read_raster(
 
     Args:
         read_windows: ReadWindowExtractionResult from extract_read_windows / build_multimotif_read_windows
-        n_windows: number of windows per read to plot when ``window_center_offsets`` is not provided
+        n_windows: number of windows per read to plot when explicit centers are not provided
         min_separation_bp: minimum separation between site centers (distance_mode="center") or read starts (bounds)
         distance_mode: "center" uses region_start/end center; "bounds" uses read_start/read_end
         window_size: half-window in bp; if provided, per-motif slice width is ``2 * window_size``.
@@ -2234,43 +2451,104 @@ def plot_multisite_read_raster(
         motif_count: total motif slices concatenated in data_matrix; inferred when possible
         plot_all_motifs: when True, render all motif slices in a motif x window panel grid
         motif_labels: optional motif names aligned to motif slices
-        window_center_offsets: explicit desired window centers in primary-region coordinates
+        window_centers_bp: explicit desired window centers in primary-region coordinates
             (for example ``[-2500, 0, 2500]``). When provided, this replaces ``n_windows``.
-        center_tolerance_bp: matching tolerance for ``window_center_offsets``. Defaults to half window span.
+        window_widths_bp: per-window display widths in bp (common width when scalar). Defaults
+            to the extracted span for each panel.
+        window_match_tolerance_bp: matching tolerance for explicit centers. Defaults to half
+            the extracted span.
+        symmetric_side_windows: when set with ``symmetric_max_offset_bp``, generate centers as
+            evenly spaced offsets from ``-symmetric_max_offset_bp`` to ``+symmetric_max_offset_bp``
+            with ``2 * symmetric_side_windows + 1`` windows total.
+        symmetric_max_offset_bp: max absolute offset used for symmetric center generation.
+        enforce_full_window_span: when True (default), drop read-sets that cannot span the
+            full displayed windows based on read_start/read_end (or read_length when available).
+        window_center_offsets: legacy alias for ``window_centers_bp``.
+        center_tolerance_bp: legacy alias for ``window_match_tolerance_bp``.
         min_read_length_bp: optional minimum read length filter. Must be at least the required
             span implied by requested centers/separation plus plotted window width.
         smoothing: None, "boxcar", or "gaussian"
         smooth_win: smoothing window length
         smooth_sigma_bp: sigma for gaussian smoothing
-        max_rows: cap rows; downsample by averaging if exceeded
+        max_rows: cap rows; when exceeded, downsample according to ``downsample_method``.
+            Pass None to disable downsampling.
+        downsample_method: "bin_mean" averages adjacent sorted read rows; "uniform" takes
+            evenly spaced sorted rows.
         cmap: matplotlib colormap
         vmin/vmax: color scale limits; None auto-scales
         render_mode: "scatter" or "heatmap"
+        render_values: value source used for plotting.
+            - "auto": scatter uses smoothed values when smoothing is enabled; heatmap uses raw per-read values
+            - "raw": always plot raw per-read values
+            - "smoothed": always plot smoothed values
+        axis_orientation: controls which axis encodes position.
+            - "position_x": x=position, y=reads
+            - "position_y": x=reads, y=position
+            When None, preserves legacy behavior for heatmaps based on ``rotate`` and uses ``position_x`` for scatter.
         scatter_size: marker size for scatter mode
         scatter_alpha: marker alpha for scatter mode
-        x_axis_mode: "relative_to_primary" offsets window axes by each read-pair
-            center distance from window 1; "centered" centers each window at 0
-        sort_by: "mod_fraction" or "cluster"
+        scatter_color_values: scatter color source.
+            - "ml_score": normalized ML score from mod_vector values (clipped to 0..1)
+            - "raw": raw per-read values
+            - "smoothed": smoothed per-read values
+            - "auto": ml_score (default behavior)
+        ml_score_thresholds: optional per-motif ML score thresholds for scatter mode. When provided,
+            only points with ML score >= threshold are plotted in motif-specific colors.
+        motif_colors: optional colors aligned to motifs for thresholded scatter display
+        x_axis_mode: coordinate mode. ``relative_to_primary`` preserves primary-region offsets;
+            ``centered`` keeps each panel centered at zero for legacy compatibility.
+        sort_by: ordering strategy for paired reads
+        sort_window_index: optional window index used by window-aware sorting modes
+        sort_descending: descending/ascending order toggle for supported sort modes.
+            If None, defaults are mode-aware (descending for mod_fraction, ascending otherwise).
         sort_labels: cluster labels to sort by when sort_by="cluster"
         beds: optional list of BED/GTF/GFF paths; only reads intersecting all beds are retained
-        rotate: if True, rotate rasters for vertical stacking
+        rotate: subplot layout orientation (legacy compatibility); does not force data-axis orientation
     """
 
-    import matplotlib.pyplot as plt
     import math
+
+    import matplotlib.pyplot as plt
 
     if render_mode not in {"scatter", "heatmap"}:
         raise ValueError("render_mode must be 'scatter' or 'heatmap'.")
-    if x_axis_mode not in {"relative_to_primary", "centered"}:
-        raise ValueError("x_axis_mode must be 'relative_to_primary' or 'centered'.")
+    if render_values not in {"auto", "raw", "smoothed"}:
+        raise ValueError("render_values must be 'auto', 'raw', or 'smoothed'.")
+    if axis_orientation is not None and axis_orientation not in {
+        "position_x",
+        "position_y",
+    }:
+        raise ValueError(
+            "axis_orientation must be None, 'position_x', or 'position_y'."
+        )
+    if scatter_color_values not in {"auto", "ml_score", "raw", "smoothed"}:
+        raise ValueError(
+            "scatter_color_values must be 'auto', 'ml_score', 'raw', or 'smoothed'."
+        )
+    if x_axis_mode is not None and x_axis_mode not in {
+        "relative_to_primary",
+        "centered",
+    }:
+        raise ValueError(
+            "x_axis_mode must be None, 'relative_to_primary', or 'centered'."
+        )
+    effective_x_axis_mode = x_axis_mode or "relative_to_primary"
     if distance_mode not in {"center", "bounds"}:
         raise ValueError("distance_mode must be 'center' or 'bounds'.")
     if n_windows < 1:
         raise ValueError("n_windows must be >= 1.")
     if min_separation_bp < 0:
         raise ValueError("min_separation_bp must be >= 0.")
+    if downsample_method not in {"bin_mean", "uniform"}:
+        raise ValueError("downsample_method must be 'bin_mean' or 'uniform'.")
     if center_tolerance_bp is not None and center_tolerance_bp < 0:
         raise ValueError("center_tolerance_bp must be >= 0 when provided.")
+    if window_match_tolerance_bp is not None and window_match_tolerance_bp < 0:
+        raise ValueError("window_match_tolerance_bp must be >= 0 when provided.")
+    if max_rows is not None and max_rows <= 0:
+        raise ValueError("max_rows must be > 0 when provided.")
+    if sort_window_index is not None and sort_window_index < 0:
+        raise ValueError("sort_window_index must be >= 0 when provided.")
 
     def _kernel(kind: str, win: int, sigma: float):
         if win % 2 == 0:
@@ -2287,7 +2565,11 @@ def plot_multisite_read_raster(
     def _smooth(M: np.ndarray) -> np.ndarray:
         if smoothing is None:
             return M
-        k = _kernel("gaussian" if smoothing == "gaussian" else "boxcar", smooth_win, smooth_sigma_bp)
+        k = _kernel(
+            "gaussian" if smoothing == "gaussian" else "boxcar",
+            smooth_win,
+            smooth_sigma_bp,
+        )
         r = len(k) // 2
         out = np.empty_like(M, dtype=float)
         for i in range(M.shape[0]):
@@ -2323,15 +2605,21 @@ def plot_multisite_read_raster(
     if n_motifs <= 0:
         n_motifs = 1
     if slice_width <= 0:
-        raise ValueError("Unable to infer motif slice width from read_windows.data_matrix.")
+        raise ValueError(
+            "Unable to infer motif slice width from read_windows.data_matrix."
+        )
     if width % slice_width != 0:
         raise ValueError(
             "read_windows.data_matrix width is not divisible into consistent motif slices. "
             "Pass an explicit motif_count or compatible window_size."
         )
     if motif_index < 0 or motif_index >= n_motifs:
-        raise ValueError(f"motif_index {motif_index} out of range for {n_motifs} motif slices.")
-    motif_ids = list(range(n_motifs)) if plot_all_motifs and n_motifs > 1 else [motif_index]
+        raise ValueError(
+            f"motif_index {motif_index} out of range for {n_motifs} motif slices."
+        )
+    motif_ids = (
+        list(range(n_motifs)) if plot_all_motifs and n_motifs > 1 else [motif_index]
+    )
     if motif_labels is None:
         motif_labels_resolved = [f"motif_{i}" for i in range(n_motifs)]
     else:
@@ -2341,24 +2629,85 @@ def plot_multisite_read_raster(
                 [f"motif_{i}" for i in range(len(motif_labels_resolved), n_motifs)]
             )
     X_by_motif = [X_full[:, m * slice_width : (m + 1) * slice_width] for m in motif_ids]
+    ML_by_motif = [np.clip(matrix.astype(float), 0.0, 1.0) for matrix in X_by_motif]
 
-    if window_center_offsets is None:
+    if (
+        window_center_offsets is not None
+        and window_centers_bp is not None
+        and list(window_center_offsets) != list(window_centers_bp)
+    ):
+        raise ValueError(
+            "Pass either window_centers_bp or window_center_offsets (legacy alias), not both with different values."
+        )
+    resolved_centers = (
+        window_centers_bp if window_centers_bp is not None else window_center_offsets
+    )
+    if (
+        center_tolerance_bp is not None
+        and window_match_tolerance_bp is not None
+        and int(center_tolerance_bp) != int(window_match_tolerance_bp)
+    ):
+        raise ValueError(
+            "Pass either window_match_tolerance_bp or center_tolerance_bp (legacy alias), not both with different values."
+        )
+    match_tolerance_bp = (
+        int(window_match_tolerance_bp)
+        if window_match_tolerance_bp is not None
+        else (int(center_tolerance_bp) if center_tolerance_bp is not None else None)
+    )
+
+    if symmetric_side_windows is not None or symmetric_max_offset_bp is not None:
+        if resolved_centers is not None:
+            raise ValueError(
+                "Do not combine symmetric center spec with explicit window_centers_bp."
+            )
+        if symmetric_side_windows is None or symmetric_max_offset_bp is None:
+            raise ValueError(
+                "symmetric_side_windows and symmetric_max_offset_bp must be provided together."
+            )
+        if int(symmetric_side_windows) < 0:
+            raise ValueError("symmetric_side_windows must be >= 0.")
+        if int(symmetric_max_offset_bp) < 0:
+            raise ValueError("symmetric_max_offset_bp must be >= 0.")
+        n_side = int(symmetric_side_windows)
+        max_offset = float(symmetric_max_offset_bp)
+        if n_side == 0:
+            resolved_centers = [0]
+        else:
+            resolved_centers = (
+                np.linspace(-max_offset, max_offset, (2 * n_side) + 1)
+                .round()
+                .astype(int)
+                .tolist()
+            )
+
+    if resolved_centers is None:
         n_windows_effective = int(n_windows)
         target_offsets = None
     else:
-        offsets = [int(offset) for offset in window_center_offsets]
+        offsets = [int(offset) for offset in resolved_centers]
         if len(offsets) == 0:
-            raise ValueError("window_center_offsets must contain at least one center when provided.")
+            raise ValueError(
+                "window_centers_bp must contain at least one center when provided."
+            )
         n_windows_effective = len(offsets)
         target_offsets = np.asarray(offsets, dtype=float)
 
     if target_offsets is None:
-        required_read_length_bp = int(max(slice_width, ((n_windows_effective - 1) * min_separation_bp) + slice_width))
+        required_read_length_bp = int(
+            max(
+                slice_width,
+                ((n_windows_effective - 1) * min_separation_bp) + slice_width,
+            )
+        )
     else:
         required_read_length_bp = int(
             max(
                 slice_width,
-                np.ceil(float(target_offsets.max() - target_offsets.min()) + float(slice_width)),
+                np.ceil(
+                    float(target_offsets.max() - target_offsets.min())
+                    + float(slice_width)
+                ),
             )
         )
 
@@ -2368,12 +2717,36 @@ def plot_multisite_read_raster(
             f"({required_read_length_bp} bp)."
         )
     effective_min_read_length = (
-        required_read_length_bp if target_offsets is not None and min_read_length_bp is None else min_read_length_bp
+        required_read_length_bp
+        if target_offsets is not None and min_read_length_bp is None
+        else min_read_length_bp
     )
 
+    if window_widths_bp is None:
+        default_width_bp = int(
+            slice_width if window_size is None else max(1, 2 * int(window_size))
+        )
+        panel_widths_bp = [default_width_bp for _ in range(n_windows_effective)]
+    elif isinstance(window_widths_bp, (int, np.integer)):
+        panel_widths_bp = [int(window_widths_bp) for _ in range(n_windows_effective)]
+    else:
+        panel_widths_bp = [int(width) for width in window_widths_bp]
+        if len(panel_widths_bp) != n_windows_effective:
+            raise ValueError(
+                "window_widths_bp must be a scalar or a sequence with one entry per window center."
+            )
+    if any(width <= 0 for width in panel_widths_bp):
+        raise ValueError("window_widths_bp values must be > 0.")
+    if any(width > slice_width for width in panel_widths_bp):
+        raise ValueError(
+            "window_widths_bp values cannot exceed extracted window span; increase extract/parse window_size."
+        )
+    panel_half_widths = [0.5 * float(width) for width in panel_widths_bp]
+
     def _apply_index_filter(index_vector: np.ndarray) -> None:
-        nonlocal X_by_motif, meta, filtered_original_indices
+        nonlocal X_by_motif, ML_by_motif, meta, filtered_original_indices
         X_by_motif = [matrix[index_vector] for matrix in X_by_motif]
+        ML_by_motif = [matrix[index_vector] for matrix in ML_by_motif]
         meta = [meta[i] for i in index_vector]
         filtered_original_indices = filtered_original_indices[index_vector]
 
@@ -2413,7 +2786,9 @@ def plot_multisite_read_raster(
                 if joined.df.empty:
                     candidate_indices = np.array([], dtype=int)
                     break
-                candidate_indices = joined.df["read_idx"].drop_duplicates().to_numpy(dtype=int)
+                candidate_indices = (
+                    joined.df["read_idx"].drop_duplicates().to_numpy(dtype=int)
+                )
 
             keep_idx = np.sort(candidate_indices)
         else:
@@ -2430,18 +2805,105 @@ def plot_multisite_read_raster(
                     parsed_length = int(read_length_val)
             except Exception:
                 parsed_length = None
-            if (parsed_length is None or parsed_length <= 0) and {"read_start", "read_end"}.issubset(m.keys()):
+            if (parsed_length is None or parsed_length <= 0) and {
+                "read_start",
+                "read_end",
+            }.issubset(m.keys()):
                 try:
                     parsed_length = int(m["read_end"]) - int(m["read_start"])
                 except Exception:
                     parsed_length = None
-            if parsed_length is not None and parsed_length >= int(effective_min_read_length):
+            if parsed_length is not None and parsed_length >= int(
+                effective_min_read_length
+            ):
                 keep_by_length.append(idx)
         _apply_index_filter(np.asarray(keep_by_length, dtype=int))
 
+    span_check_warning_emitted = False
+    dropped_for_window_span = 0
+
+    def _safe_int(value: Any) -> int | None:
+        try:
+            if value is None:
+                return None
+            return int(value)
+        except Exception:
+            return None
+
+    def _read_bounds(meta_row: dict[str, Any]) -> tuple[int, int] | None:
+        start = _safe_int(meta_row.get("read_start"))
+        end = _safe_int(meta_row.get("read_end"))
+        length = _safe_int(meta_row.get("read_length"))
+        if start is not None and end is not None and end > start:
+            return (start, end)
+        if start is not None and length is not None and length > 0:
+            return (start, start + length)
+        if end is not None and length is not None and length > 0:
+            return (end - length, end)
+        return None
+
+    def _read_length(meta_row: dict[str, Any]) -> int | None:
+        length = _safe_int(meta_row.get("read_length"))
+        if length is not None and length > 0:
+            return length
+        bounds = _read_bounds(meta_row)
+        if bounds is None:
+            return None
+        return bounds[1] - bounds[0]
+
+    def _window_is_covered(
+        meta_row: dict[str, Any], center_bp: float, half_width_bp: float
+    ) -> bool | None:
+        bounds = _read_bounds(meta_row)
+        if bounds is None:
+            return None
+        left = float(center_bp) - float(half_width_bp)
+        right = float(center_bp) + float(half_width_bp)
+        return left >= float(bounds[0]) and right <= float(bounds[1])
+
+    def _selection_spans_all_windows(
+        selected: Sequence[tuple[int, float, int]],
+    ) -> bool:
+        nonlocal span_check_warning_emitted
+        if not enforce_full_window_span:
+            return True
+
+        unresolved_present = False
+        left_edges: list[float] = []
+        right_edges: list[float] = []
+        candidate_lengths: list[int] = []
+        for row_idx, center_bp, window_pos in selected:
+            half_width_bp = float(panel_half_widths[window_pos])
+            covered = _window_is_covered(meta[row_idx], center_bp, half_width_bp)
+            if covered is False:
+                return False
+            if covered is None:
+                unresolved_present = True
+            left_edges.append(float(center_bp) - half_width_bp)
+            right_edges.append(float(center_bp) + half_width_bp)
+            length_value = _read_length(meta[row_idx])
+            if length_value is not None:
+                candidate_lengths.append(int(length_value))
+
+        if unresolved_present:
+            if candidate_lengths:
+                required_span = max(right_edges) - min(left_edges)
+                if max(candidate_lengths) < required_span:
+                    return False
+            elif not span_check_warning_emitted:
+                warnings.warn(
+                    "Unable to fully verify window-span coverage for some reads because "
+                    "read_start/read_end/read_length metadata are missing. "
+                    "Re-extract windows with current APIs for strict filtering.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                span_check_warning_emitted = True
+        return True
+
     # Group by read key
     groups = defaultdict(list)
-    for i, m in zip(range(len(meta)), meta):
+    for i, m in zip(range(len(meta)), meta, strict=False):
         key = (
             m.get("read_name"),
             m.get("chromosome"),
@@ -2472,12 +2934,23 @@ def plot_multisite_read_raster(
                 ):
                     continue
                 idxs = [items[j + k][0] for k in range(n_windows_effective)]
+                candidate = [
+                    (int(idxs[k]), float(centers[k]), int(k))
+                    for k in range(n_windows_effective)
+                ]
+                if not _selection_spans_all_windows(candidate):
+                    dropped_for_window_span += 1
+                    continue
                 for k, idx in enumerate(idxs):
                     pair_indices_per_window[k].append(int(idx))
                     panel_centers[k].append(float(centers[k]))
             continue
 
-        tolerance = float(center_tolerance_bp if center_tolerance_bp is not None else max(1, slice_width // 2))
+        tolerance = float(
+            match_tolerance_bp
+            if match_tolerance_bp is not None
+            else max(1, slice_width // 2)
+        )
         best_candidate: tuple[float, list[int]] | None = None
         for anchor_pos in range(len(items)):
             anchor_center = centers_arr[anchor_pos]
@@ -2494,6 +2967,13 @@ def plot_multisite_read_raster(
                     if pos in used_positions:
                         continue
                     if float(distances[pos]) <= tolerance:
+                        candidate_idx = int(idx_arr[pos])
+                        window_half = float(panel_half_widths[len(selected_positions)])
+                        covered = _window_is_covered(
+                            meta[candidate_idx], float(centers_arr[pos]), window_half
+                        )
+                        if covered is False:
+                            continue
                         chosen = pos
                         break
                 if chosen is None:
@@ -2511,34 +2991,92 @@ def plot_multisite_read_raster(
         if best_candidate is None:
             continue
         _, selected_positions = best_candidate
+        candidate = [
+            (int(idx_arr[pos]), float(centers_arr[pos]), int(k))
+            for k, pos in enumerate(selected_positions)
+        ]
+        if not _selection_spans_all_windows(candidate):
+            dropped_for_window_span += 1
+            continue
         for k, pos in enumerate(selected_positions):
             pair_indices_per_window[k].append(int(idx_arr[pos]))
             panel_centers[k].append(float(centers_arr[pos]))
 
     if not all(len(p) > 0 for p in pair_indices_per_window):
+        if enforce_full_window_span and dropped_for_window_span > 0:
+            raise ValueError(
+                "No read sets found after enforcing full-window span coverage; "
+                "increase read length, reduce window widths/offsets, or relax constraints."
+            )
         raise ValueError("No read sets found meeting separation criteria.")
 
-    window_indices = [np.asarray(values, dtype=int) for values in pair_indices_per_window]
-    panel_centers = [np.asarray(center_values, dtype=float) for center_values in panel_centers]
+    window_indices = [
+        np.asarray(values, dtype=int) for values in pair_indices_per_window
+    ]
+    panel_centers = [
+        np.asarray(center_values, dtype=float) for center_values in panel_centers
+    ]
     panels_by_motif = []
     panels_smooth_by_motif = []
+    panels_ml_by_motif = []
     for motif_matrix in X_by_motif:
         motif_panels = [motif_matrix[idx] for idx in window_indices]
         panels_by_motif.append(motif_panels)
         panels_smooth_by_motif.append([_smooth(panel) for panel in motif_panels])
+    for motif_ml_matrix in ML_by_motif:
+        panels_ml_by_motif.append([motif_ml_matrix[idx] for idx in window_indices])
+
+    if render_values == "raw":
+        panels_render_by_motif = panels_by_motif
+        render_value_mode = "raw"
+    elif render_values == "smoothed":
+        panels_render_by_motif = panels_smooth_by_motif
+        render_value_mode = "smoothed"
+    else:
+        if render_mode == "heatmap" or smoothing is None:
+            panels_render_by_motif = panels_by_motif
+            render_value_mode = "raw"
+        else:
+            panels_render_by_motif = panels_smooth_by_motif
+            render_value_mode = "smoothed"
 
     # Sorting uses the reference motif to keep all motif panels aligned.
     try:
         ref_motif_pos = motif_ids.index(motif_index)
     except ValueError:
         ref_motif_pos = 0
-    reference_panels = panels_smooth_by_motif[ref_motif_pos]
+    reference_panels = panels_render_by_motif[ref_motif_pos]
+
+    if sort_window_index is None:
+        sort_window_pos = 0
+    else:
+        sort_window_pos = int(sort_window_index)
+        if sort_window_pos >= n_windows_effective:
+            raise ValueError(
+                f"sort_window_index {sort_window_index} out of range for {n_windows_effective} windows."
+            )
+
+    if sort_descending is None:
+        effective_sort_descending = sort_by == "mod_fraction"
+    else:
+        effective_sort_descending = bool(sort_descending)
 
     # Sorting
     if sort_by == "mod_fraction":
-        means = [p.mean(axis=1) for p in reference_panels]
-        order = np.lexsort(tuple(-m for m in reversed(means)))
-    elif sort_by == "cluster" and sort_labels is not None:
+        if sort_window_index is not None:
+            score = reference_panels[sort_window_pos].mean(axis=1)
+            order = np.argsort(score, kind="stable")
+            if effective_sort_descending:
+                order = order[::-1]
+        else:
+            means = [panel.mean(axis=1) for panel in reference_panels]
+            if effective_sort_descending:
+                order = np.lexsort(tuple(-m for m in reversed(means)))
+            else:
+                order = np.lexsort(tuple(m for m in reversed(means)))
+    elif sort_by == "cluster":
+        if sort_labels is None:
+            raise ValueError("sort_labels must be provided when sort_by='cluster'.")
         labels_array = np.asarray(sort_labels)
         if labels_array.shape[0] == len(read_windows.metadata):
             labels_filtered = labels_array[filtered_original_indices]
@@ -2550,17 +3088,102 @@ def plot_multisite_read_raster(
                 "or the filtered metadata length."
             )
         pair_labels = labels_filtered[window_indices[0]]
-        order = np.argsort(pair_labels)
+        order = np.argsort(pair_labels, kind="stable")
+        if effective_sort_descending:
+            order = order[::-1]
+    elif sort_by == "window_center":
+        center_values = panel_centers[sort_window_pos]
+        order = np.argsort(center_values, kind="stable")
+        if effective_sort_descending:
+            order = order[::-1]
+    elif sort_by == "read_name":
+        values = np.asarray(
+            [str(meta[idx].get("read_name", "")) for idx in window_indices[0]]
+        )
+        order = np.argsort(values, kind="stable")
+        if effective_sort_descending:
+            order = order[::-1]
+    elif sort_by == "region_start":
+        values = np.asarray(
+            [int(meta[idx].get("region_start", 0) or 0) for idx in window_indices[0]],
+            dtype=float,
+        )
+        order = np.argsort(values, kind="stable")
+        if effective_sort_descending:
+            order = order[::-1]
+    elif sort_by == "read_length":
+
+        def _resolved_read_length(read_meta: dict) -> int:
+            length_value = read_meta.get("read_length")
+            if length_value is not None:
+                try:
+                    return int(length_value)
+                except Exception:
+                    pass
+            try:
+                return int(read_meta.get("read_end", 0)) - int(
+                    read_meta.get("read_start", 0)
+                )
+            except Exception:
+                return 0
+
+        values = np.asarray(
+            [_resolved_read_length(meta[idx]) for idx in window_indices[0]], dtype=float
+        )
+        order = np.argsort(values, kind="stable")
+        if effective_sort_descending:
+            order = order[::-1]
+    elif sort_by == "none":
+        order = np.arange(reference_panels[0].shape[0], dtype=int)
     else:
-        order = np.arange(reference_panels[0].shape[0])
+        raise ValueError(
+            "sort_by must be one of 'mod_fraction', 'cluster', 'window_center', "
+            "'read_name', 'region_start', 'read_length', or 'none'."
+        )
 
     panels_sorted_by_motif = [
         [panel[order] for panel in motif_panels]
+        for motif_panels in panels_render_by_motif
+    ]
+    panels_raw_sorted_by_motif = [
+        [panel[order] for panel in motif_panels] for motif_panels in panels_by_motif
+    ]
+    panels_smooth_sorted_by_motif = [
+        [panel[order] for panel in motif_panels]
         for motif_panels in panels_smooth_by_motif
     ]
-    centers_sorted = [c[order] for c in panel_centers]
+    panels_ml_sorted_by_motif: list[list[np.ndarray]] = [
+        [panel[order] for panel in motif_panels] for motif_panels in panels_ml_by_motif
+    ]
+    expected_rows = panels_raw_sorted_by_motif[0][0].shape[0]
+    for motif_panels in panels_raw_sorted_by_motif:
+        for panel in motif_panels:
+            if panel.shape[0] != expected_rows:
+                raise RuntimeError(
+                    "Inconsistent read ordering across multisite panels; panel row counts diverged."
+                )
+    centers_sorted = [center_values[order] for center_values in panel_centers]
     primary_centers = centers_sorted[0]
-    center_offsets = [c - primary_centers for c in centers_sorted]
+    if effective_x_axis_mode == "centered":
+        center_offsets = [
+            np.zeros_like(center_values, dtype=float)
+            for center_values in centers_sorted
+        ]
+    else:
+        center_offsets = [
+            center_values - primary_centers for center_values in centers_sorted
+        ]
+    if render_mode == "heatmap" and effective_x_axis_mode == "relative_to_primary":
+        for offsets in center_offsets:
+            if offsets.size > 1 and not np.allclose(
+                offsets, offsets[0], equal_nan=True
+            ):
+                raise ValueError(
+                    "Heatmap rendering with x_axis_mode='relative_to_primary' requires constant "
+                    "per-read offsets within each panel because imshow uses one rectangular extent. "
+                    "Use render_mode='scatter', x_axis_mode='centered', or fixed/explicit centers "
+                    "producing constant offsets."
+                )
 
     # Downsample rows if too tall
     def bin_rows(M, k):
@@ -2580,31 +3203,158 @@ def plot_multisite_read_raster(
         return out
 
     P = panels_sorted_by_motif[0][0].shape[0]
+    rows_before_downsample = int(P)
     downsampled = False
-    if P > max_rows:
+    downsample_factor = 1
+    if max_rows is not None and max_rows < P:
         step = math.ceil(P / max_rows)
-        panels_sorted_by_motif = [
-            [bin_rows(panel, step) for panel in motif_panels]
-            for motif_panels in panels_sorted_by_motif
-        ]
-        center_offsets = [bin_vector(v, step) for v in center_offsets]
+        downsample_factor = step
+        if downsample_method == "bin_mean":
+            panels_sorted_by_motif = [
+                [bin_rows(panel, step) for panel in motif_panels]
+                for motif_panels in panels_sorted_by_motif
+            ]
+            panels_raw_sorted_by_motif = [
+                [bin_rows(panel, step) for panel in motif_panels]
+                for motif_panels in panels_raw_sorted_by_motif
+            ]
+            panels_smooth_sorted_by_motif = [
+                [bin_rows(panel, step) for panel in motif_panels]
+                for motif_panels in panels_smooth_sorted_by_motif
+            ]
+            panels_ml_sorted_by_motif = [
+                [bin_rows(panel, step) for panel in motif_panels]
+                for motif_panels in panels_ml_sorted_by_motif
+            ]
+            center_offsets = [bin_vector(v, step) for v in center_offsets]
+        else:
+            keep = np.unique(np.round(np.linspace(0, P - 1, max_rows)).astype(int))
+            panels_sorted_by_motif = [
+                [panel[keep] for panel in motif_panels]
+                for motif_panels in panels_sorted_by_motif
+            ]
+            panels_raw_sorted_by_motif = [
+                [panel[keep] for panel in motif_panels]
+                for motif_panels in panels_raw_sorted_by_motif
+            ]
+            panels_smooth_sorted_by_motif = [
+                [panel[keep] for panel in motif_panels]
+                for motif_panels in panels_smooth_sorted_by_motif
+            ]
+            panels_ml_sorted_by_motif = [
+                [panel[keep] for panel in motif_panels]
+                for motif_panels in panels_ml_sorted_by_motif
+            ]
+            center_offsets = [vector[keep] for vector in center_offsets]
         P = panels_sorted_by_motif[0][0].shape[0]
         downsampled = True
 
+    if scatter_color_values == "auto":
+        effective_scatter_color_values = "ml_score"
+    else:
+        effective_scatter_color_values = scatter_color_values
+
+    threshold_map: dict[int, float] | None = None
+    if render_mode == "scatter" and ml_score_thresholds is not None:
+        thresholds_list = [float(value) for value in ml_score_thresholds]
+        if len(thresholds_list) == len(motif_ids):
+            threshold_map = {
+                motif_id: float(thresholds_list[idx])
+                for idx, motif_id in enumerate(motif_ids)
+            }
+        elif len(thresholds_list) == n_motifs:
+            threshold_map = {
+                idx: float(value) for idx, value in enumerate(thresholds_list)
+            }
+        elif len(thresholds_list) == 1:
+            threshold_map = {
+                motif_id: float(thresholds_list[0]) for motif_id in motif_ids
+            }
+        else:
+            raise ValueError(
+                "ml_score_thresholds must have length 1, motif_count, or motifs_plotted length."
+            )
+
+    motif_color_map: dict[int, str] = {}
+    if threshold_map is not None:
+        if motif_colors is not None:
+            colors_list = [str(value) for value in motif_colors]
+            if len(colors_list) == len(motif_ids):
+                motif_color_map = {
+                    motif_id: colors_list[idx] for idx, motif_id in enumerate(motif_ids)
+                }
+            elif len(colors_list) == n_motifs:
+                motif_color_map = {
+                    motif_id: colors_list[motif_id] for motif_id in motif_ids
+                }
+            elif len(colors_list) == 1:
+                motif_color_map = {motif_id: colors_list[0] for motif_id in motif_ids}
+            else:
+                raise ValueError(
+                    "motif_colors must have length 1, motif_count, or motifs_plotted length."
+                )
+        else:
+            tab10 = plt.get_cmap("tab10")
+            motif_color_map = {
+                motif_id: tab10(idx % 10) for idx, motif_id in enumerate(motif_ids)
+            }
+
+    def _default_ml_cmap_name(motif_label: str, motif_pos: int) -> str:
+        normalized = motif_label.strip().upper()
+        if normalized == "A,0":
+            return "Blues"
+        if normalized == "CG,0":
+            return "Oranges"
+        sequential_cycle = (
+            "Greens",
+            "Purples",
+            "Reds",
+            "Greys",
+            "YlGnBu",
+            "BuPu",
+            "PuRd",
+            "YlOrBr",
+            "BuGn",
+        )
+        return sequential_cycle[motif_pos % len(sequential_cycle)]
+
+    ml_cmap_names = {
+        motif_id: _default_ml_cmap_name(str(motif_labels_resolved[motif_id]), motif_pos)
+        for motif_pos, motif_id in enumerate(motif_ids)
+    }
+
     if vmin is None or vmax is None:
-        vmax_auto = max(panel.max() for motif_panels in panels_sorted_by_motif for panel in motif_panels)
-        vmin = 0.0 if vmin is None else vmin
-        vmax = vmax_auto if vmax is None else vmax
+        if (
+            render_mode == "scatter"
+            and threshold_map is not None
+            or render_mode == "scatter"
+            and effective_scatter_color_values == "ml_score"
+        ):
+            vmin = 0.0 if vmin is None else vmin
+            vmax = 1.0 if vmax is None else vmax
+        else:
+            vmax_auto = max(
+                panel.max()
+                for motif_panels in panels_sorted_by_motif
+                for panel in motif_panels
+            )
+            vmin = 0.0 if vmin is None else vmin
+            vmax = vmax_auto if vmax is None else vmax
 
     x_positions = np.arange(slice_width, dtype=float) - (slice_width // 2)
 
+    if axis_orientation is None:
+        if render_mode == "heatmap":
+            effective_axis_orientation = "position_y" if rotate else "position_x"
+        else:
+            effective_axis_orientation = "position_x"
+    else:
+        effective_axis_orientation = axis_orientation
+
     share_x_axes = True
-    if (
-        rotate
-        and render_mode == "scatter"
-        and x_axis_mode == "relative_to_primary"
-        and n_windows_effective > 1
-    ):
+    if effective_axis_orientation == "position_x" and n_windows_effective > 1:
+        # When each window has a different positional frame (relative-to-primary),
+        # sharing x limits forces misleading axis alignment across panels.
         share_x_axes = False
 
     n_plot_motifs = len(motif_ids)
@@ -2653,68 +3403,169 @@ def plot_multisite_read_raster(
         return axes[motif_pos, window_pos]
 
     first_mappable = None
+    threshold_legend_entries: dict[str, tuple[str, float]] = {}
     for motif_pos, motif_id in enumerate(motif_ids):
         motif_panels = panels_sorted_by_motif[motif_pos]
+        motif_raw_panels = panels_raw_sorted_by_motif[motif_pos]
+        motif_smooth_panels = panels_smooth_sorted_by_motif[motif_pos]
+        motif_ml_panels = panels_ml_sorted_by_motif[motif_pos]
         motif_label = str(motif_labels_resolved[motif_id])
         for window_pos in range(n_windows_effective):
             ax = _axis_for(motif_pos, window_pos)
             panel = motif_panels[window_pos]
-            row_offsets = (
-                center_offsets[window_pos]
-                if x_axis_mode == "relative_to_primary"
-                else np.zeros(panel.shape[0], dtype=float)
-            )
+            panel_raw = motif_raw_panels[window_pos]
+            panel_smooth = motif_smooth_panels[window_pos]
+            panel_ml = motif_ml_panels[window_pos]
+            row_offsets = center_offsets[window_pos]
             axis_center = float(np.nanmedian(row_offsets)) if row_offsets.size else 0.0
+            window_half_width = panel_half_widths[window_pos]
+            window_lo = axis_center - window_half_width
+            window_hi = axis_center + window_half_width
 
             if render_mode == "scatter":
-                rows, cols = np.nonzero(panel > 0)
-                values = panel[rows, cols]
+                rows, cols = np.nonzero(panel_raw > 0)
+                if (
+                    effective_scatter_color_values == "ml_score"
+                    and panel_ml is not None
+                ):
+                    color_panel = panel_ml
+                elif effective_scatter_color_values == "smoothed":
+                    color_panel = panel_smooth
+                else:
+                    color_panel = panel_raw
+                values = color_panel[rows, cols]
+                if threshold_map is not None:
+                    threshold_value = float(threshold_map[motif_id])
+                    keep = panel_ml[rows, cols] >= threshold_value
+                    rows = rows[keep]
+                    cols = cols[keep]
+                    values = panel_ml[rows, cols]
+                    threshold_legend_entries[motif_label] = (
+                        str(motif_color_map[motif_id]),
+                        threshold_value,
+                    )
                 if rows.size > 0:
                     x_scatter = x_positions[cols] + row_offsets[rows]
-                    first_mappable = ax.scatter(
-                        x_scatter,
-                        rows,
-                        c=values,
-                        s=scatter_size,
-                        alpha=scatter_alpha,
-                        cmap=cmap,
-                        vmin=vmin,
-                        vmax=vmax,
-                        linewidths=0,
-                        rasterized=True,
-                    )
-                    x_min = float(np.nanmin(x_scatter))
-                    x_max = float(np.nanmax(x_scatter))
+                    in_window = (x_scatter >= window_lo) & (x_scatter <= window_hi)
+                    rows = rows[in_window]
+                    cols = cols[in_window]
+                    values = values[in_window]
+                    x_scatter = x_scatter[in_window]
+                if rows.size > 0:
+                    if effective_axis_orientation == "position_x":
+                        if threshold_map is None:
+                            scatter_cmap = (
+                                ml_cmap_names[motif_id]
+                                if effective_scatter_color_values == "ml_score"
+                                else cmap
+                            )
+                            first_mappable = ax.scatter(
+                                x_scatter,
+                                rows,
+                                c=values,
+                                s=scatter_size,
+                                alpha=scatter_alpha,
+                                cmap=scatter_cmap,
+                                vmin=vmin,
+                                vmax=vmax,
+                                linewidths=0,
+                                rasterized=True,
+                            )
+                        else:
+                            ax.scatter(
+                                x_scatter,
+                                rows,
+                                c=motif_color_map[motif_id],
+                                s=scatter_size,
+                                alpha=scatter_alpha,
+                                linewidths=0,
+                                rasterized=True,
+                            )
+                        x_min = float(np.nanmin(x_scatter))
+                        x_max = float(np.nanmax(x_scatter))
+                    else:
+                        if threshold_map is None:
+                            scatter_cmap = (
+                                ml_cmap_names[motif_id]
+                                if effective_scatter_color_values == "ml_score"
+                                else cmap
+                            )
+                            first_mappable = ax.scatter(
+                                rows,
+                                x_scatter,
+                                c=values,
+                                s=scatter_size,
+                                alpha=scatter_alpha,
+                                cmap=scatter_cmap,
+                                vmin=vmin,
+                                vmax=vmax,
+                                linewidths=0,
+                                rasterized=True,
+                            )
+                        else:
+                            ax.scatter(
+                                rows,
+                                x_scatter,
+                                c=motif_color_map[motif_id],
+                                s=scatter_size,
+                                alpha=scatter_alpha,
+                                linewidths=0,
+                                rasterized=True,
+                            )
+                        y_min = float(np.nanmin(x_scatter))
+                        y_max = float(np.nanmax(x_scatter))
                 else:
-                    x_min = float(x_positions[0] + axis_center)
-                    x_max = float(x_positions[-1] + axis_center)
-                x_pad = max(1.0, 0.02 * (x_max - x_min + 1.0))
-                ax.axvline(axis_center, linestyle="--", linewidth=1, color="0.7")
-                ax.set_ylim(-1, panel.shape[0] + 1)
-                ax.set_xlim(x_min - x_pad, x_max + x_pad)
+                    if effective_axis_orientation == "position_x":
+                        x_min = float(window_lo)
+                        x_max = float(window_hi)
+                    else:
+                        y_min = float(window_lo)
+                        y_max = float(window_hi)
+                if effective_axis_orientation == "position_x":
+                    x_min = min(x_min, float(window_lo))
+                    x_max = max(x_max, float(window_hi))
+                    x_pad = max(1.0, 0.02 * (window_hi - window_lo + 1.0))
+                    ax.axvline(axis_center, linestyle="--", linewidth=1, color="0.7")
+                    ax.set_ylim(-1, panel.shape[0] + 1)
+                    ax.set_xlim(window_lo - x_pad, window_hi + x_pad)
+                else:
+                    y_min = min(y_min, float(window_lo))
+                    y_max = max(y_max, float(window_hi))
+                    y_pad = max(1.0, 0.02 * (window_hi - window_lo + 1.0))
+                    ax.axhline(axis_center, linestyle="--", linewidth=1, color="0.7")
+                    ax.set_xlim(-1, panel.shape[0] + 1)
+                    ax.set_ylim(window_lo - y_pad, window_hi + y_pad)
             else:
-                if rotate:
+                x_lo = float(x_positions[0] + axis_center)
+                x_hi = float(x_positions[-1] + axis_center)
+                if effective_axis_orientation == "position_y":
                     first_mappable = ax.imshow(
                         panel.T,
                         aspect="auto",
                         origin="lower",
+                        extent=[-0.5, panel.shape[0] - 0.5, x_lo, x_hi],
                         vmin=vmin,
                         vmax=vmax,
                         cmap=cmap,
                     )
-                    ax.axhline(slice_width // 2, linestyle="--", linewidth=1, color="0.7")
+                    ax.axhline(axis_center, linestyle="--", linewidth=1, color="0.7")
+                    y_pad = max(1.0, 0.02 * (window_hi - window_lo + 1.0))
+                    ax.set_ylim(window_lo - y_pad, window_hi + y_pad)
                 else:
                     first_mappable = ax.imshow(
                         panel,
                         aspect="auto",
                         origin="upper",
+                        extent=[x_lo, x_hi, panel.shape[0] - 0.5, -0.5],
                         vmin=vmin,
                         vmax=vmax,
                         cmap=cmap,
                     )
-                    ax.axvline(slice_width // 2 - 0.5, linestyle="--", linewidth=1, color="0.7")
+                    ax.axvline(axis_center, linestyle="--", linewidth=1, color="0.7")
+                    x_pad = max(1.0, 0.02 * (window_hi - window_lo + 1.0))
+                    ax.set_xlim(window_lo - x_pad, window_hi + x_pad)
 
-            if render_mode == "heatmap" and x_axis_mode == "centered":
+            if render_mode == "heatmap":
                 heatmap_title = (
                     f"{motif_label} | Window {window_pos + 1}"
                     if len(motif_ids) > 1
@@ -2727,55 +3578,206 @@ def plot_multisite_read_raster(
                 if not rotate and motif_pos == 0:
                     ax.set_title(f"Window {window_pos + 1}")
 
-            if rotate and motif_pos == 0:
-                ax.set_ylabel(f"Window {window_pos + 1}\nReads")
-            if (not rotate) and len(motif_ids) > 1 and window_pos == 0:
-                ax.set_ylabel(f"{motif_label}\nReads")
+            if effective_axis_orientation == "position_x":
+                if rotate and motif_pos == 0:
+                    ax.set_ylabel(f"Window {window_pos + 1}\nReads")
+                if (not rotate) and len(motif_ids) > 1 and window_pos == 0:
+                    ax.set_ylabel(f"{motif_label}\nReads")
+            else:
+                if rotate and motif_pos == 0:
+                    ax.set_ylabel(f"Window {window_pos + 1}\nPosition")
+                if (not rotate) and len(motif_ids) > 1 and window_pos == 0:
+                    ax.set_ylabel(f"{motif_label}\nPosition")
 
     if rotate:
-        bottom_axes = [_axis_for(motif_pos, n_windows_effective - 1) for motif_pos in range(len(motif_ids))]
+        bottom_axes = [
+            _axis_for(motif_pos, n_windows_effective - 1)
+            for motif_pos in range(len(motif_ids))
+        ]
+        position_label = "Position relative to primary center (bp)"
         xlabel = (
-            "Position relative to primary window center (bp)"
-            if render_mode == "scatter" and x_axis_mode == "relative_to_primary"
-            else "Position from window center (bp)"
-            if render_mode == "scatter"
+            position_label
+            if effective_axis_orientation == "position_x"
             else "Reads (sorted)"
         )
         for ax in bottom_axes:
             ax.set_xlabel(xlabel)
     else:
         for motif_pos in range(len(motif_ids)):
-            _axis_for(motif_pos, 0).set_ylabel("Reads (sorted)" if len(motif_ids) == 1 else _axis_for(motif_pos, 0).get_ylabel())
+            if effective_axis_orientation == "position_x":
+                _axis_for(motif_pos, 0).set_ylabel(
+                    "Reads (sorted)"
+                    if len(motif_ids) == 1
+                    else _axis_for(motif_pos, 0).get_ylabel()
+                )
+            else:
+                _axis_for(motif_pos, 0).set_ylabel(
+                    "Position (bp)"
+                    if len(motif_ids) == 1
+                    else _axis_for(motif_pos, 0).get_ylabel()
+                )
             for window_pos in range(n_windows_effective):
-                _axis_for(motif_pos, window_pos).set_xlabel("Position (bp)")
+                if effective_axis_orientation == "position_x":
+                    _axis_for(motif_pos, window_pos).set_xlabel(
+                        "Position relative to primary center (bp)"
+                    )
+                else:
+                    _axis_for(motif_pos, window_pos).set_xlabel("Reads (sorted)")
 
-    if first_mappable is None:
-        first_axis = _axis_for(0, 0)
-        first_mappable = first_axis.scatter([], [], c=[], cmap=cmap, vmin=vmin, vmax=vmax)
-    cbar = fig.colorbar(first_mappable, ax=np.ravel(axes).tolist(), shrink=0.6, pad=0.02)
-    sigma_txt = f", σ={smooth_sigma_bp}" if smoothing == "gaussian" else ""
-    scale_label = "fraction modified signal"
-    if render_mode == "heatmap":
-        scale_label = "window signal (row-aggregated heatmap)"
-    cbar.set_label(
-        f"{scale_label} (smoothed={smoothing}, win={smooth_win}{sigma_txt})\\n"
-        f"{'downsampled' if downsampled else 'full'}"
-    )
+    if threshold_map is None:
+        if first_mappable is None:
+            first_axis = _axis_for(0, 0)
+            fallback_cmap = (
+                ml_cmap_names[motif_ids[0]]
+                if effective_scatter_color_values == "ml_score"
+                else cmap
+            )
+            first_mappable = first_axis.scatter(
+                [], [], c=[], cmap=fallback_cmap, vmin=vmin, vmax=vmax
+            )
+        cbar = fig.colorbar(
+            first_mappable, ax=np.ravel(axes).tolist(), shrink=0.6, pad=0.02
+        )
+        sigma_txt = f", σ={smooth_sigma_bp}" if smoothing == "gaussian" else ""
+        if render_mode == "scatter" and effective_scatter_color_values == "ml_score":
+            cbar.set_label(
+                f"normalized ML score (0-1)\\n{'downsampled' if downsampled else 'full'}"
+            )
+        elif render_mode == "scatter":
+            scale_label = "fraction modified signal"
+            smoothing_label = (
+                f"{smoothing}, win={smooth_win}{sigma_txt}"
+                if render_value_mode == "smoothed"
+                else "none"
+            )
+            cbar.set_label(
+                f"{scale_label} (values={render_value_mode}, smoother={smoothing_label})\\n"
+                f"{'downsampled' if downsampled else 'full'}"
+            )
+        else:
+            scale_label = "window signal heatmap"
+            smoothing_label = (
+                f"{smoothing}, win={smooth_win}{sigma_txt}"
+                if render_value_mode == "smoothed"
+                else "none"
+            )
+            cbar.set_label(
+                f"{scale_label} (per-read smoothing along position axis; "
+                f"values={render_value_mode}, smoother={smoothing_label})\\n"
+                f"{'downsampled' if downsampled else 'full'}"
+            )
+    else:
+        from matplotlib.lines import Line2D
+
+        handles = [
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                linestyle="",
+                color="none",
+                markerfacecolor=color,
+                markeredgecolor=color,
+                markersize=6,
+                label=f"{label} (ML >= {threshold:.2f})",
+                alpha=scatter_alpha,
+            )
+            for label, (color, threshold) in threshold_legend_entries.items()
+        ]
+        fig.legend(
+            handles=handles,
+            title="Motif thresholds",
+            loc="upper right",
+            bbox_to_anchor=(0.98, 0.98),
+            frameon=False,
+        )
 
     return fig, {
         "pairs": panels_sorted_by_motif[0][0].shape[0],
         "downsampled": downsampled,
+        "downsample_method": (downsample_method if downsampled else "none"),
+        "downsample_factor": int(downsample_factor),
+        "rows_before_downsample": rows_before_downsample,
+        "rows_after_downsample": int(panels_sorted_by_motif[0][0].shape[0]),
         "vmin": vmin,
         "vmax": vmax,
         "render_mode": render_mode,
-        "x_axis_mode": x_axis_mode,
+        "render_values": render_value_mode,
+        "scatter_color_values": effective_scatter_color_values,
+        "axis_orientation": effective_axis_orientation,
+        "x_axis_mode": effective_x_axis_mode,
+        "sort_by": sort_by,
+        "sort_window_index": sort_window_pos,
+        "sort_descending": effective_sort_descending,
         "motifs_plotted": [motif_labels_resolved[m] for m in motif_ids],
         "n_windows": n_windows_effective,
-        "window_center_offsets": target_offsets.tolist() if target_offsets is not None else None,
+        "window_centers_bp": target_offsets.tolist()
+        if target_offsets is not None
+        else None,
+        "window_center_offsets": target_offsets.tolist()
+        if target_offsets is not None
+        else None,
+        "window_widths_bp": [int(value) for value in panel_widths_bp],
         "required_read_length_bp": required_read_length_bp,
         "min_read_length_bp": effective_min_read_length,
-        "center_tolerance_bp": center_tolerance_bp,
+        "window_match_tolerance_bp": match_tolerance_bp,
+        "center_tolerance_bp": match_tolerance_bp,
+        "enforce_full_window_span": bool(enforce_full_window_span),
+        "dropped_for_window_span": int(dropped_for_window_span),
+        "read_order_consistent": True,
+        "ml_score_thresholds": (
+            None
+            if threshold_map is None
+            else {
+                motif_labels_resolved[key]: value
+                for key, value in threshold_map.items()
+                if key in motif_ids
+            }
+        ),
+        "ml_score_cmaps": (
+            {
+                motif_labels_resolved[motif_id]: ml_cmap_names[motif_id]
+                for motif_id in motif_ids
+            }
+            if threshold_map is None and effective_scatter_color_values == "ml_score"
+            else None
+        ),
     }
+
+
+def plot_two_site_read_raster(
+    read_windows: ReadWindowExtractionResult,
+    *,
+    second_site_offset_bp: int,
+    window_width_bp: int | None = None,
+    window_match_tolerance_bp: int | None = None,
+    **kwargs,
+):
+    """
+    Convenience wrapper for two-site raster plots in primary-region coordinates.
+
+    Args:
+        read_windows: ReadWindowExtractionResult from extract_read_windows / build_multimotif_read_windows
+        second_site_offset_bp: secondary site center (bp) relative to the primary site at 0
+        window_width_bp: common width (bp) applied to both windows when provided
+        window_match_tolerance_bp: tolerance used when matching explicit centers
+        **kwargs: forwarded to plot_multisite_read_raster
+    """
+
+    if "window_centers_bp" in kwargs or "window_center_offsets" in kwargs:
+        raise ValueError(
+            "plot_two_site_read_raster manages centers internally; do not pass window_centers_bp."
+        )
+    if "n_windows" in kwargs:
+        raise ValueError("plot_two_site_read_raster always uses exactly two windows.")
+
+    forwarded: dict[str, Any] = dict(kwargs)
+    forwarded["window_centers_bp"] = [0, int(second_site_offset_bp)]
+    if window_width_bp is not None:
+        forwarded["window_widths_bp"] = [int(window_width_bp), int(window_width_bp)]
+    if window_match_tolerance_bp is not None:
+        forwarded["window_match_tolerance_bp"] = int(window_match_tolerance_bp)
+    return plot_multisite_read_raster(read_windows, n_windows=2, **forwarded)
 
 
 def plot_region_cluster_profiles(
@@ -2816,8 +3818,8 @@ def plot_region_cluster_profiles(
 
     import matplotlib.pyplot as plt
     from matplotlib import gridspec
-    from matplotlib.lines import Line2D
     from matplotlib.colors import Normalize
+    from matplotlib.lines import Line2D
 
     X_full = np.asarray(pileup_matrix)
     labs = np.asarray(labels)
@@ -2840,7 +3842,9 @@ def plot_region_cluster_profiles(
         raise ValueError(
             f"motif_index {motif_idx} out of range for {n_motifs} motif slices."
         )
-    motif_ids = list(range(n_motifs)) if plot_all_motifs and n_motifs > 1 else [motif_idx]
+    motif_ids = (
+        list(range(n_motifs)) if plot_all_motifs and n_motifs > 1 else [motif_idx]
+    )
 
     if motif_labels is None:
         motif_labels = [f"motif_{i}" for i in range(n_motifs)]
@@ -2866,7 +3870,9 @@ def plot_region_cluster_profiles(
     primary_matrix = X_full[:, primary_start:primary_end]
     x_axis = _centered_x_axis(
         primary_matrix.shape[1],
-        _window_span_from_size(window_size) if window_size is not None else primary_matrix.shape[1],
+        _window_span_from_size(window_size)
+        if window_size is not None
+        else primary_matrix.shape[1],
     )
 
     labs_arr, lab_codes, unique_codes = _prepare_group_labels(labs)
@@ -2874,7 +3880,9 @@ def plot_region_cluster_profiles(
     X_sorted_full = X_full[order]
     lab_codes_sorted = lab_codes[order]
 
-    unique_labels = np.array([np.unique(labs_arr[lab_codes == code])[0] for code in unique_codes])
+    unique_labels = np.array(
+        [np.unique(labs_arr[lab_codes == code])[0] for code in unique_codes]
+    )
     cmap = plt.get_cmap(cmap_name)
     norm = Normalize(vmin=int(unique_codes.min()), vmax=int(unique_codes.max() or 1))
 
@@ -2949,8 +3957,12 @@ def plot_region_cluster_profiles(
                     color=motif_colors[motif_id],
                     linewidth=1.5,
                 )
-                motif_ax.set_ylabel(str(motif_labels[motif_id]), color=motif_colors[motif_id])
-                motif_ax.tick_params(axis="y", colors=motif_colors[motif_id], labelsize=8)
+                motif_ax.set_ylabel(
+                    str(motif_labels[motif_id]), color=motif_colors[motif_id]
+                )
+                motif_ax.tick_params(
+                    axis="y", colors=motif_colors[motif_id], labelsize=8
+                )
             for motif_pos, motif_ax in enumerate(axes_for_motifs):
                 motif_ax.set_ylim(0, max(motif_maxima[motif_pos], 0.05) * 1.05)
         else:
@@ -2969,14 +3981,18 @@ def plot_region_cluster_profiles(
                     ax.plot(
                         x_axis,
                         mean_profile_raw,
-                        color=motif_colors[motif_id] if len(motif_ids) > 1 else cmap(norm(code)),
+                        color=motif_colors[motif_id]
+                        if len(motif_ids) > 1
+                        else cmap(norm(code)),
                         linewidth=1.0,
                         alpha=0.25,
                     )
                 ax.plot(
                     x_axis,
                     mean_profile,
-                    color=motif_colors[motif_id] if len(motif_ids) > 1 else cmap(norm(code)),
+                    color=motif_colors[motif_id]
+                    if len(motif_ids) > 1
+                    else cmap(norm(code)),
                     linewidth=1.5,
                 )
         ax.set_title(f"{unique_labels[i]} (n={row_mask.sum()})")
@@ -2986,7 +4002,9 @@ def plot_region_cluster_profiles(
 
     if len(motif_ids) > 1 or color_points_by == "motif":
         handles = [
-            Line2D([0], [0], color=motif_colors[m], linewidth=2, label=str(motif_labels[m]))
+            Line2D(
+                [0], [0], color=motif_colors[m], linewidth=2, label=str(motif_labels[m])
+            )
             for m in motif_ids
         ]
         fig.legend(
@@ -3025,7 +4043,9 @@ def export_region_clusters_to_bed(
 
     output_path = Path(output_path)
     lines = []
-    for (chrom, start, end, strand), label in zip(region_metadata, labels):
+    for (chrom, start, end, strand), label in zip(
+        region_metadata, labels, strict=False
+    ):
         name = f"{name_prefix}_{label}"
         score = str(label)
         strand_field = strand if strand in {"+", "-"} else "."
@@ -3051,6 +4071,8 @@ def plot_cluster_karyotype(
     chromosome_order: str | Sequence[str] = "length_desc",
     invert_position_axis: bool = True,
     detect_haplotype_backbone_shading: bool = True,
+    show_position_axis: bool = False,
+    coordinate_label_stagger: bool = True,
 ):
     """
     Plot cluster-labeled regions along chromosomes (ideogram-style), colored by cluster.
@@ -3067,10 +4089,13 @@ def plot_cluster_karyotype(
         invert_position_axis: if True, chromosome position increases downward
         detect_haplotype_backbone_shading: if True, apply subtle maternal/paternal-like
             backbone shading when paired haplotype naming is detected
+        show_position_axis: if True, show y-axis ticks/label; default hides them for cleaner ideogram view
+        coordinate_label_stagger: if True, alternate end-label vertical offsets to reduce overlap
     """
+    import re
+
     import matplotlib.pyplot as plt
     from matplotlib.colors import Normalize
-    import re
 
     clusters_df = pd.read_csv(
         region_bed,
@@ -3135,7 +4160,9 @@ def plot_cluster_karyotype(
         df["cluster_id"] = pd.factorize(df["Name"].astype(str))[0]
     else:
         fallback = pd.factorize(df["Name"].astype(str))[0]
-        df["cluster_id"] = parsed_cluster.fillna(pd.Series(fallback, index=df.index)).astype(int)
+        df["cluster_id"] = parsed_cluster.fillna(
+            pd.Series(fallback, index=df.index)
+        ).astype(int)
 
     chrom_sizes_series = df.groupby("Chromosome")["Length"].max()
     if isinstance(chromosome_order, (list, tuple, pd.Index, np.ndarray)):
@@ -3146,11 +4173,21 @@ def plot_cluster_karyotype(
     else:
         order_mode = str(chromosome_order).lower()
         if order_mode == "length_asc":
-            chrom_order = chrom_sizes_series.sort_values(ascending=True).index.astype(str).tolist()
+            chrom_order = (
+                chrom_sizes_series.sort_values(ascending=True)
+                .index.astype(str)
+                .tolist()
+            )
         elif order_mode == "natural":
-            chrom_order = sorted(chrom_sizes_series.index.astype(str).tolist(), key=_natural_chrom_key)
+            chrom_order = sorted(
+                chrom_sizes_series.index.astype(str).tolist(), key=_natural_chrom_key
+            )
         else:
-            chrom_order = chrom_sizes_series.sort_values(ascending=False).index.astype(str).tolist()
+            chrom_order = (
+                chrom_sizes_series.sort_values(ascending=False)
+                .index.astype(str)
+                .tolist()
+            )
 
     haplotype_pairs: dict[str, set[str]] = {}
     if detect_haplotype_backbone_shading:
@@ -3178,8 +4215,8 @@ def plot_cluster_karyotype(
 
     cmap = plt.get_cmap(cmap_name)
     unique_clusters = np.sort(df["cluster_id"].unique())
-    if hasattr(cmap, "colors") and len(getattr(cmap, "colors")) > 0:
-        color_cycle = list(getattr(cmap, "colors"))
+    if hasattr(cmap, "colors") and len(cmap.colors) > 0:
+        color_cycle = list(cmap.colors)
         cluster_to_color = {
             int(cid): color_cycle[i % len(color_cycle)]
             for i, cid in enumerate(unique_clusters)
@@ -3187,16 +4224,22 @@ def plot_cluster_karyotype(
     else:
         norm = Normalize(vmin=0, vmax=max(1, len(unique_clusters) - 1))
         cluster_to_color = {
-            int(cid): cmap(norm(i))
-            for i, cid in enumerate(unique_clusters)
+            int(cid): cmap(norm(i)) for i, cid in enumerate(unique_clusters)
         }
 
     fig_height = max(3.0, figsize_per_chrom * len(chrom_order))
     fig, ax = plt.subplots(figsize=(max(8, len(chrom_order) * 0.7), fig_height + 1.5))
     max_length = float(df["Length"].max())
     x_positions = np.arange(len(chrom_order), dtype=float)
+    cluster_counts = df["cluster_id"].value_counts().to_dict()
+    # Draw dense clusters first and rarer clusters on top for visibility.
+    draw_order = sorted(
+        unique_clusters,
+        key=lambda cid: int(cluster_counts.get(int(cid), 0)),
+        reverse=True,
+    )
 
-    for xi, chrom in zip(x_positions, chrom_order):
+    for xi, chrom in zip(x_positions, chrom_order, strict=False):
         chrom_len = float(df.loc[df["Chromosome"] == chrom, "Length"].max())
         # Backbone for full chromosome (proportional in bp units)
         ax.plot(
@@ -3209,36 +4252,71 @@ def plot_cluster_karyotype(
             zorder=1,
         )
         # Cluster-assigned regions
-        sub = df[df["Chromosome"] == chrom]
-        for _, row in sub.iterrows():
-            start_bp = float(row["Start"])
-            end_bp = float(row["End"])
-            region_len = max(0.0, end_bp - start_bp)
-            min_len = max(float(min_visible_bp), chrom_len * float(min_visible_fraction))
-            if region_len < min_len:
-                center = 0.5 * (start_bp + end_bp)
-                start_bp = max(0.0, center - (0.5 * min_len))
-                end_bp = min(chrom_len, center + (0.5 * min_len))
-            ax.plot(
-                [xi, xi],
-                [start_bp, end_bp],
-                color=cluster_to_color[int(row.cluster_id)],
-                lw=linewidth + 2.0,
-                alpha=0.95,
-                solid_capstyle="butt",
-                zorder=2,
-            )
-        # Per-chromosome coordinate summary below each chromosome.
-        label_y = -0.055 * max_length if invert_position_axis else 1.055 * max_length
-        label_va = "top" if invert_position_axis else "bottom"
+        sub = df[df["Chromosome"] == chrom].copy()
+        for z_rank, cid in enumerate(draw_order, start=2):
+            sub_cluster = sub[sub["cluster_id"] == int(cid)]
+            if sub_cluster.empty:
+                continue
+            for _, row in sub_cluster.iterrows():
+                start_bp = float(row["Start"])
+                end_bp = float(row["End"])
+                region_len = max(0.0, end_bp - start_bp)
+                min_len = max(
+                    float(min_visible_bp), chrom_len * float(min_visible_fraction)
+                )
+                if region_len < min_len:
+                    center = 0.5 * (start_bp + end_bp)
+                    start_bp = max(0.0, center - (0.5 * min_len))
+                    end_bp = min(chrom_len, center + (0.5 * min_len))
+                ax.plot(
+                    [xi, xi],
+                    [start_bp, end_bp],
+                    color=cluster_to_color[int(row.cluster_id)],
+                    lw=linewidth + 2.0,
+                    alpha=0.98,
+                    solid_capstyle="butt",
+                    zorder=z_rank,
+                )
+
+        # Per-chromosome coordinate labels centered on each ideogram.
+        # Use per-chromosome padding (not global max length) so labels stay close.
+        x_label = xi
+        y_pad = max(1.0, 0.0015 * chrom_len)
+        if coordinate_label_stagger:
+            bottom_extra = 0.0 if (int(xi) % 2 == 0) else (0.6 * y_pad)
+        else:
+            bottom_extra = 0.0
+        if invert_position_axis:
+            top_label_y = -y_pad
+            bottom_label_y = chrom_len + y_pad + bottom_extra
+            top_label_text = "0"
+            bottom_label_text = f"{int(chrom_len):,}"
+        else:
+            top_label_y = chrom_len + y_pad + bottom_extra
+            bottom_label_y = -y_pad
+            top_label_text = f"{int(chrom_len):,}"
+            bottom_label_text = "0"
         ax.text(
-            xi,
-            label_y,
-            f"0 .. {int(chrom_len):,} bp",
+            x_label,
+            top_label_y,
+            top_label_text,
             ha="center",
-            va=label_va,
-            fontsize=7,
+            va="bottom",
+            fontsize=8,
             color="0.35",
+            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 0.2},
+            zorder=4,
+        )
+        ax.text(
+            x_label,
+            bottom_label_y,
+            bottom_label_text,
+            ha="center",
+            va="top",
+            fontsize=8,
+            color="0.35",
+            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 0.2},
+            zorder=4,
         )
 
     ax.set_xlim(-0.7, len(chrom_order) - 0.3)
@@ -3248,14 +4326,25 @@ def plot_cluster_karyotype(
         ax.set_ylim(-0.1 * max_length, 1.08 * max_length)
     ax.set_xticks(x_positions)
     ax.set_xticklabels(chrom_order, rotation=45, ha="right")
-    ax.set_ylabel("Position (bp)")
+    if show_position_axis:
+        ax.set_ylabel("Position (bp)")
+    else:
+        ax.set_ylabel("")
+        ax.yaxis.set_visible(False)
+        ax.spines["left"].set_visible(False)
     ax.set_title("Clustered Regions by Chromosome (Vertical, Proportional Length)")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     from matplotlib.lines import Line2D
 
     legend_handles = [
-        Line2D([0], [0], color=cluster_to_color[int(cid)], linewidth=3, label=f"C{int(cid)}")
+        Line2D(
+            [0],
+            [0],
+            color=cluster_to_color[int(cid)],
+            linewidth=3,
+            label=f"C{int(cid)}",
+        )
         for cid in unique_clusters
     ]
     ax.legend(
@@ -3350,7 +4439,12 @@ def summarize_region_cluster_annotations(
         return pd.DataFrame()
 
     df = overlaps.df.copy()
-    df["cluster"] = df["Name"].astype(str).str.replace(f"{name_prefix}_", "", regex=False).astype(int)
+    df["cluster"] = (
+        df["Name"]
+        .astype(str)
+        .str.replace(f"{name_prefix}_", "", regex=False)
+        .astype(int)
+    )
     df["feature"] = df[feature_col].astype(str)
 
     counts = df.groupby(["cluster", "feature"]).size().reset_index(name="count")
@@ -3437,11 +4531,13 @@ def summarize_read_cluster_region_associations(
         raise ValueError("prior_count must be non-negative.")
 
     rows: list[dict[str, Any]] = []
-    for meta, cluster_label in zip(metadata, labels):
+    for meta, cluster_label in zip(metadata, labels, strict=False):
         chrom = meta.get("chromosome", meta.get("chrom"))
         start = meta.get("region_start", meta.get("start"))
         end = meta.get("region_end", meta.get("end"))
-        strand_value = meta.get("region_strand", meta.get("strand")) if include_strand else "."
+        strand_value = (
+            meta.get("region_strand", meta.get("strand")) if include_strand else "."
+        )
         strand = strand_value if strand_value in {"+", "-"} else "."
         rows.append(
             {
@@ -3475,16 +4571,24 @@ def summarize_read_cluster_region_associations(
 
     region_cols = ["chrom", "start", "end", "strand"]
     cluster_order = list(pd.unique(df["cluster"]))
-    region_totals = df.groupby(region_cols, sort=True).size().reset_index(name="total_reads")
-    kept_regions = region_totals.loc[region_totals["total_reads"] >= min_reads_per_region, region_cols]
+    region_totals = (
+        df.groupby(region_cols, sort=True).size().reset_index(name="total_reads")
+    )
+    kept_regions = region_totals.loc[
+        region_totals["total_reads"] >= min_reads_per_region, region_cols
+    ]
     if kept_regions.empty:
         return pd.DataFrame(columns=columns)
 
-    region_grid = kept_regions.assign(_key=1).merge(
-        pd.DataFrame({"cluster": cluster_order, "_key": 1}),
-        on="_key",
-        how="outer",
-    ).drop(columns="_key")
+    region_grid = (
+        kept_regions.assign(_key=1)
+        .merge(
+            pd.DataFrame({"cluster": cluster_order, "_key": 1}),
+            on="_key",
+            how="outer",
+        )
+        .drop(columns="_key")
+    )
 
     observed_counts = (
         df.groupby(region_cols + ["cluster"], sort=True)
@@ -3503,7 +4607,9 @@ def summarize_read_cluster_region_associations(
         global_counts["global_count"] / global_total if global_total > 0 else 0.0
     )
 
-    summary = region_grid.merge(observed_counts, on=region_cols + ["cluster"], how="left")
+    summary = region_grid.merge(
+        observed_counts, on=region_cols + ["cluster"], how="left"
+    )
     summary["count"] = summary["count"].fillna(0).astype(int)
     summary = summary.merge(region_totals, on=region_cols, how="left")
     summary = summary.merge(global_counts, on="cluster", how="left")
@@ -3531,6 +4637,7 @@ def summarize_read_cluster_region_associations(
             summary["count"],
             summary["total_reads"],
             summary["global_fraction"].fillna(0.0),
+            strict=False,
         )
     ]
     summary["q_value"] = _adjust_p_values_bh(summary["p_value"])
@@ -3603,7 +4710,7 @@ def summarize_read_clusters_by_region(
         entropy = float(-(probs * np.log(probs + 1e-12)).sum())
         return dominant_cluster, dominant_fraction, entropy
 
-    dom, dom_frac, ent = zip(*pivot.apply(_dominance_and_entropy, axis=1))
+    dom, dom_frac, ent = zip(*pivot.apply(_dominance_and_entropy, axis=1), strict=False)
     pivot["dominant_cluster"] = dom
     pivot["dominant_fraction"] = dom_frac
     pivot["entropy"] = ent
@@ -3635,5 +4742,6 @@ __all__ = [
     "sample_rows",
     "cluster_label_mapping",
     "apply_cluster_label_mapping",
+    "plot_two_site_read_raster",
     "plot_multisite_read_raster",
 ]

@@ -81,6 +81,7 @@ def by_modification(
         **kwargs,
     )
 
+
 def by_regions(
     mod_file_name: str | Path,
     regions_list: list[str | Path | list[str | Path]] | None = None,
@@ -108,7 +109,9 @@ def by_regions(
         raise ValueError("by_regions requires motif.")
 
     sample_names_for_plot = (
-        sample_names if sample_names is not None else [str(region) for region in regions_list]
+        sample_names
+        if sample_names is not None
+        else [str(region) for region in regions_list]
     )
     n_beds = len(regions_list)
     return plot_enrichment(
@@ -182,7 +185,9 @@ def get_enrichments(
     mod_file_paths = [Path(fn) for fn in mod_file_names]
 
     mod_fractions = []
-    for mod_file, regions, motif in zip(mod_file_paths, regions_list, motifs):
+    for mod_file, regions, motif in zip(
+        mod_file_paths, regions_list, motifs, strict=False
+    ):
         match mod_file.suffix:
             case ".gz":
                 n_mod, n_total = load_processed.pileup_counts_from_bedmethyl(

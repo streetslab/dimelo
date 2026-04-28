@@ -66,7 +66,9 @@ def test_poll_request_collects_history_until_finished(monkeypatch):
         return {"request_id": "REQ1", **payload}
 
     monkeypatch.setattr(chip_atlas, "get_status", fake_get_status)
-    poll = chip_atlas.poll_request("REQ1", poll_interval_seconds=0.0, timeout_seconds=5.0)
+    poll = chip_atlas.poll_request(
+        "REQ1", poll_interval_seconds=0.0, timeout_seconds=5.0
+    )
     assert poll["status"] == "finished"
     assert [step["status"] for step in poll["history"]] == ["running", "finished"]
 
@@ -83,7 +85,9 @@ def test_fetch_result_parses_tsv(monkeypatch):
     assert isinstance(result, pd.DataFrame)
     assert result.loc[0, "target"] == "CTCF"
     assert int(result.loc[0, "count"]) == 42
-    assert captured["url"] == f"{chip_atlas.DEFAULT_RESULT_URL}REQ2?info=result&format=tsv"
+    assert (
+        captured["url"] == f"{chip_atlas.DEFAULT_RESULT_URL}REQ2?info=result&format=tsv"
+    )
 
 
 def test_run_enrichment_raises_on_terminal_failure(monkeypatch):
@@ -150,10 +154,14 @@ def test_cache_chain_files_uses_resolver(monkeypatch):
 
     def fake_resolve(**kwargs):
         calls.append((kwargs["source_genome"], kwargs["target_genome"]))
-        return f"/tmp/{kwargs['source_genome']}_to_{kwargs['target_genome']}.over.chain.gz"
+        return (
+            f"/tmp/{kwargs['source_genome']}_to_{kwargs['target_genome']}.over.chain.gz"
+        )
 
     monkeypatch.setattr(chip_atlas, "_resolve_chain_file", fake_resolve)
-    cached = chip_atlas.cache_chain_files(source_genome="chm13", target_genomes=("hg38", "hg19"))
+    cached = chip_atlas.cache_chain_files(
+        source_genome="chm13", target_genomes=("hg38", "hg19")
+    )
 
     assert calls == [("chm13", "hg38"), ("chm13", "hg19")]
     assert str(cached["hg38"]).endswith("chm13_to_hg38.over.chain.gz")
@@ -203,7 +211,11 @@ def test_search_peak_datasets_filters_metadata_rows(monkeypatch, tmp_path):
         },
     ]
 
-    monkeypatch.setattr(chip_atlas, "_ensure_experiment_list_zip", lambda **kwargs: tmp_path / "fake.zip")
+    monkeypatch.setattr(
+        chip_atlas,
+        "_ensure_experiment_list_zip",
+        lambda **kwargs: tmp_path / "fake.zip",
+    )
     monkeypatch.setattr(chip_atlas, "_iter_experiment_rows", lambda path: iter(rows))
 
     found = chip_atlas.search_peak_datasets(
@@ -228,11 +240,11 @@ def test_download_peak_datasets_writes_variants_and_crossmapped(monkeypatch, tmp
         ]
     )
     bed_payload = (
-        "chr1\t10\t20\tp1\t100\t.\n"
-        "chr1\t30\t40\tp2\t10\t.\n"
-        "chr1\t50\t60\tp3\t50\t.\n"
-        "chr1\t70\t80\tp4\t5\t.\n"
-    ).encode("utf-8")
+        b"chr1\t10\t20\tp1\t100\t.\n"
+        b"chr1\t30\t40\tp2\t10\t.\n"
+        b"chr1\t50\t60\tp3\t50\t.\n"
+        b"chr1\t70\t80\tp4\t5\t.\n"
+    )
     monkeypatch.setattr(chip_atlas, "_download_bytes", lambda **kwargs: bed_payload)
     monkeypatch.setattr(
         chip_atlas,

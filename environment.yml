@@ -8,6 +8,6 @@ dependencies:
   - python=3.11
   - pip
   - libcurl
-  # Conservative default pin; runtime supports both 0.2.4 and 0.6.x.
-  - nanoporetech::modkit==0.2.4
+  # Project default for parsing/DMR workflows and notebooks.
+  - nanoporetech::modkit==0.6.1
   - bioconda::crossmap=0.7.3

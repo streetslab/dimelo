@@ -22,7 +22,13 @@ def test_build_cluster_distribution_counts_and_fractions():
 
     result = build_cluster_distribution(assignments)
 
-    assert list(result.columns) == ["sample_id", "condition", "cluster", "count", "fraction"]
+    assert list(result.columns) == [
+        "sample_id",
+        "condition",
+        "cluster",
+        "count",
+        "fraction",
+    ]
     s1 = (
         result[result["sample_id"] == "s1"]
         .sort_values("cluster")
@@ -137,7 +143,13 @@ def test_prepare_cluster_distribution_bar_data_returns_sorted_frame():
 
     result = prepare_cluster_distribution_bar_data(cluster_distribution)
 
-    assert list(result.columns) == ["sample_id", "condition", "cluster", "count", "fraction"]
+    assert list(result.columns) == [
+        "sample_id",
+        "condition",
+        "cluster",
+        "count",
+        "fraction",
+    ]
     assert list(result["sample_id"]) == ["s1", "s2"]
     assert list(result["cluster"]) == ["C0", "C1"]
 

@@ -114,17 +114,22 @@ def build_distribution_change(
     merged["reference_fraction"] = merged["reference_fraction"].fillna(0.0)
     merged["delta_fraction"] = merged["fraction"] - merged["reference_fraction"]
     merged["log2_fc"] = np.log2(
-        (merged["fraction"] + pseudo_count) / (merged["reference_fraction"] + pseudo_count)
+        (merged["fraction"] + pseudo_count)
+        / (merged["reference_fraction"] + pseudo_count)
     )
-    return merged[
-        [
-            "condition",
-            "cluster",
-            "count",
-            "fraction",
-            "replicate_n",
-            "reference_fraction",
-            "delta_fraction",
-            "log2_fc",
+    return (
+        merged[
+            [
+                "condition",
+                "cluster",
+                "count",
+                "fraction",
+                "replicate_n",
+                "reference_fraction",
+                "delta_fraction",
+                "log2_fc",
+            ]
         ]
-    ].sort_values(["condition", "cluster"], kind="stable").reset_index(drop=True)
+        .sort_values(["condition", "cluster"], kind="stable")
+        .reset_index(drop=True)
+    )

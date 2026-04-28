@@ -183,7 +183,9 @@ def test_read_by_base_txt_to_hdf5_uses_dense_span_vectors(tmp_path):
         sparse_val_vector = _decode_vector(h5["val_vector"], sparse_index)
 
         no_hits_index = 1
-        no_hits_span = int(h5["read_end"][no_hits_index] - h5["read_start"][no_hits_index])
+        no_hits_span = int(
+            h5["read_end"][no_hits_index] - h5["read_start"][no_hits_index]
+        )
         no_hits_mod_vector = _decode_vector(h5["mod_vector"], no_hits_index)
         no_hits_val_vector = _decode_vector(h5["val_vector"], no_hits_index)
 
@@ -267,8 +269,12 @@ def test_read_by_base_txt_to_hdf5_stores_per_motif_threshold_metadata(tmp_path):
     val_vector_index = datasets.index("val_vector")
 
     assert len(read_tuples) == 4
-    assert all(read_tuple[mod_vector_index].dtype == np.bool_ for read_tuple in read_tuples)
-    assert all(read_tuple[val_vector_index].dtype == np.bool_ for read_tuple in read_tuples)
+    assert all(
+        read_tuple[mod_vector_index].dtype == np.bool_ for read_tuple in read_tuples
+    )
+    assert all(
+        read_tuple[val_vector_index].dtype == np.bool_ for read_tuple in read_tuples
+    )
 
 
 def test_read_by_base_txt_to_hdf5_rejects_mixed_raw_and_thresholded_motifs(tmp_path):
@@ -322,8 +328,12 @@ def test_read_vectors_from_hdf5_loads_thresholded_vectors_as_binary(tmp_path):
     read_name_index = datasets.index("read_name")
 
     assert len(read_tuples) == 2
-    assert all(read_tuple[mod_vector_index].dtype == np.bool_ for read_tuple in read_tuples)
-    assert all(read_tuple[val_vector_index].dtype == np.bool_ for read_tuple in read_tuples)
+    assert all(
+        read_tuple[mod_vector_index].dtype == np.bool_ for read_tuple in read_tuples
+    )
+    assert all(
+        read_tuple[val_vector_index].dtype == np.bool_ for read_tuple in read_tuples
+    )
 
     reads_by_name = {
         read_tuple[read_name_index]: read_tuple for read_tuple in read_tuples
@@ -562,12 +572,14 @@ def test_readwise_binary_modification_arrays_splits_duplicate_read_names_by_regi
         quiet=True,
     )
 
-    _, read_ids, motifs, regions_dict = load_processed.readwise_binary_modification_arrays(
-        file=output_h5,
-        motifs=["A,0"],
-        regions=["chr1:95-105", "chr1:100-110"],
-        thresh=None,
-        quiet=True,
+    _, read_ids, motifs, regions_dict = (
+        load_processed.readwise_binary_modification_arrays(
+            file=output_h5,
+            motifs=["A,0"],
+            regions=["chr1:95-105", "chr1:100-110"],
+            thresh=None,
+            quiet=True,
+        )
     )
 
     assert set(read_ids.tolist()) == {0, 1}
@@ -675,6 +687,97 @@ def test_read_vectors_from_hdf5_accepts_tuple_sort_by(tmp_path):
     ]
 
 
+def test_read_vectors_from_hdf5_filters_by_min_read_length(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    read_tuples, datasets, _ = load_processed.read_vectors_from_hdf5(
+        file=output_h5,
+        motifs=["A,0"],
+        min_read_length_bp=11,
+        calculate_mod_fractions=False,
+        quiet=True,
+    )
+
+    read_name_index = datasets.index("read_name")
+    assert [row[read_name_index] for row in read_tuples] == ["read_no_hits"]
+
+
+def test_read_vectors_from_hdf5_supports_global_random_read_sample(
+    tmp_path, monkeypatch
+):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    def _pick_first(array, n=None, frac=None, replace=False):
+        assert n == 1
+        return np.asarray(array[:1])
+
+    monkeypatch.setattr(load_processed.utils, "random_sample", _pick_first)
+
+    read_tuples, datasets, _ = load_processed.read_vectors_from_hdf5(
+        file=output_h5,
+        motifs=["A,0"],
+        random_sample_n_reads=1,
+        calculate_mod_fractions=False,
+        quiet=True,
+    )
+
+    read_name_index = datasets.index("read_name")
+    sampled_names = {row[read_name_index] for row in read_tuples}
+    assert len(sampled_names) == 1
+
+
+def test_read_vectors_from_hdf5_rejects_invalid_random_sample_or_length(tmp_path):
+    input_txt = tmp_path / "extract.txt"
+    output_h5 = tmp_path / "reads_thresholded.h5"
+    _write_extract_file(input_txt)
+
+    parse_bam.read_by_base_txt_to_hdf5(
+        input_txt=input_txt,
+        output_h5=output_h5,
+        motif="A,0",
+        thresh=0.5,
+        quiet=True,
+    )
+
+    with pytest.raises(ValueError, match="random_sample_n_reads"):
+        load_processed.read_vectors_from_hdf5(
+            file=output_h5,
+            motifs=["A,0"],
+            random_sample_n_reads=0,
+            calculate_mod_fractions=False,
+            quiet=True,
+        )
+
+    with pytest.raises(ValueError, match="min_read_length_bp"):
+        load_processed.read_vectors_from_hdf5(
+            file=output_h5,
+            motifs=["A,0"],
+            min_read_length_bp=-1,
+            calculate_mod_fractions=False,
+            quiet=True,
+        )
+
+
 def test_readwise_binary_modification_arrays_passes_subset_and_quiet(monkeypatch):
     captured_kwargs = {}
 
@@ -714,12 +817,16 @@ def test_readwise_binary_modification_arrays_passes_subset_and_quiet(monkeypatch
             motifs=["A,0"],
             regions="chr1:100-110",
             subset_parameters={"n": 1},
+            random_sample_n_reads=1,
+            min_read_length_bp=1000,
             quiet=False,
         )
     )
 
     assert captured_kwargs["quiet"] is False
     assert captured_kwargs["subset_parameters"] == {"n": 1}
+    assert captured_kwargs["random_sample_n_reads"] == 1
+    assert captured_kwargs["min_read_length_bp"] == 1000
     assert mod_positions.tolist() == [-5]
     assert read_ids.tolist() == [0]
     assert motifs.tolist() == ["A,0"]

@@ -106,8 +106,8 @@ bash scripts/bootstrap_dimelo_env.sh <env_name> <kernel_name> "<kernel_display_n
 ```
 
 Examples:
-- Keep default tested pin (`0.2.4`): `bash scripts/bootstrap_dimelo_env.sh`
-- Install a specific version (for example `0.6.1`): `bash scripts/bootstrap_dimelo_env.sh dimelo-toolkit dimelo-test "Python (dimelo-test)" 0.6.1`
+- Use the project default (`0.6.1`): `bash scripts/bootstrap_dimelo_env.sh`
+- Install a different explicit version: `bash scripts/bootstrap_dimelo_env.sh dimelo-toolkit dimelo-test "Python (dimelo-test)" 0.6.1`
 
 ### Install pip dependencies and core dimelo-toolkit package
 
@@ -131,7 +131,7 @@ python scripts/ensure_dimelo_kernel.py --expected-env dimelo-toolkit
 
 ## Google Colab Installation
 
-Run the following code in the first cell of your notebook to grab `modkit v0.2.4` from conda and install the `dimelo-toolkit main` branch. This will have to be run whenever you make a new Colab instance, unless you have a better way of managing this, in which case please reach out. The tutorial notebook runs equivalent code blocks to set up your environment, so if you are trying to run the tutorial you can skip to [Basic Use](#basic-use).
+Run the following code in the first cell of your notebook to grab `modkit v0.6.1` from conda and install the `dimelo-toolkit main` branch. This will have to be run whenever you make a new Colab instance, unless you have a better way of managing this, in which case please reach out. The tutorial notebook runs equivalent code blocks to set up your environment, so if you are trying to run the tutorial you can skip to [Basic Use](#basic-use).
 
 ```
 from google.colab import drive
@@ -139,13 +139,13 @@ drive.mount('/content/drive')
 !pip install -q condacolab
 import condacolab
 condacolab.install()
-!conda install nanoporetech::modkit==0.2.4
+!conda install nanoporetech::modkit==0.6.1
 !git clone https://github.com/streetslab/dimelo-toolkit
 !cd dimelo-toolkit && pip install ipywidgets==7.7.1 .
 import dimelo
 ```
 
-`dimelo-toolkit` parsing paths support both `modkit 0.2.4` and `modkit 0.6.x`. The default environment pin remains conservative (`0.2.4`) for reproducibility, but you can install `0.6.x` when preferred.
+`dimelo-toolkit` defaults to `modkit 0.6.1` for parsing/DMR workflows and notebook reproducibility.
 
 To switch versions in an existing env:
 
@@ -155,12 +155,8 @@ bash scripts/update_modkit_version.sh dimelo-toolkit 0.6.1
 
 ## Alternative Installations
 
-Alternatively, you can install modkit into any conda environment you like. If you want to, you can install modkit some other way, and then add it to the path of your notebook or script. Supported series are `0.2.4` and `0.6.x`. *NOTE: if you are creating the environment yourself, be sure to use python 3.10 or greater. Some dimelo-toolkit features require relatively new python releases.*
+Alternatively, you can install modkit into any conda environment you like. If you want to, you can install modkit some other way, and then add it to the path of your notebook or script. Recommended/validated series is `0.6.x`. *NOTE: if you are creating the environment yourself, be sure to use python 3.10 or greater. Some dimelo-toolkit features require relatively new python releases.*
 
-```
-conda install nanoporetech::modkit==0.2.4
-```
-OR
 ```
 conda install nanoporetech::modkit=0.6
 ```
@@ -248,6 +244,7 @@ def pileup(
     cores: int = None,
     log: bool = False,
     cleanup: bool = True,
+    overwrite: bool = True,
     quiet: bool = False,
     override_checks: bool = False,
     modkit_executable: str | Path | None = None,) -> Path, Path:
@@ -267,6 +264,7 @@ def extract(
     cores: int = None,
     log: bool = False,
     cleanup: bool = True,
+    overwrite: bool = True,
     quiet: bool = False,
     override_checks: bool = False,
     modkit_executable: str | Path | None = None,) -> Path, Path:
@@ -891,6 +889,8 @@ def read_vectors_from_hdf5(
     cores: int | None = None,  # currently unused
     subset_parameters: dict | None = None,
     span_full_window: bool = False,
+    random_sample_n_reads: int | None = None,
+    min_read_length_bp: int | None = None,
 ) -> tuple[list[tuple], list[str], dict | None]:
     """
     User-facing function.
@@ -940,6 +940,8 @@ def read_vectors_from_hdf5(
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
         span_full_window: If True, only load reads that fully span the window defined by region_start-region_end
+        random_sample_n_reads: Optional global random sample size by unique read name.
+        min_read_length_bp: Optional minimum read length filter (bp) applied before loading vectors.
 
     Returns:
         a list of tuples, each tuple containing all datasets corresponding to an individual read that
@@ -1120,6 +1122,8 @@ For **clustering read-window extraction APIs** (`cluster.extract_read_windows`, 
 
 `cleanup` will keep the (often large) human-readable outputs that are inefficient for plotting and vector extraction but may be helpful for other use cases.
 
+`overwrite` controls whether parse outputs for the target `output_name` are regenerated. When `True` (default), existing outputs are replaced. When `False`, complete existing outputs are reused; if partial/conflicting artifacts exist, parsing raises `FileExistsError`.
+
 `quiet` suppressed progress bars and other outputs.
 
 `override_checks` lets you run modkit even if the bam format checking and reference alignment checking are anomalous.
@@ -1129,6 +1133,12 @@ For **clustering read-window extraction APIs** (`cluster.extract_read_windows`, 
 # Known Issues
 ## No progress bars
 The most common culprit for progress bar issues in notebooks (Jupyter or Colab) is an incompatibility between your notebooks interfaces and your `ipywidgets` version. The latest jupyter notebooks or jupyter lab install and the latest ipywidgets should work together, but on Google Colab, VS Code, Open On Demand, and other jupyter interfaces this may not be the case. [setup.py](setup.py) contains details on which versions you can try downgrading to for different platforms. The following code run in your activated conda environment will downgrade `ipywidgets` to your specified version. **Our Colab instructions in the [Colab Installation](#google-colab-installation) section and the [tutorial](tutorial.ipynb) already handle this for you.**
+
+Live parse/extract progress bars now auto-disable in notebook/non-TTY contexts to avoid mangled carriage-return output. You can force behavior with:
+- `DIMELO_PROGRESS_MODE=off` to disable live bars everywhere
+- `DIMELO_PROGRESS_MODE=on` to force live bars
+
+In notebooks, you can also pass `quiet=True` to `parse_bam.pileup(...)` and `parse_bam.extract(...)`.
 
 ```
 pip install ipywidgets==X.XX.X

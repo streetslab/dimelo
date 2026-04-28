@@ -3,7 +3,9 @@ import gzip
 import itertools
 import json
 import multiprocessing
+import os
 import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -26,6 +28,22 @@ Global variables
 # Specifies how many reads to check for the base modifications of interest.
 NUM_READS_TO_CHECK = 100
 ThresholdInput = int | float | dict[str, int | float] | None
+
+
+def _should_render_live_progress() -> bool:
+    """
+    Decide whether tqdm live bars should be rendered in this process context.
+
+    "auto" mode avoids notebook/non-TTY contexts where carriage-return bars are
+    frequently rendered as mangled output.
+    """
+    mode = os.environ.get("DIMELO_PROGRESS_MODE", "auto").strip().lower()
+    if mode in {"off", "none", "false", "0"}:
+        return False
+    if mode in {"on", "force", "true", "1"}:
+        return True
+    in_notebook = "JPY_PARENT_PID" in os.environ or "IPYKERNEL_PARENT_PID" in os.environ
+    return sys.stderr.isatty() and not in_notebook
 
 
 def _unique_preserve_order(items: list[str]) -> list[str]:
@@ -146,7 +164,7 @@ def _build_extract_command_prefix(
     output_txt: Path,
     capabilities: run_modkit.ModkitCapabilities,
 ) -> list[str | Path]:
-    if capabilities.supports_extract_subcommands:
+    if _extract_requires_subcommands(capabilities):
         return [capabilities.executable, "extract", "full", input_file, output_txt]
     return [capabilities.executable, "extract", input_file, output_txt]
 
@@ -155,17 +173,28 @@ def _build_extract_reference_command_list(
     ref_genome: Path,
     capabilities: run_modkit.ModkitCapabilities,
 ) -> list[str | Path]:
-    if capabilities.supports_extract_subcommands:
+    if _extract_requires_subcommands(capabilities):
         if capabilities.extract_supports_reference_long:
             return ["--reference", ref_genome]
-        if capabilities.extract_supports_reference_short:
-            return ["--ref", ref_genome]
-        return []
+        # modkit 0.6+ extract subcommands require --reference for motif filtering.
+        return ["--reference", ref_genome]
     if capabilities.extract_supports_reference_short:
         return ["--ref", ref_genome]
     if capabilities.extract_supports_reference_long:
         return ["--reference", ref_genome]
     return ["--ref", ref_genome]
+
+
+def _extract_requires_subcommands(
+    capabilities: run_modkit.ModkitCapabilities,
+) -> bool:
+    if capabilities.supports_extract_subcommands:
+        return True
+    return bool(
+        capabilities.version_tuple is not None
+        and len(capabilities.version_tuple) >= 2
+        and (capabilities.version_tuple[0], capabilities.version_tuple[1]) >= (0, 6)
+    )
 
 
 def _build_implicit_tag_command_list(
@@ -176,9 +205,38 @@ def _build_implicit_tag_command_list(
     return []
 
 
+def _modkit_requires_multi_motif_pileup_split(
+    capabilities: run_modkit.ModkitCapabilities,
+) -> bool:
+    if capabilities.version_tuple is None or len(capabilities.version_tuple) < 2:
+        return False
+    return (capabilities.version_tuple[0], capabilities.version_tuple[1]) >= (0, 6)
+
+
 def _canonical_motif_key(motif: str) -> str:
     parsed = utils.ParsedMotif(motif)
     return f"{parsed.motif_seq},{parsed.modified_pos}"
+
+
+def _group_motifs_for_pileup(
+    motifs: list[str],
+    capabilities: run_modkit.ModkitCapabilities,
+) -> list[tuple[str, list[str]]]:
+    if (
+        not _modkit_requires_multi_motif_pileup_split(capabilities)
+        or len({_canonical_motif_key(motif) for motif in motifs}) <= 1
+    ):
+        return [("combined", motifs)]
+
+    grouped: dict[str, list[str]] = {}
+    ordered_keys: list[str] = []
+    for motif in motifs:
+        canonical_key = _canonical_motif_key(motif)
+        if canonical_key not in grouped:
+            grouped[canonical_key] = []
+            ordered_keys.append(canonical_key)
+        grouped[canonical_key].append(motif)
+    return [(key, grouped[key]) for key in ordered_keys]
 
 
 def _resolve_motif_thresholds(
@@ -249,6 +307,22 @@ def _unlink_existing(*paths: Path) -> None:
         path.unlink(missing_ok=True)
 
 
+def _text_file_has_any_rows(path: Path) -> bool:
+    try:
+        with open(path) as handle:
+            for line in handle:
+                if line.strip():
+                    return True
+    except FileNotFoundError:
+        return False
+    return False
+
+
+def _sanitize_motif_group_label(label: str) -> str:
+    sanitized = "".join(char if char.isalnum() else "_" for char in label).strip("_")
+    return sanitized or "motif"
+
+
 def _reference_oriented_read_offset(
     *,
     pos_in_read: int,
@@ -288,6 +362,7 @@ def pileup(
     cores: int | None = None,
     log: bool = False,
     cleanup: bool = True,
+    overwrite: bool = True,
     quiet: bool = False,
     override_checks: bool = False,
     modkit_executable: str | Path | None = None,
@@ -354,6 +429,9 @@ def pileup(
         cleanup: a boolean specifying whether to clean up to keep intermediate
             outputs. The final processed files are not human-readable, whereas the intermediate
             outputs are. However, intermediate outputs can also be quite large.
+        overwrite: when True (default), existing outputs for `output_name` are
+            replaced. When False, existing completed outputs are reused and parsing
+            is skipped. If partial/conflicting outputs exist, raises FileExistsError.
         override_checks: convert errors from input checking into warnings if True
         modkit_executable: optional executable name or path to a specific modkit
             binary. If None, dimelo resolves modkit from PATH (or
@@ -367,28 +445,12 @@ def pileup(
     """
     ## Verify and prepare inputs and outputs
 
-    capabilities = run_modkit._ensure_modkit_available(
-        quiet=quiet,
-        executable=modkit_executable,
-    )
-
     input_file, ref_genome, output_directory = utils.sanitize_path_args(
         input_file, ref_genome, output_directory
     )
     input_file = Path(input_file)
     ref_genome = Path(ref_genome)
     output_directory = None if output_directory is None else Path(output_directory)
-
-    try:
-        verify_inputs(input_file, motifs, ref_genome)
-    except Exception as e:
-        if override_checks:
-            if not quiet:
-                print(f"WARNING: {e}")
-        else:
-            raise Exception(
-                f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.'
-            ) from e
 
     output_path, (output_bedmethyl, output_bedmethyl_sorted, output_pileup_path, _) = (
         prep_output_directory(
@@ -401,8 +463,65 @@ def pileup(
                 "pileup.sorted.bed.gz",
                 "pileup.sorted.bed.gz.tbi",
             ],
+            overwrite=False,
         )
     )
+    output_pileup_tbi = Path(f"{output_pileup_path}.tbi")
+    processed_regions_candidate = output_path / "regions.processed.bed"
+    processed_regions_existing = (
+        processed_regions_candidate if processed_regions_candidate.exists() else None
+    )
+
+    if not overwrite:
+        final_outputs_exist = output_pileup_path.exists() and output_pileup_tbi.exists()
+        regions_ready = regions is None or processed_regions_existing is not None
+        if final_outputs_exist and regions_ready:
+            if not quiet:
+                print(
+                    f"overwrite=False and existing outputs found. Reusing {output_pileup_path}."
+                )
+            return output_pileup_path, processed_regions_existing
+
+        existing_paths = [
+            output_bedmethyl,
+            output_bedmethyl_sorted,
+            output_pileup_path,
+            output_pileup_tbi,
+        ]
+        if processed_regions_existing is not None:
+            existing_paths.append(processed_regions_existing)
+        conflicting_paths = [path for path in existing_paths if path.exists()]
+        if len(conflicting_paths) > 0:
+            conflict_names = ", ".join(path.name for path in conflicting_paths)
+            raise FileExistsError(
+                "overwrite=False but output directory contains existing parse artifacts "
+                f"for '{output_name}': {conflict_names}. "
+                "Set overwrite=True to regenerate, or remove stale files."
+            )
+    else:
+        _unlink_existing(
+            output_bedmethyl,
+            output_bedmethyl_sorted,
+            output_pileup_path,
+            output_pileup_tbi,
+            processed_regions_candidate,
+        )
+
+    capabilities = run_modkit._ensure_modkit_available(
+        quiet=quiet,
+        executable=modkit_executable,
+    )
+
+    try:
+        verify_inputs(input_file, motifs, ref_genome)
+    except Exception as e:
+        if override_checks:
+            if not quiet:
+                print(f"WARNING: {e}")
+        else:
+            raise Exception(
+                f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.'
+            ) from e
 
     ## Build up the command list to be sent to modkit, then run modkit
 
@@ -414,21 +533,16 @@ def pileup(
 
     if len(motifs) == 0:
         raise ValueError("Error: no motifs specified. Nothing to process.")
-    motif_command_list = _build_pileup_targeting_command_list(
-        motifs=motifs,
-        capabilities=capabilities,
-    )
-
-    if log:
-        if not quiet:
-            print("Logging to ", Path(output_path) / "pileup-log")
-        log_command_list = ["--log-filepath", Path(output_path) / "pileup-log"]
-    else:
-        log_command_list = []
-
     cores_command_list = _threads_command_list(cores=cores, quiet=quiet)
 
-    mod_thresh_command_list: list[str] = []
+    motif_groups = _group_motifs_for_pileup(motifs=motifs, capabilities=capabilities)
+    split_pileup_runs = len(motif_groups) > 1
+    if split_pileup_runs and not quiet:
+        print(
+            "Detected multiple motif contexts with modkit 0.6.x; running per-motif pileups "
+            "and merging outputs to avoid mixed-motif empty output behavior."
+        )
+
     motif_thresholds = _resolve_motif_thresholds(
         motifs=motifs,
         thresh=thresh,
@@ -444,44 +558,94 @@ def pileup(
             print(
                 f"WARNING: thresh {thresh} is very low and may lead to unexpected behavior. Typical thresholds are at least 0.5 or 128."
             )
-        mod_thresh_command_list = _build_mod_threshold_command_list(
-            motifs=motifs,
-            motif_thresholds=motif_thresholds,
-            capabilities=capabilities,
-        )
-
     ref_genome_command_list = ["--ref", ref_genome]
     filter_command_list = ["--filter-threshold", "0"]
     implicit_tag_command_list = _build_implicit_tag_command_list(capabilities)
 
-    pileup_command_list = (
-        [capabilities.executable, "pileup", input_file, output_bedmethyl]
-        + region_command_list
-        + motif_command_list
-        + ref_genome_command_list
-        + filter_command_list
-        + implicit_tag_command_list
-        + mod_thresh_command_list
-        + cores_command_list
-        + log_command_list
-    )
+    intermediate_pileup_files: list[Path] = []
+    for index, (group_key, group_motifs) in enumerate(motif_groups, start=1):
+        group_suffix = _sanitize_motif_group_label(group_key)
+        group_output_bedmethyl = (
+            output_bedmethyl
+            if not split_pileup_runs
+            else output_path / f"pileup.part{index}.{group_suffix}.bed"
+        )
+        _unlink_existing(group_output_bedmethyl)
+        intermediate_pileup_files.append(group_output_bedmethyl)
 
-    run_modkit.run_with_progress_bars(
-        command_list=pileup_command_list,
-        input_file=input_file,
-        ref_genome=ref_genome,
-        motifs=motifs,
-        load_fasta_regex=r"\s+\[.*?\]\s+(\d+)\s+Reading",
-        find_motifs_regex=r"\s+(\d+)/(\d+)\s+finding\s+([A-Za-z0-9,]+)\s+motifs",
-        contigs_progress_regex=r"\s+(\d+)/(\d+)\s+contigs",
-        single_contig_regex=r"\s+(\d+)/(\d+)\s+processing\s+([\w]+)[^\w]",
-        buffer_size=50,
-        progress_granularity=25,
-        done_str="Done",
-        err_str="Error",
-        expect_done=True,
-        quiet=quiet,
-    )
+        group_motif_command_list = _build_pileup_targeting_command_list(
+            motifs=group_motifs,
+            capabilities=capabilities,
+        )
+        group_mod_thresh_command_list: list[str] = []
+        if motif_thresholds is not None:
+            group_motif_thresholds = {
+                motif: motif_thresholds[motif] for motif in group_motifs
+            }
+            group_mod_thresh_command_list = _build_mod_threshold_command_list(
+                motifs=group_motifs,
+                motif_thresholds=group_motif_thresholds,
+                capabilities=capabilities,
+            )
+
+        if log:
+            log_path = (
+                Path(output_path) / "pileup-log"
+                if not split_pileup_runs
+                else Path(output_path) / f"pileup-log.{index}.{group_suffix}"
+            )
+            log_command_list = ["--log-filepath", log_path]
+            if not quiet and not split_pileup_runs:
+                print("Logging to ", log_path)
+        else:
+            log_command_list = []
+
+        base_pileup_command = (
+            [capabilities.executable, "pileup", input_file, group_output_bedmethyl]
+            + region_command_list
+            + group_motif_command_list
+            + ref_genome_command_list
+            + filter_command_list
+            + implicit_tag_command_list
+            + cores_command_list
+            + log_command_list
+        )
+
+        def _run_pileup_command(
+            extra_args: list[str],
+            *,
+            base_command: list[str] = base_pileup_command,
+            motifs_for_progress: list[tuple[str, int, str]] = group_motifs,
+        ) -> None:
+            run_modkit.run_with_progress_bars(
+                command_list=base_command + extra_args,
+                input_file=input_file,
+                ref_genome=ref_genome,
+                motifs=motifs_for_progress,
+                load_fasta_regex=r"\s+\[.*?\]\s+(\d+)\s+Reading",
+                find_motifs_regex=r"\s+(\d+)/(\d+)\s+finding\s+([A-Za-z0-9,]+)\s+motifs",
+                contigs_progress_regex=r"\s+(\d+)/(\d+)\s+contigs",
+                single_contig_regex=r"\s+(\d+)/(\d+)\s+processing\s+([\w]+)[^\w]",
+                buffer_size=50,
+                progress_granularity=25,
+                done_str="Done",
+                err_str="Error",
+                expect_done=True,
+                quiet=quiet,
+            )
+
+        _run_pileup_command(group_mod_thresh_command_list)
+
+    if split_pileup_runs:
+        with open(output_bedmethyl, "w") as merged_file:
+            for intermediate_file in intermediate_pileup_files:
+                if not intermediate_file.exists():
+                    continue
+                with open(intermediate_file) as part_file:
+                    for line in part_file:
+                        merged_file.write(line)
+        for intermediate_file in intermediate_pileup_files:
+            _unlink_existing(intermediate_file)
 
     ## Sort, compress, and index the output bedmethyl file
 
@@ -510,6 +674,7 @@ def extract(
     cores: int | None = None,
     log: bool = False,
     cleanup: bool = True,
+    overwrite: bool = True,
     quiet: bool = False,
     override_checks: bool = False,
     modkit_executable: str | Path | None = None,
@@ -574,6 +739,9 @@ def extract(
         cleanup: a boolean specifying whether to clean up to keep intermediate
             outputs. The final processed files are not human-readable, whereas the intermediate
             outputs are. However, intermediate outputs can also be quite large.
+        overwrite: when True (default), existing outputs for `output_name` are
+            replaced. When False, existing completed outputs are reused and parsing
+            is skipped. If partial/conflicting outputs exist, raises FileExistsError.
         override_checks: convert errors from input checking into warnings if True
         modkit_executable: optional executable name or path to a specific modkit
             binary. If None, dimelo resolves modkit from PATH (or
@@ -586,17 +754,53 @@ def extract(
 
     """
     ## Verify and prepare inputs and outputs
-    capabilities = run_modkit._ensure_modkit_available(
-        quiet=quiet,
-        executable=modkit_executable,
-    )
-
     input_file, ref_genome, output_directory = utils.sanitize_path_args(
         input_file, ref_genome, output_directory
     )
     input_file = Path(input_file)
     ref_genome = Path(ref_genome)
     output_directory = None if output_directory is None else Path(output_directory)
+
+    output_path, (output_reads_path,) = prep_output_directory(
+        output_directory=output_directory,
+        output_name=output_name,
+        input_file=input_file.parent,
+        output_file_names=["reads.combined_basemods.h5"],
+        overwrite=False,
+    )
+    processed_regions_candidate = output_path / "regions.processed.bed"
+    processed_regions_existing = (
+        processed_regions_candidate if processed_regions_candidate.exists() else None
+    )
+
+    if not overwrite:
+        final_output_exists = output_reads_path.exists()
+        regions_ready = regions is None or processed_regions_existing is not None
+        if final_output_exists and regions_ready:
+            if not quiet:
+                print(
+                    f"overwrite=False and existing outputs found. Reusing {output_reads_path}."
+                )
+            return output_reads_path, processed_regions_existing
+
+        existing_paths = [output_reads_path]
+        if processed_regions_existing is not None:
+            existing_paths.append(processed_regions_existing)
+        conflicting_paths = [path for path in existing_paths if path.exists()]
+        if len(conflicting_paths) > 0:
+            conflict_names = ", ".join(path.name for path in conflicting_paths)
+            raise FileExistsError(
+                "overwrite=False but output directory contains existing parse artifacts "
+                f"for '{output_name}': {conflict_names}. "
+                "Set overwrite=True to regenerate, or remove stale files."
+            )
+    else:
+        _unlink_existing(output_reads_path, processed_regions_candidate)
+
+    capabilities = run_modkit._ensure_modkit_available(
+        quiet=quiet,
+        executable=modkit_executable,
+    )
 
     try:
         verify_inputs(input_file, motifs, ref_genome)
@@ -608,13 +812,6 @@ def extract(
             raise Exception(
                 f'{e}\nIf you are confident that your inputs are ok, pass "override_checks=True" to convert to warning and proceed with processing.'
             ) from e
-
-    output_path, (output_reads_path,) = prep_output_directory(
-        output_directory=output_directory,
-        output_name=output_name,
-        input_file=input_file.parent,
-        output_file_names=["reads.combined_basemods.h5"],
-    )
 
     ## Build up the command lists shared across motifs to be sent to modkit
 
@@ -658,7 +855,9 @@ def extract(
         capabilities=capabilities,
     )
     filter_command_list = (
-        [] if capabilities.supports_extract_subcommands else ["--filter-threshold", "0"]
+        []
+        if _extract_requires_subcommands(capabilities)
+        else ["--filter-threshold", "0"]
     )
     implicit_tag_command_list = _build_implicit_tag_command_list(capabilities)
 
@@ -1015,7 +1214,8 @@ def read_by_base_txt_to_hdf5(
 
         # Check file length
         line_index = 0
-        for line_index, fields in enumerate(reader, start=1):
+        for fields in reader:
+            line_index += 1
             read_id_value = fields[first_pass_read_name_idx]
             if read_name != read_id_value:
                 read_name = read_id_value
@@ -1065,7 +1265,11 @@ def read_by_base_txt_to_hdf5(
 
             if has_binary:
                 unique_thresholds = sorted(
-                    {float(value) for value in threshold_by_motif.values() if value is not None}
+                    {
+                        float(value)
+                        for value in threshold_by_motif.values()
+                        if value is not None
+                    }
                 )
                 if len(unique_thresholds) == 1:
                     threshold_to_store = unique_thresholds[0]
@@ -1100,6 +1304,7 @@ def read_by_base_txt_to_hdf5(
                     compression="gzip",
                     compression_opts=9,
                 )
+
             def ensure_dataset_capacity(
                 *,
                 name: str,
@@ -1167,8 +1372,8 @@ def read_by_base_txt_to_hdf5(
             read_counter = 0
             # Keys (strings): dataset names, values: lists of dataset values by read; string or ints or arrays
             # Contents reset at the end of each chunk, after writing to h5
-            chunk_rows: defaultdict[str, list[str | int | np.ndarray]] = (
-                defaultdict(list)
+            chunk_rows: defaultdict[str, list[str | int | np.ndarray]] = defaultdict(
+                list
             )
             chunk_row_count = 0
 
@@ -1265,7 +1470,7 @@ def read_by_base_txt_to_hdf5(
             canonical_base_idx = _column_index("canonical_base", fallback=15)
 
             iterator = reader
-            if not quiet:
+            if not quiet and _should_render_live_progress():
                 iterator = tqdm(
                     iterator,
                     total=num_lines,
@@ -1334,6 +1539,7 @@ def prep_output_directory(
     output_name: str,
     input_file: Path,
     output_file_names: list[str],
+    overwrite: bool = True,
 ) -> tuple[Path, list[Path]]:
     """
     As a side effect, if files exist that match the requested outputs, they are deleted.
@@ -1346,6 +1552,8 @@ def prep_output_directory(
             containing the intermediate and final outputs, along with any logs.
         input_file: default output directory when output_directory is None
         output_file_names: list of names of desired output files
+        overwrite: when True, existing requested output files are deleted. When
+            False, existing files are preserved.
 
     Returns:
         * Path to top-level output directory
@@ -1359,10 +1567,10 @@ def prep_output_directory(
 
     output_files = [output_path / file_name for file_name in output_file_names]
 
-    # Ensure output path exists, and that any of the specified output files do not already exist (necessary for some outputs)
-    # Delete the files that do already exist
+    # Ensure output path exists.
     output_path.mkdir(parents=True, exist_ok=True)
-    for output_file in output_files:
-        output_file.unlink(missing_ok=True)
+    if overwrite:
+        for output_file in output_files:
+            output_file.unlink(missing_ok=True)
 
     return output_path, output_files

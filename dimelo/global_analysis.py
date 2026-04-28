@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from functools import partial
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import pandas as pd
 import pysam
@@ -27,9 +27,7 @@ def _global_counts_for_motifs_from_bedmethyl(
     if len(unique_motifs) == 0:
         return {}
 
-    parsed_motifs = {
-        motif: utils.ParsedMotif(motif) for motif in unique_motifs
-    }
+    parsed_motifs = {motif: utils.ParsedMotif(motif) for motif in unique_motifs}
     counts_by_motif = {motif: [0, 0] for motif in unique_motifs}
 
     with pysam.TabixFile(str(bedmethyl_file)) as tabix_file:
@@ -229,10 +227,9 @@ def build_window_summary(
         for window_row, (modified_count, valid_count) in zip(
             windows.itertuples(index=False),
             counts_by_window,
+            strict=False,
         ):
-            window_fraction = (
-                0.0 if valid_count == 0 else modified_count / valid_count
-            )
+            window_fraction = 0.0 if valid_count == 0 else modified_count / valid_count
             rows.append(
                 {
                     "sample_id": sample.sample_id,

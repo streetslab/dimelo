@@ -6,7 +6,6 @@ from typing import Any
 
 import pandas as pd
 
-
 _SELECTED_REGION_CHROM_COLUMNS = {"chrom", "chromosome"}
 _SELECTED_REGION_REQUIRED_COLUMNS = {"start", "end"}
 
@@ -19,7 +18,9 @@ def _validate_selected_regions_dataframe(
     if not isinstance(selected_regions, pd.DataFrame):
         raise TypeError(f"{owner}.selected_regions must be a pandas DataFrame")
 
-    has_chrom_column = bool(_SELECTED_REGION_CHROM_COLUMNS & set(selected_regions.columns))
+    has_chrom_column = bool(
+        _SELECTED_REGION_CHROM_COLUMNS & set(selected_regions.columns)
+    )
     has_required_columns = _SELECTED_REGION_REQUIRED_COLUMNS.issubset(
         selected_regions.columns
     )
@@ -314,13 +315,11 @@ class RegionDiscoveryClusterResult:
             )
         if not isinstance(self.discovery, RegionDiscoveryResult):
             raise TypeError(
-                "RegionDiscoveryClusterResult.discovery must be a "
-                "RegionDiscoveryResult"
+                "RegionDiscoveryClusterResult.discovery must be a RegionDiscoveryResult"
             )
         if not isinstance(self.clustering, SharedClusterResult):
             raise TypeError(
-                "RegionDiscoveryClusterResult.clustering must be a "
-                "SharedClusterResult"
+                "RegionDiscoveryClusterResult.clustering must be a SharedClusterResult"
             )
 
 
@@ -416,7 +415,9 @@ class ModkitDMRPairResult:
         if self.sites is None:
             raise ValueError("ModkitDMRPairResult.sites cannot be None.")
         if self.high_confidence_sites is None:
-            raise ValueError("ModkitDMRPairResult.high_confidence_sites cannot be None.")
+            raise ValueError(
+                "ModkitDMRPairResult.high_confidence_sites cannot be None."
+            )
         if self.metadata is None:
             raise ValueError("ModkitDMRPairResult.metadata cannot be None.")
 

@@ -1,6 +1,4 @@
 import os
-from dataclasses import dataclass
-from functools import lru_cache
 
 # I believe that pty does not currently work on Windows, although this may change in future releases: https://bugs.python.org/issue41663
 # However, it may be that pywinpty, which is installable from pip, would work fine. That just needs to be tested with a Windows machine
@@ -11,8 +9,10 @@ import select
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
-from typing import Optional, TypeAlias, cast
+from typing import TypeAlias, cast
 
 from tqdm.auto import tqdm
 
@@ -45,6 +45,22 @@ def _strip_runtime_noise(text: str) -> str:
     for line in _NOISY_RUNTIME_LINES:
         cleaned = cleaned.replace(line, "")
     return cleaned
+
+
+def _should_render_live_progress() -> bool:
+    """
+    Decide whether tqdm live bars should be rendered for modkit subprocess output.
+
+    The default "auto" mode disables live bars in notebook/non-TTY contexts where
+    carriage-return updates tend to produce mangled output.
+    """
+    mode = os.environ.get("DIMELO_PROGRESS_MODE", "auto").strip().lower()
+    if mode in {"off", "none", "false", "0"}:
+        return False
+    if mode in {"on", "force", "true", "1"}:
+        return True
+    in_notebook = "JPY_PARENT_PID" in os.environ or "IPYKERNEL_PARENT_PID" in os.environ
+    return sys.stderr.isatty() and not in_notebook
 
 
 def _prepare_modkit_path(quiet: bool = False) -> None:
@@ -90,7 +106,7 @@ def _resolve_modkit_executable(
         raise FileNotFoundError(
             f"Executable not found for modkit candidate '{requested}'. "
             'Install dimelo using "conda env create -f environment.yml" '
-            'or install modkit manually using "conda install nanoporetech::modkit==0.2.4". '
+            'or install modkit manually using "conda install nanoporetech::modkit==0.6.1". '
             "Without modkit you cannot run parse_bam functions."
         )
     return discovered
@@ -126,15 +142,16 @@ def _get_modkit_capabilities_cached(
     try:
         version_result = subprocess.run(
             [executable, "--version"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             check=True,
         )
-    except Exception as exc:  # pragma: no cover - direct subprocess failures are environment-specific
+    except (
+        Exception
+    ) as exc:  # pragma: no cover - direct subprocess failures are environment-specific
         raise FileNotFoundError(
             'Executable not found for modkit. Install dimelo using "conda env create -f environment.yml" '
-            'or install modkit manually using "conda install nanoporetech::modkit==0.2.4". '
+            'or install modkit manually using "conda install nanoporetech::modkit==0.6.1". '
             "Without modkit you cannot run parse_bam functions."
         ) from exc
 
@@ -144,8 +161,7 @@ def _get_modkit_capabilities_cached(
 
     pileup_help = subprocess.run(
         [executable, "pileup", "--help"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=True,
     )
@@ -153,35 +169,54 @@ def _get_modkit_capabilities_cached(
 
     extract_help = subprocess.run(
         [executable, "extract", "--help"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=True,
     )
     extract_help_text = (extract_help.stdout or "") + "\n" + (extract_help.stderr or "")
-    supports_extract_subcommands = "extract <COMMAND>" in extract_help_text
+    supports_extract_subcommands = (
+        re.search(r"(?m)^Usage:\s+modkit\s+extract\s+<COMMAND>", extract_help_text)
+        is not None
+    )
+    if (
+        not supports_extract_subcommands
+        and version_tuple is not None
+        and len(version_tuple) >= 2
+        and (version_tuple[0], version_tuple[1]) >= (0, 6)
+    ):
+        supports_extract_subcommands = True
     extract_command_help_text = extract_help_text
     if supports_extract_subcommands:
-        extract_full_help = subprocess.run(
-            [executable, "extract", "full", "--help"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True,
-        )
-        extract_command_help_text = (extract_full_help.stdout or "") + "\n" + (
-            extract_full_help.stderr or ""
-        )
+        try:
+            extract_full_help = subprocess.run(
+                [executable, "extract", "full", "--help"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            extract_command_help_text = (
+                (extract_full_help.stdout or "")
+                + "\n"
+                + (extract_full_help.stderr or "")
+            )
+        except subprocess.CalledProcessError:
+            # Fall back to top-level extract help text if subcommand help probing fails.
+            extract_command_help_text = extract_help_text
 
     minor_version = (
-        (version_tuple[0], version_tuple[1]) if version_tuple and len(version_tuple) >= 2 else None
+        (version_tuple[0], version_tuple[1])
+        if version_tuple and len(version_tuple) >= 2
+        else None
     )
-    if minor_version is not None and minor_version not in SUPPORTED_MODKIT_MINOR_VERSIONS:
-        if not quiet:
-            print(
-                "modkit found with version "
-                f"{version or version_raw}. Officially tested series are {', '.join(SUPPORTED_MODKIT_SERIES)}."
-            )
+    if (
+        minor_version is not None
+        and minor_version not in SUPPORTED_MODKIT_MINOR_VERSIONS
+        and not quiet
+    ):
+        print(
+            "modkit found with version "
+            f"{version or version_raw}. Officially tested series are {', '.join(SUPPORTED_MODKIT_SERIES)}."
+        )
 
     return ModkitCapabilities(
         executable=executable,
@@ -189,8 +224,12 @@ def _get_modkit_capabilities_cached(
         version=version,
         version_tuple=version_tuple,
         supports_mod_threshold=_help_supports_flag(pileup_help_text, "--mod-threshold"),
-        supports_mod_thresholds=_help_supports_flag(pileup_help_text, "--mod-thresholds"),
-        supports_modified_bases=_help_supports_flag(pileup_help_text, "--modified-bases"),
+        supports_mod_thresholds=_help_supports_flag(
+            pileup_help_text, "--mod-thresholds"
+        ),
+        supports_modified_bases=_help_supports_flag(
+            pileup_help_text, "--modified-bases"
+        ),
         supports_force_allow_implicit=_help_supports_flag(
             pileup_help_text, "--force-allow-implicit"
         ),
@@ -309,13 +348,15 @@ def run_with_progress_bars(
                 f"{ref_genome.name} is gzipped, which will cause modkit to fail.\ngunzip {ref_genome.name} and try again."
             )
 
-    # Set up progress bar variables to display progress updates when not in quiet mode
+    render_progress = (not quiet) and _should_render_live_progress()
+
+    # Set up progress bar variables to display progress updates when enabled
     format_pre = "{bar}| {desc} {percentage:3.0f}% | {elapsed}"
     format_contigs = "{bar}| {desc} {percentage:3.0f}% | {elapsed}<{remaining}"
     format_chr = "{bar}| {desc} {percentage:3.0f}%"
-    pbar_pre: Optional[tqdm] = None
-    pbar_contigs: Optional[tqdm] = None
-    pbar_chr: Optional[tqdm] = None
+    pbar_pre: tqdm | None = None
+    pbar_contigs: tqdm | None = None
+    pbar_chr: tqdm | None = None
 
     finding_progress_dict: FindingProgressDict = {}
     in_contig_progress = (0, 1)
@@ -357,84 +398,80 @@ def run_with_progress_bars(
                 if not data:
                     break  # No more data
 
-                if quiet:
-                    # If we are in quiet mode, nothing gets grabbed
-                    continue
-                else:
-                    # Create the progress bars when first entering this code block
-                    if not progress_bars_initialized:
-                        pbar_pre = tqdm(
-                            total=100,
-                            desc=f"Step 1: Identify motif locations in {ref_genome.name}",
-                            bar_format=format_pre,
-                        )
-                        pbar_contigs = tqdm(
-                            total=100,
-                            desc=f"Step 2: Parse regions in {input_file.name}",
-                            bar_format=format_contigs,
-                        )
-                        pbar_chr = tqdm(
-                            total=100,
-                            desc="",
-                            bar_format=format_chr,
-                        )
-                        progress_bars_initialized = True
+                if render_progress and not progress_bars_initialized:
+                    pbar_pre = tqdm(
+                        total=100,
+                        desc=f"Step 1: Identify motif locations in {ref_genome.name}",
+                        bar_format=format_pre,
+                    )
+                    pbar_contigs = tqdm(
+                        total=100,
+                        desc=f"Step 2: Parse regions in {input_file.name}",
+                        bar_format=format_contigs,
+                    )
+                    pbar_chr = tqdm(
+                        total=100,
+                        desc="",
+                        bar_format=format_chr,
+                    )
+                    progress_bars_initialized = True
 
-                    buffer_bytes += data  # Accumulate bytes in the buffer
+                buffer_bytes += data  # Accumulate bytes in the buffer
 
-                    try:
-                        # Try to decode the accumulated bytes
-                        # This will throw a UnicodeDecodeError if not complete, which is ok! Then we just continue on
-                        text = buffer_bytes.decode("utf-8")
-                        readout_count += 1
-                        buffer_bytes.clear()  # Clear the buffer after successful decoding
-                        # If we have hit an error or modkit is done, just accumulate the rest of the output and then deal with it:
-                        # no need to check the progress tracking stuff in that case
-                        if err_flag or done_flag:
-                            tail_buffer = _strip_runtime_noise(tail_buffer + text)
-                        # If we haven't hit an error or a done state, first check for that
-                        else:
-                            tail_buffer = _strip_runtime_noise(
-                                (tail_buffer + text)[-buffer_size:]
-                            )
-                            if err_str in tail_buffer:
-                                index = tail_buffer.find(err_str)
-                                tail_buffer = tail_buffer[index:]
-                                err_flag = True
-                            elif done_str in tail_buffer:
-                                index = tail_buffer.find(done_str)
-                                tail_buffer = tail_buffer[index - 2 :]
-                                done_flag = True
-                            # If the process is ongoing, then go through the possible cases and create/adjust pbars accordingly
-                            # We only sometimes want to update progress because otherwise the constant updates slow us down
-                            elif (
-                                readout_count % progress_granularity == 0
-                                and progress_bars_initialized
-                            ):
-                                region_parsing_started, in_contig_progress = (
-                                    update_progress_bars(
-                                        pbar_pre=pbar_pre,
-                                        pbar_contigs=pbar_contigs,
-                                        pbar_chr=pbar_chr,
-                                        tail_buffer=tail_buffer,
-                                        contigs_progress_regex=contigs_progress_regex,
-                                        single_contig_regex=single_contig_regex,
-                                        find_motifs_regex=find_motifs_regex,
-                                        load_fasta_regex=load_fasta_regex,
-                                        region_parsing_started=region_parsing_started,
-                                        in_contig_progress=in_contig_progress,
-                                        finding_progress_dict=finding_progress_dict,
-                                        ref_genome=ref_genome,
-                                        input_file=input_file,
-                                        motifs=motifs,
-                                    )
+                try:
+                    # Try to decode the accumulated bytes
+                    # This will throw a UnicodeDecodeError if not complete, which is ok! Then we just continue on
+                    text = buffer_bytes.decode("utf-8")
+                    readout_count += 1
+                    buffer_bytes.clear()  # Clear the buffer after successful decoding
+                    # If we have hit an error or modkit is done, just accumulate the rest of the output and then deal with it:
+                    # no need to check the progress tracking stuff in that case
+                    if err_flag or done_flag:
+                        tail_buffer = _strip_runtime_noise(tail_buffer + text)
+                    # If we haven't hit an error or a done state, first check for that
+                    else:
+                        tail_buffer = _strip_runtime_noise(
+                            (tail_buffer + text)[-buffer_size:]
+                        )
+                        if err_str in tail_buffer:
+                            index = tail_buffer.find(err_str)
+                            tail_buffer = tail_buffer[index:]
+                            err_flag = True
+                        elif done_str in tail_buffer:
+                            index = tail_buffer.find(done_str)
+                            tail_buffer = tail_buffer[index - 2 :]
+                            done_flag = True
+                        # If the process is ongoing, then go through the possible cases and create/adjust pbars accordingly
+                        # We only sometimes want to update progress because otherwise the constant updates slow us down
+                        elif (
+                            render_progress
+                            and readout_count % progress_granularity == 0
+                            and progress_bars_initialized
+                        ):
+                            region_parsing_started, in_contig_progress = (
+                                update_progress_bars(
+                                    pbar_pre=pbar_pre,
+                                    pbar_contigs=pbar_contigs,
+                                    pbar_chr=pbar_chr,
+                                    tail_buffer=tail_buffer,
+                                    contigs_progress_regex=contigs_progress_regex,
+                                    single_contig_regex=single_contig_regex,
+                                    find_motifs_regex=find_motifs_regex,
+                                    load_fasta_regex=load_fasta_regex,
+                                    region_parsing_started=region_parsing_started,
+                                    in_contig_progress=in_contig_progress,
+                                    finding_progress_dict=finding_progress_dict,
+                                    ref_genome=ref_genome,
+                                    input_file=input_file,
+                                    motifs=motifs,
                                 )
+                            )
 
-                    except UnicodeDecodeError:
-                        # If decoding fails, continue accumulating bytes
-                        continue
-                    except Exception as e:
-                        raise e
+                except UnicodeDecodeError:
+                    # If decoding fails, continue accumulating bytes
+                    continue
+                except Exception as e:
+                    raise e
             except OSError:
                 break
 
@@ -515,9 +552,9 @@ def run_with_progress_bars(
 
 
 def update_progress_bars(
-    pbar_pre: Optional[tqdm],
-    pbar_contigs: Optional[tqdm],
-    pbar_chr: Optional[tqdm],
+    pbar_pre: tqdm | None,
+    pbar_contigs: tqdm | None,
+    pbar_chr: tqdm | None,
     tail_buffer: str,
     contigs_progress_regex: str,
     single_contig_regex: str,

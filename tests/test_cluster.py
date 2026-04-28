@@ -12,7 +12,9 @@ def test_region_feature_matrix_from_pileup(monkeypatch):
         "chr2": [(5, 8, "-")],
     }
     monkeypatch.setattr(
-        cluster.utils, "regions_dict_from_input", lambda *args, **kwargs: fake_regions_dict
+        cluster.utils,
+        "regions_dict_from_input",
+        lambda *args, **kwargs: fake_regions_dict,
     )
     monkeypatch.setattr(
         cluster.load_processed,
@@ -109,11 +111,36 @@ def test_read_mod_fraction_table(monkeypatch):
 
 def test_summarize_read_cluster_region_associations_counts_and_fractions():
     metadata = [
-        {"chromosome": "chr1", "region_start": 0, "region_end": 100, "region_strand": "+"},
-        {"chromosome": "chr1", "region_start": 0, "region_end": 100, "region_strand": "+"},
-        {"chromosome": "chr1", "region_start": 0, "region_end": 100, "region_strand": "+"},
-        {"chromosome": "chr1", "region_start": 200, "region_end": 300, "region_strand": "-"},
-        {"chromosome": "chr1", "region_start": 200, "region_end": 300, "region_strand": "-"},
+        {
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 100,
+            "region_strand": "+",
+        },
+        {
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 100,
+            "region_strand": "+",
+        },
+        {
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 100,
+            "region_strand": "+",
+        },
+        {
+            "chromosome": "chr1",
+            "region_start": 200,
+            "region_end": 300,
+            "region_strand": "-",
+        },
+        {
+            "chromosome": "chr1",
+            "region_start": 200,
+            "region_end": 300,
+            "region_strand": "-",
+        },
     ]
     labels = [0, 0, 1, 1, 1]
 
@@ -132,11 +159,36 @@ def test_summarize_read_cluster_region_associations_counts_and_fractions():
 
 def test_summarize_read_cluster_region_associations_enrichment_and_multiple_testing():
     metadata = [
-        {"chromosome": "chr1", "region_start": 0, "region_end": 100, "region_strand": "+"},
-        {"chromosome": "chr1", "region_start": 0, "region_end": 100, "region_strand": "+"},
-        {"chromosome": "chr1", "region_start": 0, "region_end": 100, "region_strand": "+"},
-        {"chromosome": "chr1", "region_start": 200, "region_end": 300, "region_strand": "-"},
-        {"chromosome": "chr1", "region_start": 200, "region_end": 300, "region_strand": "-"},
+        {
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 100,
+            "region_strand": "+",
+        },
+        {
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 100,
+            "region_strand": "+",
+        },
+        {
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 100,
+            "region_strand": "+",
+        },
+        {
+            "chromosome": "chr1",
+            "region_start": 200,
+            "region_end": 300,
+            "region_strand": "-",
+        },
+        {
+            "chromosome": "chr1",
+            "region_start": 200,
+            "region_end": 300,
+            "region_strand": "-",
+        },
     ]
     labels = [0, 0, 1, 1, 1]
 
@@ -160,9 +212,24 @@ def test_summarize_read_cluster_region_associations_enrichment_and_multiple_test
 
 def test_summarize_read_cluster_region_associations_min_reads_filter():
     metadata = [
-        {"chromosome": "chr1", "region_start": 0, "region_end": 100, "region_strand": "+"},
-        {"chromosome": "chr1", "region_start": 200, "region_end": 300, "region_strand": "-"},
-        {"chromosome": "chr1", "region_start": 200, "region_end": 300, "region_strand": "-"},
+        {
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 100,
+            "region_strand": "+",
+        },
+        {
+            "chromosome": "chr1",
+            "region_start": 200,
+            "region_end": 300,
+            "region_strand": "-",
+        },
+        {
+            "chromosome": "chr1",
+            "region_start": 200,
+            "region_end": 300,
+            "region_strand": "-",
+        },
     ]
     labels = [0, 1, 1]
 
@@ -243,7 +310,11 @@ def test_extract_read_windows_orientation(monkeypatch):
     result = cluster.extract_read_windows(
         hdf5_file="reads.h5",
         motifs=["A,0"],
-        config=cluster.ReadWindowExtractionConfig(window_size=2, orientation_aware=True),
+        config=cluster.ReadWindowExtractionConfig(
+            window_size=2,
+            orientation_aware=True,
+            enforce_thresholded_vectors=False,
+        ),
     )
 
     np.testing.assert_allclose(result.data_matrix, np.array([[7.0, 6.0, 5.0, 4.0]]))
@@ -317,7 +388,10 @@ def test_extract_read_windows_filter_multi_region(monkeypatch):
         hdf5_file="reads.h5",
         motifs=["A,0"],
         config=cluster.ReadWindowExtractionConfig(
-            window_size=2, orientation_aware=False, filter_multi_region_reads=True
+            window_size=2,
+            orientation_aware=False,
+            filter_multi_region_reads=True,
+            enforce_thresholded_vectors=False,
         ),
     )
     assert result.data_matrix.shape[0] == 1
@@ -401,7 +475,11 @@ def test_read_window_feature_matrix_filters():
         regions_dict=None,
     )
     features, _ = cluster.read_window_feature_matrix(
-        result, require_nonzero_valid=True, min_valid_fraction=0.5, n_pca=0, autocorr_lags=()
+        result,
+        require_nonzero_valid=True,
+        min_valid_fraction=0.5,
+        n_pca=0,
+        autocorr_lags=(),
     )
     # Second row should be dropped due to zero valid fraction
     assert features.shape[0] == 1
@@ -516,6 +594,70 @@ def test_plot_multisite_read_raster_supports_multimotif_grid():
     assert stats["pairs"] >= 1
     assert stats["n_windows"] == 3
     assert stats["motifs_plotted"] == ["A,0", "CG,0"]
+    assert stats["ml_score_cmaps"] == {"A,0": "Blues", "CG,0": "Oranges"}
+
+
+def test_plot_multisite_read_raster_ml_scatter_uses_sequential_cmaps_for_other_motifs():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    motif_1 = np.array(
+        [
+            [0, 1, 0, 1],
+            [1, 0, 1, 0],
+        ],
+        dtype=float,
+    )
+    motif_2 = np.array(
+        [
+            [1, 0, 1, 0],
+            [0, 1, 0, 1],
+        ],
+        dtype=float,
+    )
+    motif_3 = np.array(
+        [
+            [0, 0, 1, 1],
+            [1, 1, 0, 0],
+        ],
+        dtype=float,
+    )
+    data = np.hstack([motif_1, motif_2, motif_3])
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 6000,
+            "region_end": 6004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=5000,
+        motif_index=0,
+        motif_count=3,
+        plot_all_motifs=True,
+        motif_labels=["X,0", "Y,0", "Z,0"],
+        smoothing=None,
+    )
+    assert fig is not None
+    assert stats["ml_score_cmaps"] == {"X,0": "Greens", "Y,0": "Purples", "Z,0": "Reds"}
 
 
 def test_plot_multisite_read_raster_supports_explicit_window_centers_and_length_filter():
@@ -578,7 +720,114 @@ def test_plot_multisite_read_raster_supports_explicit_window_centers_and_length_
     assert stats["min_read_length_bp"] == stats["required_read_length_bp"]
 
 
-def test_plot_multisite_read_raster_heatmap_centered_titles():
+def test_plot_two_site_read_raster_wrapper():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0, 1, 0, 1],
+            [1, 0, 1, 0],
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+            "read_length": 8000,
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 2000,
+            "region_end": 2004,
+            "region_strand": "+",
+            "read_length": 8000,
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, stats = cluster.plot_two_site_read_raster(
+        r,
+        second_site_offset_bp=2000,
+        window_width_bp=4,
+        motif_index=0,
+        smoothing=None,
+    )
+    assert fig is not None
+    assert stats["n_windows"] == 2
+    assert stats["window_centers_bp"] == [0.0, 2000.0]
+    assert stats["window_widths_bp"] == [4, 4]
+
+
+def test_plot_multisite_read_raster_supports_symmetric_center_spec():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0, 1, 0, 1],
+            [1, 0, 1, 0],
+            [0, 1, 1, 0],
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+            "read_length": 9000,
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 2000,
+            "region_end": 2004,
+            "region_strand": "+",
+            "read_length": 9000,
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 4000,
+            "region_end": 4004,
+            "region_strand": "+",
+            "read_length": 9000,
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        motif_index=0,
+        symmetric_side_windows=1,
+        symmetric_max_offset_bp=2000,
+        window_match_tolerance_bp=200,
+        smoothing=None,
+    )
+    assert fig is not None
+    assert stats["n_windows"] == 3
+    assert stats["window_centers_bp"] == [-2000.0, 0.0, 2000.0]
+
+
+def test_plot_multisite_read_raster_heatmap_window_titles():
     import matplotlib
 
     matplotlib.use("Agg")
@@ -618,13 +867,659 @@ def test_plot_multisite_read_raster_heatmap_centered_titles():
         min_separation_bp=5000,
         motif_index=0,
         render_mode="heatmap",
-        x_axis_mode="centered",
         rotate=False,
         smoothing=None,
     )
     titles = [axis.get_title() for axis in fig.axes if axis.get_title()]
     assert "Window 1" in titles
     assert "Window 2" in titles
+
+
+def test_plot_multisite_read_raster_accepts_centered_axis_mode():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0, 1, 0, 1],
+            [1, 0, 1, 0],
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 6000,
+            "region_end": 6004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=5000,
+        motif_index=0,
+        x_axis_mode="centered",
+        smoothing=None,
+    )
+
+    assert fig is not None
+    assert stats["x_axis_mode"] == "centered"
+    data_axes = [ax for ax in fig.axes if ax.lines]
+    assert len(data_axes) == 2
+    assert [float(ax.lines[0].get_xdata()[0]) for ax in data_axes] == [0.0, 0.0]
+    assert all(ax.get_xlim()[0] < 0 < ax.get_xlim()[1] for ax in data_axes)
+
+
+def test_plot_multisite_read_raster_heatmap_auto_uses_raw_values():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 6000,
+            "region_end": 6004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=5000,
+        motif_index=0,
+        render_mode="heatmap",
+        render_values="auto",
+        axis_orientation="position_x",
+        smoothing="gaussian",
+        rotate=False,
+    )
+    assert fig is not None
+    assert stats["render_values"] == "raw"
+
+
+def test_plot_multisite_read_raster_heatmap_relative_axis_uses_window_offsets():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0.0, 0.8, 0.0, 0.0],
+            [0.0, 0.0, 0.7, 0.0],
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 6000,
+            "region_end": 6004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, _ = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=5000,
+        motif_index=0,
+        render_mode="heatmap",
+        render_values="smoothed",
+        smoothing="gaussian",
+        axis_orientation="position_x",
+        x_axis_mode="relative_to_primary",
+        rotate=True,
+    )
+    data_axes = [ax for ax in fig.axes if ax.images]
+    assert len(data_axes) == 2
+    center_0 = float(data_axes[0].lines[0].get_xdata()[0])
+    center_1 = float(data_axes[1].lines[0].get_xdata()[0])
+    assert abs(center_0) < 5
+    assert center_1 > 1000
+
+
+def test_plot_multisite_read_raster_heatmap_relative_axis_rejects_variable_offsets():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0.0, 0.8, 0.0, 0.0],
+            [0.0, 0.0, 0.7, 0.0],
+            [0.0, 0.6, 0.0, 0.0],
+            [0.0, 0.0, 0.5, 0.0],
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 6000,
+            "region_end": 6004,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r2",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r2",
+            "chromosome": "chr1",
+            "region_start": 7000,
+            "region_end": 7004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="render_mode='scatter'.*x_axis_mode='centered'.*fixed/explicit centers",
+    ):
+        cluster.plot_multisite_read_raster(
+            r,
+            n_windows=2,
+            min_separation_bp=5000,
+            motif_index=0,
+            render_mode="heatmap",
+            x_axis_mode="relative_to_primary",
+            smoothing=None,
+        )
+
+
+def test_plot_multisite_read_raster_heatmap_smoothing_label_mentions_per_read_axis():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0.0, 0.8, 0.0, 0.0],
+            [0.0, 0.0, 0.7, 0.0],
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 6000,
+            "region_end": 6004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, _ = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=5000,
+        motif_index=0,
+        render_mode="heatmap",
+        render_values="smoothed",
+        smoothing="gaussian",
+        axis_orientation="position_x",
+        rotate=True,
+    )
+    colorbar_axes = [
+        ax
+        for ax in fig.axes
+        if "per-read smoothing along position axis" in ax.get_ylabel()
+    ]
+    assert colorbar_axes
+
+
+def test_plot_multisite_read_raster_heatmap_thresholds_still_use_colorbar():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0.0, 0.9, 0.0, 0.0],
+            [0.0, 0.0, 0.4, 0.0],
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 6000,
+            "region_end": 6004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=5000,
+        motif_index=0,
+        render_mode="heatmap",
+        ml_score_thresholds=[0.5],
+        smoothing=None,
+    )
+
+    assert fig is not None
+    assert stats["render_mode"] == "heatmap"
+    assert stats["ml_score_thresholds"] is None
+    assert any("window signal heatmap" in ax.get_ylabel() for ax in fig.axes)
+    assert not any(
+        legend.get_title().get_text() == "Motif thresholds" for legend in fig.legends
+    )
+
+
+def test_plot_multisite_read_raster_accepts_axis_orientation_and_sort_modes():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [1, 0, 0, 0],
+            [0, 0, 0, 1],
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "z_read",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+            "read_length": 7000,
+        },
+        {
+            "read_name": "z_read",
+            "chromosome": "chr1",
+            "region_start": 3000,
+            "region_end": 3004,
+            "region_strand": "+",
+            "read_length": 7000,
+        },
+        {
+            "read_name": "a_read",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+            "read_length": 6500,
+        },
+        {
+            "read_name": "a_read",
+            "chromosome": "chr1",
+            "region_start": 3000,
+            "region_end": 3004,
+            "region_strand": "+",
+            "read_length": 6500,
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=2000,
+        motif_index=0,
+        render_mode="scatter",
+        axis_orientation="position_y",
+        sort_by="read_name",
+        sort_descending=False,
+        smoothing=None,
+    )
+    assert fig is not None
+    assert stats["axis_orientation"] == "position_y"
+    assert stats["sort_by"] == "read_name"
+    # At least one data axis should now expose reads on x.
+    assert any(ax.get_xlabel() == "Reads (sorted)" for ax in fig.axes)
+
+
+def test_plot_multisite_read_raster_default_scatter_uses_ml_score_colorbar():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0.0, 0.9, 0.0, 0.0],
+            [0.0, 0.0, 0.4, 0.0],
+        ],
+        dtype=float,
+    )
+    val = np.array(
+        [
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 6000,
+            "region_end": 6004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=val,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=5000,
+        motif_index=0,
+        render_mode="scatter",
+        smoothing=None,
+    )
+    assert fig is not None
+    assert stats["scatter_color_values"] == "ml_score"
+    assert any("normalized ML score" in ax.get_ylabel() for ax in fig.axes)
+    # Ensure ML coloring tracks mod values (0.9 / 0.4), not val-mask (1.0 / 1.0).
+    scatter_arrays = [
+        np.asarray(collection.get_array(), dtype=float)
+        for axis in fig.axes
+        for collection in getattr(axis, "collections", [])
+        if collection.get_array() is not None and len(collection.get_array()) > 0
+    ]
+    assert any(np.isclose(arr, 0.9).any() for arr in scatter_arrays)
+    assert any(np.isclose(arr, 0.4).any() for arr in scatter_arrays)
+
+
+def test_plot_multisite_read_raster_uniform_downsampling_stats():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.tile(np.array([[0.0, 0.9, 0.0, 0.0]], dtype=float), (20, 1))
+    meta = []
+    for idx in range(20):
+        meta.append(
+            {
+                "read_name": f"r{idx}",
+                "chromosome": "chr1",
+                "region_start": 0,
+                "region_end": 4,
+                "region_strand": "+",
+            }
+        )
+        meta.append(
+            {
+                "read_name": f"r{idx}",
+                "chromosome": "chr1",
+                "region_start": 6000,
+                "region_end": 6004,
+                "region_strand": "+",
+            }
+        )
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=np.vstack([data, data]),
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=5000,
+        motif_index=0,
+        render_mode="scatter",
+        max_rows=8,
+        downsample_method="uniform",
+        smoothing=None,
+    )
+    assert fig is not None
+    assert stats["downsampled"] is True
+    assert stats["downsample_method"] == "uniform"
+    assert stats["rows_before_downsample"] > stats["rows_after_downsample"]
+
+
+def test_plot_multisite_read_raster_drops_reads_that_do_not_span_display_windows():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0.0, 1.0, 0.0, 0.0],  # long read, window 1
+            [0.0, 1.0, 0.0, 0.0],  # long read, window 2
+            [0.0, 1.0, 0.0, 0.0],  # short read, window 1
+            [0.0, 1.0, 0.0, 0.0],  # short read, window 2 (outside read_end)
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "r_long",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+            "read_start": -10,
+            "read_end": 3000,
+        },
+        {
+            "read_name": "r_long",
+            "chromosome": "chr1",
+            "region_start": 2000,
+            "region_end": 2004,
+            "region_strand": "+",
+            "read_start": -10,
+            "read_end": 3000,
+        },
+        {
+            "read_name": "r_short",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+            "read_start": -10,
+            "read_end": 2001,
+        },
+        {
+            "read_name": "r_short",
+            "chromosome": "chr1",
+            "region_start": 2000,
+            "region_end": 2004,
+            "region_strand": "+",
+            "read_start": -10,
+            "read_end": 2001,
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=1000,
+        motif_index=0,
+        window_widths_bp=4,
+        enforce_full_window_span=True,
+        smoothing=None,
+    )
+    assert fig is not None
+    assert stats["pairs"] == 1
+    assert stats["dropped_for_window_span"] >= 1
+
+
+def test_plot_multisite_read_raster_ml_thresholds_use_motif_colors():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.hstack(
+        [
+            np.array(
+                [
+                    [0, 1, 0, 0],
+                    [0, 0, 1, 0],
+                ],
+                dtype=float,
+            ),
+            np.array(
+                [
+                    [0, 1, 0, 0],
+                    [0, 1, 0, 0],
+                ],
+                dtype=float,
+            ),
+        ]
+    )
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 6000,
+            "region_end": 6004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=5000,
+        motif_index=0,
+        motif_count=2,
+        plot_all_motifs=True,
+        motif_labels=["A,0", "CG,0"],
+        render_mode="scatter",
+        ml_score_thresholds=[0.5, 0.75],
+        motif_colors=["#1f77b4", "#ff7f0e"],
+        smoothing=None,
+    )
+    assert fig is not None
+    assert stats["ml_score_thresholds"] == {"A,0": 0.5, "CG,0": 0.75}
+    assert stats["read_order_consistent"] is True
+    assert any(
+        legend.get_title().get_text() == "Motif thresholds" for legend in fig.legends
+    )
 
 
 def test_plot_multisite_read_raster_multimotif_nonrotated_uses_effective_window_count():
@@ -820,14 +1715,166 @@ def test_extract_read_windows_infers_shortest_region_window(monkeypatch):
         ),
     ]
     monkeypatch.setattr(
-        cluster.load_processed, "read_vectors_from_hdf5", lambda **kwargs: (records, dataset_names, None)
+        cluster.load_processed,
+        "read_vectors_from_hdf5",
+        lambda **kwargs: (records, dataset_names, None),
     )
     result = cluster.extract_read_windows(
         hdf5_file="reads.h5",
         motifs=["A,0"],
-        config=cluster.ReadWindowExtractionConfig(window_size=None, orientation_aware=False),
+        config=cluster.ReadWindowExtractionConfig(
+            window_size=None,
+            orientation_aware=False,
+            enforce_thresholded_vectors=False,
+        ),
     )
     assert result.data_matrix.shape == (2, 6)
+
+
+def test_extract_read_windows_auto_thresholds_raw_vectors_by_default(monkeypatch):
+    dataset_names = [
+        "chromosome",
+        "mod_vector",
+        "motif",
+        "read_end",
+        "read_name",
+        "read_start",
+        "strand",
+        "val_vector",
+        "region_start",
+        "region_end",
+        "region_strand",
+        "read_length",
+    ]
+    record = (
+        "chr1",
+        np.array([0.0, 0.3, 0.8, 0.2, 0.9, 0.0], dtype=float),
+        "A,0",
+        106,
+        "read1",
+        100,
+        "+",
+        np.ones(6, dtype=float),
+        101,
+        105,
+        "+",
+        6,
+    )
+
+    monkeypatch.setattr(
+        cluster.load_processed,
+        "read_vectors_from_hdf5",
+        lambda **kwargs: ([record], dataset_names, None),
+    )
+    with pytest.warns(RuntimeWarning, match="applying automatic thresholding"):
+        result = cluster.extract_read_windows(
+            hdf5_file="reads.h5",
+            motifs=["A,0"],
+            config=cluster.ReadWindowExtractionConfig(
+                window_size=2, orientation_aware=False
+            ),
+        )
+
+    # default 190/255 ~= 0.745 -> [0.3, 0.8, 0.2, 0.9] => [0,1,0,1]
+    np.testing.assert_allclose(result.data_matrix, np.array([[0.0, 1.0, 0.0, 1.0]]))
+
+
+def test_extract_read_windows_respects_adjustable_auto_threshold(monkeypatch):
+    dataset_names = [
+        "chromosome",
+        "mod_vector",
+        "motif",
+        "read_end",
+        "read_name",
+        "read_start",
+        "strand",
+        "val_vector",
+        "region_start",
+        "region_end",
+        "region_strand",
+        "read_length",
+    ]
+    record = (
+        "chr1",
+        np.array([0.0, 0.45, 0.8, 0.2, 0.9, 0.0], dtype=float),
+        "A,0",
+        106,
+        "read1",
+        100,
+        "+",
+        np.ones(6, dtype=float),
+        101,
+        105,
+        "+",
+        6,
+    )
+
+    monkeypatch.setattr(
+        cluster.load_processed,
+        "read_vectors_from_hdf5",
+        lambda **kwargs: ([record], dataset_names, None),
+    )
+    with pytest.warns(RuntimeWarning):
+        result = cluster.extract_read_windows(
+            hdf5_file="reads.h5",
+            motifs=["A,0"],
+            config=cluster.ReadWindowExtractionConfig(
+                window_size=2,
+                orientation_aware=False,
+                auto_threshold_if_raw=100,  # 100/255 ~= 0.392
+            ),
+        )
+
+    # threshold 100/255 -> [0.45,0.8,0.2,0.9] => [1,1,0,1]
+    np.testing.assert_allclose(result.data_matrix, np.array([[1.0, 1.0, 0.0, 1.0]]))
+
+
+def test_extract_read_windows_errors_when_raw_vectors_disallowed(monkeypatch):
+    dataset_names = [
+        "chromosome",
+        "mod_vector",
+        "motif",
+        "read_end",
+        "read_name",
+        "read_start",
+        "strand",
+        "val_vector",
+        "region_start",
+        "region_end",
+        "region_strand",
+        "read_length",
+    ]
+    record = (
+        "chr1",
+        np.array([0.0, 0.45, 0.8, 0.2, 0.9, 0.0], dtype=float),
+        "A,0",
+        106,
+        "read1",
+        100,
+        "+",
+        np.ones(6, dtype=float),
+        101,
+        105,
+        "+",
+        6,
+    )
+
+    monkeypatch.setattr(
+        cluster.load_processed,
+        "read_vectors_from_hdf5",
+        lambda **kwargs: ([record], dataset_names, None),
+    )
+    with pytest.raises(ValueError, match="unthresholded"):
+        cluster.extract_read_windows(
+            hdf5_file="reads.h5",
+            motifs=["A,0"],
+            config=cluster.ReadWindowExtractionConfig(
+                window_size=2,
+                orientation_aware=False,
+                auto_threshold_if_raw=None,
+                enforce_thresholded_vectors=True,
+            ),
+        )
 
 
 def test_classify_read_features_binary_includes_row_index():
@@ -985,14 +2032,84 @@ def test_plot_cluster_karyotype_handles_non_numeric_cluster_names(tmp_path):
     matplotlib.use("Agg")
     bed = tmp_path / "clusters.bed"
     bed.write_text(
-        "chr1\t0\t10\talpha\t0\t+\n"
-        "chr1\t20\t40\tbeta\t0\t+\n"
-        "chr2\t5\t15\talpha\t0\t+\n"
+        "chr1\t0\t10\talpha\t0\t+\nchr1\t20\t40\tbeta\t0\t+\nchr2\t5\t15\talpha\t0\t+\n"
     )
     sizes = tmp_path / "chrom.sizes"
     sizes.write_text("chr1\t100\nchr2\t80\n")
     fig = cluster.plot_cluster_karyotype(bed, sizes)
     assert fig is not None
+
+
+def test_plot_cluster_karyotype_uses_top_bottom_coordinate_labels_and_draws_rare_cluster_on_top(
+    tmp_path,
+):
+    import matplotlib
+
+    matplotlib.use("Agg")
+    bed = tmp_path / "clusters_overlap.bed"
+    bed.write_text(
+        "chr1\t10\t20\t0\t0\t+\nchr1\t10\t20\t1\t0\t+\nchr2\t5\t15\t0\t0\t+\n"
+    )
+    sizes = tmp_path / "chrom.sizes"
+    sizes.write_text("chr1\t100\nchr2\t80\n")
+
+    fig = cluster.plot_cluster_karyotype(
+        bed,
+        sizes,
+        chromosome_order="natural",
+        min_visible_bp=1,
+        min_visible_fraction=0.0,
+    )
+    assert fig is not None
+    ax = fig.axes[0]
+
+    text_values = [t.get_text() for t in ax.texts]
+    # One "0" label per chromosome at the top.
+    assert text_values.count("0") >= 2
+    # Bottom end-index labels should be present.
+    assert "100" in text_values
+    assert "80" in text_values
+    top_zero_labels = [text for text in ax.texts if text.get_text() == "0"]
+    assert len(top_zero_labels) >= 2
+    # Top "0" labels should sit just above chromosome starts and centered on each line.
+    for text in top_zero_labels:
+        x_pos, y_pos = text.get_position()
+        assert x_pos == pytest.approx(round(x_pos))
+        assert y_pos < 0
+        assert y_pos > -5
+
+    end_labels = [text for text in ax.texts if text.get_text() in {"80", "100"}]
+    assert len(end_labels) == 2
+    for text in end_labels:
+        x_pos, y_pos = text.get_position()
+        end_val = float(text.get_text())
+        # End labels should be just below the chromosome end and centered.
+        assert x_pos == pytest.approx(round(x_pos))
+        assert y_pos > end_val
+        assert y_pos < end_val + 6
+
+    legend = ax.get_legend()
+    assert legend is not None
+    label_to_color = {
+        text.get_text(): handle.get_color()
+        for text, handle in zip(legend.get_texts(), legend.legend_handles, strict=False)
+    }
+    assert "C0" in label_to_color
+    assert "C1" in label_to_color
+
+    overlap_lines = []
+    for line in ax.lines:
+        x_vals = np.asarray(line.get_xdata(), dtype=float)
+        y_vals = np.asarray(line.get_ydata(), dtype=float)
+        if x_vals.size != 2 or y_vals.size != 2:
+            continue
+        if np.allclose(x_vals, [0.0, 0.0]) and np.allclose(y_vals, [10.0, 20.0]):
+            overlap_lines.append(line)
+
+    assert len(overlap_lines) == 2
+    top_line = max(overlap_lines, key=lambda line: line.get_zorder())
+    assert tuple(top_line.get_color()) == tuple(label_to_color["C1"])
+    assert not ax.yaxis.get_visible()
 
 
 def test_infer_shared_window_size(monkeypatch):
@@ -1003,7 +2120,9 @@ def test_infer_shared_window_size(monkeypatch):
             return {"chr1": [(0, 30, "+")], "chr2": [(10, 70, "-")]}
         raise ValueError("unexpected input")
 
-    monkeypatch.setattr(cluster.utils, "regions_dict_from_input", fake_regions_dict_from_input)
+    monkeypatch.setattr(
+        cluster.utils, "regions_dict_from_input", fake_regions_dict_from_input
+    )
     shared = cluster._infer_shared_window_size(["a.bed", "b.bed"])
     assert shared == 15
 

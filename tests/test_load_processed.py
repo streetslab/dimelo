@@ -1,5 +1,6 @@
-import numpy as np
 import h5py
+import numpy as np
+import pytest
 
 from dimelo import load_processed
 from dimelo import utils as dimelo_utils
@@ -26,6 +27,34 @@ class _FakeTabix:
         return ["row_a", "row_b"]
 
 
+def test_process_pileup_row_parses_modkit_18_column_format():
+    parsed_motif = dimelo_utils.ParsedMotif("A,0")
+    row = "chr1\t9167144\t9167145\tY\t12\t+\t9167144\t9167145\t255,0,0\t12\t0.00\t3\t9\t0\t0\t0\t0\t0"
+    keep, coord, modified, valid = load_processed.process_pileup_row(
+        row=row,
+        parsed_motif=parsed_motif,
+        region_strand="+",
+        single_strand=False,
+    )
+    assert keep is True
+    assert coord == 9167144
+    assert modified == 3
+    assert valid == 12
+
+
+def test_process_pileup_row_skips_malformed_rows_without_raising():
+    parsed_motif = dimelo_utils.ParsedMotif("A,0")
+    malformed_row = "chr1\t1\t2\tY\tbad\t+\t1\t2\t255,0,0\tbad\t0.00\tbad"
+    with pytest.warns(RuntimeWarning, match="Skipping malformed bedMethyl row"):
+        keep, coord, modified, valid = load_processed.process_pileup_row(
+            row=malformed_row,
+            parsed_motif=parsed_motif,
+            region_strand="+",
+            single_strand=False,
+        )
+    assert (keep, coord, modified, valid) == (False, 0, 0, 0)
+
+
 def test_resolve_cores_for_task_count_auto_small_batch_is_single_core(monkeypatch):
     monkeypatch.setattr(load_processed.utils, "cores_to_run", lambda _cores: 8)
     resolved = load_processed._resolve_cores_for_task_count(
@@ -36,7 +65,9 @@ def test_resolve_cores_for_task_count_auto_small_batch_is_single_core(monkeypatc
 
 
 def test_resolve_cores_for_task_count_explicit_cores_are_preserved(monkeypatch):
-    monkeypatch.setattr(load_processed.utils, "cores_to_run", lambda _cores: int(_cores))
+    monkeypatch.setattr(
+        load_processed.utils, "cores_to_run", lambda _cores: int(_cores)
+    )
     resolved = load_processed._resolve_cores_for_task_count(
         requested_cores=4,
         task_count=2,
@@ -46,9 +77,13 @@ def test_resolve_cores_for_task_count_explicit_cores_are_preserved(monkeypatch):
 
 def test_memory_limited_cores_caps_auto_parallelism(monkeypatch):
     monkeypatch.setattr(load_processed.utils, "cores_to_run", lambda _cores: 8)
-    monkeypatch.setattr(load_processed, "_available_memory_bytes", lambda: 1024 * 1024 * 1024)
+    monkeypatch.setattr(
+        load_processed, "_available_memory_bytes", lambda: 1024 * 1024 * 1024
+    )
     monkeypatch.setattr(load_processed, "AUTO_PARALLEL_MEMORY_FRACTION", 0.5)
-    monkeypatch.setattr(load_processed, "AUTO_PARALLEL_PROCESS_OVERHEAD_BYTES", 64 * 1024 * 1024)
+    monkeypatch.setattr(
+        load_processed, "AUTO_PARALLEL_PROCESS_OVERHEAD_BYTES", 64 * 1024 * 1024
+    )
 
     resolved = load_processed._memory_limited_cores(
         requested_cores=None,
@@ -60,8 +95,12 @@ def test_memory_limited_cores_caps_auto_parallelism(monkeypatch):
 
 
 def test_memory_limited_cores_keeps_explicit_override(monkeypatch):
-    monkeypatch.setattr(load_processed.utils, "cores_to_run", lambda _cores: int(_cores))
-    monkeypatch.setattr(load_processed, "_available_memory_bytes", lambda: 128 * 1024 * 1024)
+    monkeypatch.setattr(
+        load_processed.utils, "cores_to_run", lambda _cores: int(_cores)
+    )
+    monkeypatch.setattr(
+        load_processed, "_available_memory_bytes", lambda: 128 * 1024 * 1024
+    )
 
     resolved = load_processed._memory_limited_cores(
         requested_cores=6,
@@ -141,7 +180,9 @@ def test_get_tabix_file_caches_by_path(monkeypatch):
 
 def test_pileup_vectors_from_bedmethyl_single_core_bypasses_process_pool(monkeypatch):
     def _raise_if_called(*_args, **_kwargs):
-        raise AssertionError("ProcessPoolExecutor should not be created for single-core execution.")
+        raise AssertionError(
+            "ProcessPoolExecutor should not be created for single-core execution."
+        )
 
     def fake_process_pileup_row(row, **_kwargs):
         if row == "row_a":
@@ -150,10 +191,20 @@ def test_pileup_vectors_from_bedmethyl_single_core_bypasses_process_pool(monkeyp
             return True, 102, 1, 3
         raise AssertionError(f"Unexpected row payload: {row}")
 
-    monkeypatch.setattr(load_processed.utils, "regions_dict_from_input", lambda *_args, **_kwargs: {"chr1": [(100, 104, "+")]})
-    monkeypatch.setattr(load_processed.utils, "process_chunks_from_regions_dict", lambda *_args, **_kwargs: _single_region_chunks())
+    monkeypatch.setattr(
+        load_processed.utils,
+        "regions_dict_from_input",
+        lambda *_args, **_kwargs: {"chr1": [(100, 104, "+")]},
+    )
+    monkeypatch.setattr(
+        load_processed.utils,
+        "process_chunks_from_regions_dict",
+        lambda *_args, **_kwargs: _single_region_chunks(),
+    )
     monkeypatch.setattr(load_processed.utils, "cores_to_run", lambda _cores: 1)
-    monkeypatch.setattr(load_processed.concurrent.futures, "ProcessPoolExecutor", _raise_if_called)
+    monkeypatch.setattr(
+        load_processed.concurrent.futures, "ProcessPoolExecutor", _raise_if_called
+    )
     monkeypatch.setattr(load_processed.pysam, "TabixFile", _FakeTabix)
     monkeypatch.setattr(load_processed, "process_pileup_row", fake_process_pileup_row)
 
@@ -170,7 +221,9 @@ def test_pileup_vectors_from_bedmethyl_single_core_bypasses_process_pool(monkeyp
 
 def test_regions_to_list_single_core_bypasses_process_pool(monkeypatch):
     def _raise_if_called(*_args, **_kwargs):
-        raise AssertionError("ProcessPoolExecutor should not be created for single-core execution.")
+        raise AssertionError(
+            "ProcessPoolExecutor should not be created for single-core execution."
+        )
 
     monkeypatch.setattr(
         load_processed.utils,
@@ -178,7 +231,9 @@ def test_regions_to_list_single_core_bypasses_process_pool(monkeypatch):
         lambda *_args, **_kwargs: {"chr1": [(100, 110, "+"), (120, 130, "-")]},
     )
     monkeypatch.setattr(load_processed.utils, "cores_to_run", lambda _cores: 1)
-    monkeypatch.setattr(load_processed.concurrent.futures, "ProcessPoolExecutor", _raise_if_called)
+    monkeypatch.setattr(
+        load_processed.concurrent.futures, "ProcessPoolExecutor", _raise_if_called
+    )
 
     result = load_processed.regions_to_list(
         function_handle=lambda regions, **_kwargs: f"ok:{regions}",
@@ -191,7 +246,9 @@ def test_regions_to_list_single_core_bypasses_process_pool(monkeypatch):
 
 def test_regions_to_list_auto_cores_prefers_single_core_for_small_batches(monkeypatch):
     def _raise_if_called(*_args, **_kwargs):
-        raise AssertionError("ProcessPoolExecutor should not be created for small auto-core batches.")
+        raise AssertionError(
+            "ProcessPoolExecutor should not be created for small auto-core batches."
+        )
 
     monkeypatch.setattr(
         load_processed.utils,
@@ -199,7 +256,9 @@ def test_regions_to_list_auto_cores_prefers_single_core_for_small_batches(monkey
         lambda *_args, **_kwargs: {"chr1": [(100, 110, "+"), (120, 130, "-")]},
     )
     monkeypatch.setattr(load_processed.utils, "cores_to_run", lambda _cores: 8)
-    monkeypatch.setattr(load_processed.concurrent.futures, "ProcessPoolExecutor", _raise_if_called)
+    monkeypatch.setattr(
+        load_processed.concurrent.futures, "ProcessPoolExecutor", _raise_if_called
+    )
 
     result = load_processed.regions_to_list(
         function_handle=lambda regions, **_kwargs: f"ok:{regions}",
@@ -232,8 +291,12 @@ def test_regions_to_list_explicit_cores_still_uses_process_pool(monkeypatch):
         "regions_dict_from_input",
         lambda *_args, **_kwargs: {"chr1": [(100, 110, "+"), (120, 130, "-")]},
     )
-    monkeypatch.setattr(load_processed.utils, "cores_to_run", lambda _cores: int(_cores))
-    monkeypatch.setattr(load_processed.concurrent.futures, "ProcessPoolExecutor", _FakeExecutor)
+    monkeypatch.setattr(
+        load_processed.utils, "cores_to_run", lambda _cores: int(_cores)
+    )
+    monkeypatch.setattr(
+        load_processed.concurrent.futures, "ProcessPoolExecutor", _FakeExecutor
+    )
 
     result = load_processed.regions_to_list(
         function_handle=lambda regions, **_kwargs: f"ok:{regions}",
@@ -270,8 +333,12 @@ def test_regions_to_list_parallel_batches_preserve_order(monkeypatch):
         "regions_dict_from_input",
         lambda *_args, **_kwargs: {"chr1": regions},
     )
-    monkeypatch.setattr(load_processed.utils, "cores_to_run", lambda _cores: int(_cores))
-    monkeypatch.setattr(load_processed.concurrent.futures, "ProcessPoolExecutor", _FakeExecutor)
+    monkeypatch.setattr(
+        load_processed.utils, "cores_to_run", lambda _cores: int(_cores)
+    )
+    monkeypatch.setattr(
+        load_processed.concurrent.futures, "ProcessPoolExecutor", _FakeExecutor
+    )
 
     result = load_processed.regions_to_list(
         function_handle=lambda regions, **_kwargs: f"ok:{regions}",
@@ -295,15 +362,21 @@ def test_regions_to_list_uses_external_executor_when_provided(monkeypatch):
             return map(fn, iterable)
 
     def _raise_if_called(*_args, **_kwargs):
-        raise AssertionError("ProcessPoolExecutor should not be created when external executor is provided.")
+        raise AssertionError(
+            "ProcessPoolExecutor should not be created when external executor is provided."
+        )
 
     monkeypatch.setattr(
         load_processed.utils,
         "regions_dict_from_input",
         lambda *_args, **_kwargs: {"chr1": [(100, 110, "+"), (120, 130, "-")]},
     )
-    monkeypatch.setattr(load_processed.utils, "cores_to_run", lambda _cores: int(_cores))
-    monkeypatch.setattr(load_processed.concurrent.futures, "ProcessPoolExecutor", _raise_if_called)
+    monkeypatch.setattr(
+        load_processed.utils, "cores_to_run", lambda _cores: int(_cores)
+    )
+    monkeypatch.setattr(
+        load_processed.concurrent.futures, "ProcessPoolExecutor", _raise_if_called
+    )
 
     executor = _ExternalExecutor()
     result = load_processed.regions_to_list(
@@ -320,7 +393,9 @@ def test_regions_to_list_uses_external_executor_when_provided(monkeypatch):
 
 def test_pileup_counts_from_bedmethyl_single_core_bypasses_process_pool(monkeypatch):
     def _raise_if_called(*_args, **_kwargs):
-        raise AssertionError("ProcessPoolExecutor should not be created for single-core execution.")
+        raise AssertionError(
+            "ProcessPoolExecutor should not be created for single-core execution."
+        )
 
     def fake_process_pileup_row(row, **_kwargs):
         if row == "row_a":
@@ -329,10 +404,20 @@ def test_pileup_counts_from_bedmethyl_single_core_bypasses_process_pool(monkeypa
             return True, 0, 1, 3
         raise AssertionError(f"Unexpected row payload: {row}")
 
-    monkeypatch.setattr(load_processed.utils, "regions_dict_from_input", lambda *_args, **_kwargs: {"chr1": [(100, 104, "+")]})
-    monkeypatch.setattr(load_processed.utils, "process_chunks_from_regions_dict", lambda *_args, **_kwargs: _single_region_chunks())
+    monkeypatch.setattr(
+        load_processed.utils,
+        "regions_dict_from_input",
+        lambda *_args, **_kwargs: {"chr1": [(100, 104, "+")]},
+    )
+    monkeypatch.setattr(
+        load_processed.utils,
+        "process_chunks_from_regions_dict",
+        lambda *_args, **_kwargs: _single_region_chunks(),
+    )
     monkeypatch.setattr(load_processed.utils, "cores_to_run", lambda _cores: 1)
-    monkeypatch.setattr(load_processed.concurrent.futures, "ProcessPoolExecutor", _raise_if_called)
+    monkeypatch.setattr(
+        load_processed.concurrent.futures, "ProcessPoolExecutor", _raise_if_called
+    )
     monkeypatch.setattr(load_processed.pysam, "TabixFile", _FakeTabix)
     monkeypatch.setattr(load_processed, "process_pileup_row", fake_process_pileup_row)
 
@@ -351,7 +436,9 @@ def test_read_vectors_from_hdf5_mod_fraction_order_and_missing_defaults(tmp_path
     h5_path = tmp_path / "reads.h5"
     with h5py.File(h5_path, "w") as h5:
         h5.create_dataset("read_name", data=np.array(["r1", "r1", "r2"], dtype="S2"))
-        h5.create_dataset("chromosome", data=np.array(["chr1", "chr1", "chr1"], dtype="S4"))
+        h5.create_dataset(
+            "chromosome", data=np.array(["chr1", "chr1", "chr1"], dtype="S4")
+        )
         h5.create_dataset("read_start", data=np.array([0, 0, 10], dtype=np.int32))
         h5.create_dataset("read_end", data=np.array([4, 4, 14], dtype=np.int32))
         h5.create_dataset("motif", data=np.array(["A,0", "CG,0", "A,0"], dtype="S4"))

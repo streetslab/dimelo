@@ -61,7 +61,9 @@ def _prepare_legacy_aggregate_profile_vectors(
 ) -> list[np.ndarray]:
     prepared_vectors: list[np.ndarray] = []
     for sample_name in sample_names:
-        sample_table = prepared_table.loc[prepared_table["sample_name"] == sample_name].copy()
+        sample_table = prepared_table.loc[
+            prepared_table["sample_name"] == sample_name
+        ].copy()
         sample_table = sample_table.sort_values("plot_x")
         prepared_vectors.append(sample_table["value"].to_numpy())
     return prepared_vectors
@@ -209,6 +211,7 @@ def by_modification(
         **kwargs,
     )
 
+
 def by_regions(
     mod_file_name: str | Path,
     regions_list: list[str | Path | list[str | Path]] | None = None,
@@ -236,7 +239,9 @@ def by_regions(
         raise ValueError("by_regions requires motif.")
 
     sample_names_for_plot = (
-        sample_names if sample_names is not None else [str(region) for region in regions_list]
+        sample_names
+        if sample_names is not None
+        else [str(region) for region in regions_list]
     )
     n_beds = len(regions_list)
     return plot_enrichment_profile(
@@ -314,7 +319,9 @@ def get_enrichment_profiles(
     mod_file_paths = [Path(fn) for fn in mod_file_names]
 
     trace_vectors = []
-    for mod_file, regions, motif in zip(mod_file_paths, regions_list, motifs):
+    for mod_file, regions, motif in zip(
+        mod_file_paths, regions_list, motifs, strict=False
+    ):
         match mod_file.suffix:
             case ".gz":
                 modified_base_counts, valid_base_counts = (
@@ -378,7 +385,11 @@ def make_enrichment_profile_plot(
     if not utils.check_len_equal(trace_vectors, sample_names):
         raise ValueError("Unequal number of inputs")
     legend_title = kwargs.pop("legend_title", None)
-    if legend_title is None and sample_names and all(_looks_like_motif_spec(name) for name in sample_names):
+    if (
+        legend_title is None
+        and sample_names
+        and all(_looks_like_motif_spec(name) for name in sample_names)
+    ):
         legend_title = "Modifications (motif, mod_index)"
     resolved_legend_title = "variable" if legend_title is None else str(legend_title)
     axes = utils.line_plot(

@@ -548,7 +548,9 @@ def test_score_regions_single_read_mod_fraction_effect_size_only():
         samples=[],
         regions=None,
         motifs=[],
-        contrast=ContrastSpec(mode="group_vs_group", numerator=["treated"], denominator=["NS"]),
+        contrast=ContrastSpec(
+            mode="group_vs_group", numerator=["treated"], denominator=["NS"]
+        ),
         analysis_unit="single_read",
         representation="read_mod_fraction",
         signal_source="extract_reads",
@@ -781,7 +783,9 @@ def test_score_regions_single_read_window_features_effect_size_only():
         samples=[],
         regions=None,
         motifs=[],
-        contrast=ContrastSpec(mode="group_vs_group", numerator=["treated"], denominator=["NS"]),
+        contrast=ContrastSpec(
+            mode="group_vs_group", numerator=["treated"], denominator=["NS"]
+        ),
         analysis_unit="single_read",
         representation="read_window_features",
         signal_source="extract_features",
@@ -981,8 +985,18 @@ def test_score_regions_single_read_matched_pairwise_requires_pairing_key_column(
 @pytest.mark.parametrize(
     "representation,table_factory,signal_source,test_name",
     [
-        ("read_mod_fraction", "read_table", "extract_reads", "sample_distribution_shift"),
-        ("read_window_features", "feature_table", "extract_features", "feature_summary_shift"),
+        (
+            "read_mod_fraction",
+            "read_table",
+            "extract_reads",
+            "sample_distribution_shift",
+        ),
+        (
+            "read_window_features",
+            "feature_table",
+            "extract_features",
+            "feature_summary_shift",
+        ),
     ],
 )
 def test_score_regions_single_read_matched_pairwise_requires_non_null_pairing_keys(
@@ -1065,8 +1079,18 @@ def test_score_regions_single_read_matched_pairwise_requires_non_null_pairing_ke
 @pytest.mark.parametrize(
     "representation,table_factory,signal_source,test_name",
     [
-        ("read_mod_fraction", "read_table", "extract_reads", "sample_distribution_shift"),
-        ("read_window_features", "feature_table", "extract_features", "feature_summary_shift"),
+        (
+            "read_mod_fraction",
+            "read_table",
+            "extract_reads",
+            "sample_distribution_shift",
+        ),
+        (
+            "read_window_features",
+            "feature_table",
+            "extract_features",
+            "feature_summary_shift",
+        ),
     ],
 )
 def test_score_regions_single_read_matched_pairwise_rejects_multi_condition_sides(
@@ -1167,8 +1191,18 @@ def test_score_regions_single_read_matched_pairwise_rejects_multi_condition_side
 @pytest.mark.parametrize(
     "representation,table_factory,signal_source,test_name",
     [
-        ("read_mod_fraction", "read_table", "extract_reads", "sample_distribution_shift"),
-        ("read_window_features", "feature_table", "extract_features", "feature_summary_shift"),
+        (
+            "read_mod_fraction",
+            "read_table",
+            "extract_reads",
+            "sample_distribution_shift",
+        ),
+        (
+            "read_window_features",
+            "feature_table",
+            "extract_features",
+            "feature_summary_shift",
+        ),
     ],
 )
 def test_score_regions_single_read_matched_pairwise_rejects_multiple_samples_on_one_side(
@@ -1252,7 +1286,9 @@ def test_score_regions_single_read_matched_pairwise_rejects_multiple_samples_on_
             )
         }
 
-    with pytest.raises(ValueError, match="exactly one sample per region, pair, and condition"):
+    with pytest.raises(
+        ValueError, match="exactly one sample per region, pair, and condition"
+    ):
         region_contrasts.score_regions(
             samples=[],
             regions=None,
@@ -1269,8 +1305,18 @@ def test_score_regions_single_read_matched_pairwise_rejects_multiple_samples_on_
 @pytest.mark.parametrize(
     "representation,table_factory,signal_source,test_name",
     [
-        ("read_mod_fraction", "read_table", "extract_reads", "sample_distribution_shift"),
-        ("read_window_features", "feature_table", "extract_features", "feature_summary_shift"),
+        (
+            "read_mod_fraction",
+            "read_table",
+            "extract_reads",
+            "sample_distribution_shift",
+        ),
+        (
+            "read_window_features",
+            "feature_table",
+            "extract_features",
+            "feature_summary_shift",
+        ),
     ],
 )
 def test_score_regions_single_read_matched_pairwise_rejects_sample_ids_mapped_to_multiple_pairs(
@@ -1403,7 +1449,9 @@ def test_score_regions_single_read_window_features_uses_builtin_loader(monkeypat
         region_contrasts,
         "cluster",
         SimpleNamespace(
-            extract_read_windows=lambda **kwargs: extracted_by_path[kwargs["hdf5_file"]],
+            extract_read_windows=lambda **kwargs: extracted_by_path[
+                kwargs["hdf5_file"]
+            ],
             read_window_feature_matrix=lambda extracted: feature_rows_by_path[
                 "ns.h5" if extracted is extracted_by_path["ns.h5"] else "treated.h5"
             ],
@@ -1418,7 +1466,9 @@ def test_score_regions_single_read_window_features_uses_builtin_loader(monkeypat
         ],
         regions="regions.bed",
         motifs=["A,0"],
-        contrast=ContrastSpec(mode="pairwise", numerator=["treated"], denominator=["NS"]),
+        contrast=ContrastSpec(
+            mode="pairwise", numerator=["treated"], denominator=["NS"]
+        ),
         analysis_unit="single_read",
         representation="read_window_features",
         signal_source="extract_features",
@@ -1881,7 +1931,9 @@ def test_score_regions_beta_binomial_adds_p_values(monkeypatch):
         assert "p_value" in table.columns
         assert "adjusted_p_value" in table.columns
         assert ((table["p_value"] >= 0) & (table["p_value"] <= 1)).all()
-        assert ((table["adjusted_p_value"] >= 0) & (table["adjusted_p_value"] <= 1)).all()
+        assert (
+            (table["adjusted_p_value"] >= 0) & (table["adjusted_p_value"] <= 1)
+        ).all()
 
 
 def test_score_regions_beta_binomial_rejects_unsupported_multiple_testing(monkeypatch):
@@ -2098,8 +2150,14 @@ def test_score_regions_beta_binomial_ranks_by_adjusted_p_value(monkeypatch):
     )
 
     assert result.summary.iloc[0]["region_id"] == "lower_effect_higher_significance"
-    assert result.summary.iloc[0]["adjusted_p_value"] <= result.summary.iloc[1]["adjusted_p_value"]
-    assert result.summary.iloc[0]["delta_fraction"] < result.summary.iloc[1]["delta_fraction"]
+    assert (
+        result.summary.iloc[0]["adjusted_p_value"]
+        <= result.summary.iloc[1]["adjusted_p_value"]
+    )
+    assert (
+        result.summary.iloc[0]["delta_fraction"]
+        < result.summary.iloc[1]["delta_fraction"]
+    )
     assert result.summary.iloc[0]["rank"] == 1
 
 
@@ -2430,7 +2488,9 @@ def test_score_regions_modified_count_representation_ranks_by_delta_count(monkey
     assert result.summary.loc[0, "reference_count"] == 1
     assert result.summary.loc[0, "delta_count"] == 10
     assert result.summary.loc[1, "delta_count"] == 7
-    assert result.summary.loc[0, "log2_fc_count"] == pytest.approx(math.log2((11 + 1e-6) / (1 + 1e-6)))
+    assert result.summary.loc[0, "log2_fc_count"] == pytest.approx(
+        math.log2((11 + 1e-6) / (1 + 1e-6))
+    )
     assert result.metadata["representation"] == "modified_count"
 
 
@@ -2543,7 +2603,9 @@ def test_score_regions_cluster_occupancy_dominant_cluster_rejects_missing_reques
             samples=[],
             regions=None,
             motifs=[],
-            contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+            contrast=ContrastSpec(
+                mode="pairwise", numerator=["15min"], denominator=["NS"]
+            ),
             analysis_unit="cluster_occupancy",
             representation="dominant_cluster",
             signal_source="cluster_occupancy",
@@ -2575,7 +2637,9 @@ def test_score_regions_cluster_occupancy_dominant_cluster_rejects_region_specifi
             samples=[],
             regions=None,
             motifs=[],
-            contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+            contrast=ContrastSpec(
+                mode="pairwise", numerator=["15min"], denominator=["NS"]
+            ),
             analysis_unit="cluster_occupancy",
             representation="dominant_cluster",
             signal_source="cluster_occupancy",
@@ -2668,7 +2732,9 @@ def test_score_regions_cluster_occupancy_rejects_fraction_test_for_dominant_clus
             samples=[],
             regions=None,
             motifs=[],
-            contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+            contrast=ContrastSpec(
+                mode="pairwise", numerator=["15min"], denominator=["NS"]
+            ),
             analysis_unit="cluster_occupancy",
             representation="dominant_cluster",
             signal_source="cluster_occupancy",
@@ -2836,10 +2902,30 @@ def test_score_regions_cluster_fraction_treats_missing_sample_cluster_rows_as_ze
 @pytest.mark.parametrize(
     ("representation", "column", "value", "message"),
     [
-        ("cluster_fraction", "fraction", 1.2, "fraction values must be finite and between 0 and 1"),
-        ("cluster_fraction", "fraction", float("nan"), "fraction values must be finite and between 0 and 1"),
-        ("cluster_entropy", "cluster_entropy", float("inf"), "cluster_entropy values must be finite and >= 0"),
-        ("cluster_entropy", "cluster_entropy", -0.1, "cluster_entropy values must be finite and >= 0"),
+        (
+            "cluster_fraction",
+            "fraction",
+            1.2,
+            "fraction values must be finite and between 0 and 1",
+        ),
+        (
+            "cluster_fraction",
+            "fraction",
+            float("nan"),
+            "fraction values must be finite and between 0 and 1",
+        ),
+        (
+            "cluster_entropy",
+            "cluster_entropy",
+            float("inf"),
+            "cluster_entropy values must be finite and >= 0",
+        ),
+        (
+            "cluster_entropy",
+            "cluster_entropy",
+            -0.1,
+            "cluster_entropy values must be finite and >= 0",
+        ),
     ],
 )
 def test_score_regions_cluster_occupancy_rejects_invalid_numeric_values(
@@ -2872,7 +2958,9 @@ def test_score_regions_cluster_occupancy_rejects_invalid_numeric_values(
             samples=[],
             regions=None,
             motifs=[],
-            contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+            contrast=ContrastSpec(
+                mode="pairwise", numerator=["15min"], denominator=["NS"]
+            ),
             analysis_unit="cluster_occupancy",
             representation=representation,
             signal_source="cluster_occupancy",
@@ -2887,7 +2975,9 @@ def test_score_regions_cluster_occupancy_rejects_missing_occupancy_columns():
             samples=[],
             regions=None,
             motifs=[],
-            contrast=ContrastSpec(mode="pairwise", numerator=["15min"], denominator=["NS"]),
+            contrast=ContrastSpec(
+                mode="pairwise", numerator=["15min"], denominator=["NS"]
+            ),
             analysis_unit="cluster_occupancy",
             representation="cluster_fraction",
             signal_source="cluster_occupancy",

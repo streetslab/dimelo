@@ -46,7 +46,7 @@ conda run -n "${ENV_NAME}" python -m ipykernel install \
 
 echo "==> Validating environment health"
 conda run -n "${ENV_NAME}" python "${REPO_ROOT}/scripts/ensure_dimelo_kernel.py" \
-  --modkit-version "${MODKIT_VERSION:-supported}" \
+  --modkit-version "${MODKIT_VERSION:-0.6.1}" \
   --expected-env "${ENV_NAME}"
 
 cat <<EOF

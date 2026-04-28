@@ -122,7 +122,9 @@ def by_regions(
         raise ValueError("by_regions requires motif.")
 
     sample_names_for_plot = (
-        sample_names if sample_names is not None else [str(region) for region in regions_list]
+        sample_names
+        if sample_names is not None
+        else [str(region) for region in regions_list]
     )
     n_beds = len(regions_list)
     return plot_depth_histogram(
@@ -200,7 +202,9 @@ def get_depth_counts(
     mod_file_paths = [Path(fn) for fn in mod_file_names]
 
     depth_vectors = []
-    for mod_file, regions, motif in zip(mod_file_paths, regions_list, motifs):
+    for mod_file, regions, motif in zip(
+        mod_file_paths, regions_list, motifs, strict=False
+    ):
         match mod_file.suffix:
             case ".gz":
                 pileup_vectors_list = load_processed.regions_to_list(
