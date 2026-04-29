@@ -1043,13 +1043,40 @@ cluster.export_region_clusters_to_bed(region_info, labels, "region_clusters.bed"
 cluster.plot_cluster_karyotype("region_clusters.bed", "ref.fasta.fai")
 # If pileup_matrix concatenates multiple motifs, pass motif_index to select which slice to visualize.
 
-# Multi-site read raster (paired windows) for exploratory QC
+# Strict two-site fixed-offset raster: window 1 is centered at 0 and window 2
+# is centered at the requested distance along the same reads.
+# fig, stats = cluster.plot_two_site_read_raster(
+#     read_windows,
+#     second_site_offset_bp=2000,
+#     window_width_bp=2000,
+#     motif_count=2,
+#     plot_all_motifs=True,
+#     max_rows=500,
+#     downsample_method="auto",
+#     downsample_seed=42,
+# )
+
+# Co-occurring multi-site raster: pick one site-set per read from all candidate
+# regions on the read. Each panel can use its own local coordinate system.
 # fig, stats = cluster.plot_multisite_read_raster(
 #     read_windows,
-#     n_windows=2,
-#     min_separation_bp=5000,
-#     motif_index=0,
-#     smoothing="gaussian",
+#     site_selection={
+#         "mode": "cooccurring",
+#         "n_windows": 2,
+#         "min_distance_bp": "window_width",
+#         "max_distance_bp": None,
+#         "choose": "first",  # or "random", "longest_span", "shortest_span"
+#         "selection_seed": 42,
+#         "strand_relation": "any",  # or "same", "opposite"
+#         "orientation": "genomic",  # or "anchor_strand"
+#     },
+#     coordinate_mode="local_window",
+#     window_widths_bp=[2000, 2000],
+#     motif_count=2,
+#     plot_all_motifs=True,
+#     ml_score_thresholds=[0.65, 0.50],
+#     downsample_method="random",
+#     downsample_seed=42,
 # )
 
 # Binary classification of read features across two samples

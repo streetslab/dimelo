@@ -5,6 +5,17 @@ import pytest
 from dimelo import cluster
 
 
+@pytest.fixture(autouse=True)
+def _close_matplotlib_figures():
+    yield
+    try:
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+    except Exception:
+        pass
+
+
 def test_region_feature_matrix_from_pileup(monkeypatch):
     # Mock the region parsing and loading helpers so we can focus on the feature logic
     fake_regions_dict = {
@@ -587,7 +598,6 @@ def test_plot_multisite_read_raster_supports_multimotif_grid():
         motif_count=2,
         plot_all_motifs=True,
         motif_labels=["A,0", "CG,0"],
-        x_axis_mode="relative_to_primary",
         smoothing=None,
     )
     assert fig is not None
@@ -660,7 +670,7 @@ def test_plot_multisite_read_raster_ml_scatter_uses_sequential_cmaps_for_other_m
     assert stats["ml_score_cmaps"] == {"X,0": "Greens", "Y,0": "Purples", "Z,0": "Reds"}
 
 
-def test_plot_multisite_read_raster_supports_explicit_window_centers_and_length_filter():
+def test_plot_multisite_read_raster_supports_fixed_offsets_and_length_filter():
     import matplotlib
 
     matplotlib.use("Agg")
@@ -709,13 +719,14 @@ def test_plot_multisite_read_raster_supports_explicit_window_centers_and_length_
     fig, stats = cluster.plot_multisite_read_raster(
         r,
         motif_index=0,
-        window_center_offsets=[-2500, 0, 2500],
-        x_axis_mode="relative_to_primary",
+        selection_mode="fixed_offsets",
+        window_offsets_bp=[0, 2500, 5000],
+        coordinate_mode="relative_to_primary",
         smoothing=None,
     )
     assert fig is not None
     assert stats["n_windows"] == 3
-    assert stats["window_center_offsets"] == [-2500.0, 0.0, 2500.0]
+    assert stats["window_offsets_bp"] == [0.0, 2500.0, 5000.0]
     assert stats["required_read_length_bp"] > 0
     assert stats["min_read_length_bp"] == stats["required_read_length_bp"]
 
@@ -762,14 +773,23 @@ def test_plot_two_site_read_raster_wrapper():
         window_width_bp=4,
         motif_index=0,
         smoothing=None,
+        max_rows=1,
+        downsample_method="auto",
     )
     assert fig is not None
     assert stats["n_windows"] == 2
-    assert stats["window_centers_bp"] == [0.0, 2000.0]
+    assert stats["selection_mode"] == "fixed_offsets"
+    assert stats["window_offsets_bp"] == [0.0, 2000.0]
     assert stats["window_widths_bp"] == [4, 4]
+    assert stats["coordinate_mode"] == "relative_to_primary"
+    assert stats["downsample_method"] == "none"
+    data_axes = [ax for ax in fig.axes if ax.get_ylabel().endswith("Reads")]
+    assert data_axes
+    assert data_axes[0].get_xlim()[0] <= -2 and data_axes[0].get_xlim()[1] >= 2
+    assert data_axes[1].get_xlim()[0] <= 1998 and data_axes[1].get_xlim()[1] >= 2002
 
 
-def test_plot_multisite_read_raster_supports_symmetric_center_spec():
+def test_plot_multisite_read_raster_supports_fixed_offsets_with_primary_highlight():
     import matplotlib
 
     matplotlib.use("Agg")
@@ -817,14 +837,16 @@ def test_plot_multisite_read_raster_supports_symmetric_center_spec():
     fig, stats = cluster.plot_multisite_read_raster(
         r,
         motif_index=0,
-        symmetric_side_windows=1,
-        symmetric_max_offset_bp=2000,
-        window_match_tolerance_bp=200,
+        selection_mode="fixed_offsets",
+        window_offsets_bp=[0, 2000, 4000],
+        primary_window_index=1,
         smoothing=None,
     )
     assert fig is not None
     assert stats["n_windows"] == 3
-    assert stats["window_centers_bp"] == [-2000.0, 0.0, 2000.0]
+    assert stats["window_offsets_bp"] == [0.0, 2000.0, 4000.0]
+    data_axes = [ax for ax in fig.axes if ax.get_ylabel().endswith("Reads")]
+    assert data_axes[1].spines["left"].get_linewidth() > data_axes[0].spines["left"].get_linewidth()
 
 
 def test_plot_multisite_read_raster_heatmap_window_titles():
@@ -875,7 +897,7 @@ def test_plot_multisite_read_raster_heatmap_window_titles():
     assert "Window 2" in titles
 
 
-def test_plot_multisite_read_raster_accepts_centered_axis_mode():
+def test_plot_multisite_read_raster_accepts_local_window_coordinate_mode():
     import matplotlib
 
     matplotlib.use("Agg")
@@ -914,16 +936,288 @@ def test_plot_multisite_read_raster_accepts_centered_axis_mode():
         n_windows=2,
         min_separation_bp=5000,
         motif_index=0,
-        x_axis_mode="centered",
+        coordinate_mode="local_window",
         smoothing=None,
     )
 
     assert fig is not None
-    assert stats["x_axis_mode"] == "centered"
+    assert stats["coordinate_mode"] == "local_window"
     data_axes = [ax for ax in fig.axes if ax.lines]
     assert len(data_axes) == 2
     assert [float(ax.lines[0].get_xdata()[0]) for ax in data_axes] == [0.0, 0.0]
     assert all(ax.get_xlim()[0] < 0 < ax.get_xlim()[1] for ax in data_axes)
+
+
+def test_plot_multisite_read_raster_site_selection_defaults_min_distance_to_window_width():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.zeros((3, 4000), dtype=float)
+    data[:, 2000] = 1.0
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 1000,
+            "region_end": 1004,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 3000,
+            "region_end": 3004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(data, None, meta, [], None)
+
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        site_selection={"mode": "cooccurring", "n_windows": 2},
+        window_widths_bp=2000,
+        smoothing=None,
+    )
+
+    assert fig is not None
+    assert stats["site_selection"]["min_distance_bp"] == 2000
+    assert stats["observed_window_center_offsets_bp"] == [[0.0], [3000.0]]
+    assert stats["observed_window_center_offsets_summary_bp"] == [
+        {"n": 1, "min": 0.0, "median": 0.0, "max": 0.0, "unique": 1},
+        {"n": 1, "min": 3000.0, "median": 3000.0, "max": 3000.0, "unique": 1},
+    ]
+    assert stats["rows_are"] == "reads"
+    assert stats["unique_reads"] == 1
+    assert stats["site_sets"] == 1
+
+
+def test_plot_multisite_read_raster_site_selection_choose_span_and_max_distance():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.tile(np.array([[0, 1, 0, 1]], dtype=float), (4, 1))
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": start,
+            "region_end": start + 4,
+            "region_strand": "+",
+        }
+        for start in [0, 1000, 3000, 7000]
+    ]
+    r = cluster.ReadWindowExtractionResult(data, None, meta, [], None)
+
+    _, longest = cluster.plot_multisite_read_raster(
+        r,
+        site_selection={
+            "mode": "cooccurring",
+            "n_windows": 2,
+            "min_distance_bp": 1000,
+            "max_distance_bp": 4000,
+            "choose": "longest_span",
+        },
+        window_widths_bp=4,
+        smoothing=None,
+    )
+    _, shortest = cluster.plot_multisite_read_raster(
+        r,
+        site_selection={
+            "mode": "cooccurring",
+            "n_windows": 2,
+            "min_distance_bp": 1000,
+            "max_distance_bp": 4000,
+            "choose": "shortest_span",
+        },
+        window_widths_bp=4,
+        smoothing=None,
+    )
+
+    assert longest["observed_window_center_offsets_bp"] == [[0.0], [4000.0]]
+    assert shortest["observed_window_center_offsets_bp"] == [[0.0], [1000.0]]
+
+
+def test_plot_multisite_read_raster_site_selection_strand_relation_and_orientation():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.tile(np.array([[0, 1, 0, 1]], dtype=float), (4, 1))
+    meta = [
+        {
+            "read_name": "r_same",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r_same",
+            "chromosome": "chr1",
+            "region_start": 3000,
+            "region_end": 3004,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r_opp",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "-",
+        },
+        {
+            "read_name": "r_opp",
+            "chromosome": "chr1",
+            "region_start": 3000,
+            "region_end": 3004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(data, None, meta, [], None)
+
+    _, same = cluster.plot_multisite_read_raster(
+        r,
+        site_selection={
+            "mode": "cooccurring",
+            "n_windows": 2,
+            "min_distance_bp": 1000,
+            "strand_relation": "same",
+        },
+        window_widths_bp=4,
+        smoothing=None,
+        sort_by="read_name",
+        sort_descending=False,
+    )
+    _, opposite = cluster.plot_multisite_read_raster(
+        r,
+        site_selection={
+            "mode": "cooccurring",
+            "n_windows": 2,
+            "min_distance_bp": 1000,
+            "strand_relation": "opposite",
+            "orientation": "anchor_strand",
+        },
+        window_widths_bp=4,
+        smoothing=None,
+    )
+
+    assert same["pairs"] == 1
+    assert opposite["pairs"] == 1
+    assert opposite["orientation_applied"] == "anchor_strand"
+    assert opposite["observed_window_center_offsets_bp"] == [[0.0], [-3000.0]]
+
+
+def test_plot_multisite_read_raster_site_selection_excludes_rows_and_regions(tmp_path):
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.tile(np.array([[0, 1, 0, 1]], dtype=float), (4, 1))
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": start,
+            "region_end": start + 4,
+            "region_strand": "+",
+        }
+        for start in [0, 3000, 6000, 9000]
+    ]
+    bed = tmp_path / "exclude.bed"
+    bed.write_text("chr1\t2990\t3010\n")
+    r = cluster.ReadWindowExtractionResult(data, None, meta, [], None)
+
+    _, stats = cluster.plot_multisite_read_raster(
+        r,
+        site_selection={
+            "mode": "cooccurring",
+            "n_windows": 2,
+            "min_distance_bp": 1000,
+            "exclude": {"row_indices": [0], "regions": bed},
+        },
+        window_widths_bp=4,
+        smoothing=None,
+    )
+
+    assert stats["observed_window_center_offsets_bp"] == [[0.0], [3000.0]]
+    assert stats["site_selection"]["excluded_sites"] == 2
+
+
+def test_plot_multisite_read_raster_site_selection_random_choice_is_seeded():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.tile(np.array([[0, 1, 0, 1]], dtype=float), (4, 1))
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": start,
+            "region_end": start + 4,
+            "region_strand": "+",
+        }
+        for start in [0, 1000, 3000, 6000]
+    ]
+    r = cluster.ReadWindowExtractionResult(data, None, meta, [], None)
+    selector = {
+        "mode": "cooccurring",
+        "n_windows": 2,
+        "min_distance_bp": 1000,
+        "choose": "random",
+        "selection_seed": 7,
+    }
+
+    _, first = cluster.plot_multisite_read_raster(
+        r,
+        site_selection=selector,
+        window_widths_bp=4,
+        smoothing=None,
+    )
+    _, second = cluster.plot_multisite_read_raster(
+        r,
+        site_selection=selector,
+        window_widths_bp=4,
+        smoothing=None,
+    )
+
+    assert first["observed_window_center_offsets_bp"] == second["observed_window_center_offsets_bp"]
+
+
+def test_plot_multisite_read_raster_site_selection_rejects_all_valid_sets_for_now():
+    data = np.tile(np.array([[0, 1, 0, 1]], dtype=float), (2, 1))
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 3000,
+            "region_end": 3004,
+            "region_strand": "+",
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(data, None, meta, [], None)
+
+    with pytest.raises(NotImplementedError, match="all_valid_sets"):
+        cluster.plot_multisite_read_raster(
+            r,
+            site_selection={
+                "mode": "cooccurring",
+                "n_windows": 2,
+                "selection_multiplicity": "all_valid_sets",
+            },
+            smoothing=None,
+        )
 
 
 def test_plot_multisite_read_raster_heatmap_auto_uses_raw_values():
@@ -1018,7 +1312,7 @@ def test_plot_multisite_read_raster_heatmap_relative_axis_uses_window_offsets():
         render_values="smoothed",
         smoothing="gaussian",
         axis_orientation="position_x",
-        x_axis_mode="relative_to_primary",
+        coordinate_mode="relative_to_primary",
         rotate=True,
     )
     data_axes = [ax for ax in fig.axes if ax.images]
@@ -1082,7 +1376,7 @@ def test_plot_multisite_read_raster_heatmap_relative_axis_rejects_variable_offse
 
     with pytest.raises(
         ValueError,
-        match="render_mode='scatter'.*x_axis_mode='centered'.*fixed/explicit centers",
+        match="render_mode='scatter'.*coordinate_mode='local_window'.*fixed offsets",
     ):
         cluster.plot_multisite_read_raster(
             r,
@@ -1090,7 +1384,7 @@ def test_plot_multisite_read_raster_heatmap_relative_axis_rejects_variable_offse
             min_separation_bp=5000,
             motif_index=0,
             render_mode="heatmap",
-            x_axis_mode="relative_to_primary",
+            coordinate_mode="relative_to_primary",
             smoothing=None,
         )
 
@@ -1329,11 +1623,77 @@ def test_plot_multisite_read_raster_default_scatter_uses_ml_score_colorbar():
     scatter_arrays = [
         np.asarray(collection.get_array(), dtype=float)
         for axis in fig.axes
+        if axis.get_ylabel().endswith("Reads")
         for collection in getattr(axis, "collections", [])
         if collection.get_array() is not None and len(collection.get_array()) > 0
     ]
     assert any(np.isclose(arr, 0.9).any() for arr in scatter_arrays)
     assert any(np.isclose(arr, 0.4).any() for arr in scatter_arrays)
+
+
+def test_plot_multisite_read_raster_scatter_auto_downsamples_uniformly():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    n_reads = 12
+    data_rows = []
+    meta = []
+    for read_idx in range(n_reads):
+        left = np.zeros(4, dtype=float)
+        right = np.zeros(4, dtype=float)
+        left[read_idx % 4] = 1.0
+        right[(read_idx + 1) % 4] = 1.0
+        data_rows.extend([left, right])
+        meta.extend(
+            [
+                {
+                    "read_name": f"r{read_idx}",
+                    "chromosome": "chr1",
+                    "region_start": 0,
+                    "region_end": 4,
+                    "region_strand": "+",
+                    "read_length": 7000,
+                },
+                {
+                    "read_name": f"r{read_idx}",
+                    "chromosome": "chr1",
+                    "region_start": 3000,
+                    "region_end": 3004,
+                    "region_strand": "+",
+                    "read_length": 7000,
+                },
+            ]
+        )
+    r = cluster.ReadWindowExtractionResult(
+        data_matrix=np.asarray(data_rows),
+        val_matrix=None,
+        metadata=meta,
+        datasets=[],
+        regions_dict=None,
+    )
+
+    fig, stats = cluster.plot_multisite_read_raster(
+        r,
+        n_windows=2,
+        min_separation_bp=2000,
+        motif_index=0,
+        render_mode="scatter",
+        smoothing=None,
+        max_rows=5,
+    )
+
+    assert fig is not None
+    assert stats["downsampled"] is True
+    assert stats["downsample_method"] == "uniform"
+    scatter_arrays = [
+        np.asarray(collection.get_array(), dtype=float)
+        for axis in fig.axes
+        if axis.get_ylabel().endswith("Reads")
+        for collection in getattr(axis, "collections", [])
+        if collection.get_array() is not None and len(collection.get_array()) > 0
+    ]
+    assert scatter_arrays
+    assert all(set(np.unique(arr)).issubset({1.0}) for arr in scatter_arrays)
 
 
 def test_plot_multisite_read_raster_uniform_downsampling_stats():
@@ -1582,16 +1942,18 @@ def test_plot_multisite_read_raster_multimotif_nonrotated_uses_effective_window_
         motif_count=2,
         plot_all_motifs=True,
         motif_labels=["A,0", "CG,0"],
-        window_center_offsets=[-2500, 0, 2500],
-        center_tolerance_bp=500,
+        selection_mode="fixed_offsets",
+        window_offsets_bp=[0, 2500, 5000],
         rotate=False,
         render_mode="scatter",
-        x_axis_mode="relative_to_primary",
+        coordinate_mode="relative_to_primary",
         smoothing=None,
     )
     assert stats["n_windows"] == 3
-    # 2 motifs x 3 windows + 1 colorbar axis
-    assert len(fig.axes) == 7
+    # 2 motifs x 3 windows + one ML-score colorbar per motif
+    assert len(fig.axes) == 8
+    assert any("A,0 normalized ML score" in ax.get_ylabel() for ax in fig.axes)
+    assert any("CG,0 normalized ML score" in ax.get_ylabel() for ax in fig.axes)
 
 
 def test_plot_multisite_read_raster_rejects_too_small_min_read_length():
@@ -1640,7 +2002,8 @@ def test_plot_multisite_read_raster_rejects_too_small_min_read_length():
         cluster.plot_multisite_read_raster(
             r,
             motif_index=0,
-            window_center_offsets=[-2500, 0, 2500],
+            selection_mode="fixed_offsets",
+            window_offsets_bp=[0, 2500, 5000],
             min_read_length_bp=100,
             smoothing=None,
         )

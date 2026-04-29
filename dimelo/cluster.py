@@ -7,6 +7,7 @@ from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +79,41 @@ class ReadWindowExtractionResult:
     metadata: list[dict[str, Any]]
     datasets: list[str]
     regions_dict: dict | None
+
+
+@dataclass(frozen=True)
+class _RasterSiteSelection:
+    mode: str
+    n_windows: int
+    min_distance_bp: int
+    max_distance_bp: int | None
+    selection_multiplicity: str
+    choose: str
+    selection_seed: int | None
+    anchor: dict[str, Any]
+    strand_relation: str
+    exclude: dict[str, Any] | None
+    orientation: str
+    window_offsets_bp: tuple[int, ...] | None
+    primary_window_index: int
+
+
+@dataclass(frozen=True)
+class _RasterSiteCandidate:
+    row_idx: int
+    center_bp: float
+    chrom: str | None
+    start_bp: int | None
+    end_bp: int | None
+    strand: str | None
+    read_key: tuple[Any, Any]
+
+
+@dataclass
+class _RasterSiteSelectionResult:
+    window_indices: list[np.ndarray]
+    panel_centers: list[np.ndarray]
+    stats: dict[str, Any]
 
 
 @dataclass
@@ -692,6 +728,450 @@ def _resolve_motif_slices(
     if slice_width <= 0:
         return 1, width
     return n_motifs, slice_width
+
+
+def _resolve_raster_site_selection(
+    site_selection: dict[str, Any] | None,
+    *,
+    selection_mode: str,
+    window_offsets_bp: Sequence[int] | None,
+    n_windows: int,
+    min_separation_bp: int,
+    primary_window_index: int,
+    panel_widths_bp: Sequence[int],
+) -> _RasterSiteSelection:
+    spec = dict(site_selection or {})
+    mode_aliases = {
+        "cooccurring_regions": "cooccurring",
+        "cooccurring": "cooccurring",
+        "fixed_offsets": "fixed_offsets",
+        "anchor_plus_neighbors": "anchor_plus_neighbors",
+    }
+    mode_raw = spec.get("mode", selection_mode)
+    if mode_raw not in mode_aliases:
+        raise ValueError(
+            "site_selection mode must be 'cooccurring', 'fixed_offsets', or 'anchor_plus_neighbors'."
+        )
+    mode = mode_aliases[str(mode_raw)]
+
+    offsets_value = spec.get("window_offsets_bp", window_offsets_bp)
+    offsets = None
+    if offsets_value is not None:
+        offsets = tuple(int(value) for value in offsets_value)
+        if not offsets:
+            raise ValueError("window_offsets_bp must contain at least one offset.")
+
+    if mode == "fixed_offsets":
+        if offsets is None:
+            raise ValueError(
+                "window_offsets_bp is required for fixed_offsets site selection."
+            )
+        n_windows_effective = len(offsets)
+    else:
+        if offsets is not None:
+            raise ValueError(
+                "window_offsets_bp is only valid for fixed_offsets site selection."
+            )
+        n_windows_effective = int(spec.get("n_windows", n_windows))
+        if n_windows_effective < 1:
+            raise ValueError("site_selection n_windows must be >= 1.")
+
+    primary_index = int(spec.get("primary_window_index", primary_window_index))
+    if primary_index < 0 or primary_index >= n_windows_effective:
+        raise ValueError(
+            f"primary_window_index {primary_index} out of range for {n_windows_effective} windows."
+        )
+
+    default_min_distance: int | str = (
+        "window_width" if site_selection is not None else min_separation_bp
+    )
+    min_distance_value = spec.get("min_distance_bp", default_min_distance)
+    if min_distance_value == "window_width":
+        min_distance = int(max(panel_widths_bp))
+    else:
+        min_distance = int(min_distance_value)
+    if min_distance < 0:
+        raise ValueError("site_selection min_distance_bp must be >= 0.")
+
+    max_distance_value = spec.get("max_distance_bp")
+    max_distance = None if max_distance_value is None else int(max_distance_value)
+    if max_distance is not None and max_distance < min_distance:
+        raise ValueError("site_selection max_distance_bp must be >= min_distance_bp.")
+
+    multiplicity = str(spec.get("selection_multiplicity", "one_per_read"))
+    if multiplicity == "all_valid_sets":
+        raise NotImplementedError(
+            "site_selection selection_multiplicity='all_valid_sets' is not implemented yet; use 'one_per_read'."
+        )
+    if multiplicity != "one_per_read":
+        raise ValueError(
+            "site_selection selection_multiplicity must be 'one_per_read' or 'all_valid_sets'."
+        )
+
+    choose = str(spec.get("choose", "first"))
+    if choose not in {"first", "random", "longest_span", "shortest_span"}:
+        raise ValueError(
+            "site_selection choose must be 'first', 'random', 'longest_span', or 'shortest_span'."
+        )
+
+    anchor = dict(spec.get("anchor", {"mode": "first"}) or {"mode": "first"})
+    anchor_mode = str(anchor.get("mode", "first"))
+    if anchor_mode not in {"first", "random", "index"}:
+        raise ValueError("site_selection anchor mode must be 'first', 'random', or 'index'.")
+
+    strand_relation = str(spec.get("strand_relation", "any"))
+    if strand_relation not in {"any", "same", "opposite"}:
+        raise ValueError("site_selection strand_relation must be 'any', 'same', or 'opposite'.")
+
+    orientation = str(spec.get("orientation", "genomic"))
+    if orientation not in {"genomic", "anchor_strand"}:
+        raise ValueError("site_selection orientation must be 'genomic' or 'anchor_strand'.")
+
+    exclude = spec.get("exclude")
+    exclude_dict = dict(exclude) if exclude is not None else None
+    selection_seed = spec.get("selection_seed")
+
+    return _RasterSiteSelection(
+        mode=mode,
+        n_windows=n_windows_effective,
+        min_distance_bp=min_distance,
+        max_distance_bp=max_distance,
+        selection_multiplicity=multiplicity,
+        choose=choose,
+        selection_seed=None if selection_seed is None else int(selection_seed),
+        anchor=anchor,
+        strand_relation=strand_relation,
+        exclude=exclude_dict,
+        orientation=orientation,
+        window_offsets_bp=offsets,
+        primary_window_index=primary_index,
+    )
+
+
+def _metadata_center_bp(meta_row: dict[str, Any], distance_mode: str) -> float:
+    if distance_mode == "center":
+        return float((int(meta_row.get("region_start", 0)) + int(meta_row.get("region_end", 0))) // 2)
+    return float(int(meta_row.get("read_start", 0)))
+
+
+def _metadata_interval(meta_row: dict[str, Any]) -> tuple[str | None, int | None, int | None]:
+    chrom = meta_row.get("chromosome")
+    try:
+        start = int(meta_row.get("region_start"))
+        end = int(meta_row.get("region_end"))
+    except Exception:
+        return chrom, None, None
+    return chrom, start, end
+
+
+def _interval_overlaps_any(
+    chrom: str | None,
+    start: int | None,
+    end: int | None,
+    regions_dict: dict[str, list[tuple[int, int, str]]],
+) -> bool:
+    if chrom is None or start is None or end is None:
+        return False
+    for region_start, region_end, _ in regions_dict.get(str(chrom), []):
+        if max(start, int(region_start)) < min(end, int(region_end)):
+            return True
+    return False
+
+
+def _build_raster_site_candidates(
+    meta: Sequence[dict[str, Any]],
+    *,
+    original_indices: np.ndarray,
+    selector: _RasterSiteSelection,
+    distance_mode: str,
+) -> tuple[list[_RasterSiteCandidate], int]:
+    excluded_original_rows = set()
+    excluded_regions = None
+    if selector.exclude:
+        excluded_original_rows = {
+            int(value) for value in selector.exclude.get("row_indices", []) or []
+        }
+        regions = selector.exclude.get("regions")
+        if regions is not None:
+            excluded_regions = utils.regions_dict_from_input(regions, window_size=None)
+
+    candidates: list[_RasterSiteCandidate] = []
+    excluded_count = 0
+    for row_idx, meta_row in enumerate(meta):
+        original_idx = int(original_indices[row_idx])
+        chrom, start, end = _metadata_interval(meta_row)
+        if original_idx in excluded_original_rows or (
+            excluded_regions is not None
+            and _interval_overlaps_any(chrom, start, end, excluded_regions)
+        ):
+            excluded_count += 1
+            continue
+        candidates.append(
+            _RasterSiteCandidate(
+                row_idx=row_idx,
+                center_bp=_metadata_center_bp(meta_row, distance_mode),
+                chrom=str(chrom) if chrom is not None else None,
+                start_bp=start,
+                end_bp=end,
+                strand=_coerce_strand(meta_row.get("region_strand")),
+                read_key=(meta_row.get("read_name"), meta_row.get("chromosome")),
+            )
+        )
+    return candidates, excluded_count
+
+
+def _strand_relation_ok(
+    selected: Sequence[_RasterSiteCandidate],
+    selector: _RasterSiteSelection,
+) -> bool:
+    if selector.strand_relation == "any":
+        return True
+    strands = [candidate.strand for candidate in selected]
+    if any(strand not in {"+", "-"} for strand in strands):
+        raise ValueError(
+            "site_selection strand_relation requires '+'/'-' region_strand metadata for all selected sites."
+        )
+    if selector.strand_relation == "same":
+        return len(set(strands)) == 1
+    anchor_strand = strands[selector.primary_window_index]
+    if len(strands) == 2:
+        return strands[0] != strands[1]
+    return any(strand != anchor_strand for strand in strands)
+
+
+def _distances_ok(
+    selected: Sequence[_RasterSiteCandidate],
+    selector: _RasterSiteSelection,
+) -> bool:
+    centers = [candidate.center_bp for candidate in selected]
+    if len(centers) < 2:
+        return True
+    for left, right in zip(centers, centers[1:], strict=False):
+        distance = abs(float(right) - float(left))
+        if distance < selector.min_distance_bp:
+            return False
+        if selector.max_distance_bp is not None and distance > selector.max_distance_bp:
+            return False
+    return True
+
+
+def _apply_anchor_orientation(
+    selected: Sequence[_RasterSiteCandidate],
+    selector: _RasterSiteSelection,
+) -> list[_RasterSiteCandidate]:
+    ordered = list(selected)
+    if (
+        selector.orientation == "anchor_strand"
+        and ordered
+        and ordered[selector.primary_window_index].strand == "-"
+    ):
+        ordered = list(reversed(ordered))
+    return ordered
+
+
+def _fixed_offset_sets(
+    items: Sequence[_RasterSiteCandidate],
+    selector: _RasterSiteSelection,
+) -> list[list[_RasterSiteCandidate]]:
+    assert selector.window_offsets_bp is not None
+    out: list[list[_RasterSiteCandidate]] = []
+    by_center: defaultdict[float, list[_RasterSiteCandidate]] = defaultdict(list)
+    for item in items:
+        by_center[item.center_bp].append(item)
+    for anchor in items:
+        selected: list[_RasterSiteCandidate] = []
+        used: set[int] = set()
+        for offset in selector.window_offsets_bp:
+            matches = by_center.get(anchor.center_bp + float(offset), [])
+            chosen = next((candidate for candidate in matches if candidate.row_idx not in used), None)
+            if chosen is None:
+                selected = []
+                break
+            selected.append(chosen)
+            used.add(chosen.row_idx)
+        if selected and _strand_relation_ok(selected, selector):
+            out.append(_apply_anchor_orientation(selected, selector))
+    return out
+
+
+def _anchor_position(
+    items: Sequence[_RasterSiteCandidate],
+    selector: _RasterSiteSelection,
+    rng: np.random.Generator,
+) -> int:
+    mode = str(selector.anchor.get("mode", "first"))
+    if mode == "first":
+        return 0
+    if mode == "random":
+        return int(rng.integers(0, len(items)))
+    index = int(selector.anchor.get("index", 0))
+    if index < 0 or index >= len(items):
+        raise ValueError("site_selection anchor index is out of range for a read.")
+    return index
+
+
+def _cooccurring_sets(
+    items: Sequence[_RasterSiteCandidate],
+    selector: _RasterSiteSelection,
+    rng: np.random.Generator,
+) -> list[list[_RasterSiteCandidate]]:
+    out: list[list[_RasterSiteCandidate]] = []
+    ordered_items = list(items)
+    if selector.mode == "anchor_plus_neighbors":
+        anchor_pos = _anchor_position(ordered_items, selector, rng)
+        anchor = ordered_items[anchor_pos]
+        combos_source = [
+            [anchor, *combo]
+            for combo in combinations(
+                [item for idx, item in enumerate(ordered_items) if idx != anchor_pos],
+                max(0, selector.n_windows - 1),
+            )
+        ]
+    else:
+        combos_source = combinations(ordered_items, selector.n_windows)
+
+    for combo in combos_source:
+        selected = sorted(combo, key=lambda candidate: candidate.center_bp)
+        if not _distances_ok(selected, selector):
+            continue
+        if not _strand_relation_ok(selected, selector):
+            continue
+        out.append(_apply_anchor_orientation(selected, selector))
+    return out
+
+
+def _choose_site_set(
+    valid_sets: Sequence[list[_RasterSiteCandidate]],
+    selector: _RasterSiteSelection,
+    rng: np.random.Generator,
+) -> list[_RasterSiteCandidate] | None:
+    if not valid_sets:
+        return None
+    if selector.choose == "first":
+        return list(valid_sets[0])
+    if selector.choose == "random":
+        return list(valid_sets[int(rng.integers(0, len(valid_sets)))])
+
+    def span(site_set: Sequence[_RasterSiteCandidate]) -> float:
+        centers = [candidate.center_bp for candidate in site_set]
+        return float(max(centers) - min(centers))
+
+    if selector.choose == "longest_span":
+        return list(max(valid_sets, key=span))
+    return list(min(valid_sets, key=span))
+
+
+def _summarize_observed_offsets(
+    observed_offsets: Sequence[Sequence[float]],
+) -> list[dict[str, float | int | None]]:
+    summary: list[dict[str, float | int | None]] = []
+    for values in observed_offsets:
+        arr = np.asarray(values, dtype=float)
+        if arr.size == 0:
+            summary.append(
+                {
+                    "n": 0,
+                    "min": None,
+                    "median": None,
+                    "max": None,
+                    "unique": 0,
+                }
+            )
+            continue
+        summary.append(
+            {
+                "n": int(arr.size),
+                "min": float(np.min(arr)),
+                "median": float(np.median(arr)),
+                "max": float(np.max(arr)),
+                "unique": int(np.unique(arr).size),
+            }
+        )
+    return summary
+
+
+def _select_raster_site_windows(
+    meta: Sequence[dict[str, Any]],
+    *,
+    original_indices: np.ndarray,
+    selector: _RasterSiteSelection,
+    distance_mode: str,
+    selection_spans_all_windows,
+) -> _RasterSiteSelectionResult:
+    candidates, excluded_count = _build_raster_site_candidates(
+        meta,
+        original_indices=original_indices,
+        selector=selector,
+        distance_mode=distance_mode,
+    )
+    groups: defaultdict[tuple[Any, Any], list[_RasterSiteCandidate]] = defaultdict(list)
+    for candidate in candidates:
+        groups[candidate.read_key].append(candidate)
+
+    rng = np.random.default_rng(selector.selection_seed)
+    per_window_indices: list[list[int]] = [[] for _ in range(selector.n_windows)]
+    per_window_centers: list[list[float]] = [[] for _ in range(selector.n_windows)]
+    selected_read_keys: list[tuple[Any, Any]] = []
+    dropped_for_window_span = 0
+    observed_offsets: list[list[float]] = [[] for _ in range(selector.n_windows)]
+
+    for read_key, items in groups.items():
+        if len(items) < selector.n_windows:
+            continue
+        ordered_items = sorted(items, key=lambda candidate: candidate.center_bp)
+        if selector.mode == "fixed_offsets":
+            valid_sets = _fixed_offset_sets(ordered_items, selector)
+        else:
+            valid_sets = _cooccurring_sets(ordered_items, selector, rng)
+        chosen = _choose_site_set(valid_sets, selector, rng)
+        if chosen is None:
+            continue
+        candidate_for_span = [
+            (candidate.row_idx, candidate.center_bp, window_pos)
+            for window_pos, candidate in enumerate(chosen)
+        ]
+        if not selection_spans_all_windows(candidate_for_span):
+            dropped_for_window_span += 1
+            continue
+        primary_center = chosen[selector.primary_window_index].center_bp
+        for window_pos, candidate in enumerate(chosen):
+            per_window_indices[window_pos].append(int(candidate.row_idx))
+            per_window_centers[window_pos].append(float(candidate.center_bp))
+            observed_offsets[window_pos].append(float(candidate.center_bp - primary_center))
+        selected_read_keys.append(read_key)
+
+    if not all(per_window_indices):
+        raise ValueError("No read sets found meeting site-selection criteria.")
+
+    stats = {
+        "rows_are": "reads",
+        "unique_reads": len(set(selected_read_keys)),
+        "site_sets": len(selected_read_keys),
+        "orientation_applied": selector.orientation,
+        "observed_window_center_offsets_bp": observed_offsets,
+        "observed_window_center_offsets_summary_bp": _summarize_observed_offsets(
+            observed_offsets
+        ),
+        "site_selection": {
+            "mode": selector.mode,
+            "n_windows": selector.n_windows,
+            "min_distance_bp": selector.min_distance_bp,
+            "max_distance_bp": selector.max_distance_bp,
+            "selection_multiplicity": selector.selection_multiplicity,
+            "choose": selector.choose,
+            "selection_seed": selector.selection_seed,
+            "anchor": selector.anchor,
+            "strand_relation": selector.strand_relation,
+            "orientation": selector.orientation,
+            "excluded_sites": excluded_count,
+        },
+        "dropped_for_window_span": dropped_for_window_span,
+    }
+    return _RasterSiteSelectionResult(
+        window_indices=[np.asarray(values, dtype=int) for values in per_window_indices],
+        panel_centers=[np.asarray(values, dtype=float) for values in per_window_centers],
+        stats=stats,
+    )
 
 
 def _extract_window_from_record(
@@ -2398,27 +2878,26 @@ def plot_multisite_read_raster(
     *,
     n_windows: int = 2,
     min_separation_bp: int = 5000,
+    selection_mode: str = "cooccurring",
+    window_offsets_bp: Sequence[int] | None = None,
+    primary_window_index: int = 0,
+    coordinate_mode: str | None = None,
+    site_selection: dict[str, Any] | None = None,
     distance_mode: str = "center",  # or "bounds"
     window_size: int | None = None,
     motif_index: int = 0,
     motif_count: int | None = None,
     plot_all_motifs: bool = False,
     motif_labels: Sequence[str] | None = None,
-    window_centers_bp: Sequence[int] | None = None,
     window_widths_bp: int | Sequence[int] | None = None,
-    window_match_tolerance_bp: int | None = None,
-    symmetric_side_windows: int | None = None,
-    symmetric_max_offset_bp: int | None = None,
     enforce_full_window_span: bool = True,
-    # Legacy aliases
-    window_center_offsets: Sequence[int] | None = None,
-    center_tolerance_bp: int | None = None,
     min_read_length_bp: int | None = None,
     smoothing: str | None = "gaussian",  # None, "boxcar", "gaussian"
     smooth_win: int = 21,
     smooth_sigma_bp: float = 6.0,
     max_rows: int | None = 500,
-    downsample_method: str = "bin_mean",  # "bin_mean" | "uniform"
+    downsample_method: str = "auto",  # "auto" | "bin_mean" | "uniform" | "random"
+    downsample_seed: int | None = None,
     cmap: str = "magma",
     vmin: float | None = None,
     vmax: float | None = None,
@@ -2430,7 +2909,6 @@ def plot_multisite_read_raster(
     scatter_color_values: str = "ml_score",  # "auto" | "ml_score" | "raw" | "smoothed"
     ml_score_thresholds: Sequence[float] | None = None,
     motif_colors: Sequence[str] | None = None,
-    x_axis_mode: str | None = None,  # "relative_to_primary" | "centered"
     sort_by: str = "mod_fraction",  # "mod_fraction" | "cluster" | "window_center" | "read_name" | "region_start" | "read_length" | "none"
     sort_window_index: int | None = None,
     sort_descending: bool | None = None,
@@ -2443,28 +2921,32 @@ def plot_multisite_read_raster(
 
     Args:
         read_windows: ReadWindowExtractionResult from extract_read_windows / build_multimotif_read_windows
-        n_windows: number of windows per read to plot when explicit centers are not provided
-        min_separation_bp: minimum separation between site centers (distance_mode="center") or read starts (bounds)
+        n_windows: number of windows per read for co-occurring-region mode.
+        min_separation_bp: minimum separation between selected site centers.
+        selection_mode: shorthand selector mode. "fixed_offsets" requires exact
+            window_offsets_bp matches per read; "cooccurring" chooses regions from the
+            same read separated by min_separation_bp. The legacy alias
+            "cooccurring_regions" is also accepted.
+        window_offsets_bp: fixed window offsets relative to the primary window center.
+            Pass one value per window; the primary window offset should usually be 0.
+        primary_window_index: window used as the reference coordinate frame and default sort window.
+        coordinate_mode: "relative_to_primary" preserves offsets along each read; "local_window"
+            centers every panel on its own selected site.
+        site_selection: optional rich selector dict. Supports modes "cooccurring",
+            "fixed_offsets", and "anchor_plus_neighbors"; distance bounds, seeded
+            random choice, strand filters, exclusions, and orientation by anchor strand.
+            When provided, it supersedes selection_mode/window_offsets_bp/n_windows
+            shorthand for site selection.
         distance_mode: "center" uses region_start/end center; "bounds" uses read_start/read_end
         window_size: half-window in bp; if provided, per-motif slice width is ``2 * window_size``.
         motif_index: reference motif slice index for single-motif plotting and ordering
         motif_count: total motif slices concatenated in data_matrix; inferred when possible
         plot_all_motifs: when True, render all motif slices in a motif x window panel grid
         motif_labels: optional motif names aligned to motif slices
-        window_centers_bp: explicit desired window centers in primary-region coordinates
-            (for example ``[-2500, 0, 2500]``). When provided, this replaces ``n_windows``.
         window_widths_bp: per-window display widths in bp (common width when scalar). Defaults
             to the extracted span for each panel.
-        window_match_tolerance_bp: matching tolerance for explicit centers. Defaults to half
-            the extracted span.
-        symmetric_side_windows: when set with ``symmetric_max_offset_bp``, generate centers as
-            evenly spaced offsets from ``-symmetric_max_offset_bp`` to ``+symmetric_max_offset_bp``
-            with ``2 * symmetric_side_windows + 1`` windows total.
-        symmetric_max_offset_bp: max absolute offset used for symmetric center generation.
         enforce_full_window_span: when True (default), drop read-sets that cannot span the
             full displayed windows based on read_start/read_end (or read_length when available).
-        window_center_offsets: legacy alias for ``window_centers_bp``.
-        center_tolerance_bp: legacy alias for ``window_match_tolerance_bp``.
         min_read_length_bp: optional minimum read length filter. Must be at least the required
             span implied by requested centers/separation plus plotted window width.
         smoothing: None, "boxcar", or "gaussian"
@@ -2472,8 +2954,10 @@ def plot_multisite_read_raster(
         smooth_sigma_bp: sigma for gaussian smoothing
         max_rows: cap rows; when exceeded, downsample according to ``downsample_method``.
             Pass None to disable downsampling.
-        downsample_method: "bin_mean" averages adjacent sorted read rows; "uniform" takes
-            evenly spaced sorted rows.
+        downsample_method: "auto" uses "uniform" for scatter plots to preserve real reads
+            and "bin_mean" for heatmaps; "bin_mean" averages adjacent sorted read rows;
+            "uniform" takes evenly spaced sorted rows; "random" samples sorted rows.
+        downsample_seed: seed for reproducible random downsampling.
         cmap: matplotlib colormap
         vmin/vmax: color scale limits; None auto-scales
         render_mode: "scatter" or "heatmap"
@@ -2495,8 +2979,6 @@ def plot_multisite_read_raster(
         ml_score_thresholds: optional per-motif ML score thresholds for scatter mode. When provided,
             only points with ML score >= threshold are plotted in motif-specific colors.
         motif_colors: optional colors aligned to motifs for thresholded scatter display
-        x_axis_mode: coordinate mode. ``relative_to_primary`` preserves primary-region offsets;
-            ``centered`` keeps each panel centered at zero for legacy compatibility.
         sort_by: ordering strategy for paired reads
         sort_window_index: optional window index used by window-aware sorting modes
         sort_descending: descending/ascending order toggle for supported sort modes.
@@ -2525,26 +3007,27 @@ def plot_multisite_read_raster(
         raise ValueError(
             "scatter_color_values must be 'auto', 'ml_score', 'raw', or 'smoothed'."
         )
-    if x_axis_mode is not None and x_axis_mode not in {
+    if selection_mode not in {"fixed_offsets", "cooccurring_regions", "cooccurring"}:
+        raise ValueError(
+            "selection_mode must be 'fixed_offsets', 'cooccurring_regions', or 'cooccurring'."
+        )
+    if coordinate_mode is not None and coordinate_mode not in {
         "relative_to_primary",
-        "centered",
+        "local_window",
     }:
         raise ValueError(
-            "x_axis_mode must be None, 'relative_to_primary', or 'centered'."
+            "coordinate_mode must be None, 'relative_to_primary', or 'local_window'."
         )
-    effective_x_axis_mode = x_axis_mode or "relative_to_primary"
     if distance_mode not in {"center", "bounds"}:
         raise ValueError("distance_mode must be 'center' or 'bounds'.")
     if n_windows < 1:
         raise ValueError("n_windows must be >= 1.")
     if min_separation_bp < 0:
         raise ValueError("min_separation_bp must be >= 0.")
-    if downsample_method not in {"bin_mean", "uniform"}:
-        raise ValueError("downsample_method must be 'bin_mean' or 'uniform'.")
-    if center_tolerance_bp is not None and center_tolerance_bp < 0:
-        raise ValueError("center_tolerance_bp must be >= 0 when provided.")
-    if window_match_tolerance_bp is not None and window_match_tolerance_bp < 0:
-        raise ValueError("window_match_tolerance_bp must be >= 0 when provided.")
+    if downsample_method not in {"auto", "bin_mean", "uniform", "random"}:
+        raise ValueError(
+            "downsample_method must be 'auto', 'bin_mean', 'uniform', or 'random'."
+        )
     if max_rows is not None and max_rows <= 0:
         raise ValueError("max_rows must be > 0 when provided.")
     if sort_window_index is not None and sort_window_index < 0:
@@ -2629,98 +3112,27 @@ def plot_multisite_read_raster(
                 [f"motif_{i}" for i in range(len(motif_labels_resolved), n_motifs)]
             )
     X_by_motif = [X_full[:, m * slice_width : (m + 1) * slice_width] for m in motif_ids]
-    ML_by_motif = [np.clip(matrix.astype(float), 0.0, 1.0) for matrix in X_by_motif]
 
-    if (
-        window_center_offsets is not None
-        and window_centers_bp is not None
-        and list(window_center_offsets) != list(window_centers_bp)
-    ):
-        raise ValueError(
-            "Pass either window_centers_bp or window_center_offsets (legacy alias), not both with different values."
-        )
-    resolved_centers = (
-        window_centers_bp if window_centers_bp is not None else window_center_offsets
-    )
-    if (
-        center_tolerance_bp is not None
-        and window_match_tolerance_bp is not None
-        and int(center_tolerance_bp) != int(window_match_tolerance_bp)
-    ):
-        raise ValueError(
-            "Pass either window_match_tolerance_bp or center_tolerance_bp (legacy alias), not both with different values."
-        )
-    match_tolerance_bp = (
-        int(window_match_tolerance_bp)
-        if window_match_tolerance_bp is not None
-        else (int(center_tolerance_bp) if center_tolerance_bp is not None else None)
-    )
+    def _normalize_ml_scores(matrix: np.ndarray) -> np.ndarray:
+        values = np.asarray(matrix, dtype=float)
+        finite = values[np.isfinite(values)]
+        if finite.size and float(np.nanmax(finite)) > 1.0:
+            values = values / 255.0
+        return np.clip(values, 0.0, 1.0)
 
-    if symmetric_side_windows is not None or symmetric_max_offset_bp is not None:
-        if resolved_centers is not None:
+    ML_by_motif = [_normalize_ml_scores(matrix) for matrix in X_by_motif]
+
+    raw_selector_spec = dict(site_selection or {})
+    raw_mode = raw_selector_spec.get("mode", selection_mode)
+    raw_offsets = raw_selector_spec.get("window_offsets_bp", window_offsets_bp)
+    if raw_mode in {"fixed_offsets"}:
+        if raw_offsets is None:
             raise ValueError(
-                "Do not combine symmetric center spec with explicit window_centers_bp."
+                "window_offsets_bp is required when selection_mode='fixed_offsets'."
             )
-        if symmetric_side_windows is None or symmetric_max_offset_bp is None:
-            raise ValueError(
-                "symmetric_side_windows and symmetric_max_offset_bp must be provided together."
-            )
-        if int(symmetric_side_windows) < 0:
-            raise ValueError("symmetric_side_windows must be >= 0.")
-        if int(symmetric_max_offset_bp) < 0:
-            raise ValueError("symmetric_max_offset_bp must be >= 0.")
-        n_side = int(symmetric_side_windows)
-        max_offset = float(symmetric_max_offset_bp)
-        if n_side == 0:
-            resolved_centers = [0]
-        else:
-            resolved_centers = (
-                np.linspace(-max_offset, max_offset, (2 * n_side) + 1)
-                .round()
-                .astype(int)
-                .tolist()
-            )
-
-    if resolved_centers is None:
-        n_windows_effective = int(n_windows)
-        target_offsets = None
+        n_windows_effective = len(list(raw_offsets))
     else:
-        offsets = [int(offset) for offset in resolved_centers]
-        if len(offsets) == 0:
-            raise ValueError(
-                "window_centers_bp must contain at least one center when provided."
-            )
-        n_windows_effective = len(offsets)
-        target_offsets = np.asarray(offsets, dtype=float)
-
-    if target_offsets is None:
-        required_read_length_bp = int(
-            max(
-                slice_width,
-                ((n_windows_effective - 1) * min_separation_bp) + slice_width,
-            )
-        )
-    else:
-        required_read_length_bp = int(
-            max(
-                slice_width,
-                np.ceil(
-                    float(target_offsets.max() - target_offsets.min())
-                    + float(slice_width)
-                ),
-            )
-        )
-
-    if min_read_length_bp is not None and min_read_length_bp < required_read_length_bp:
-        raise ValueError(
-            "min_read_length_bp must be >= required span implied by requested windows "
-            f"({required_read_length_bp} bp)."
-        )
-    effective_min_read_length = (
-        required_read_length_bp
-        if target_offsets is not None and min_read_length_bp is None
-        else min_read_length_bp
-    )
+        n_windows_effective = int(raw_selector_spec.get("n_windows", n_windows))
 
     if window_widths_bp is None:
         default_width_bp = int(
@@ -2742,6 +3154,57 @@ def plot_multisite_read_raster(
             "window_widths_bp values cannot exceed extracted window span; increase extract/parse window_size."
         )
     panel_half_widths = [0.5 * float(width) for width in panel_widths_bp]
+
+    selector = _resolve_raster_site_selection(
+        site_selection,
+        selection_mode=selection_mode,
+        window_offsets_bp=window_offsets_bp,
+        n_windows=n_windows,
+        min_separation_bp=min_separation_bp,
+        primary_window_index=primary_window_index,
+        panel_widths_bp=panel_widths_bp,
+    )
+    n_windows_effective = selector.n_windows
+    primary_window_index = selector.primary_window_index
+    target_offsets = (
+        np.asarray(selector.window_offsets_bp, dtype=float)
+        if selector.window_offsets_bp is not None
+        else None
+    )
+    effective_coordinate_mode = (
+        coordinate_mode
+        if coordinate_mode is not None
+        else ("relative_to_primary" if selector.mode == "fixed_offsets" else "local_window")
+    )
+
+    if target_offsets is None:
+        required_read_length_bp = int(
+            max(
+                slice_width,
+                ((n_windows_effective - 1) * selector.min_distance_bp) + slice_width,
+            )
+        )
+    else:
+        required_read_length_bp = int(
+            max(
+                slice_width,
+                np.ceil(
+                    float(target_offsets.max() - target_offsets.min())
+                    + float(slice_width)
+                ),
+            )
+        )
+
+    if min_read_length_bp is not None and min_read_length_bp < required_read_length_bp:
+        raise ValueError(
+            "min_read_length_bp must be >= required span implied by requested windows "
+            f"({required_read_length_bp} bp)."
+        )
+    effective_min_read_length = (
+        required_read_length_bp
+        if selector.mode == "fixed_offsets" and min_read_length_bp is None
+        else min_read_length_bp
+    )
 
     def _apply_index_filter(index_vector: np.ndarray) -> None:
         nonlocal X_by_motif, ML_by_motif, meta, filtered_original_indices
@@ -2819,7 +3282,6 @@ def plot_multisite_read_raster(
                 keep_by_length.append(idx)
         _apply_index_filter(np.asarray(keep_by_length, dtype=int))
 
-    span_check_warning_emitted = False
     dropped_for_window_span = 0
 
     def _safe_int(value: Any) -> int | None:
@@ -2864,7 +3326,6 @@ def plot_multisite_read_raster(
     def _selection_spans_all_windows(
         selected: Sequence[tuple[int, float, int]],
     ) -> bool:
-        nonlocal span_check_warning_emitted
         if not enforce_full_window_span:
             return True
 
@@ -2885,137 +3346,22 @@ def plot_multisite_read_raster(
             if length_value is not None:
                 candidate_lengths.append(int(length_value))
 
-        if unresolved_present:
-            if candidate_lengths:
-                required_span = max(right_edges) - min(left_edges)
-                if max(candidate_lengths) < required_span:
-                    return False
-            elif not span_check_warning_emitted:
-                warnings.warn(
-                    "Unable to fully verify window-span coverage for some reads because "
-                    "read_start/read_end/read_length metadata are missing. "
-                    "Re-extract windows with current APIs for strict filtering.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                span_check_warning_emitted = True
+        if unresolved_present and candidate_lengths:
+            required_span = max(right_edges) - min(left_edges)
+            if max(candidate_lengths) < required_span:
+                return False
         return True
 
-    # Group by read key
-    groups = defaultdict(list)
-    for i, m in zip(range(len(meta)), meta, strict=False):
-        key = (
-            m.get("read_name"),
-            m.get("chromosome"),
-            m.get("region_strand"),
-        )
-        if distance_mode == "center":
-            center = (int(m.get("region_start", 0)) + int(m.get("region_end", 0))) // 2
-        else:
-            center = int(m.get("read_start", 0))
-        groups[key].append((i, center))
-
-    pair_indices_per_window = [[] for _ in range(n_windows_effective)]
-    panel_centers = [[] for _ in range(n_windows_effective)]
-    for _, items in groups.items():
-        if len(items) < n_windows_effective:
-            continue
-        items = sorted(items, key=lambda x: x[1])
-        centers_arr = np.asarray([entry[1] for entry in items], dtype=float)
-        idx_arr = np.asarray([entry[0] for entry in items], dtype=int)
-
-        if target_offsets is None:
-            # sliding window of n_windows with minimum separation
-            for j in range(len(items) - n_windows_effective + 1):
-                centers = [items[j + k][1] for k in range(n_windows_effective)]
-                if any(
-                    (centers[k + 1] - centers[k]) < min_separation_bp
-                    for k in range(n_windows_effective - 1)
-                ):
-                    continue
-                idxs = [items[j + k][0] for k in range(n_windows_effective)]
-                candidate = [
-                    (int(idxs[k]), float(centers[k]), int(k))
-                    for k in range(n_windows_effective)
-                ]
-                if not _selection_spans_all_windows(candidate):
-                    dropped_for_window_span += 1
-                    continue
-                for k, idx in enumerate(idxs):
-                    pair_indices_per_window[k].append(int(idx))
-                    panel_centers[k].append(float(centers[k]))
-            continue
-
-        tolerance = float(
-            match_tolerance_bp
-            if match_tolerance_bp is not None
-            else max(1, slice_width // 2)
-        )
-        best_candidate: tuple[float, list[int]] | None = None
-        for anchor_pos in range(len(items)):
-            anchor_center = centers_arr[anchor_pos]
-            targets = anchor_center + target_offsets
-            used_positions: set[int] = set()
-            selected_positions: list[int] = []
-            total_error = 0.0
-            for target in targets:
-                distances = np.abs(centers_arr - target)
-                order = np.argsort(distances)
-                chosen = None
-                for candidate_pos in order:
-                    pos = int(candidate_pos)
-                    if pos in used_positions:
-                        continue
-                    if float(distances[pos]) <= tolerance:
-                        candidate_idx = int(idx_arr[pos])
-                        window_half = float(panel_half_widths[len(selected_positions)])
-                        covered = _window_is_covered(
-                            meta[candidate_idx], float(centers_arr[pos]), window_half
-                        )
-                        if covered is False:
-                            continue
-                        chosen = pos
-                        break
-                if chosen is None:
-                    selected_positions = []
-                    break
-                used_positions.add(chosen)
-                selected_positions.append(chosen)
-                total_error += float(distances[chosen])
-
-            if not selected_positions:
-                continue
-            if best_candidate is None or total_error < best_candidate[0]:
-                best_candidate = (total_error, selected_positions)
-
-        if best_candidate is None:
-            continue
-        _, selected_positions = best_candidate
-        candidate = [
-            (int(idx_arr[pos]), float(centers_arr[pos]), int(k))
-            for k, pos in enumerate(selected_positions)
-        ]
-        if not _selection_spans_all_windows(candidate):
-            dropped_for_window_span += 1
-            continue
-        for k, pos in enumerate(selected_positions):
-            pair_indices_per_window[k].append(int(idx_arr[pos]))
-            panel_centers[k].append(float(centers_arr[pos]))
-
-    if not all(len(p) > 0 for p in pair_indices_per_window):
-        if enforce_full_window_span and dropped_for_window_span > 0:
-            raise ValueError(
-                "No read sets found after enforcing full-window span coverage; "
-                "increase read length, reduce window widths/offsets, or relax constraints."
-            )
-        raise ValueError("No read sets found meeting separation criteria.")
-
-    window_indices = [
-        np.asarray(values, dtype=int) for values in pair_indices_per_window
-    ]
-    panel_centers = [
-        np.asarray(center_values, dtype=float) for center_values in panel_centers
-    ]
+    selection_result = _select_raster_site_windows(
+        meta,
+        original_indices=filtered_original_indices,
+        selector=selector,
+        distance_mode=distance_mode,
+        selection_spans_all_windows=_selection_spans_all_windows,
+    )
+    window_indices = selection_result.window_indices
+    panel_centers = selection_result.panel_centers
+    dropped_for_window_span = int(selection_result.stats["dropped_for_window_span"])
     panels_by_motif = []
     panels_smooth_by_motif = []
     panels_ml_by_motif = []
@@ -3048,7 +3394,7 @@ def plot_multisite_read_raster(
     reference_panels = panels_render_by_motif[ref_motif_pos]
 
     if sort_window_index is None:
-        sort_window_pos = 0
+        sort_window_pos = int(primary_window_index)
     else:
         sort_window_pos = int(sort_window_index)
         if sort_window_pos >= n_windows_effective:
@@ -3163,8 +3509,8 @@ def plot_multisite_read_raster(
                     "Inconsistent read ordering across multisite panels; panel row counts diverged."
                 )
     centers_sorted = [center_values[order] for center_values in panel_centers]
-    primary_centers = centers_sorted[0]
-    if effective_x_axis_mode == "centered":
+    primary_centers = centers_sorted[int(primary_window_index)]
+    if effective_coordinate_mode == "local_window":
         center_offsets = [
             np.zeros_like(center_values, dtype=float)
             for center_values in centers_sorted
@@ -3173,15 +3519,15 @@ def plot_multisite_read_raster(
         center_offsets = [
             center_values - primary_centers for center_values in centers_sorted
         ]
-    if render_mode == "heatmap" and effective_x_axis_mode == "relative_to_primary":
+    if render_mode == "heatmap" and effective_coordinate_mode == "relative_to_primary":
         for offsets in center_offsets:
             if offsets.size > 1 and not np.allclose(
                 offsets, offsets[0], equal_nan=True
             ):
                 raise ValueError(
-                    "Heatmap rendering with x_axis_mode='relative_to_primary' requires constant "
+                    "Heatmap rendering with coordinate_mode='relative_to_primary' requires constant "
                     "per-read offsets within each panel because imshow uses one rectangular extent. "
-                    "Use render_mode='scatter', x_axis_mode='centered', or fixed/explicit centers "
+                    "Use render_mode='scatter', coordinate_mode='local_window', or fixed offsets "
                     "producing constant offsets."
                 )
 
@@ -3204,12 +3550,17 @@ def plot_multisite_read_raster(
 
     P = panels_sorted_by_motif[0][0].shape[0]
     rows_before_downsample = int(P)
+    effective_downsample_method = (
+        ("uniform" if render_mode == "scatter" else "bin_mean")
+        if downsample_method == "auto"
+        else downsample_method
+    )
     downsampled = False
     downsample_factor = 1
     if max_rows is not None and max_rows < P:
         step = math.ceil(P / max_rows)
         downsample_factor = step
-        if downsample_method == "bin_mean":
+        if effective_downsample_method == "bin_mean":
             panels_sorted_by_motif = [
                 [bin_rows(panel, step) for panel in motif_panels]
                 for motif_panels in panels_sorted_by_motif
@@ -3227,6 +3578,26 @@ def plot_multisite_read_raster(
                 for motif_panels in panels_ml_sorted_by_motif
             ]
             center_offsets = [bin_vector(v, step) for v in center_offsets]
+        elif effective_downsample_method == "random":
+            rng = np.random.default_rng(downsample_seed)
+            keep = np.sort(rng.choice(P, size=max_rows, replace=False))
+            panels_sorted_by_motif = [
+                [panel[keep] for panel in motif_panels]
+                for motif_panels in panels_sorted_by_motif
+            ]
+            panels_raw_sorted_by_motif = [
+                [panel[keep] for panel in motif_panels]
+                for motif_panels in panels_raw_sorted_by_motif
+            ]
+            panels_smooth_sorted_by_motif = [
+                [panel[keep] for panel in motif_panels]
+                for motif_panels in panels_smooth_sorted_by_motif
+            ]
+            panels_ml_sorted_by_motif = [
+                [panel[keep] for panel in motif_panels]
+                for motif_panels in panels_ml_sorted_by_motif
+            ]
+            center_offsets = [vector[keep] for vector in center_offsets]
         else:
             keep = np.unique(np.round(np.linspace(0, P - 1, max_rows)).astype(int))
             panels_sorted_by_motif = [
@@ -3403,7 +3774,17 @@ def plot_multisite_read_raster(
         return axes[motif_pos, window_pos]
 
     first_mappable = None
+    first_mappable_by_motif: dict[int, Any] = {}
     threshold_legend_entries: dict[str, tuple[str, float]] = {}
+    if threshold_map is not None:
+        threshold_legend_entries = {
+            str(motif_labels_resolved[motif_id]): (
+                str(motif_color_map[motif_id]),
+                float(threshold_map[motif_id]),
+            )
+            for motif_id in motif_ids
+            if motif_id in threshold_map
+        }
     for motif_pos, motif_id in enumerate(motif_ids):
         motif_panels = panels_sorted_by_motif[motif_pos]
         motif_raw_panels = panels_raw_sorted_by_motif[motif_pos]
@@ -3440,10 +3821,6 @@ def plot_multisite_read_raster(
                     rows = rows[keep]
                     cols = cols[keep]
                     values = panel_ml[rows, cols]
-                    threshold_legend_entries[motif_label] = (
-                        str(motif_color_map[motif_id]),
-                        threshold_value,
-                    )
                 if rows.size > 0:
                     x_scatter = x_positions[cols] + row_offsets[rows]
                     in_window = (x_scatter >= window_lo) & (x_scatter <= window_hi)
@@ -3471,6 +3848,7 @@ def plot_multisite_read_raster(
                                 linewidths=0,
                                 rasterized=True,
                             )
+                            first_mappable_by_motif.setdefault(motif_id, first_mappable)
                         else:
                             ax.scatter(
                                 x_scatter,
@@ -3502,6 +3880,7 @@ def plot_multisite_read_raster(
                                 linewidths=0,
                                 rasterized=True,
                             )
+                            first_mappable_by_motif.setdefault(motif_id, first_mappable)
                         else:
                             ax.scatter(
                                 rows,
@@ -3565,6 +3944,11 @@ def plot_multisite_read_raster(
                     x_pad = max(1.0, 0.02 * (window_hi - window_lo + 1.0))
                     ax.set_xlim(window_lo - x_pad, window_hi + x_pad)
 
+            if window_pos == primary_window_index:
+                for spine in ax.spines.values():
+                    spine.set_linewidth(2.2)
+                    spine.set_edgecolor("black")
+
             if render_mode == "heatmap":
                 heatmap_title = (
                     f"{motif_label} | Window {window_pos + 1}"
@@ -3589,12 +3973,16 @@ def plot_multisite_read_raster(
                 if (not rotate) and len(motif_ids) > 1 and window_pos == 0:
                     ax.set_ylabel(f"{motif_label}\nPosition")
 
+    position_label = (
+        "Position relative to primary center (bp)"
+        if effective_coordinate_mode == "relative_to_primary"
+        else "Distance from window center (bp)"
+    )
     if rotate:
         bottom_axes = [
             _axis_for(motif_pos, n_windows_effective - 1)
             for motif_pos in range(len(motif_ids))
         ]
-        position_label = "Position relative to primary center (bp)"
         xlabel = (
             position_label
             if effective_axis_orientation == "position_x"
@@ -3619,7 +4007,7 @@ def plot_multisite_read_raster(
             for window_pos in range(n_windows_effective):
                 if effective_axis_orientation == "position_x":
                     _axis_for(motif_pos, window_pos).set_xlabel(
-                        "Position relative to primary center (bp)"
+                        position_label
                     )
                 else:
                     _axis_for(motif_pos, window_pos).set_xlabel("Reads (sorted)")
@@ -3635,37 +4023,70 @@ def plot_multisite_read_raster(
             first_mappable = first_axis.scatter(
                 [], [], c=[], cmap=fallback_cmap, vmin=vmin, vmax=vmax
             )
-        cbar = fig.colorbar(
-            first_mappable, ax=np.ravel(axes).tolist(), shrink=0.6, pad=0.02
-        )
         sigma_txt = f", σ={smooth_sigma_bp}" if smoothing == "gaussian" else ""
-        if render_mode == "scatter" and effective_scatter_color_values == "ml_score":
-            cbar.set_label(
-                f"normalized ML score (0-1)\\n{'downsampled' if downsampled else 'full'}"
-            )
-        elif render_mode == "scatter":
-            scale_label = "fraction modified signal"
-            smoothing_label = (
-                f"{smoothing}, win={smooth_win}{sigma_txt}"
-                if render_value_mode == "smoothed"
-                else "none"
-            )
-            cbar.set_label(
-                f"{scale_label} (values={render_value_mode}, smoother={smoothing_label})\\n"
-                f"{'downsampled' if downsampled else 'full'}"
-            )
+        if (
+            render_mode == "scatter"
+            and effective_scatter_color_values == "ml_score"
+            and len(motif_ids) > 1
+        ):
+            for motif_id in motif_ids:
+                motif_pos = motif_ids.index(motif_id)
+                if motif_id not in first_mappable_by_motif:
+                    first_mappable_by_motif[motif_id] = _axis_for(motif_pos, 0).scatter(
+                        [],
+                        [],
+                        c=[],
+                        cmap=ml_cmap_names[motif_id],
+                        vmin=vmin,
+                        vmax=vmax,
+                    )
+                cbar = fig.colorbar(
+                    first_mappable_by_motif[motif_id],
+                    ax=[
+                        _axis_for(motif_pos, window_pos)
+                        for window_pos in range(n_windows_effective)
+                    ],
+                    shrink=0.6,
+                    pad=0.02,
+                )
+                cbar.set_label(
+                    f"{motif_labels_resolved[motif_id]} normalized ML score (0-1)\\n"
+                    f"{'downsampled' if downsampled else 'full'}"
+                )
         else:
-            scale_label = "window signal heatmap"
-            smoothing_label = (
-                f"{smoothing}, win={smooth_win}{sigma_txt}"
-                if render_value_mode == "smoothed"
-                else "none"
+            cbar = fig.colorbar(
+                first_mappable, ax=np.ravel(axes).tolist(), shrink=0.6, pad=0.02
             )
-            cbar.set_label(
-                f"{scale_label} (per-read smoothing along position axis; "
-                f"values={render_value_mode}, smoother={smoothing_label})\\n"
-                f"{'downsampled' if downsampled else 'full'}"
-            )
+            if (
+                render_mode == "scatter"
+                and effective_scatter_color_values == "ml_score"
+            ):
+                cbar.set_label(
+                    f"normalized ML score (0-1)\\n{'downsampled' if downsampled else 'full'}"
+                )
+            elif render_mode == "scatter":
+                scale_label = "fraction modified signal"
+                smoothing_label = (
+                    f"{smoothing}, win={smooth_win}{sigma_txt}"
+                    if render_value_mode == "smoothed"
+                    else "none"
+                )
+                cbar.set_label(
+                    f"{scale_label} (values={render_value_mode}, smoother={smoothing_label})\\n"
+                    f"{'downsampled' if downsampled else 'full'}"
+                )
+            else:
+                scale_label = "window signal heatmap"
+                smoothing_label = (
+                    f"{smoothing}, win={smooth_win}{sigma_txt}"
+                    if render_value_mode == "smoothed"
+                    else "none"
+                )
+                cbar.set_label(
+                    f"{scale_label} (per-read smoothing along position axis; "
+                    f"values={render_value_mode}, smoother={smoothing_label})\\n"
+                    f"{'downsampled' if downsampled else 'full'}"
+                )
     else:
         from matplotlib.lines import Line2D
 
@@ -3694,8 +4115,9 @@ def plot_multisite_read_raster(
 
     return fig, {
         "pairs": panels_sorted_by_motif[0][0].shape[0],
+        **selection_result.stats,
         "downsampled": downsampled,
-        "downsample_method": (downsample_method if downsampled else "none"),
+        "downsample_method": (effective_downsample_method if downsampled else "none"),
         "downsample_factor": int(downsample_factor),
         "rows_before_downsample": rows_before_downsample,
         "rows_after_downsample": int(panels_sorted_by_motif[0][0].shape[0]),
@@ -3705,23 +4127,18 @@ def plot_multisite_read_raster(
         "render_values": render_value_mode,
         "scatter_color_values": effective_scatter_color_values,
         "axis_orientation": effective_axis_orientation,
-        "x_axis_mode": effective_x_axis_mode,
+        "coordinate_mode": effective_coordinate_mode,
         "sort_by": sort_by,
         "sort_window_index": sort_window_pos,
         "sort_descending": effective_sort_descending,
         "motifs_plotted": [motif_labels_resolved[m] for m in motif_ids],
         "n_windows": n_windows_effective,
-        "window_centers_bp": target_offsets.tolist()
-        if target_offsets is not None
-        else None,
-        "window_center_offsets": target_offsets.tolist()
-        if target_offsets is not None
-        else None,
+        "selection_mode": selector.mode,
+        "primary_window_index": int(primary_window_index),
+        "window_offsets_bp": target_offsets.tolist() if target_offsets is not None else None,
         "window_widths_bp": [int(value) for value in panel_widths_bp],
         "required_read_length_bp": required_read_length_bp,
         "min_read_length_bp": effective_min_read_length,
-        "window_match_tolerance_bp": match_tolerance_bp,
-        "center_tolerance_bp": match_tolerance_bp,
         "enforce_full_window_span": bool(enforce_full_window_span),
         "dropped_for_window_span": int(dropped_for_window_span),
         "read_order_consistent": True,
@@ -3750,7 +4167,9 @@ def plot_two_site_read_raster(
     *,
     second_site_offset_bp: int,
     window_width_bp: int | None = None,
-    window_match_tolerance_bp: int | None = None,
+    max_rows: int | None = 500,
+    downsample_method: str = "auto",
+    downsample_seed: int | None = None,
     **kwargs,
 ):
     """
@@ -3760,23 +4179,36 @@ def plot_two_site_read_raster(
         read_windows: ReadWindowExtractionResult from extract_read_windows / build_multimotif_read_windows
         second_site_offset_bp: secondary site center (bp) relative to the primary site at 0
         window_width_bp: common width (bp) applied to both windows when provided
-        window_match_tolerance_bp: tolerance used when matching explicit centers
+        max_rows: cap displayed reads; pass None to show all rows
+        downsample_method: "auto" uses uniform read sampling for scatter and bin-mean for heatmap
+        downsample_seed: seed for reproducible random downsampling
         **kwargs: forwarded to plot_multisite_read_raster
     """
 
-    if "window_centers_bp" in kwargs or "window_center_offsets" in kwargs:
+    if (
+        "window_offsets_bp" in kwargs
+        or "selection_mode" in kwargs
+        or "site_selection" in kwargs
+    ):
         raise ValueError(
-            "plot_two_site_read_raster manages centers internally; do not pass window_centers_bp."
+            "plot_two_site_read_raster manages fixed offsets internally; do not pass window_offsets_bp, selection_mode, or site_selection."
         )
     if "n_windows" in kwargs:
         raise ValueError("plot_two_site_read_raster always uses exactly two windows.")
+    if "primary_window_index" in kwargs:
+        raise ValueError("plot_two_site_read_raster always uses window 1 as primary.")
 
     forwarded: dict[str, Any] = dict(kwargs)
-    forwarded["window_centers_bp"] = [0, int(second_site_offset_bp)]
+    forwarded["max_rows"] = max_rows
+    forwarded["downsample_method"] = downsample_method
+    forwarded["downsample_seed"] = downsample_seed
+    forwarded["site_selection"] = {
+        "mode": "fixed_offsets",
+        "window_offsets_bp": [0, int(second_site_offset_bp)],
+        "primary_window_index": 0,
+    }
     if window_width_bp is not None:
         forwarded["window_widths_bp"] = [int(window_width_bp), int(window_width_bp)]
-    if window_match_tolerance_bp is not None:
-        forwarded["window_match_tolerance_bp"] = int(window_match_tolerance_bp)
     return plot_multisite_read_raster(read_windows, n_windows=2, **forwarded)
 
 

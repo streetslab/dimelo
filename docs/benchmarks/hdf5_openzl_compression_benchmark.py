@@ -19,12 +19,12 @@ from typing import Any
 import h5py
 import numpy as np
 
+from dimelo.load_processed import read_vectors_from_hdf5
+
 try:
     import openzl
 except ImportError:  # pragma: no cover
     openzl = None
-
-from dimelo.load_processed import read_vectors_from_hdf5
 
 
 DEFAULT_MOTIFS = ["A,0", "CG,0"]
