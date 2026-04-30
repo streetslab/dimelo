@@ -1013,7 +1013,7 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
         origin="upper",
         interpolation="nearest",
     )
-    ax.figure.colorbar(
+    colorbar = ax.figure.colorbar(
         image,
         ax=ax,
         label=value_mode.replace("_", " ").title(),
@@ -1146,7 +1146,8 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
             row_annotation_columns=annotation_columns,
             group_region_labels=group_region_labels,
             region_label_mode=region_label_mode,
-        )
+        ),
+        pad=14,
     )
 
     if annotation_values_by_column and n_regions > 0:
@@ -1241,19 +1242,16 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
             )
             strip_ax.set_xticks([])
             strip_ax.set_yticks([])
-            strip_ax.set_title(
-                _row_annotation_title(
-                    annotation_column,
-                    row_annotation_title=row_annotation_title,
-                    row_annotation_titles=row_annotation_titles,
-                    n_columns=len(annotation_values_by_column),
-                ),
-                fontsize=7,
-                pad=3,
-                rotation=90,
-                x=0.5,
-                y=1.01,
+            strip_title = _row_annotation_title(
+                annotation_column,
+                row_annotation_title=row_annotation_title,
+                row_annotation_titles=row_annotation_titles,
+                n_columns=len(annotation_values_by_column),
             )
+            strip_ax.set_xlabel(strip_title, fontsize=7, labelpad=8)
+            strip_ax.xaxis.label.set_rotation(90)
+            strip_ax.xaxis.label.set_verticalalignment("top")
+            strip_ax.xaxis.label.set_horizontalalignment("center")
 
             legend_handles = [
                 Patch(
@@ -1264,19 +1262,20 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
                 for value in ordered_annotations
             ]
             if legend_handles:
-                legend = ax.legend(
+                fig.canvas.draw()
+                legend_x = max(
+                    colorbar.ax.get_position().x1 + 0.055,
+                    ax.get_position().x1 + 0.12,
+                )
+                legend = fig.legend(
                     handles=legend_handles,
-                    title=_row_annotation_title(
-                        annotation_column,
-                        row_annotation_title=row_annotation_title,
-                        row_annotation_titles=row_annotation_titles,
-                        n_columns=len(annotation_values_by_column),
-                    ),
+                    title=strip_title,
                     loc="upper left",
-                    bbox_to_anchor=(1.18, 1.0 - (0.18 * strip_idx)),
+                    bbox_to_anchor=(legend_x, ax.get_position().y1 - (0.16 * strip_idx)),
+                    bbox_transform=fig.transFigure,
                     frameon=False,
                 )
-                ax.add_artist(legend)
+                fig.add_artist(legend)
     return fig, ax
 
 

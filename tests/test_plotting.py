@@ -1814,11 +1814,20 @@ def test_plot_read_cluster_region_association_heatmap_matplotlib_supports_multip
         if axis is not ax and axis.get_position().x1 <= main_pos.x0
     ]
     assert len(left_side_axes) == 2
-    assert sorted(axis.get_title() for axis in left_side_axes) == [
+    assert sorted(axis.get_xlabel() for axis in left_side_axes) == [
         "Source bed",
         "Strand",
     ]
     assert max(axis.get_position().x1 for axis in left_side_axes) <= main_pos.x0
+    fig.canvas.draw()
+    legend_x0 = [
+        legend.get_window_extent(fig.canvas.get_renderer())
+        .transformed(fig.transFigure.inverted())
+        .x0
+        for legend in fig.legends
+    ]
+    assert len(legend_x0) == 2
+    assert max(legend_x0) - min(legend_x0) < 0.01
 
 
 def test_plot_read_cluster_region_association_heatmap_preserves_annotations_with_cluster_sort_override():
