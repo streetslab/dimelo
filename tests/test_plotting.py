@@ -9,6 +9,7 @@ from dimelo import (
     plot_enrichment_profile,
     plot_reads,
     plotting,
+    plotting_matplotlib,
 )
 from dimelo.models import (
     ContrastSpec,
@@ -1464,6 +1465,111 @@ def test_prepare_read_cluster_region_association_data_supports_association_stren
     assert payload["metadata"]["association_strength_aggregate"] == "max"
 
 
+def test_prepare_read_cluster_region_association_data_cluster_sort_arbitrary_labels():
+    table = pd.DataFrame(
+        {
+            "region_id": ["r1", "r1", "r1", "r2", "r2", "r2"],
+            "cluster": ["10", "alpha", 2, "10", "alpha", 2],
+            "fraction": [0.1, 0.8, 0.3, 0.9, 0.1, 0.4],
+            "count": [1, 8, 3, 9, 1, 4],
+            "total_reads": [10, 10, 10, 10, 10, 10],
+        }
+    )
+
+    natural = plotting.prepare_read_cluster_region_association_data(
+        table,
+        cluster_sort="natural",
+    )
+    total = plotting.prepare_read_cluster_region_association_data(
+        table,
+        cluster_sort="total_association",
+    )
+    explicit = plotting.prepare_read_cluster_region_association_data(
+        table,
+        cluster_order=["alpha"],
+    )
+
+    assert natural["metadata"]["cluster_order"] == ["10", 2, "alpha"]
+    assert total["metadata"]["cluster_order"] == ["10", "alpha", 2]
+    assert explicit["metadata"]["cluster_order"] == ["alpha", "10", 2]
+    assert natural["matrix_table"].columns.tolist() == ["region_id", "10", 2, "alpha"]
+
+
+def test_plot_read_cluster_region_association_heatmap_cluster_order_override():
+    table = pd.DataFrame(
+        {
+            "region_id": ["r1", "r1", "r2", "r2"],
+            "cluster": ["b", "a", "b", "a"],
+            "fraction": [0.7, 0.3, 0.2, 0.8],
+            "count": [7, 3, 2, 8],
+            "total_reads": [10, 10, 10, 10],
+        }
+    )
+    payload = plotting.prepare_read_cluster_region_association_data(table)
+
+    _fig, ax = plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
+        payload,
+        cluster_order=["a", "b"],
+    )
+
+    assert [tick.get_text() for tick in ax.get_xticklabels()] == ["a", "b"]
+
+
+def test_prepare_read_cluster_region_association_data_supports_hierarchical_region_sort():
+    table = pd.DataFrame(
+        {
+            "region_id": [
+                "chr2:10-20:+", "chr2:10-20:+",
+                "chr1:10-20:+", "chr1:10-20:+",
+                "chr1:30-40:+", "chr1:30-40:+",
+            ],
+            "cluster": ["A", "B", "A", "B", "A", "B"],
+            "fraction": [0.9, 0.1, 0.2, 0.8, 0.7, 0.3],
+            "count": [9, 1, 2, 8, 7, 3],
+            "total_reads": [10, 10, 10, 10, 10, 10],
+        }
+    )
+
+    payload = plotting.prepare_read_cluster_region_association_data(
+        table,
+        region_sort=["cluster_fraction", "genomic"],
+        cluster_order=["A", "B"],
+    )
+
+    assert payload["metadata"]["region_sort"] == ["cluster_fraction", "genomic"]
+    assert payload["matrix_table"]["region_id"].tolist() == [
+        "chr2:10-20:+",
+        "chr1:30-40:+",
+        "chr1:10-20:+",
+    ]
+
+
+def test_plot_read_cluster_region_association_heatmap_region_sort_list_override():
+    table = pd.DataFrame(
+        {
+            "region_id": ["chr2:10-20:+", "chr1:10-20:+"],
+            "cluster": ["A", "A"],
+            "fraction": [0.9, 0.2],
+            "count": [9, 2],
+            "total_reads": [10, 10],
+        }
+    )
+    payload = plotting.prepare_read_cluster_region_association_data(
+        table, region_sort="input"
+    )
+
+    _fig, ax = plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
+        payload,
+        region_sort=["genomic"],
+        region_label_mode="region_id",
+    )
+
+    assert [tick.get_text() for tick in ax.get_yticklabels()] == [
+        "chr1:10-20:+",
+        "chr2:10-20:+",
+    ]
+
+
 def test_prepare_read_cluster_region_association_data_accepts_legacy_wide_region_summary():
     legacy_summary = pd.DataFrame(
         [
@@ -1588,6 +1694,41 @@ def test_plot_read_cluster_region_association_heatmap_matplotlib_accepts_region_
     assert ytick_text[0].startswith("chr1:100-110:+")
 
 
+def test_plot_read_cluster_region_association_heatmap_title_reflects_effective_flags():
+    table = pd.DataFrame(
+        {
+            "region_id": ["chr1:10-20:+", "chr1:10-20:+", "chr2:10-20:+", "chr2:10-20:+"],
+            "cluster": ["b", "a", "b", "a"],
+            "fraction": [0.7, 0.3, 0.2, 0.8],
+            "count": [7, 3, 2, 8],
+            "total_reads": [10, 10, 10, 10],
+        }
+    )
+    payload = plotting.prepare_read_cluster_region_association_data(
+        table,
+        region_sort="input",
+        cluster_sort="input",
+    )
+
+    _fig, ax = plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
+        payload,
+        region_sort=["association_strength", "genomic"],
+        association_strength_aggregate="mean",
+        cluster_sort="natural",
+        row_annotation_column="source_label",
+        region_label_mode="chromosome",
+        group_region_labels=True,
+    )
+
+    title = ax.get_title()
+    assert "Read-cluster association (fraction)" in title
+    assert "regions: association_strength > genomic" in title
+    assert "clusters: natural" in title
+    assert "strength: mean" in title
+    assert "annotated by source_label" in title
+    assert "grouped labels" in title
+
+
 def test_plot_read_cluster_region_association_heatmap_matplotlib_supports_row_annotations():
     from dimelo import plotting_matplotlib
 
@@ -1610,6 +1751,7 @@ def test_plot_read_cluster_region_association_heatmap_matplotlib_supports_row_an
 
     assert fig is not None
     assert ax is not None
+    assert ax.get_ylabel() == ""
     ytick_text = [tick.get_text() for tick in ax.get_yticklabels()]
     assert "on_target" in ytick_text[0]
     assert "off_target" in ytick_text[1]
@@ -1622,6 +1764,96 @@ def test_plot_read_cluster_region_association_heatmap_matplotlib_supports_row_an
     assert left_side_axes
     # The source-bed strip should live fully to the left of the heatmap.
     assert max(axis.get_position().x1 for axis in left_side_axes) <= main_pos.x0
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    tick_left = min(
+        tick.get_window_extent(renderer).transformed(fig.transFigure.inverted()).x0
+        for tick in ax.get_yticklabels()
+        if tick.get_text()
+    )
+    assert max(axis.get_position().x1 for axis in left_side_axes) < tick_left - 0.01
+
+
+def test_plot_read_cluster_region_association_heatmap_matplotlib_supports_multiple_row_annotations():
+    from dimelo import plotting_matplotlib
+
+    payload = plotting.prepare_read_cluster_region_association_data(
+        _make_read_cluster_region_association_table(),
+        region_sort="genomic",
+    )
+    axis_table = payload["region_axis_table"].copy()
+    axis_table["source_label"] = ["on_target", "off_target"]
+    axis_table["strand_group"] = ["plus", "minus"]
+    payload["region_axis_table"] = axis_table
+
+    fig, ax = (
+        plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
+            payload,
+            row_annotation_columns=["source_label", "strand_group"],
+            row_annotation_titles={
+                "source_label": "Source bed",
+                "strand_group": "Strand",
+            },
+            row_annotation_palettes={
+                "source_label": {
+                    "on_target": "#D95F02",
+                    "off_target": "#1B9E77",
+                },
+                "strand_group": {"plus": "#4C78A8", "minus": "#F58518"},
+            },
+        )
+    )
+
+    assert fig is not None
+    assert ax is not None
+    assert "annotated by source_label, strand_group" in ax.get_title()
+    main_pos = ax.get_position()
+    left_side_axes = [
+        axis
+        for axis in fig.axes
+        if axis is not ax and axis.get_position().x1 <= main_pos.x0
+    ]
+    assert len(left_side_axes) == 2
+    assert sorted(axis.get_title() for axis in left_side_axes) == [
+        "Source bed",
+        "Strand",
+    ]
+    assert max(axis.get_position().x1 for axis in left_side_axes) <= main_pos.x0
+
+
+def test_plot_read_cluster_region_association_heatmap_preserves_annotations_with_cluster_sort_override():
+    from dimelo import plotting_matplotlib
+
+    table = pd.DataFrame(
+        {
+            "region_id": ["r1", "r1", "r2", "r2"],
+            "cluster": ["b", "a", "b", "a"],
+            "fraction": [0.7, 0.3, 0.2, 0.8],
+            "count": [7, 3, 2, 8],
+            "total_reads": [10, 10, 10, 10],
+        }
+    )
+    payload = plotting.prepare_read_cluster_region_association_data(table)
+    axis_table = payload["region_axis_table"].copy()
+    axis_table["source_label"] = ["on_target", "off_target"]
+    axis_table["strand_group"] = ["plus", "minus"]
+    payload["region_axis_table"] = axis_table
+
+    fig, ax = (
+        plotting_matplotlib.plot_read_cluster_region_association_heatmap_matplotlib(
+            payload,
+            cluster_sort="natural",
+            row_annotation_columns=["source_label", "strand_group"],
+        )
+    )
+
+    main_pos = ax.get_position()
+    left_side_axes = [
+        axis
+        for axis in fig.axes
+        if axis is not ax and axis.get_position().x1 <= main_pos.x0
+    ]
+    assert len(left_side_axes) == 2
 
 
 def test_plot_read_cluster_region_association_heatmap_matplotlib_grouped_region_labels():

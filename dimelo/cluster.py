@@ -58,6 +58,22 @@ DEFAULT_DENSITY_WINDOWS = (
     ("density_minus150", -250, -50),
 )
 
+DEFAULT_RICH_FEATURE_SPEC: dict[str, Any] = {
+    "motif_mode": "per_motif",
+    "motif_count": 1,
+    "motif_labels": None,
+    "pooled": True,
+    "pca": {"enabled": True, "n_components": 6, "scope": "pooled"},
+    "summary": {"enabled": True},
+    "densities": {"enabled": True, "windows": DEFAULT_DENSITY_WINDOWS},
+    "asymmetry": {"enabled": True, "spans": (100, 300, 500)},
+    "center_edge": {"enabled": True, "center_bp": 100, "edge_bp": 200},
+    "autocorr": {"enabled": True, "lags": DEFAULT_AUTOCORR_LAGS},
+    "fft": {"enabled": True, "periods_bp": (10, 50, 100, 150, 200)},
+    "peaks": {"enabled": False, "prominence": 0.005},
+    "cross_motif": {"enabled": True},
+}
+
 
 @dataclass
 class ReadWindowExtractionConfig:
@@ -1649,6 +1665,308 @@ def compute_autocorrelation_feature(vec: np.ndarray, lag: int) -> float:
     return float(np.dot(centered[-lag:], centered[:lag]) / denom)
 
 
+def _merge_feature_spec(feature_spec: dict[str, Any] | None) -> dict[str, Any]:
+    spec = {
+        key: (dict(value) if isinstance(value, dict) else value)
+        for key, value in DEFAULT_RICH_FEATURE_SPEC.items()
+    }
+    if feature_spec:
+        for key, value in feature_spec.items():
+            if isinstance(value, dict) and isinstance(spec.get(key), dict):
+                merged = dict(spec[key])
+                merged.update(value)
+                spec[key] = merged
+            else:
+                spec[key] = value
+    return spec
+
+
+def _feature_enabled(spec: dict[str, Any], key: str) -> bool:
+    value = spec.get(key, {})
+    if isinstance(value, dict):
+        return bool(value.get("enabled", False))
+    return bool(value)
+
+
+def _window_mean(matrix: np.ndarray, center: int, start: int, end: int) -> np.ndarray:
+    start_idx = max(0, center + int(start))
+    end_idx = min(matrix.shape[1], center + int(end))
+    if end_idx <= start_idx:
+        return np.zeros(matrix.shape[0], dtype=float)
+    return matrix[:, start_idx:end_idx].mean(axis=1)
+
+
+def _safe_ratio(numerator: np.ndarray, denominator: np.ndarray) -> np.ndarray:
+    return np.divide(
+        numerator,
+        denominator,
+        out=np.zeros_like(numerator, dtype=float),
+        where=np.abs(denominator) > 1e-12,
+    )
+
+
+def _fft_period_power(matrix: np.ndarray, period_bp: float) -> np.ndarray:
+    if matrix.shape[1] < 3 or period_bp <= 0:
+        return np.zeros(matrix.shape[0], dtype=float)
+    centered = matrix - matrix.mean(axis=1, keepdims=True)
+    power = np.abs(np.fft.rfft(centered, axis=1)) ** 2
+    freqs = np.fft.rfftfreq(matrix.shape[1], d=1.0)
+    target = 1.0 / period_bp
+    idx = int(np.argmin(np.abs(freqs - target)))
+    total = power[:, 1:].sum(axis=1)
+    if idx == 0:
+        return np.zeros(matrix.shape[0], dtype=float)
+    return _safe_ratio(power[:, idx], total)
+
+
+def _append_feature(
+    columns: list[np.ndarray],
+    names: list[str],
+    rows: list[dict[str, Any]] | None,
+    values: np.ndarray,
+    name: str,
+    *,
+    family: str,
+    motif: str,
+    scope: str,
+    window: str = "full",
+) -> None:
+    arr = np.asarray(values, dtype=float)
+    if arr.ndim == 1:
+        arr = arr[:, None]
+    columns.append(arr)
+    force_index = name == "pca" or name.endswith("__pca")
+    if arr.shape[1] == 1 and not force_index:
+        names.append(name)
+        if rows is not None:
+            rows.append(
+                {
+                    "feature_name": name,
+                    "family": family,
+                    "motif": motif,
+                    "scope": scope,
+                    "window": window,
+                }
+            )
+    else:
+        for i in range(arr.shape[1]):
+            col_name = f"{name}_{i}"
+            names.append(col_name)
+            if rows is not None:
+                rows.append(
+                    {
+                        "feature_name": col_name,
+                        "family": family,
+                        "motif": motif,
+                        "scope": scope,
+                        "window": window,
+                    }
+                )
+
+
+def _motif_views(
+    data_matrix: np.ndarray,
+    val_matrix: np.ndarray | None,
+    *,
+    motif_count: int,
+    motif_labels: Sequence[str] | None,
+) -> list[tuple[str, np.ndarray, np.ndarray | None]]:
+    motif_count = max(1, int(motif_count))
+    if data_matrix.shape[1] % motif_count != 0:
+        raise ValueError(
+            "data_matrix width must be divisible by motif_count for motif-specific features."
+        )
+    width = data_matrix.shape[1] // motif_count
+    labels = (
+        list(motif_labels)
+        if motif_labels is not None
+        else [f"motif_{i}" for i in range(motif_count)]
+    )
+    if len(labels) != motif_count:
+        raise ValueError("motif_labels length must match motif_count.")
+    views = []
+    for i, label in enumerate(labels):
+        sl = slice(i * width, (i + 1) * width)
+        views.append(
+            (
+                str(label),
+                data_matrix[:, sl],
+                val_matrix[:, sl] if val_matrix is not None else None,
+            )
+        )
+    return views
+
+
+def _append_rich_features_for_view(
+    columns: list[np.ndarray],
+    names: list[str],
+    rows: list[dict[str, Any]] | None,
+    matrix: np.ndarray,
+    val_matrix: np.ndarray | None,
+    spec: dict[str, Any],
+    *,
+    prefix: str,
+    motif: str,
+    scope: str,
+    peak_prominence: float,
+) -> None:
+    n_reads, width = matrix.shape
+    center = width // 2
+
+    if _feature_enabled(spec, "summary"):
+        q25 = np.percentile(matrix, 25, axis=1)
+        q75 = np.percentile(matrix, 75, axis=1)
+        for label, values in [
+            ("mean", matrix.mean(axis=1)),
+            ("var", matrix.var(axis=1)),
+            ("median", np.median(matrix, axis=1)),
+            ("q25", q25),
+            ("q75", q75),
+            ("iqr", q75 - q25),
+        ]:
+            _append_feature(
+                columns,
+                names,
+                rows,
+                values,
+                f"{prefix}__{label}",
+                family="summary",
+                motif=motif,
+                scope=scope,
+            )
+        if val_matrix is not None:
+            valid_sum = val_matrix.sum(axis=1)
+            frac = _safe_ratio(matrix.sum(axis=1), valid_sum)
+            _append_feature(
+                columns,
+                names,
+                rows,
+                frac,
+                f"{prefix}__mod_fraction",
+                family="summary",
+                motif=motif,
+                scope=scope,
+            )
+
+    if _feature_enabled(spec, "densities"):
+        windows = spec["densities"].get("windows", DEFAULT_DENSITY_WINDOWS)
+        for label, start, end in windows:
+            _append_feature(
+                columns,
+                names,
+                rows,
+                _window_mean(matrix, center, start, end),
+                f"{prefix}__{label}",
+                family="density",
+                motif=motif,
+                scope=scope,
+                window=f"{start}..{end}",
+            )
+
+    if _feature_enabled(spec, "asymmetry"):
+        for span in spec["asymmetry"].get("spans", (100, 300, 500)):
+            left = _window_mean(matrix, center, -int(span), 0)
+            right = _window_mean(matrix, center, 0, int(span))
+            _append_feature(
+                columns,
+                names,
+                rows,
+                right - left,
+                f"{prefix}__right_minus_left_pm{span}",
+                family="asymmetry",
+                motif=motif,
+                scope=scope,
+                window=f"-{span}..{span}",
+            )
+
+    if _feature_enabled(spec, "center_edge"):
+        center_bp = int(spec["center_edge"].get("center_bp", 100))
+        edge_bp = int(spec["center_edge"].get("edge_bp", 200))
+        center_vals = _window_mean(matrix, center, -center_bp, center_bp)
+        left_edge = _window_mean(matrix, center, -width // 2, -width // 2 + edge_bp)
+        right_edge = _window_mean(matrix, center, width // 2 - edge_bp, width // 2)
+        edge_vals = (left_edge + right_edge) / 2.0
+        _append_feature(
+            columns,
+            names,
+            rows,
+            center_vals - edge_vals,
+            f"{prefix}__center_minus_edge",
+            family="center_edge",
+            motif=motif,
+            scope=scope,
+            window=f"center_pm{center_bp}_edge{edge_bp}",
+        )
+        _append_feature(
+            columns,
+            names,
+            rows,
+            _safe_ratio(center_vals, edge_vals),
+            f"{prefix}__center_edge_ratio",
+            family="center_edge",
+            motif=motif,
+            scope=scope,
+            window=f"center_pm{center_bp}_edge{edge_bp}",
+        )
+
+    if _feature_enabled(spec, "autocorr"):
+        for lag in spec["autocorr"].get("lags", DEFAULT_AUTOCORR_LAGS):
+            values = np.array([compute_autocorrelation_feature(row, int(lag)) for row in matrix])
+            _append_feature(
+                columns,
+                names,
+                rows,
+                values,
+                f"{prefix}__autocorr_{lag}",
+                family="autocorr",
+                motif=motif,
+                scope=scope,
+            )
+
+    if _feature_enabled(spec, "fft"):
+        for period in spec["fft"].get("periods_bp", (10, 50, 100, 150, 200)):
+            _append_feature(
+                columns,
+                names,
+                rows,
+                _fft_period_power(matrix, float(period)),
+                f"{prefix}__fft_power_period_{period}bp",
+                family="fft",
+                motif=motif,
+                scope=scope,
+            )
+
+    if _feature_enabled(spec, "peaks") and find_peaks is not None:
+        prominence = float(spec["peaks"].get("prominence", peak_prominence))
+        peak_counts = np.zeros(n_reads, dtype=float)
+        peak_prominences = np.zeros(n_reads, dtype=float)
+        for row_idx, row in enumerate(matrix):
+            peaks, props = find_peaks(row, prominence=prominence)
+            peak_counts[row_idx] = len(peaks)
+            if peaks.size > 0:
+                peak_prominences[row_idx] = float(np.mean(props["prominences"]))
+        _append_feature(
+            columns,
+            names,
+            rows,
+            peak_counts,
+            f"{prefix}__peak_count",
+            family="peaks",
+            motif=motif,
+            scope=scope,
+        )
+        _append_feature(
+            columns,
+            names,
+            rows,
+            peak_prominences,
+            f"{prefix}__peak_prominence",
+            family="peaks",
+            motif=motif,
+            scope=scope,
+        )
+
+
 def read_window_feature_matrix(
     result: ReadWindowExtractionResult,
     *,
@@ -1660,7 +1978,21 @@ def read_window_feature_matrix(
     use_peak_features: bool = False,
     require_nonzero_valid: bool = False,
     min_valid_fraction: float = 0.0,
-) -> tuple[np.ndarray, list[str]]:
+    feature_spec: dict[str, Any] | None = None,
+    motif_count: int | None = None,
+    motif_labels: Sequence[str] | None = None,
+    scale_features: bool = False,
+    scaling_method: str = "standard",
+    family_weighting: str | None = None,
+    family_weights: dict[str, float] | None = None,
+    unscaled_families: Sequence[str] | None = None,
+    return_feature_table: bool = False,
+    return_scale_table: bool = False,
+) -> (
+    tuple[np.ndarray, list[str]]
+    | tuple[np.ndarray, list[str], pd.DataFrame]
+    | tuple[np.ndarray, list[str], pd.DataFrame, pd.DataFrame]
+):
     """
     Convert read windows into an augmented feature matrix including PCA components,
     autocorrelation, density summaries, and basic statistics.
@@ -1668,6 +2000,8 @@ def read_window_feature_matrix(
     Set use_peak_features=True to append peak counts/prominences (requires SciPy).
     If require_nonzero_valid is True, rows with no valid sites (or below min_valid_fraction)
     are dropped before feature computation (requires val_matrix to be present).
+    Set scale_features=True to return a scaled matrix suitable for distance-based
+    methods such as k-means. Use return_scale_table=True to inspect the scaling.
     """
 
     data_matrix = result.data_matrix.astype(float, copy=False)
@@ -1688,6 +2022,132 @@ def read_window_feature_matrix(
 
     columns: list[np.ndarray] = []
     names: list[str] = []
+    build_feature_table = return_feature_table or scale_features
+    feature_rows: list[dict[str, Any]] | None = [] if build_feature_table else None
+
+    if feature_spec is not None:
+        spec = _merge_feature_spec(feature_spec)
+        spec_motif_count = int(motif_count or spec.get("motif_count") or 1)
+        spec_motif_labels = motif_labels or spec.get("motif_labels")
+        views = _motif_views(
+            data_matrix,
+            val_matrix,
+            motif_count=spec_motif_count,
+            motif_labels=spec_motif_labels,
+        )
+        motif_mode = str(spec.get("motif_mode", "per_motif"))
+        include_pooled = bool(spec.get("pooled", motif_mode in {"pooled", "both"}))
+
+        pca_spec = spec.get("pca", {})
+        if isinstance(pca_spec, dict) and pca_spec.get("enabled", False):
+            pca_scope = str(pca_spec.get("scope", "pooled"))
+            pca_n = int(pca_spec.get("n_components", n_pca))
+            if pca_scope == "per_motif":
+                pca_views = views
+            else:
+                pca_views = [("pooled", data_matrix, val_matrix)]
+            for label, matrix, _view_val in pca_views:
+                n_components = min(pca_n, n_reads, matrix.shape[1])
+                if n_components <= 0:
+                    continue
+                from sklearn.decomposition import PCA
+
+                pca = PCA(n_components=n_components, random_state=random_state)
+                pca_vals = pca.fit_transform(matrix)
+                _append_feature(
+                    columns,
+                    names,
+                    feature_rows,
+                    pca_vals,
+                    f"{label}__pca",
+                    family="pca",
+                    motif=label,
+                    scope=pca_scope,
+                )
+
+        if motif_mode in {"per_motif", "both"}:
+            for label, matrix, view_val in views:
+                _append_rich_features_for_view(
+                    columns,
+                    names,
+                    feature_rows,
+                    matrix,
+                    view_val,
+                    spec,
+                    prefix=label,
+                    motif=label,
+                    scope="per_motif",
+                    peak_prominence=peak_prominence,
+                )
+
+        if include_pooled:
+            _append_rich_features_for_view(
+                columns,
+                names,
+                feature_rows,
+                data_matrix,
+                val_matrix,
+                spec,
+                prefix="pooled",
+                motif="pooled",
+                scope="pooled",
+                peak_prominence=peak_prominence,
+            )
+
+        if (
+            spec_motif_count > 1
+            and isinstance(spec.get("cross_motif"), dict)
+            and spec["cross_motif"].get("enabled", False)
+        ):
+            for (left_label, left, _), (right_label, right, _) in combinations(views, 2):
+                left_mean = left.mean(axis=1)
+                right_mean = right.mean(axis=1)
+                _append_feature(
+                    columns,
+                    names,
+                    feature_rows,
+                    left_mean - right_mean,
+                    f"{left_label}_minus_{right_label}__mean",
+                    family="cross_motif",
+                    motif=f"{left_label}|{right_label}",
+                    scope="cross_motif",
+                )
+                corrs = np.zeros(n_reads, dtype=float)
+                for row_idx in range(n_reads):
+                    if np.std(left[row_idx]) > 0 and np.std(right[row_idx]) > 0:
+                        corrs[row_idx] = float(np.corrcoef(left[row_idx], right[row_idx])[0, 1])
+                _append_feature(
+                    columns,
+                    names,
+                    feature_rows,
+                    corrs,
+                    f"{left_label}_{right_label}__correlation",
+                    family="cross_motif",
+                    motif=f"{left_label}|{right_label}",
+                    scope="cross_motif",
+                )
+
+        if not columns:
+            raise ValueError("feature_spec produced no features.")
+        feature_matrix = np.hstack(columns)
+        table = pd.DataFrame(feature_rows)
+        if scale_features:
+            feature_matrix, scale_table = scale_feature_matrix(
+                feature_matrix,
+                names,
+                feature_table=table,
+                method=scaling_method,
+                family_weighting=family_weighting,
+                family_weights=family_weights,
+                unscaled_families=unscaled_families,
+            )
+            if return_feature_table or return_scale_table:
+                if return_scale_table:
+                    return feature_matrix, names, table, scale_table
+                return feature_matrix, names, table
+        if return_feature_table:
+            return feature_matrix, names, table
+        return feature_matrix, names
 
     n_components = min(n_pca, n_reads, window_size)
     if n_components > 0:
@@ -1695,8 +2155,16 @@ def read_window_feature_matrix(
 
         pca = PCA(n_components=n_components, random_state=random_state)
         pca_vals = pca.fit_transform(data_matrix)
-        columns.append(pca_vals)
-        names.extend([f"pca_{i}" for i in range(n_components)])
+        _append_feature(
+            columns,
+            names,
+            feature_rows,
+            pca_vals,
+            "pca",
+            family="pca",
+            motif="pooled",
+            scope="legacy_pooled",
+        )
 
     # Precompute cumulative sums to accelerate density windows
     cumsum = np.cumsum(data_matrix, axis=1)
@@ -1706,8 +2174,16 @@ def read_window_feature_matrix(
         values = np.array(
             [compute_autocorrelation_feature(row, lag) for row in data_matrix]
         )
-        columns.append(values[:, None])
-        names.append(f"autocorr_{lag}")
+        _append_feature(
+            columns,
+            names,
+            feature_rows,
+            values,
+            f"autocorr_{lag}",
+            family="autocorr",
+            motif="pooled",
+            scope="legacy_pooled",
+        )
 
     for label, start, end in density_windows:
         start_idx = max(0, center + start)
@@ -1718,8 +2194,17 @@ def read_window_feature_matrix(
             length = end_idx - start_idx
             window_sum = cumsum[:, end_idx] - cumsum[:, start_idx]
             values = window_sum / length
-        columns.append(values[:, None])
-        names.append(label)
+        _append_feature(
+            columns,
+            names,
+            feature_rows,
+            values,
+            label,
+            family="density",
+            motif="pooled",
+            scope="legacy_pooled",
+            window=f"{start}..{end}",
+        )
 
     global_mean = data_matrix.mean(axis=1)
     global_var = data_matrix.var(axis=1)
@@ -1727,26 +2212,24 @@ def read_window_feature_matrix(
     q25 = np.percentile(data_matrix, 25, axis=1)
     q75 = np.percentile(data_matrix, 75, axis=1)
 
-    columns.extend(
-        [
-            global_mean[:, None],
-            global_var[:, None],
-            global_median[:, None],
-            q25[:, None],
-            q75[:, None],
-            (q75 - q25)[:, None],
-        ]
-    )
-    names.extend(
-        [
-            "global_mean",
-            "global_var",
-            "global_median",
-            "q25",
-            "q75",
-            "iqr",
-        ]
-    )
+    for label, values in [
+        ("global_mean", global_mean),
+        ("global_var", global_var),
+        ("global_median", global_median),
+        ("q25", q25),
+        ("q75", q75),
+        ("iqr", q75 - q25),
+    ]:
+        _append_feature(
+            columns,
+            names,
+            feature_rows,
+            values,
+            label,
+            family="summary",
+            motif="pooled",
+            scope="legacy_pooled",
+        )
 
     if val_matrix is not None:
         valid_sum = val_matrix.sum(axis=1)
@@ -1757,8 +2240,16 @@ def read_window_feature_matrix(
                 out=np.zeros_like(valid_sum),
                 where=valid_sum > 0,
             )
-        columns.append(frac[:, None])
-        names.append("global_mod_fraction")
+        _append_feature(
+            columns,
+            names,
+            feature_rows,
+            frac,
+            "global_mod_fraction",
+            family="summary",
+            motif="pooled",
+            scope="legacy_pooled",
+        )
 
     if use_peak_features and find_peaks is not None:  # pragma: no branch
         peak_counts = []
@@ -1770,12 +2261,326 @@ def read_window_feature_matrix(
                 peak_prominences.append(float(np.mean(props["prominences"])))
             else:
                 peak_prominences.append(0.0)
-        columns.append(np.array(peak_counts)[:, None])
-        columns.append(np.array(peak_prominences)[:, None])
-        names.extend(["peak_count", "peak_prominence"])
+        _append_feature(
+            columns,
+            names,
+            feature_rows,
+            np.array(peak_counts),
+            "peak_count",
+            family="peaks",
+            motif="pooled",
+            scope="legacy_pooled",
+        )
+        _append_feature(
+            columns,
+            names,
+            feature_rows,
+            np.array(peak_prominences),
+            "peak_prominence",
+            family="peaks",
+            motif="pooled",
+            scope="legacy_pooled",
+        )
 
     feature_matrix = np.hstack(columns)
+    table = pd.DataFrame(feature_rows)
+    if scale_features:
+        feature_matrix, scale_table = scale_feature_matrix(
+            feature_matrix,
+            names,
+            feature_table=table,
+            method=scaling_method,
+            family_weighting=family_weighting,
+            family_weights=family_weights,
+            unscaled_families=unscaled_families,
+        )
+        if return_scale_table:
+            return feature_matrix, names, table, scale_table
+    if return_feature_table:
+        return feature_matrix, names, table
     return feature_matrix, names
+
+
+def summarize_feature_matrix(
+    feature_matrix: np.ndarray,
+    feature_names: Sequence[str],
+    *,
+    feature_table: pd.DataFrame | None = None,
+    labels: Sequence[Any] | None = None,
+    top_n_variable: int = 12,
+) -> dict[str, Any]:
+    """Summarize feature matrix dimensions, missingness, variance, and optional labels."""
+
+    X = np.asarray(feature_matrix, dtype=float)
+    if X.ndim != 2:
+        raise ValueError("feature_matrix must be 2-dimensional.")
+    if X.shape[1] != len(feature_names):
+        raise ValueError("feature_names length must match feature_matrix width.")
+
+    variance = np.nanvar(X, axis=0)
+    missing_fraction = np.isnan(X).mean(axis=0)
+    order = np.argsort(variance)[::-1][:top_n_variable]
+    variable = pd.DataFrame(
+        {
+            "feature_name": [feature_names[i] for i in order],
+            "variance": variance[order],
+            "missing_fraction": missing_fraction[order],
+        }
+    )
+    summary: dict[str, Any] = {
+        "n_reads": int(X.shape[0]),
+        "n_features": int(X.shape[1]),
+        "missing_values": int(np.isnan(X).sum()),
+        "zero_variance_features": int(np.sum(variance <= 1e-12)),
+        "top_variable_features": variable,
+    }
+    if feature_table is not None and not feature_table.empty:
+        summary["feature_counts_by_family"] = (
+            feature_table.groupby("family", dropna=False)
+            .size()
+            .rename("n_features")
+            .reset_index()
+            .sort_values("n_features", ascending=False)
+        )
+        summary["feature_counts_by_motif"] = (
+            feature_table.groupby("motif", dropna=False)
+            .size()
+            .rename("n_features")
+            .reset_index()
+            .sort_values("n_features", ascending=False)
+        )
+    if labels is not None:
+        summary["label_counts"] = pd.Series(labels).value_counts(dropna=False).rename("n")
+    return summary
+
+
+def scale_feature_matrix(
+    feature_matrix: np.ndarray,
+    feature_names: Sequence[str],
+    *,
+    feature_table: pd.DataFrame | None = None,
+    method: str = "standard",
+    family_weighting: str | None = None,
+    family_weights: dict[str, float] | None = None,
+    unscaled_families: Sequence[str] | None = None,
+    return_scaler: bool = False,
+) -> tuple[np.ndarray, pd.DataFrame] | tuple[np.ndarray, pd.DataFrame, Any]:
+    """
+    Scale engineered features for distance-based methods.
+
+    K-means, Ward agglomerative clustering, and Euclidean nearest-neighbor views are
+    sensitive to feature scale. The default "standard" method centers each feature
+    and scales it to unit variance. "robust" uses median/IQR scaling for heavier tails.
+    If feature_table is provided, family_weighting="equal_family" downweights each
+    column by sqrt(number of scaled columns in its family) so families with many
+    columns do not dominate Euclidean distance solely by column count.
+    """
+
+    X = np.asarray(feature_matrix, dtype=float)
+    if X.ndim != 2:
+        raise ValueError("feature_matrix must be 2-dimensional.")
+    if X.shape[1] != len(feature_names):
+        raise ValueError("feature_names length must match feature_matrix width.")
+
+    method_norm = method.lower()
+    unscaled_family_set = set(unscaled_families or ())
+    families = pd.Series(["feature"] * X.shape[1], dtype=object)
+    if feature_table is not None and not feature_table.empty:
+        if "feature_name" not in feature_table.columns or "family" not in feature_table.columns:
+            raise ValueError("feature_table must include feature_name and family columns.")
+        family_map = feature_table.set_index("feature_name")["family"].to_dict()
+        families = pd.Series(
+            [family_map.get(name, "feature") for name in feature_names],
+            dtype=object,
+        )
+    scaled_mask = ~families.isin(unscaled_family_set).to_numpy()
+
+    if method_norm == "standard":
+        from sklearn.preprocessing import StandardScaler
+
+        scaler = StandardScaler()
+    elif method_norm == "robust":
+        from sklearn.preprocessing import RobustScaler
+
+        scaler = RobustScaler(quantile_range=(25.0, 75.0))
+    elif method_norm in {"none", "identity"}:
+        scaled = X.copy()
+        table = pd.DataFrame(
+            {
+                "feature_name": list(feature_names),
+                "scaling_method": "none",
+                "family": families.to_numpy(),
+                "family_weight": np.ones(X.shape[1], dtype=float),
+                "center": np.zeros(X.shape[1], dtype=float),
+                "scale": np.ones(X.shape[1], dtype=float),
+                "raw_mean": np.nanmean(X, axis=0),
+                "raw_std": np.nanstd(X, axis=0),
+            }
+        )
+        if return_scaler:
+            return scaled, table, None
+        return scaled, table
+    else:
+        raise ValueError("method must be 'standard', 'robust', or 'none'.")
+
+    scaled = X.copy()
+    center = np.zeros(X.shape[1], dtype=float)
+    scale = np.ones(X.shape[1], dtype=float)
+    if np.any(scaled_mask):
+        scaled[:, scaled_mask] = scaler.fit_transform(X[:, scaled_mask])
+        center_values = getattr(
+            scaler, "mean_", getattr(scaler, "center_", np.zeros(np.sum(scaled_mask)))
+        )
+        scale_values = getattr(scaler, "scale_", np.ones(np.sum(scaled_mask)))
+        center[scaled_mask] = center_values
+        scale[scaled_mask] = scale_values
+
+    weights = np.ones(X.shape[1], dtype=float)
+    if family_weighting is not None:
+        weighting = family_weighting.lower()
+        if weighting != "equal_family":
+            raise ValueError("family_weighting must be None or 'equal_family'.")
+        for _family, idx in families.groupby(families).groups.items():
+            idx_arr = np.array(list(idx), dtype=int)
+            scaled_idx = idx_arr[scaled_mask[idx_arr]]
+            if len(scaled_idx) > 0:
+                weights[scaled_idx] *= 1.0 / math.sqrt(len(scaled_idx))
+    if family_weights:
+        for family, weight in family_weights.items():
+            weights[families.to_numpy() == family] *= float(weight)
+    scaled *= weights
+
+    table = pd.DataFrame(
+        {
+            "feature_name": list(feature_names),
+            "scaling_method": method_norm,
+            "family": families.to_numpy(),
+            "family_weight": weights,
+            "scaled": scaled_mask,
+            "center": center,
+            "scale": scale,
+            "raw_mean": np.nanmean(X, axis=0),
+            "raw_std": np.nanstd(X, axis=0),
+            "scaled_mean": np.nanmean(scaled, axis=0),
+            "scaled_std": np.nanstd(scaled, axis=0),
+        }
+    )
+    if return_scaler:
+        return scaled, table, scaler
+    return scaled, table
+
+
+def rank_read_features_by_group_difference(
+    feature_matrix: np.ndarray,
+    feature_names: Sequence[str],
+    labels: Sequence[Any],
+    *,
+    top_n: int = 20,
+) -> pd.DataFrame:
+    """Rank features by standardized mean separation across two or more labels."""
+
+    X = np.asarray(feature_matrix, dtype=float)
+    y = pd.Series(labels)
+    if X.ndim != 2:
+        raise ValueError("feature_matrix must be 2-dimensional.")
+    if X.shape[0] != len(y):
+        raise ValueError("labels length must match feature_matrix rows.")
+    if X.shape[1] != len(feature_names):
+        raise ValueError("feature_names length must match feature_matrix width.")
+
+    groups = list(pd.unique(y))
+    if len(groups) < 2:
+        raise ValueError("At least two label groups are required.")
+
+    rows = []
+    overall_std = np.nanstd(X, axis=0)
+    for idx, name in enumerate(feature_names):
+        means = []
+        for group in groups:
+            means.append(float(np.nanmean(X[y.to_numpy() == group, idx])))
+        effect = (max(means) - min(means)) / (overall_std[idx] + 1e-12)
+        rows.append(
+            {
+                "feature_name": name,
+                "effect_score": float(effect),
+                "min_group_mean": min(means),
+                "max_group_mean": max(means),
+                "overall_std": float(overall_std[idx]),
+            }
+        )
+    return (
+        pd.DataFrame(rows)
+        .sort_values("effect_score", ascending=False)
+        .head(top_n)
+        .reset_index(drop=True)
+    )
+
+
+def raster_stats_brief(stats: dict[str, Any]) -> dict[str, Any]:
+    """Return the raster stats fields most useful for notebook display."""
+
+    keys = [
+        "pairs",
+        "rows_are",
+        "unique_reads",
+        "site_sets",
+        "rows_before_downsample",
+        "rows_after_downsample",
+        "downsampled",
+        "downsample_method",
+        "coordinate_mode",
+        "selection_mode",
+        "window_offsets_bp",
+        "window_widths_bp",
+        "ml_score_thresholds",
+    ]
+    brief = {key: stats.get(key) for key in keys if key in stats}
+    brief["observed_offsets_bp"] = stats.get("observed_window_center_offsets_summary_bp")
+    brief["site_selection"] = stats.get("site_selection")
+    return brief
+
+
+def infer_region_source_labels(
+    region_axis_table: pd.DataFrame,
+    read_metadata: Sequence[dict[str, Any]],
+    *,
+    source_field: str = "source_label",
+    unknown_label: str = "unknown",
+) -> pd.DataFrame:
+    """Attach the most frequent read source label to each region-axis row."""
+
+    axis_table = region_axis_table.copy()
+    if "region_id" not in axis_table.columns:
+        raise ValueError("region_axis_table must include a region_id column.")
+    meta_df = pd.DataFrame(read_metadata).copy()
+    if meta_df.empty or not {"chromosome", "region_start", "region_end"}.issubset(
+        meta_df.columns
+    ):
+        axis_table[source_field] = unknown_label
+        return axis_table
+
+    if "region_strand" not in meta_df.columns:
+        meta_df["region_strand"] = "."
+    if source_field not in meta_df.columns:
+        meta_df[source_field] = unknown_label
+    meta_df["region_id"] = meta_df.apply(
+        lambda row: (
+            f"{row['chromosome']}:{int(row['region_start'])}-"
+            f"{int(row['region_end'])}:{row.get('region_strand', '.')}"
+        ),
+        axis=1,
+    )
+    source_by_region = (
+        meta_df.groupby(["region_id", source_field], dropna=False)
+        .size()
+        .reset_index(name="n")
+        .sort_values(["region_id", "n"], ascending=[True, False])
+        .drop_duplicates(subset=["region_id"], keep="first")
+        .loc[:, ["region_id", source_field]]
+    )
+    axis_table = axis_table.merge(source_by_region, on="region_id", how="left")
+    axis_table[source_field] = axis_table[source_field].fillna(unknown_label)
+    return axis_table
 
 
 def _safe_scores(X: np.ndarray, labels: np.ndarray) -> dict[str, float | None]:
@@ -2237,7 +3042,7 @@ def plot_cluster_profiles(
                 rows,
                 s=point_size,
                 alpha=point_alpha,
-                c=motif_colors[motif_id],
+                color=motif_colors[motif_id],
                 label=str(motif_labels[motif_id]),
                 rasterized=True,
             )
@@ -3530,7 +4335,6 @@ def plot_multisite_read_raster(
                     "Use render_mode='scatter', coordinate_mode='local_window', or fixed offsets "
                     "producing constant offsets."
                 )
-
     # Downsample rows if too tall
     def bin_rows(M, k):
         n_bins = math.ceil(M.shape[0] / k)
@@ -3722,11 +4526,26 @@ def plot_multisite_read_raster(
     else:
         effective_axis_orientation = axis_orientation
 
+    if effective_coordinate_mode == "relative_to_primary":
+        window_plot_order = sorted(
+            range(n_windows_effective),
+            key=lambda idx: float(np.nanmedian(center_offsets[idx]))
+            if center_offsets[idx].size
+            else 0.0,
+            reverse=bool(rotate and effective_axis_orientation == "position_y"),
+        )
+    else:
+        window_plot_order = list(range(n_windows_effective))
+
     share_x_axes = True
     if effective_axis_orientation == "position_x" and n_windows_effective > 1:
         # When each window has a different positional frame (relative-to-primary),
         # sharing x limits forces misleading axis alignment across panels.
         share_x_axes = False
+    share_y_axes = True
+    if effective_axis_orientation == "position_y" and n_windows_effective > 1:
+        # Same issue as above, but position is encoded on y.
+        share_y_axes = False
 
     n_plot_motifs = len(motif_ids)
     if n_plot_motifs == 1:
@@ -3743,7 +4562,7 @@ def plot_multisite_read_raster(
                 1,
                 n_windows_effective,
                 figsize=(10, max(3, P * 0.06)),
-                sharey=True,
+                sharey=share_y_axes,
             )
             axes = np.atleast_1d(axes).reshape(1, n_windows_effective)
     else:
@@ -3752,26 +4571,38 @@ def plot_multisite_read_raster(
             fig, axes = plt.subplots(
                 n_rows,
                 n_cols,
-                figsize=(max(8, 4.2 * n_cols), max(3.5, 2.3 * n_rows)),
+                figsize=(
+                    max(9, 4.4 * n_cols),
+                    max(
+                        4.2,
+                        2.7 * n_rows
+                        + (0.35 if render_mode == "heatmap" else 0)
+                        + (0.7 if threshold_map is not None else 0),
+                    ),
+                ),
                 sharex=share_x_axes,
-                sharey=True,
+                sharey=share_y_axes,
             )
         else:
             n_rows, n_cols = n_plot_motifs, n_windows_effective
             fig, axes = plt.subplots(
                 n_rows,
                 n_cols,
-                figsize=(max(8, 3.8 * n_cols), max(3.5, 2.2 * n_rows)),
-                sharey=True,
+                figsize=(
+                    max(9, 4.2 * n_cols),
+                    max(4.2, 2.5 * n_rows + (0.35 if render_mode == "heatmap" else 0)),
+                ),
+                sharey=share_y_axes,
             )
         axes = np.atleast_2d(axes)
 
     def _axis_for(motif_pos: int, window_pos: int):
+        display_window_pos = window_plot_order.index(window_pos)
         if len(motif_ids) == 1:
-            return axes[window_pos, 0] if rotate else axes[0, window_pos]
+            return axes[display_window_pos, 0] if rotate else axes[0, display_window_pos]
         if rotate:
-            return axes[window_pos, motif_pos]
-        return axes[motif_pos, window_pos]
+            return axes[display_window_pos, motif_pos]
+        return axes[motif_pos, display_window_pos]
 
     first_mappable = None
     first_mappable_by_motif: dict[int, Any] = {}
@@ -3791,7 +4622,8 @@ def plot_multisite_read_raster(
         motif_smooth_panels = panels_smooth_sorted_by_motif[motif_pos]
         motif_ml_panels = panels_ml_sorted_by_motif[motif_pos]
         motif_label = str(motif_labels_resolved[motif_id])
-        for window_pos in range(n_windows_effective):
+        for window_pos in window_plot_order:
+            display_window_pos = window_plot_order.index(window_pos)
             ax = _axis_for(motif_pos, window_pos)
             panel = motif_panels[window_pos]
             panel_raw = motif_raw_panels[window_pos]
@@ -3950,26 +4782,29 @@ def plot_multisite_read_raster(
                     spine.set_edgecolor("black")
 
             if render_mode == "heatmap":
+                site_label = f"Site {window_pos + 1}"
+                if window_pos == primary_window_index:
+                    site_label += " (primary)"
                 heatmap_title = (
-                    f"{motif_label} | Window {window_pos + 1}"
+                    f"{motif_label} | {site_label}"
                     if len(motif_ids) > 1
-                    else f"Window {window_pos + 1}"
+                    else site_label
                 )
                 ax.set_title(heatmap_title, fontsize=9)
             elif len(motif_ids) > 1:
-                if rotate and window_pos == 0:
+                if rotate and display_window_pos == 0:
                     ax.set_title(motif_label)
                 if not rotate and motif_pos == 0:
-                    ax.set_title(f"Window {window_pos + 1}")
+                    ax.set_title(f"Site {window_pos + 1}")
 
             if effective_axis_orientation == "position_x":
                 if rotate and motif_pos == 0:
-                    ax.set_ylabel(f"Window {window_pos + 1}\nReads")
+                    ax.set_ylabel("Reads (sorted)")
                 if (not rotate) and len(motif_ids) > 1 and window_pos == 0:
                     ax.set_ylabel(f"{motif_label}\nReads")
             else:
                 if rotate and motif_pos == 0:
-                    ax.set_ylabel(f"Window {window_pos + 1}\nPosition")
+                    ax.set_ylabel("Position (bp)")
                 if (not rotate) and len(motif_ids) > 1 and window_pos == 0:
                     ax.set_ylabel(f"{motif_label}\nPosition")
 
@@ -3979,8 +4814,9 @@ def plot_multisite_read_raster(
         else "Distance from window center (bp)"
     )
     if rotate:
+        bottom_window = window_plot_order[-1]
         bottom_axes = [
-            _axis_for(motif_pos, n_windows_effective - 1)
+            _axis_for(motif_pos, bottom_window)
             for motif_pos in range(len(motif_ids))
         ]
         xlabel = (
@@ -3992,17 +4828,18 @@ def plot_multisite_read_raster(
             ax.set_xlabel(xlabel)
     else:
         for motif_pos in range(len(motif_ids)):
+            left_window = window_plot_order[0]
             if effective_axis_orientation == "position_x":
-                _axis_for(motif_pos, 0).set_ylabel(
+                _axis_for(motif_pos, left_window).set_ylabel(
                     "Reads (sorted)"
                     if len(motif_ids) == 1
-                    else _axis_for(motif_pos, 0).get_ylabel()
+                    else _axis_for(motif_pos, left_window).get_ylabel()
                 )
             else:
-                _axis_for(motif_pos, 0).set_ylabel(
+                _axis_for(motif_pos, left_window).set_ylabel(
                     "Position (bp)"
                     if len(motif_ids) == 1
-                    else _axis_for(motif_pos, 0).get_ylabel()
+                    else _axis_for(motif_pos, left_window).get_ylabel()
                 )
             for window_pos in range(n_windows_effective):
                 if effective_axis_orientation == "position_x":
@@ -4011,6 +4848,48 @@ def plot_multisite_read_raster(
                     )
                 else:
                     _axis_for(motif_pos, window_pos).set_xlabel("Reads (sorted)")
+
+    sort_target = f"Site {sort_window_pos + 1}"
+    if sort_window_pos == primary_window_index:
+        sort_target += " (primary)"
+    selection_label = selector.mode.replace("_", " ")
+    title_parts = [
+        f"{selection_label} raster",
+        f"primary Site {primary_window_index + 1} shown with bold border",
+        f"sorted by {sort_by} in {sort_target}",
+        f"{effective_coordinate_mode}, {effective_axis_orientation}",
+        f"rows {panels_sorted_by_motif[0][0].shape[0]} / {rows_before_downsample}",
+    ]
+    fig.suptitle(" | ".join(title_parts), fontsize=9, y=0.985)
+    top_margin = 0.70 if threshold_map is not None else 0.88
+    if render_mode == "heatmap":
+        top_margin -= 0.03
+    left_margin = 0.16 if rotate and n_windows_effective > 1 else 0.10
+    fig.subplots_adjust(
+        top=top_margin,
+        right=0.88,
+        left=left_margin,
+        hspace=0.45,
+        wspace=0.35,
+    )
+
+    if rotate and n_windows_effective > 1:
+        for window_pos in window_plot_order:
+            row_axis = _axis_for(0, window_pos)
+            bbox = row_axis.get_position()
+            site_label = f"Site {window_pos + 1}"
+            if window_pos == primary_window_index:
+                site_label += " (primary)"
+            fig.text(
+                max(0.01, bbox.x0 - 0.105),
+                (bbox.y0 + bbox.y1) / 2,
+                site_label,
+                rotation=90,
+                va="center",
+                ha="center",
+                fontsize=9,
+                fontweight="bold" if window_pos == primary_window_index else "normal",
+            )
 
     if threshold_map is None:
         if first_mappable is None:
@@ -4047,22 +4926,22 @@ def plot_multisite_read_raster(
                         for window_pos in range(n_windows_effective)
                     ],
                     shrink=0.6,
-                    pad=0.02,
+                    pad=0.06,
                 )
                 cbar.set_label(
-                    f"{motif_labels_resolved[motif_id]} normalized ML score (0-1)\\n"
+                    f"{motif_labels_resolved[motif_id]} normalized ML score (0-1)\n"
                     f"{'downsampled' if downsampled else 'full'}"
                 )
         else:
             cbar = fig.colorbar(
-                first_mappable, ax=np.ravel(axes).tolist(), shrink=0.6, pad=0.02
+                first_mappable, ax=np.ravel(axes).tolist(), shrink=0.6, pad=0.06
             )
             if (
                 render_mode == "scatter"
                 and effective_scatter_color_values == "ml_score"
             ):
                 cbar.set_label(
-                    f"normalized ML score (0-1)\\n{'downsampled' if downsampled else 'full'}"
+                    f"normalized ML score (0-1)\n{'downsampled' if downsampled else 'full'}"
                 )
             elif render_mode == "scatter":
                 scale_label = "fraction modified signal"
@@ -4072,19 +4951,19 @@ def plot_multisite_read_raster(
                     else "none"
                 )
                 cbar.set_label(
-                    f"{scale_label} (values={render_value_mode}, smoother={smoothing_label})\\n"
+                    f"{scale_label} (values={render_value_mode}, smoother={smoothing_label})\n"
                     f"{'downsampled' if downsampled else 'full'}"
                 )
             else:
-                scale_label = "window signal heatmap"
+                scale_label = "Signal heatmap"
                 smoothing_label = (
-                    f"{smoothing}, win={smooth_win}{sigma_txt}"
+                    f"{smoothing} win={smooth_win}{sigma_txt}"
                     if render_value_mode == "smoothed"
                     else "none"
                 )
                 cbar.set_label(
-                    f"{scale_label} (per-read smoothing along position axis; "
-                    f"values={render_value_mode}, smoother={smoothing_label})\\n"
+                    f"{scale_label}\n"
+                    f"{render_value_mode}; {smoothing_label}\n"
                     f"{'downsampled' if downsampled else 'full'}"
                 )
     else:
@@ -4108,8 +4987,9 @@ def plot_multisite_read_raster(
         fig.legend(
             handles=handles,
             title="Motif thresholds",
-            loc="upper right",
-            bbox_to_anchor=(0.98, 0.98),
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.86),
+            ncol=max(1, len(handles)),
             frameon=False,
         )
 
@@ -4128,6 +5008,7 @@ def plot_multisite_read_raster(
         "scatter_color_values": effective_scatter_color_values,
         "axis_orientation": effective_axis_orientation,
         "coordinate_mode": effective_coordinate_mode,
+        "window_plot_order": [int(idx) for idx in window_plot_order],
         "sort_by": sort_by,
         "sort_window_index": sort_window_pos,
         "sort_descending": effective_sort_descending,
@@ -5158,6 +6039,9 @@ __all__ = [
     "extract_read_windows",
     "build_multimotif_read_windows",
     "read_window_feature_matrix",
+    "summarize_feature_matrix",
+    "scale_feature_matrix",
+    "rank_read_features_by_group_difference",
     "cluster_read_windows",
     "classify_read_features_binary",
     "plot_cluster_profiles",
@@ -5176,4 +6060,6 @@ __all__ = [
     "apply_cluster_label_mapping",
     "plot_two_site_read_raster",
     "plot_multisite_read_raster",
+    "raster_stats_brief",
+    "infer_region_source_labels",
 ]

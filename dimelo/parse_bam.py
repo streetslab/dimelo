@@ -1035,8 +1035,9 @@ def check_bam_format(
             for base, found in basemods_found_dict.items():
                 if not found:
                     missing_bases.append(base)
-            print(
-                f"""
+            if missing_bases:
+                print(
+                    f"""
 WARNING: no modified appropriately-coded values found for {missing_bases} in the first {reads_checked} reads. 
 Do you expect this file to contain these modifications? parse_bam is looking for {motifs} but for {missing_bases} found only found {[f"{base}+{mod_codes}" for base, mod_codes in mod_codes_found_dict.items()]}.
 
@@ -1044,7 +1045,7 @@ Consider passing only the motifs and mod codes (e.g. m,h,a) that you expect to b
 You can use modkit adjust-mods --convert <CONVERT> <CONVERT> [OPTIONS] <IN_BAM> <OUT_BAM> to update or consolidate mod codes.
 See https://github.com/nanoporetech/modkit/blob/master/book/src/advanced_usage.md
                     """
-            )
+                )
             return
     except ValueError as e:
         if "fetch called on bamfile without index" in str(e):

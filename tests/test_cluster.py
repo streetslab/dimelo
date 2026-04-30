@@ -496,6 +496,152 @@ def test_read_window_feature_matrix_filters():
     assert features.shape[0] == 1
 
 
+def test_read_window_feature_matrix_rich_spec_tracks_motifs():
+    data = np.array(
+        [
+            [0, 1, 1, 0, 1, 1, 0, 0],
+            [1, 1, 0, 0, 0, 0, 1, 1],
+            [0, 0, 1, 1, 1, 0, 1, 0],
+        ],
+        dtype=float,
+    )
+    val = np.ones_like(data)
+    result = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=val,
+        metadata=[],
+        datasets=[],
+        regions_dict=None,
+    )
+
+    features, names, feature_table = cluster.read_window_feature_matrix(
+        result,
+        feature_spec={
+            "motif_mode": "per_motif",
+            "motif_count": 2,
+            "motif_labels": ["A,0", "CG,0"],
+            "pooled": False,
+            "pca": {"enabled": False},
+            "densities": {"enabled": True, "windows": [("center", -1, 1)]},
+            "autocorr": {"enabled": False},
+            "fft": {"enabled": True, "periods_bp": [2]},
+            "asymmetry": {"enabled": True, "spans": [2]},
+            "center_edge": {"enabled": True, "center_bp": 1, "edge_bp": 1},
+            "cross_motif": {"enabled": True},
+        },
+        return_feature_table=True,
+    )
+
+    assert features.shape[0] == 3
+    assert "A,0__center" in names
+    assert "CG,0__fft_power_period_2bp" in names
+    assert "A,0_minus_CG,0__mean" in names
+    assert {"A,0", "CG,0", "A,0|CG,0"}.issubset(set(feature_table["motif"]))
+    assert {"density", "fft", "cross_motif"}.issubset(set(feature_table["family"]))
+
+
+def test_summarize_and_rank_feature_matrix():
+    features = np.array([[0.0, 0.1], [0.2, 0.1], [1.0, 0.1], [1.2, 0.1]])
+    names = ["signal", "constant"]
+    feature_table = pd.DataFrame(
+        {
+            "feature_name": names,
+            "family": ["density", "summary"],
+            "motif": ["A,0", "pooled"],
+        }
+    )
+
+    summary = cluster.summarize_feature_matrix(
+        features,
+        names,
+        feature_table=feature_table,
+        labels=["off", "off", "on", "on"],
+    )
+    ranked = cluster.rank_read_features_by_group_difference(
+        features,
+        names,
+        ["off", "off", "on", "on"],
+    )
+
+    assert summary["n_reads"] == 4
+    assert summary["zero_variance_features"] == 1
+    assert summary["feature_counts_by_family"]["n_features"].sum() == 2
+    assert ranked.iloc[0]["feature_name"] == "signal"
+
+
+def test_scale_feature_matrix_standardizes_columns():
+    features = np.array([[0.0, 10.0], [1.0, 10.0], [2.0, 10.0]])
+    scaled, scale_table = cluster.scale_feature_matrix(features, ["a", "constant"])
+
+    np.testing.assert_allclose(scaled[:, 0].mean(), 0.0, atol=1e-12)
+    np.testing.assert_allclose(scaled[:, 0].std(), 1.0, atol=1e-12)
+    np.testing.assert_allclose(scaled[:, 1], np.zeros(3))
+    assert scale_table.loc[0, "scaling_method"] == "standard"
+    assert scale_table.loc[1, "scale"] == 1.0
+
+
+def test_scale_feature_matrix_can_balance_and_skip_families():
+    features = np.array([[0.0, 1.0, 10.0], [1.0, 2.0, 20.0], [2.0, 3.0, 30.0]])
+    names = ["density_a", "density_b", "raw_count"]
+    feature_table = pd.DataFrame(
+        {
+            "feature_name": names,
+            "family": ["density", "density", "count"],
+        }
+    )
+
+    scaled, scale_table = cluster.scale_feature_matrix(
+        features,
+        names,
+        feature_table=feature_table,
+        family_weighting="equal_family",
+        unscaled_families=["count"],
+    )
+
+    np.testing.assert_allclose(scale_table.loc[:1, "family_weight"], [1 / np.sqrt(2)] * 2)
+    assert scale_table.loc[2, "scaled"] == np.False_
+    np.testing.assert_allclose(scaled[:, 2], features[:, 2])
+
+
+def test_read_window_feature_matrix_inline_scaling_uses_feature_families_without_return_table():
+    data = np.array(
+        [
+            [0, 0, 1, 1],
+            [0, 1, 1, 1],
+            [1, 1, 0, 0],
+        ],
+        dtype=float,
+    )
+    result = cluster.ReadWindowExtractionResult(
+        data_matrix=data,
+        val_matrix=np.ones_like(data),
+        metadata=[],
+        datasets=[],
+        regions_dict=None,
+    )
+
+    scaled, names = cluster.read_window_feature_matrix(
+        result,
+        n_pca=0,
+        autocorr_lags=(),
+        density_windows=(("left", -2, 0), ("right", 0, 2)),
+        scale_features=True,
+        unscaled_families=["density"],
+    )
+    unscaled, unscaled_names, feature_table = cluster.read_window_feature_matrix(
+        result,
+        n_pca=0,
+        autocorr_lags=(),
+        density_windows=(("left", -2, 0), ("right", 0, 2)),
+        return_feature_table=True,
+    )
+
+    assert names == unscaled_names
+    density_cols = feature_table.index[feature_table["family"] == "density"].tolist()
+    assert density_cols
+    np.testing.assert_allclose(scaled[:, density_cols], unscaled[:, density_cols])
+
+
 def test_plot_multisite_read_raster_smoke(monkeypatch):
     # Build a minimal ReadWindowExtractionResult with two motifs, two reads
     data = np.hstack(
@@ -783,10 +929,62 @@ def test_plot_two_site_read_raster_wrapper():
     assert stats["window_widths_bp"] == [4, 4]
     assert stats["coordinate_mode"] == "relative_to_primary"
     assert stats["downsample_method"] == "none"
-    data_axes = [ax for ax in fig.axes if ax.get_ylabel().endswith("Reads")]
+    data_axes = [ax for ax in fig.axes if ax.get_ylabel() == "Reads (sorted)"]
     assert data_axes
     assert data_axes[0].get_xlim()[0] <= -2 and data_axes[0].get_xlim()[1] >= 2
     assert data_axes[1].get_xlim()[0] <= 1998 and data_axes[1].get_xlim()[1] >= 2002
+
+
+def test_plot_two_site_read_raster_position_y_keeps_site_limits_independent():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    data = np.array(
+        [
+            [0, 1, 0, 1],
+            [1, 0, 1, 0],
+        ],
+        dtype=float,
+    )
+    meta = [
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 0,
+            "region_end": 4,
+            "region_strand": "+",
+            "read_length": 8000,
+        },
+        {
+            "read_name": "r1",
+            "chromosome": "chr1",
+            "region_start": 2000,
+            "region_end": 2004,
+            "region_strand": "+",
+            "read_length": 8000,
+        },
+    ]
+    r = cluster.ReadWindowExtractionResult(data, None, meta, [], None)
+
+    fig, stats = cluster.plot_two_site_read_raster(
+        r,
+        second_site_offset_bp=2000,
+        window_width_bp=4,
+        motif_index=0,
+        smoothing=None,
+        axis_orientation="position_y",
+    )
+
+    assert stats["window_plot_order"] == [1, 0]
+    data_axes = [ax for ax in fig.axes if ax.get_ylabel() == "Position (bp)"]
+    assert len(data_axes) == 2
+    assert data_axes[0].get_ylim()[0] <= 1998 and data_axes[0].get_ylim()[1] >= 2002
+    assert data_axes[1].get_ylim()[0] <= -2 and data_axes[1].get_ylim()[1] >= 2
+    point_counts = [
+        sum(len(collection.get_offsets()) for collection in ax.collections)
+        for ax in data_axes
+    ]
+    assert point_counts == [2, 2]
 
 
 def test_plot_multisite_read_raster_supports_fixed_offsets_with_primary_highlight():
@@ -845,7 +1043,7 @@ def test_plot_multisite_read_raster_supports_fixed_offsets_with_primary_highligh
     assert fig is not None
     assert stats["n_windows"] == 3
     assert stats["window_offsets_bp"] == [0.0, 2000.0, 4000.0]
-    data_axes = [ax for ax in fig.axes if ax.get_ylabel().endswith("Reads")]
+    data_axes = [ax for ax in fig.axes if ax.get_ylabel() == "Reads (sorted)"]
     assert data_axes[1].spines["left"].get_linewidth() > data_axes[0].spines["left"].get_linewidth()
 
 
@@ -893,8 +1091,8 @@ def test_plot_multisite_read_raster_heatmap_window_titles():
         smoothing=None,
     )
     titles = [axis.get_title() for axis in fig.axes if axis.get_title()]
-    assert "Window 1" in titles
-    assert "Window 2" in titles
+    assert "Site 1 (primary)" in titles
+    assert "Site 2" in titles
 
 
 def test_plot_multisite_read_raster_accepts_local_window_coordinate_mode():
@@ -1437,7 +1635,9 @@ def test_plot_multisite_read_raster_heatmap_smoothing_label_mentions_per_read_ax
     colorbar_axes = [
         ax
         for ax in fig.axes
-        if "per-read smoothing along position axis" in ax.get_ylabel()
+        if "Signal heatmap" in ax.get_ylabel()
+        and "smoothed" in ax.get_ylabel()
+        and "gaussian" in ax.get_ylabel()
     ]
     assert colorbar_axes
 
@@ -1489,7 +1689,7 @@ def test_plot_multisite_read_raster_heatmap_thresholds_still_use_colorbar():
     assert fig is not None
     assert stats["render_mode"] == "heatmap"
     assert stats["ml_score_thresholds"] is None
-    assert any("window signal heatmap" in ax.get_ylabel() for ax in fig.axes)
+    assert any("Signal heatmap" in ax.get_ylabel() for ax in fig.axes)
     assert not any(
         legend.get_title().get_text() == "Motif thresholds" for legend in fig.legends
     )
@@ -1623,7 +1823,7 @@ def test_plot_multisite_read_raster_default_scatter_uses_ml_score_colorbar():
     scatter_arrays = [
         np.asarray(collection.get_array(), dtype=float)
         for axis in fig.axes
-        if axis.get_ylabel().endswith("Reads")
+        if axis.get_ylabel() == "Reads (sorted)"
         for collection in getattr(axis, "collections", [])
         if collection.get_array() is not None and len(collection.get_array()) > 0
     ]
@@ -1688,7 +1888,7 @@ def test_plot_multisite_read_raster_scatter_auto_downsamples_uniformly():
     scatter_arrays = [
         np.asarray(collection.get_array(), dtype=float)
         for axis in fig.axes
-        if axis.get_ylabel().endswith("Reads")
+        if axis.get_ylabel() == "Reads (sorted)"
         for collection in getattr(axis, "collections", [])
         if collection.get_array() is not None and len(collection.get_array()) > 0
     ]

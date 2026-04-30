@@ -104,6 +104,91 @@ def _ordered_unique_values(table: pd.DataFrame, column: str) -> list[object]:
     return table.loc[:, column].drop_duplicates().tolist()
 
 
+def _format_sort_value(value: object) -> str:
+    if isinstance(value, (list, tuple)):
+        return " > ".join(str(item) for item in value)
+    return str(value)
+
+
+def _read_cluster_association_title(
+    metadata: Mapping[str, object],
+    *,
+    row_annotation_columns: Sequence[str],
+    group_region_labels: bool | None,
+    region_label_mode: str,
+) -> str:
+    value_mode = str(metadata.get("value_mode") or "fraction").replace("_", " ")
+    region_sort = _format_sort_value(metadata.get("region_sort", "input"))
+    cluster_sort = str(metadata.get("cluster_sort", "input"))
+    parts = [
+        f"Read-cluster association ({value_mode})",
+        f"regions: {region_sort}",
+        f"clusters: {cluster_sort}",
+    ]
+    metadata_region_sort = metadata.get("region_sort")
+    if metadata_region_sort == "association_strength" or (
+        isinstance(metadata_region_sort, (list, tuple))
+        and "association_strength" in metadata_region_sort
+    ):
+        parts.append(
+            f"strength: {metadata.get('association_strength_aggregate', 'max')}"
+        )
+    if row_annotation_columns:
+        parts.append(f"annotated by {', '.join(row_annotation_columns)}")
+    if group_region_labels:
+        parts.append("grouped labels")
+    elif region_label_mode != "auto":
+        parts.append(f"labels: {region_label_mode}")
+    return " | ".join(parts)
+
+
+def _normalize_row_annotation_columns(
+    *,
+    row_annotation_column: str | None,
+    row_annotation_columns: Sequence[str] | None,
+) -> list[str]:
+    columns: list[str] = []
+    if row_annotation_columns is not None:
+        if isinstance(row_annotation_columns, str):
+            raise TypeError(
+                "row_annotation_columns must be a sequence of column names, not a string."
+            )
+        columns.extend(str(column) for column in row_annotation_columns)
+    if row_annotation_column is not None:
+        legacy_column = str(row_annotation_column)
+        if legacy_column not in columns:
+            columns.insert(0, legacy_column)
+    return list(dict.fromkeys(columns))
+
+
+def _row_annotation_title(
+    column: str,
+    *,
+    row_annotation_title: str | None,
+    row_annotation_titles: Mapping[str, str] | None,
+    n_columns: int,
+) -> str:
+    if row_annotation_titles is not None and column in row_annotation_titles:
+        return str(row_annotation_titles[column])
+    if n_columns == 1 and row_annotation_title is not None:
+        return row_annotation_title
+    return column
+
+
+def _row_annotation_palette(
+    column: str,
+    *,
+    row_annotation_palette: Mapping[str, str] | None,
+    row_annotation_palettes: Mapping[str, Mapping[str, str]] | None,
+    n_columns: int,
+) -> Mapping[str, str] | None:
+    if row_annotation_palettes is not None and column in row_annotation_palettes:
+        return row_annotation_palettes[column]
+    if n_columns == 1:
+        return row_annotation_palette
+    return None
+
+
 def _prepare_region_contrast_value_mode_table(
     plot_table: pd.DataFrame,
     *,
@@ -760,13 +845,18 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
     *,
     ax=None,
     title: str | None = None,
-    region_sort: str | None = None,
+    region_sort: str | Sequence[str] | None = None,
     association_strength_aggregate: str | None = None,
+    cluster_sort: str | None = None,
+    cluster_order: Sequence[object] | None = None,
     region_label_mode: str = "auto",
     max_region_labels: int = 50,
     row_annotation_column: str | None = None,
+    row_annotation_columns: Sequence[str] | None = None,
     row_annotation_title: str | None = None,
+    row_annotation_titles: Mapping[str, str] | None = None,
     row_annotation_palette: Mapping[str, str] | None = None,
+    row_annotation_palettes: Mapping[str, Mapping[str, str]] | None = None,
     group_region_labels: bool | None = None,
     group_label_columns: Sequence[str] | None = None,
 ):
@@ -796,12 +886,17 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
             if association_strength_aggregate is not None
             else metadata.get("association_strength_aggregate", "max")
         )
+        cluster_sort_mode = (
+            cluster_sort if cluster_sort is not None else metadata.get("cluster_sort", "input")
+        )
         override_payload = plotting_api.prepare_read_cluster_region_association_data(
             association_table=association_table,
             value_mode=value_mode,
             top_n_regions_per_cluster=top_n_regions_per_cluster,
             region_sort=region_sort,
             association_strength_aggregate=str(aggregate_mode),
+            cluster_sort=str(cluster_sort_mode),
+            cluster_order=cluster_order,
         )
 
         matrix_table = _require_payload_table(override_payload, "matrix_table")
@@ -811,6 +906,48 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
                 "region_sort override produced payload metadata that is not a mapping."
             )
 
+        original_axis_table = payload.get("region_axis_table")
+        region_axis_table = override_payload.get("region_axis_table")
+        if (
+            isinstance(original_axis_table, pd.DataFrame)
+            and isinstance(region_axis_table, pd.DataFrame)
+            and "region_id" in original_axis_table.columns
+            and "region_id" in region_axis_table.columns
+        ):
+            extra_cols = [
+                c
+                for c in original_axis_table.columns
+                if c not in region_axis_table.columns
+            ]
+            if extra_cols:
+                extras = original_axis_table.loc[
+                    :, ["region_id", *extra_cols]
+                ].drop_duplicates(subset=["region_id"])
+                region_axis_table = region_axis_table.merge(
+                    extras, on="region_id", how="left"
+                )
+    elif cluster_sort is not None or cluster_order is not None:
+        association_table = payload.get("association_table")
+        if not isinstance(association_table, pd.DataFrame):
+            raise ValueError(
+                "cluster_sort or cluster_order override requires payload['association_table']; "
+                "build payload with prepare_read_cluster_region_association_data(...)."
+            )
+        from dimelo import plotting as plotting_api
+
+        override_payload = plotting_api.prepare_read_cluster_region_association_data(
+            association_table=association_table,
+            value_mode=str(metadata.get("value_mode") or "fraction"),
+            top_n_regions_per_cluster=metadata.get("top_n_regions_per_cluster"),
+            region_sort=metadata.get("region_sort") or "cluster_fraction",
+            association_strength_aggregate=str(
+                metadata.get("association_strength_aggregate", "max")
+            ),
+            cluster_sort=str(cluster_sort or metadata.get("cluster_sort", "input")),
+            cluster_order=cluster_order,
+        )
+        matrix_table = _require_payload_table(override_payload, "matrix_table")
+        metadata = override_payload.get("metadata")
         original_axis_table = payload.get("region_axis_table")
         region_axis_table = override_payload.get("region_axis_table")
         if (
@@ -841,6 +978,10 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
         ax.set_ylabel("Region")
         return fig, ax
 
+    annotation_columns = _normalize_row_annotation_columns(
+        row_annotation_column=row_annotation_column,
+        row_annotation_columns=row_annotation_columns,
+    )
     region_column = (
         "region_id" if "region_id" in matrix_table.columns else matrix_table.columns[0]
     )
@@ -848,8 +989,8 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
         column for column in matrix_table.columns if column != region_column
     ]
     fig_width = max(8.0, 4.5 + (0.75 * len(cluster_columns)))
-    if row_annotation_column is not None:
-        fig_width += 1.6
+    if annotation_columns:
+        fig_width += 1.1 + (0.45 * len(annotation_columns))
     fig_height = max(4.5, min(16.0, 2.0 + (0.10 * len(matrix_table))))
     fig, ax = _make_axis(ax=ax, figsize=(fig_width, fig_height))
     value_mode = str(metadata.get("value_mode") or "fraction")
@@ -893,7 +1034,7 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
     if step > 1:
         ticks = default_ticks[::step]
         labels = [default_labels[idx] for idx in ticks]
-    annotation_values: list[str] | None = None
+    annotation_values_by_column: dict[str, list[str]] = {}
 
     axis_table = None
     if isinstance(region_axis_table, pd.DataFrame) and not region_axis_table.empty:
@@ -926,34 +1067,34 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
                     ax.axhline(boundary - 0.5, color="white", linewidth=0.6, alpha=0.6)
             elif effective_mode == "region_id":
                 labels = [default_labels[idx] for idx in ticks]
-        if (
-            row_annotation_column is not None
-            and row_annotation_column in axis_table.columns
-        ):
-            annotation_values = axis_table[row_annotation_column].astype(str).tolist()
+        for annotation_column in annotation_columns:
+            if annotation_column in axis_table.columns:
+                annotation_values_by_column[annotation_column] = (
+                    axis_table[annotation_column].astype(str).tolist()
+                )
 
     if group_region_labels is None:
+        available_annotation_columns = [
+            column for column in annotation_columns if column in annotation_values_by_column
+        ]
         group_region_labels = (
             axis_table is not None
             and region_label_mode in {"genomic", "chromosome", "auto"}
             and n_regions > max_region_labels
             and (
                 ("chrom" in axis_table.columns)
-                or (
-                    row_annotation_column is not None
-                    and row_annotation_column in axis_table.columns
-                )
+                or bool(available_annotation_columns)
             )
         )
 
     if axis_table is not None and group_region_labels:
         requested_group_cols = list(group_label_columns or [])
         if not requested_group_cols:
-            if (
-                row_annotation_column is not None
-                and row_annotation_column in axis_table.columns
-            ):
-                requested_group_cols = [row_annotation_column, "chrom"]
+            available_annotation_columns = [
+                column for column in annotation_columns if column in axis_table.columns
+            ]
+            if available_annotation_columns:
+                requested_group_cols = [available_annotation_columns[0], "chrom"]
             elif "chrom" in axis_table.columns:
                 requested_group_cols = ["chrom"]
         requested_group_cols = [
@@ -980,10 +1121,16 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
                 ax.axhline(boundary - 0.5, color="white", linewidth=0.6, alpha=0.6)
 
     ax.set_yticks(np.asarray(ticks).tolist())
-    if annotation_values is not None and not group_region_labels:
-        labels = [
-            f"{labels[pos]} | {annotation_values[idx]}" for pos, idx in enumerate(ticks)
-        ]
+    use_legacy_annotation_labels = (
+        bool(annotation_values_by_column)
+        and row_annotation_columns is None
+        and row_annotation_column is not None
+        and len(annotation_values_by_column) == 1
+        and not group_region_labels
+    )
+    if use_legacy_annotation_labels:
+        legacy_values = next(iter(annotation_values_by_column.values()))
+        labels = [f"{labels[pos]} | {legacy_values[idx]}" for pos, idx in enumerate(ticks)]
     ytick_fontsize = 8 if len(labels) <= 30 else 7
     ax.set_yticklabels(labels, fontsize=ytick_fontsize)
     if labels:
@@ -992,29 +1139,21 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
         fig.subplots_adjust(left=left_margin)
     ax.set_xlabel("Cluster")
     ax.set_ylabel("Region")
-    ax.set_title(title or "Read-cluster association heatmap")
+    ax.set_title(
+        title
+        or _read_cluster_association_title(
+            metadata,
+            row_annotation_columns=annotation_columns,
+            group_region_labels=group_region_labels,
+            region_label_mode=region_label_mode,
+        )
+    )
 
-    if annotation_values is not None and n_regions > 0:
+    if annotation_values_by_column and n_regions > 0:
         from matplotlib.colors import ListedColormap
         from matplotlib.patches import Patch
 
-        ordered_annotations = _ordered_unique_values(
-            pd.DataFrame({"annotation": annotation_values}),
-            "annotation",
-        )
-        if row_annotation_palette is None:
-            plt = _import_pyplot()
-            cmap = plt.get_cmap("tab10")
-            row_annotation_palette = {
-                value: cmap(i % 10) for i, value in enumerate(ordered_annotations)
-            }
-        annotation_colors = [
-            row_annotation_palette.get(value, "0.6") for value in ordered_annotations
-        ]
-        color_lookup = {value: i for i, value in enumerate(ordered_annotations)}
-        color_codes = np.array(
-            [color_lookup.get(value, 0) for value in annotation_values], dtype=int
-        )
+        ax.set_ylabel("")
         # Place the annotation strip in figure coordinates so it never overlaps
         # the main heatmap region, regardless of y-label length.
         fig.canvas.draw()
@@ -1031,13 +1170,19 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
         else:
             tick_left = ax_pos.x0
 
-        strip_width = 0.010
+        strip_width = 0.012
         strip_gap = 0.006
-        strip_x1 = tick_left - strip_gap
-        strip_x0 = strip_x1 - strip_width
+        label_gap = 0.018
+        n_annotation_strips = len(annotation_values_by_column)
+        total_strip_width = (
+            n_annotation_strips * strip_width
+            + max(0, n_annotation_strips - 1) * strip_gap
+        )
+        strip_x1 = tick_left - label_gap
+        first_strip_x0 = strip_x1 - total_strip_width
         min_left = 0.012
-        if strip_x0 < min_left:
-            needed_left = min(0.48, ax_pos.x0 + (min_left - strip_x0) + 0.01)
+        if first_strip_x0 < min_left:
+            needed_left = min(0.56, ax_pos.x0 + (min_left - first_strip_x0) + 0.02)
             fig.subplots_adjust(left=needed_left)
             fig.canvas.draw()
             renderer = fig.canvas.get_renderer()
@@ -1052,38 +1197,86 @@ def plot_read_cluster_region_association_heatmap_matplotlib(
                 )
             else:
                 tick_left = ax_pos.x0
-            strip_x1 = tick_left - strip_gap
-            strip_x0 = max(min_left, strip_x1 - strip_width)
+            strip_x1 = tick_left - label_gap
+            first_strip_x0 = max(min_left, strip_x1 - total_strip_width)
 
-        strip_ax = fig.add_axes([strip_x0, ax_pos.y0, strip_width, ax_pos.height])
-        strip_ax.imshow(
-            color_codes.reshape(-1, 1),
-            aspect="auto",
-            origin="upper",
-            interpolation="nearest",
-            cmap=ListedColormap(annotation_colors),
-            vmin=0,
-            vmax=max(1, len(annotation_colors) - 1),
-        )
-        strip_ax.set_xticks([])
-        strip_ax.set_yticks([])
+        plt = _import_pyplot()
+        cmap = plt.get_cmap("tab10")
+        for strip_idx, (annotation_column, annotation_values) in enumerate(
+            annotation_values_by_column.items()
+        ):
+            ordered_annotations = _ordered_unique_values(
+                pd.DataFrame({"annotation": annotation_values}),
+                "annotation",
+            )
+            annotation_palette = _row_annotation_palette(
+                annotation_column,
+                row_annotation_palette=row_annotation_palette,
+                row_annotation_palettes=row_annotation_palettes,
+                n_columns=len(annotation_values_by_column),
+            )
+            if annotation_palette is None:
+                annotation_palette = {
+                    value: cmap(i % 10) for i, value in enumerate(ordered_annotations)
+                }
+            annotation_colors = [
+                annotation_palette.get(value, "0.6") for value in ordered_annotations
+            ]
+            color_lookup = {value: i for i, value in enumerate(ordered_annotations)}
+            color_codes = np.array(
+                [color_lookup.get(value, 0) for value in annotation_values], dtype=int
+            )
+            strip_x0 = first_strip_x0 + strip_idx * (strip_width + strip_gap)
+            strip_ax = fig.add_axes(
+                [strip_x0, ax_pos.y0, strip_width, ax_pos.height]
+            )
+            strip_ax.imshow(
+                color_codes.reshape(-1, 1),
+                aspect="auto",
+                origin="upper",
+                interpolation="nearest",
+                cmap=ListedColormap(annotation_colors),
+                vmin=0,
+                vmax=max(1, len(annotation_colors) - 1),
+            )
+            strip_ax.set_xticks([])
+            strip_ax.set_yticks([])
+            strip_ax.set_title(
+                _row_annotation_title(
+                    annotation_column,
+                    row_annotation_title=row_annotation_title,
+                    row_annotation_titles=row_annotation_titles,
+                    n_columns=len(annotation_values_by_column),
+                ),
+                fontsize=7,
+                pad=3,
+                rotation=90,
+                x=0.5,
+                y=1.01,
+            )
 
-        legend_handles = [
-            Patch(
-                facecolor=row_annotation_palette.get(value, "0.6"),
-                edgecolor="none",
-                label=str(value),
-            )
-            for value in ordered_annotations
-        ]
-        if legend_handles:
-            ax.legend(
-                handles=legend_handles,
-                title=row_annotation_title or row_annotation_column,
-                loc="upper left",
-                bbox_to_anchor=(1.18, 1.0),
-                frameon=False,
-            )
+            legend_handles = [
+                Patch(
+                    facecolor=annotation_palette.get(value, "0.6"),
+                    edgecolor="none",
+                    label=str(value),
+                )
+                for value in ordered_annotations
+            ]
+            if legend_handles:
+                legend = ax.legend(
+                    handles=legend_handles,
+                    title=_row_annotation_title(
+                        annotation_column,
+                        row_annotation_title=row_annotation_title,
+                        row_annotation_titles=row_annotation_titles,
+                        n_columns=len(annotation_values_by_column),
+                    ),
+                    loc="upper left",
+                    bbox_to_anchor=(1.18, 1.0 - (0.18 * strip_idx)),
+                    frameon=False,
+                )
+                ax.add_artist(legend)
     return fig, ax
 
 

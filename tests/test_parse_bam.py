@@ -65,6 +65,30 @@ def test_check_bam_format_raises_on_malformed_tags_after_motifs_are_found(monkey
         parse_bam.check_bam_format("dummy.bam", motifs=["A,0", "CG,0"])
 
 
+def test_check_bam_format_warns_only_when_requested_motifs_missing(monkeypatch, capsys):
+    found_reads = [_FakeRead(["MM:Z:A+a?;C+m?"])] * parse_bam.NUM_READS_TO_CHECK
+    monkeypatch.setattr(
+        parse_bam.pysam,
+        "AlignmentFile",
+        lambda *args, **kwargs: _TagSequenceAlignmentFile(found_reads),
+    )
+
+    parse_bam.check_bam_format("dummy.bam", motifs=["A,0,a", "CG,0,m"])
+    assert "no modified appropriately-coded" not in capsys.readouterr().out
+
+    missing_reads = [_FakeRead(["MM:Z:A+a?"])] * parse_bam.NUM_READS_TO_CHECK
+    monkeypatch.setattr(
+        parse_bam.pysam,
+        "AlignmentFile",
+        lambda *args, **kwargs: _TagSequenceAlignmentFile(missing_reads),
+    )
+
+    parse_bam.check_bam_format("dummy.bam", motifs=["A,0,a", "CG,0,m"])
+    out = capsys.readouterr().out
+    assert "no modified appropriately-coded values found for ['C']" in out
+    assert "parse_bam is looking for ['A,0,a', 'CG,0,m']" in out
+
+
 def test_threads_command_list_defaults_to_all_available_cores(monkeypatch):
     monkeypatch.setattr(parse_bam.multiprocessing, "cpu_count", lambda: 12)
 

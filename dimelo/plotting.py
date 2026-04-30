@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -1794,8 +1795,29 @@ def _normalize_legacy_read_cluster_region_association(
     return melted
 
 
-def _read_cluster_region_association_cluster_order(table: pd.DataFrame) -> list[object]:
-    return table.loc[:, "cluster"].drop_duplicates().tolist()
+def _read_cluster_region_association_cluster_order(
+    table: pd.DataFrame,
+    *,
+    cluster_sort: str = "input",
+    cluster_order: Sequence[object] | None = None,
+) -> list[object]:
+    observed = table.loc[:, "cluster"].drop_duplicates().tolist()
+    if cluster_order is not None:
+        requested = list(cluster_order)
+        missing = [cluster for cluster in observed if cluster not in requested]
+        return requested + missing
+    if cluster_sort == "input":
+        return observed
+    if cluster_sort == "natural":
+        return sorted(observed, key=lambda value: str(value))
+    if cluster_sort in {"total_association", "max_association"}:
+        values = pd.to_numeric(table["value"], errors="coerce").fillna(0.0)
+        grouped = values.groupby(table["cluster"], sort=False)
+        score = grouped.sum() if cluster_sort == "total_association" else grouped.max()
+        return score.sort_values(ascending=False, kind="stable").index.tolist()
+    raise ValueError(
+        "cluster_sort must be 'input', 'natural', 'total_association', or 'max_association'."
+    )
 
 
 def _parse_region_id_components(region_id: object) -> tuple[str, int, int, str]:
@@ -1873,23 +1895,32 @@ def _chromosome_sort_key(chrom: object) -> tuple[int, object]:
 def _read_cluster_region_association_region_order(
     table: pd.DataFrame,
     *,
-    region_sort: str,
+    region_sort: str | Sequence[str],
     strength_aggregate: str,
+    cluster_sort: str = "input",
+    cluster_order: Sequence[object] | None = None,
 ) -> list[object]:
-    if region_sort == "input":
-        return table.loc[:, "region_id"].drop_duplicates().tolist()
+    sort_keys = [region_sort] if isinstance(region_sort, str) else list(region_sort)
+    if not sort_keys:
+        raise ValueError("region_sort must contain at least one sort key.")
+    valid_keys = {"cluster_fraction", "input", "genomic", "association_strength"}
+    invalid = [key for key in sort_keys if key not in valid_keys]
+    if invalid:
+        raise ValueError(
+            "region_sort keys must be 'cluster_fraction', 'input', 'genomic', "
+            f"or 'association_strength'. Invalid keys: {', '.join(map(str, invalid))}."
+        )
 
+    input_rank = {
+        region_id: rank
+        for rank, region_id in enumerate(table.loc[:, "region_id"].drop_duplicates())
+    }
     coords = _region_coordinate_table_for_association(table)
     coords = coords.copy()
+    coords["input_rank"] = coords["region_id"].map(input_rank).fillna(len(input_rank))
     coords["chrom_sort"] = coords["chrom"].map(_chromosome_sort_key)
-    coords = coords.sort_values(
-        ["chrom_sort", "start", "end", "region_id"], kind="stable"
-    )
 
-    if region_sort == "genomic":
-        return coords["region_id"].tolist()
-
-    if region_sort == "association_strength":
+    if "association_strength" in sort_keys:
         grouped = table.groupby("region_id", sort=False)["value"]
         strength = grouped.mean() if strength_aggregate == "mean" else grouped.max()
         coords = coords.merge(
@@ -1898,22 +1929,22 @@ def _read_cluster_region_association_region_order(
             right_index=True,
             how="left",
         )
-        coords = coords.sort_values(
-            ["association_strength", "chrom_sort", "start", "end", "region_id"],
-            ascending=[False, True, True, True, True],
-            kind="stable",
-        )
-        return coords["region_id"].tolist()
+    else:
+        coords["association_strength"] = 0.0
 
-    if region_sort == "cluster_fraction":
+    if "cluster_fraction" in sort_keys:
         # Assign each region to its dominant cluster, then rank by dominant fraction.
-        cluster_order = _read_cluster_region_association_cluster_order(table)
-        cluster_rank = {cluster: index for index, cluster in enumerate(cluster_order)}
+        ordered_clusters = _read_cluster_region_association_cluster_order(
+            table,
+            cluster_sort=cluster_sort,
+            cluster_order=cluster_order,
+        )
+        cluster_rank = {cluster: index for index, cluster in enumerate(ordered_clusters)}
         dominant_rows = table.copy()
         dominant_rows["cluster_rank"] = (
             dominant_rows["cluster"]
             .map(cluster_rank)
-            .fillna(len(cluster_order))
+            .fillna(len(ordered_clusters))
             .astype(int)
         )
         dominant_rows["value"] = pd.to_numeric(
@@ -1936,29 +1967,36 @@ def _read_cluster_region_association_region_order(
         coords = coords.merge(dominant_rows, on="region_id", how="left")
         coords["cluster_rank"] = (
             pd.to_numeric(coords["cluster_rank"], errors="coerce")
-            .fillna(len(cluster_order))
+            .fillna(len(ordered_clusters))
             .astype(int)
         )
         coords["dominant_sort_value"] = pd.to_numeric(
             coords["dominant_sort_value"], errors="coerce"
         ).fillna(0.0)
-        coords = coords.sort_values(
-            [
-                "cluster_rank",
-                "dominant_sort_value",
-                "chrom_sort",
-                "start",
-                "end",
-                "region_id",
-            ],
-            ascending=[True, False, True, True, True, True],
-            kind="stable",
-        )
-        return coords["region_id"].tolist()
+    else:
+        coords["cluster_rank"] = 0
+        coords["dominant_sort_value"] = 0.0
 
-    raise ValueError(
-        "region_sort must be 'cluster_fraction', 'input', 'genomic', or 'association_strength'."
-    )
+    sort_columns: list[str] = []
+    ascending: list[bool] = []
+    for key in sort_keys:
+        if key == "input":
+            sort_columns.append("input_rank")
+            ascending.append(True)
+        elif key == "genomic":
+            sort_columns.extend(["chrom_sort", "start", "end"])
+            ascending.extend([True, True, True])
+        elif key == "association_strength":
+            sort_columns.append("association_strength")
+            ascending.append(False)
+        elif key == "cluster_fraction":
+            sort_columns.extend(["cluster_rank", "dominant_sort_value"])
+            ascending.extend([True, False])
+
+    sort_columns.append("region_id")
+    ascending.append(True)
+    coords = coords.sort_values(sort_columns, ascending=ascending, kind="stable")
+    return coords["region_id"].tolist()
 
 
 def prepare_read_cluster_region_association_data(
@@ -1966,8 +2004,10 @@ def prepare_read_cluster_region_association_data(
     *,
     value_mode: str = "fraction",
     top_n_regions_per_cluster: int | None = 5,
-    region_sort: str = "cluster_fraction",
+    region_sort: str | Sequence[str] = "cluster_fraction",
     association_strength_aggregate: str = "max",
+    cluster_sort: str = "input",
+    cluster_order: Sequence[object] | None = None,
 ) -> dict[str, pd.DataFrame | dict[str, object]]:
     if not isinstance(association_table, pd.DataFrame):
         raise TypeError("association_table must be a pandas DataFrame.")
@@ -1975,17 +2015,26 @@ def prepare_read_cluster_region_association_data(
         raise ValueError("value_mode must be 'fraction' or 'log2_enrichment'.")
     if top_n_regions_per_cluster is not None and top_n_regions_per_cluster < 0:
         raise ValueError("top_n_regions_per_cluster must be non-negative.")
-    if region_sort not in {
+    region_sort_keys = [region_sort] if isinstance(region_sort, str) else list(region_sort)
+    valid_region_sort_keys = {
         "cluster_fraction",
         "input",
         "genomic",
         "association_strength",
-    }:
+    }
+    if not region_sort_keys or any(
+        key not in valid_region_sort_keys for key in region_sort_keys
+    ):
         raise ValueError(
-            "region_sort must be 'cluster_fraction', 'input', 'genomic', or 'association_strength'."
+            "region_sort must be 'cluster_fraction', 'input', 'genomic', "
+            "'association_strength', or a non-empty list of those keys."
         )
     if association_strength_aggregate not in {"max", "mean"}:
         raise ValueError("association_strength_aggregate must be 'max' or 'mean'.")
+    if cluster_sort not in {"input", "natural", "total_association", "max_association"}:
+        raise ValueError(
+            "cluster_sort must be 'input', 'natural', 'total_association', or 'max_association'."
+        )
 
     if "cluster" in association_table.columns:
         normalized = _normalize_long_form_read_cluster_region_association(
@@ -2008,13 +2057,19 @@ def prepare_read_cluster_region_association_data(
         normalized,
         region_sort=region_sort,
         strength_aggregate=association_strength_aggregate,
+        cluster_sort=cluster_sort,
+        cluster_order=cluster_order,
     )
-    cluster_order = _read_cluster_region_association_cluster_order(normalized)
+    resolved_cluster_order = _read_cluster_region_association_cluster_order(
+        normalized,
+        cluster_sort=cluster_sort,
+        cluster_order=cluster_order,
+    )
     normalized["region_id"] = pd.Categorical(
         normalized["region_id"], categories=region_order, ordered=True
     )
     normalized["cluster"] = pd.Categorical(
-        normalized["cluster"], categories=cluster_order, ordered=True
+        normalized["cluster"], categories=resolved_cluster_order, ordered=True
     )
     normalized = normalized.sort_values(
         ["region_id", "cluster"], kind="stable"
@@ -2025,7 +2080,7 @@ def prepare_read_cluster_region_association_data(
     matrix_table = (
         normalized.loc[:, ["region_id", "cluster", "value"]]
         .pivot(index="region_id", columns="cluster", values="value")
-        .reindex(index=region_order, columns=cluster_order)
+        .reindex(index=region_order, columns=resolved_cluster_order)
         .reset_index()
     )
     matrix_table.columns.name = None
@@ -2094,11 +2149,12 @@ def prepare_read_cluster_region_association_data(
         if not normalized.empty
         else "long_form",
         "region_order": [str(value) for value in region_order],
-        "cluster_order": cluster_order,
+        "cluster_order": resolved_cluster_order,
         "top_n_regions_per_cluster": top_n_regions_per_cluster,
         "has_top_regions_table": not top_regions_table.empty,
-        "region_sort": region_sort,
+        "region_sort": region_sort if isinstance(region_sort, str) else list(region_sort),
         "association_strength_aggregate": association_strength_aggregate,
+        "cluster_sort": cluster_sort,
         "chromosome_blocks": chromosome_blocks,
     }
     return {
