@@ -1175,7 +1175,8 @@ def binary_to_np_array(compressed_bytes, dtype, decompressor, binarized, int8tof
             / 256
         ).astype(np.float16)
     else:
-        return np.frombuffer(decompressor(compressed_bytes), dtype=dtype).astype(int)
+        # TODO: Verify whether this branch can be merged with the "binarized" branch in the long run
+        return np.frombuffer(decompressor(compressed_bytes), dtype=dtype).astype(bool)
 
 
 def retrieve_h5_data(h5, dataset, indices, compressed, dtype, decompressor, binarized):
