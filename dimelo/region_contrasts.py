@@ -724,6 +724,10 @@ def _adjust_p_values_bh(
     p_array = p_values.to_numpy(dtype=float)
     if testable is None:
         testable_array = [True] * len(p_array)
+    elif len(testable) == len(p_array):
+        # Callers pass `testable` positionally aligned with `p_values` (same frame),
+        # so align by position; a label reindex would raise on a duplicate index.
+        testable_array = testable.to_numpy().astype(bool).tolist()
     else:
         aligned = testable.reindex(p_values.index).fillna(False)
         testable_array = aligned.astype(bool).to_numpy().tolist()
