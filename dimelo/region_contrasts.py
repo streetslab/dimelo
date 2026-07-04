@@ -549,26 +549,28 @@ def _beta_binomial_two_sided_p_value(
     return min(max(tail_probability, 0.0), 1.0)
 
 
-# STATISTICS CHANGE (review fix #2): the previous "differential" test conditioned
-# a beta-binomial prior on the denominator's own counts and treated the reference
-# rate as exact. That was asymmetric (A-vs-B != B-vs-A) and produced false
-# positives when the reference had low coverage (its sampling uncertainty was
-# ignored). Replace it with a symmetric two-sample test (Fisher's exact on the
-# 2x2 table of modified / unmodified counts for numerator and denominator), which
-# accounts for both sides' sampling uncertainty and is order-invariant.
+# Symmetric two-sample test on pooled (modified, valid) counts. Used by
+# region_discovery, whose windows aggregate counts across samples (no replicate
+# structure), so a beta-binomial is not identifiable there. This is the closed-form
+# two-proportion z-test (pooled-variance normal approximation): it is symmetric /
+# order-invariant, accounts for both sides' sampling uncertainty, and is O(1) --
+# unlike Fisher's exact, which is very slow for the high-coverage windows that are
+# routine in genome-wide scans. For the large counts where speed matters the normal
+# approximation is essentially exact; near the min-coverage floor it is a standard,
+# slightly-liberal approximation. (region_contrasts uses the replicate-level
+# beta-binomial LRT below, which does model overdispersion.)
 def _two_sample_proportion_p_value(
     numerator_modified_count: int,
     numerator_valid_count: int,
     denominator_modified_count: int,
     denominator_valid_count: int,
 ) -> float:
-    """Symmetric two-sample test on (modified, unmodified) counts.
+    """Symmetric two-proportion z-test on (modified, valid) counts.
 
-    Uses Fisher's exact test on the 2x2 contingency table
-        [[num_mod, num_unmod], [den_mod, den_unmod]].
-    Returns 1.0 when either side has zero valid coverage (structurally
-    untestable). This is symmetric in numerator/denominator and does not
-    treat either rate as known without error.
+    Two-sided p-value from the pooled-variance normal approximation comparing
+    numerator vs denominator modification rates. Returns 1.0 when either side has zero
+    valid coverage, or when the pooled rate is degenerate (0 or 1) so no difference is
+    possible. Symmetric in numerator/denominator; O(1) (no factorials/optimization).
     """
     for name, value in (
         ("numerator_modified_count", numerator_modified_count),
@@ -587,19 +589,24 @@ def _two_sample_proportion_p_value(
             "two-sample proportion denominator modified_count cannot exceed valid_count."
         )
 
-    if numerator_valid_count <= 0 or denominator_valid_count <= 0:
+    n1 = numerator_valid_count
+    n2 = denominator_valid_count
+    if n1 <= 0 or n2 <= 0:
         return 1.0
 
-    numerator_unmodified_count = numerator_valid_count - numerator_modified_count
-    denominator_unmodified_count = denominator_valid_count - denominator_modified_count
-    _odds_ratio, p_value = stats.fisher_exact(
-        [
-            [numerator_modified_count, numerator_unmodified_count],
-            [denominator_modified_count, denominator_unmodified_count],
-        ],
-        alternative="two-sided",
-    )
-    p_value = float(p_value)
+    x1 = numerator_modified_count
+    x2 = denominator_modified_count
+    pooled = (x1 + x2) / (n1 + n2)
+    # Degenerate pooled rate (all-modified or all-unmodified across both sides) -> no
+    # variance and no possible difference -> not significant.
+    if pooled <= 0.0 or pooled >= 1.0:
+        return 1.0
+
+    standard_error = math.sqrt(pooled * (1.0 - pooled) * (1.0 / n1 + 1.0 / n2))
+    if standard_error == 0.0:
+        return 1.0
+    z = (x1 / n1 - x2 / n2) / standard_error
+    p_value = float(2.0 * stats.norm.sf(abs(z)))
     if math.isnan(p_value):
         return 1.0
     return min(max(p_value, 0.0), 1.0)
