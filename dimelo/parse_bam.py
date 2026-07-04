@@ -1144,6 +1144,72 @@ def _regions_to_processed_bed(
     return bed_filepath_processed
 
 
+def _fast_count_reads_and_lines(
+    input_txt: Path, read_id_col: int
+) -> tuple[int, int]:
+    """Count data rows and contiguous-distinct read ids in a modkit extract table.
+
+    ``read_by_base_txt_to_hdf5`` needs the read count up front to pre-size the hdf5
+    datasets. The original approach did a full pure-Python pass over the entire table
+    just to count, which dominated runtime for large (wide-window / long-read)
+    extractions and delayed the first write. This uses streaming C command-line tools
+    (tail/cut/uniq/wc) for the same counts, and falls back to the Python pass if the
+    tools are unavailable or error. Reads are contiguous in modkit output, so a run of
+    identical read ids is one read.
+
+    Returns:
+        (num_reads, num_lines): reads, and data rows excluding the header.
+    """
+    try:
+        total = int(
+            subprocess.run(
+                ["wc", "-l", str(input_txt)],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.split()[0]
+        )
+        num_lines = max(0, total - 1)  # exclude header row
+        if num_lines == 0:
+            return 0, 0
+        tail = subprocess.Popen(
+            ["tail", "-n", "+2", str(input_txt)], stdout=subprocess.PIPE
+        )
+        cut = subprocess.Popen(
+            ["cut", "-f", str(read_id_col + 1)],
+            stdin=tail.stdout,
+            stdout=subprocess.PIPE,
+        )
+        tail.stdout.close()
+        uniq = subprocess.Popen(["uniq"], stdin=cut.stdout, stdout=subprocess.PIPE)
+        cut.stdout.close()
+        wc = subprocess.run(
+            ["wc", "-l"], stdin=uniq.stdout, capture_output=True, text=True
+        )
+        uniq.wait()
+        cut.wait()
+        tail.wait()
+        num_reads = int(wc.stdout.split()[0])
+        if num_reads <= 0:
+            raise ValueError("fast count produced no reads")
+        return num_reads, num_lines
+    except Exception:
+        # Fallback: pure-Python pass (original behavior), robust to unusual tables.
+        num_reads = 0
+        num_lines = 0
+        prev: object = object()
+        with Path(input_txt).open(newline="") as fh:
+            reader = csv.reader(fh, delimiter="\t")
+            next(reader, None)  # skip header
+            for fields in reader:
+                num_lines += 1
+                value = fields[read_id_col]
+                if value != prev:
+                    prev = value
+                    num_reads += 1
+        return num_reads, num_lines
+
+
 def read_by_base_txt_to_hdf5(
     input_txt: str | Path,
     output_h5: str | Path,
@@ -1213,17 +1279,15 @@ def read_by_base_txt_to_hdf5(
         else:
             first_pass_read_name_idx = 0
 
-        # Check file length
-        line_index = 0
-        for fields in reader:
-            line_index += 1
-            read_id_value = fields[first_pass_read_name_idx]
-            if read_name != read_id_value:
-                read_name = read_id_value
-                num_reads += 1
-        if line_index == 0:
+        # Count reads/rows to pre-size the datasets. The original pure-Python pass over
+        # the whole table dominated runtime for large (wide-window / long-read)
+        # extractions and delayed the first write; _fast_count_reads_and_lines gets the
+        # same counts via streaming C tools (with a Python fallback).
+        num_reads, num_lines = _fast_count_reads_and_lines(
+            input_txt, first_pass_read_name_idx
+        )
+        if num_lines == 0:
             raise ValueError(f"modkit extract output has no data rows: {input_txt}")
-        num_lines = line_index
         txt.seek(0)
 
         with h5py.File(output_h5, "a") as h5:
