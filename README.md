@@ -990,6 +990,12 @@ def regions_to_list(
 
 `dimelo.cluster` wraps the loading utilities above so you can quickly build matrices for read-window clustering, dimensionality reduction, or optional region-anchored exploratory analysis.
 
+For a directly runnable single-read example, see
+[`scripts/cluster_read_windows.py`](scripts/cluster_read_windows.py). It pools one
+or more extract HDF5 files into a shared clustering model and exports read assignments,
+sample-level cluster fractions, mean profiles, feature scaling details, QC metrics, and
+figures.
+
 For the higher-level shared-boundary workflows added on top of these loaders, see [docs/shared-clustering.md](docs/shared-clustering.md). The short version is:
 
 - recommended: run `parse_bam.extract()` and cluster read windows first, then feed the resulting read-cluster labels into region-level occupancy follow-up
@@ -1019,7 +1025,7 @@ read_windows = cluster.extract_read_windows(
     hdf5_file="output/extract.h5",
     motifs=["A,0", "CG,0"],
     regions="regions.bed",
-    config=cluster.ReadWindowExtractionConfig(window_bp=2000, orientation_aware=True),
+    config=cluster.ReadWindowExtractionConfig(window_size=1000, orientation_aware=True),
 )
 feature_matrix, feature_names = cluster.read_window_feature_matrix(read_windows)
 read_clusters = cluster.cluster_read_windows(feature_matrix, method="kmeans", n_clusters=8)
@@ -1133,7 +1139,7 @@ Many of the parsing, loading, and plotting functions share parameters. The commo
 
 `window_size` for parsing and most loading and plotting functions is a *modification to your regions* that will redefine them to be all the same size, i.e. `2 x window_size`, centered around the centers of your original regions. This is important for parsing/loading/plotting operations that aggregate many loci at once, but should be left blank if you do not want your regions modified. The default is `None` for functions where the parameter is optional.
 
-For **clustering read-window extraction APIs** (`cluster.extract_read_windows`, `cluster.build_multimotif_read_windows`, and `cluster.ReadWindowExtractionConfig`) the preferred parameter is `window_bp`, which is the **full extracted span in bp**. `window_size` is still accepted there only as a backward-compatible alias.
+For **clustering read-window extraction APIs** (`cluster.extract_read_windows`, `cluster.build_multimotif_read_windows`, and `cluster.ReadWindowExtractionConfig`), `window_size` is the half-window in bp around the region center, so the extracted span is `2 x window_size`. Use `low_memory=True` with an explicit `window_size` for large region sets that should be loaded in batches.
 
 `relative` is a boolean input that specifies whether loading and plotting operations adjust coordinates to be relative to some center point or simple plot in absolute genomic coordinates. In the newer shared plotting layer, `relative=True` maps to fixed-window plotting around a common anchor. Aggregate plots may grow into richer segment-based normalization later, but single-read plotting still preserves coordinate geometry rather than stretching variable-length features.
 
