@@ -310,7 +310,10 @@ def plot_region_contrast_heatmap_matplotlib(
     image = ax.imshow(
         heatmap.to_numpy(),
         aspect="auto",
-        origin="lower",
+        # Review fix #10: use origin="upper" to match every sibling heatmap in
+        # this module; origin="lower" rendered the region-contrast panel flipped
+        # vertically relative to its row-order/summary annotations.
+        origin="upper",
         interpolation="nearest",
     )
     ax.figure.colorbar(image, ax=ax, label="value")

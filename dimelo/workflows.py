@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -7,6 +8,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
+
+_LOGGER = logging.getLogger(__name__)
 
 from . import (
     chip_atlas,
@@ -70,6 +73,32 @@ def _serialize_region_spec(region_spec: Any) -> Any:
     if isinstance(region_spec, list):
         return [str(item) if isinstance(item, Path) else item for item in region_spec]
     return region_spec
+
+
+def _region_spec_content_key(region_spec: Any) -> Any:
+    """Normalize a region spec to a comparable content key.
+
+    Review fix #4: control-region vs matched-region equality must compare
+    resolved region *content*, not object identity/type. A path is resolved to
+    its absolute filesystem location; a list of region strings is normalized to a
+    sorted tuple; anything else falls back to its serialized form. This lets a
+    ``str``/``Path`` control_regions be compared meaningfully against a
+    ``list``/``str``/``Path`` matched_regions (previously ``list == Path`` was
+    always False, so the "must be separate" guard never fired).
+    """
+    if region_spec is None:
+        return None
+    if isinstance(region_spec, (str, Path)):
+        try:
+            return ("path", str(Path(region_spec).expanduser().resolve()))
+        except OSError:
+            return ("path", str(region_spec))
+    if isinstance(region_spec, (list, tuple)):
+        return (
+            "list",
+            tuple(sorted(_region_spec_content_key(item) for item in region_spec)),
+        )
+    return ("other", str(_serialize_region_spec(region_spec)))
 
 
 def _coerce_artifacts(sample: SampleSpec) -> list[DatasetArtifact]:
@@ -181,6 +210,27 @@ def _require_pileup_path(sample: SampleSpec) -> str | Path:
     )
 
 
+def _coverage_weighted_offset(
+    data_matrix: np.ndarray,
+    val_matrix: np.ndarray | None,
+) -> float:
+    """Single offset formula shared by read_global and region_anchored modes.
+
+    Review fix #4: both normalization paths must use the same offset definition.
+    When per-position valid counts are available and non-zero, the offset is the
+    coverage-weighted mean modified fraction (sum of modified / sum of valid);
+    otherwise it falls back to the unweighted mean of the data matrix. The
+    region_anchored path has no valid-count matrix, so it consistently uses the
+    unweighted-mean fallback via ``val_matrix=None``.
+    """
+    data = np.asarray(data_matrix, dtype=float)
+    if val_matrix is not None:
+        valid = np.asarray(val_matrix, dtype=float)
+        if valid.sum() > 0:
+            return float(data.sum() / valid.sum())
+    return float(data.mean())
+
+
 def _normalize_read_windows(
     result: cluster.ReadWindowExtractionResult,
     *,
@@ -211,10 +261,7 @@ def _normalize_read_windows(
         if offset_source.val_matrix is None
         else np.asarray(offset_source.val_matrix, dtype=float)
     )
-    if offset_val_matrix is not None and offset_val_matrix.sum() > 0:
-        global_offset = float(offset_matrix.sum() / offset_val_matrix.sum())
-    else:
-        global_offset = float(offset_matrix.mean())
+    global_offset = _coverage_weighted_offset(offset_matrix, offset_val_matrix)
 
     normalized = cluster.ReadWindowExtractionResult(
         data_matrix=data_matrix - global_offset,
@@ -388,7 +435,21 @@ def _build_read_global_region_summary(assignments: pd.DataFrame) -> pd.DataFrame
                     labels=sample_assignments["cluster"].to_numpy(),
                     include_strand=include_strand,
                 )
-            except Exception:
+            except (ValueError, KeyError, TypeError) as error:
+                # Review fix #5: only recoverable, data-shape errors justify the
+                # silent downgrade to the coordinate fallback below. Log the
+                # reason so the downgrade is not invisible, and let unexpected
+                # errors (bugs, MemoryError, KeyboardInterrupt, etc.) propagate
+                # instead of being swallowed.
+                _LOGGER.warning(
+                    "summarize_read_cluster_region_associations failed for "
+                    "sample_id=%r condition=%r (%s: %s); falling back to "
+                    "coordinate-based region summary.",
+                    sample_id,
+                    condition,
+                    type(error).__name__,
+                    error,
+                )
                 association_frames = []
                 break
             if not isinstance(sample_summary, pd.DataFrame) or sample_summary.empty:
@@ -1593,7 +1654,13 @@ def shared_cluster_distribution(
                     continue
                 if signal_normalization == "control_regions":
                     control_regions = sample.regions_bed
-                    if control_regions is None or control_regions == matched_regions:
+                    # Review fix #4: compare resolved region content, not object
+                    # identity. Previously ``list == Path`` was always False so the
+                    # guard never triggered and normalization could silently divide
+                    # by the matched regions themselves.
+                    if control_regions is None or _region_spec_content_key(
+                        control_regions
+                    ) == _region_spec_content_key(matched_regions):
                         raise ValueError(
                             "signal_normalization='control_regions' in region_anchored mode "
                             "requires sample.regions_bed to provide separate control regions."
@@ -1624,9 +1691,17 @@ def shared_cluster_distribution(
                         cores=cores,
                         quiet=quiet,
                     )
-                    offset = float(np.asarray(control_matrix, dtype=float).mean())
+                    # Review fix #4: use the shared offset formula. The region
+                    # feature table carries no per-position valid-count matrix,
+                    # so val_matrix=None yields the unweighted-mean branch,
+                    # matching read_global's fallback behavior.
+                    offset = _coverage_weighted_offset(
+                        np.asarray(control_matrix, dtype=float), None
+                    )
                 else:
-                    offset = float(region_matrix[sample_indices].mean())
+                    offset = _coverage_weighted_offset(
+                        region_matrix[sample_indices], None
+                    )
                 region_matrix[sample_indices] = region_matrix[sample_indices] - offset
                 sample_normalization[sample_id] = {"global_offset": offset}
 

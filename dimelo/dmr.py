@@ -75,8 +75,20 @@ def _select_high_confidence_sites(
         effects = pd.to_numeric(out[effect_col], errors="coerce")
         mask &= effects.abs() >= float(abs_effect_size_min)
     elif "score" in out.columns:
-        scores = pd.to_numeric(out["score"], errors="coerce")
-        mask &= scores.abs() >= float(abs_effect_size_min)
+        # Review fix #7: previously, when 'effect_size' was absent we silently
+        # applied abs_effect_size_min to the 'score' column. That is wrong: modkit
+        # effect sizes are on a small fractional scale, while the BED 'score'
+        # column is a different quantity (often 0-1000), so the threshold is
+        # meaningless there. Refuse to threshold the unrelated 'score' column as
+        # if it were an effect size; the caller must supply a table with a real
+        # 'effect_size' column to filter by effect magnitude.
+        raise ValueError(
+            "_select_high_confidence_sites was asked to filter by "
+            "abs_effect_size_min but the table has no 'effect_size' column. The "
+            "'score' column is a different, non-comparable scale and must not be "
+            "thresholded as an effect size; supply a table with an 'effect_size' "
+            "column (e.g. run modkit dmr with --header) to filter by effect size."
+        )
 
     if min_total_coverage is not None:
         coverage_col = None
@@ -360,7 +372,13 @@ def run_dmr_multi(
 
     subprocess.run(command, check=True)
 
-    pair_paths = sorted(output_dir.glob("*.bed"))
+    # Review fix #6: scope the result manifest to this run's prefix instead of
+    # globbing every *.bed in out_dir. The unscoped glob picked up stale outputs
+    # from previous runs (and ignored `prefix` entirely), so the returned
+    # manifest could list files that this invocation never produced. When a
+    # prefix is set, modkit names its outputs "<prefix>*.bed"; restrict to that.
+    glob_pattern = f"{prefix}*.bed" if prefix is not None else "*.bed"
+    pair_paths = sorted(output_dir.glob(glob_pattern))
     pair_rows: list[dict[str, Any]] = []
     for bed_path in pair_paths:
         pair_rows.append(

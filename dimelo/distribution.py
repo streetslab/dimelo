@@ -38,7 +38,11 @@ def build_cluster_distribution(assignments: pd.DataFrame) -> pd.DataFrame:
         .size()
         .reset_index(name="count")
     )
-    totals = grouped.groupby("sample_id")["count"].transform("sum")
+    # STATISTICS CHANGE (review fix #9): normalize within (sample_id, condition)
+    # rather than sample_id alone. Grouping by sample_id only pools counts across
+    # conditions when a sample appears under more than one condition, so the
+    # per-cluster fractions no longer sum to 1 within a condition.
+    totals = grouped.groupby(["sample_id", "condition"])["count"].transform("sum")
     grouped["fraction"] = grouped["count"] / totals
     return grouped[_CLUSTER_DISTRIBUTION_COLUMNS]
 
@@ -88,6 +92,7 @@ def build_distribution_change(
                 "count",
                 "fraction",
                 "replicate_n",
+                "reference_present",
                 "reference_fraction",
                 "delta_fraction",
                 "log2_fc",
@@ -111,6 +116,13 @@ def build_distribution_change(
         merged["count"] = pd.NA
     if "replicate_n" not in merged.columns:
         merged["replicate_n"] = pd.NA
+    # STATISTICS CHANGE (review fix #3): flag clusters absent from the reference
+    # condition. The left merge + fillna(0) fabricates a zero reference_fraction
+    # for such clusters, which then reports a large positive log2_fc (~+20) even
+    # though the reference never observed that cluster. Expose reference_present
+    # so downstream ranking/filtering can distinguish real changes from
+    # fabricated-zero comparisons instead of silently ranking them as top hits.
+    merged["reference_present"] = merged["reference_fraction"].notna()
     merged["reference_fraction"] = merged["reference_fraction"].fillna(0.0)
     merged["delta_fraction"] = merged["fraction"] - merged["reference_fraction"]
     merged["log2_fc"] = np.log2(
@@ -125,6 +137,7 @@ def build_distribution_change(
                 "count",
                 "fraction",
                 "replicate_n",
+                "reference_present",
                 "reference_fraction",
                 "delta_fraction",
                 "log2_fc",
