@@ -1033,10 +1033,15 @@ def _validate_subset_parameters(subset_parameters: dict | None) -> None:
 def _subset_indices(
     relevant_read_indices: np.ndarray,
     subset_parameters: dict | None,
+    seed: int | None = None,
 ) -> np.ndarray:
     if subset_parameters is None or relevant_read_indices.size == 0:
         return relevant_read_indices
-    return np.sort(utils.random_sample(relevant_read_indices, **subset_parameters))
+    # Reproducibility fix: thread an optional seed into random_sample so subsetting
+    # is deterministic when a seed is supplied (None preserves prior behavior).
+    return np.sort(
+        utils.random_sample(relevant_read_indices, seed=seed, **subset_parameters)
+    )
 
 
 def read_vectors_from_hdf5(
@@ -1053,6 +1058,7 @@ def read_vectors_from_hdf5(
     span_full_window: bool = False,
     random_sample_n_reads: int | None = None,
     min_read_length_bp: int | None = None,
+    random_state: int | None = None,
 ) -> tuple[list[tuple], list[str], dict | None]:
     """
     User-facing function.
@@ -1108,6 +1114,9 @@ def read_vectors_from_hdf5(
             region/motif selection. Samples unique read names (not tuple rows), then retains all
             motif rows associated with those reads.
         min_read_length_bp: Optional minimum read length filter (bp) applied before loading vectors.
+        random_state: Optional integer seed threaded into utils.random_sample for all subsampling
+            (both subset_parameters per-region draws and the random_sample_n_reads global draw).
+            When None (default), sampling uses the module-level unseeded rng (prior behavior).
 
     Returns:
         a list of tuples, each tuple containing all datasets corresponding to an individual read that
@@ -1190,7 +1199,9 @@ def read_vectors_from_hdf5(
                         )
                     )
                     relevant_read_indices = _subset_indices(
-                        relevant_read_indices, subset_parameters=subset_parameters
+                        relevant_read_indices,
+                        subset_parameters=subset_parameters,
+                        seed=random_state,  # deterministic subset when random_state given
                     )
                     read_tuples_raw += list(
                         zip(
@@ -1223,7 +1234,9 @@ def read_vectors_from_hdf5(
                 )
             )
             relevant_read_indices = _subset_indices(
-                relevant_read_indices, subset_parameters=subset_parameters
+                relevant_read_indices,
+                subset_parameters=subset_parameters,
+                seed=random_state,  # deterministic subset when random_state given
             )
             read_tuples_raw = list(
                 zip(
@@ -1272,7 +1285,10 @@ def read_vectors_from_hdf5(
         )
         if random_sample_n_reads < unique_read_names.size:
             sampled_names = set(
-                utils.random_sample(unique_read_names, n=random_sample_n_reads).tolist()
+                # deterministic global read-name sample when random_state given
+                utils.random_sample(
+                    unique_read_names, n=random_sample_n_reads, seed=random_state
+                ).tolist()
             )
             read_tuples_processed = [
                 row

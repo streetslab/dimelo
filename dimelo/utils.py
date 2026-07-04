@@ -503,6 +503,7 @@ def random_sample(
     n: int | None = None,
     frac: float | None = None,
     replace: bool = False,
+    seed: int | np.random.Generator | None = None,
     # shuffle: bool = True,
 ):
     """
@@ -516,6 +517,9 @@ def random_sample(
         n: Number of elements to return; mutually exclusive with frac
         frac: Fraction of elements to return; mutually exclusive with n
         replace: When True, sample with replacement
+        seed: Optional source of randomness for a reproducible draw. Accepts an int seed
+            or a pre-built numpy Generator. When None (default), the module-level unseeded
+            ``rng`` is used, preserving the historical nondeterministic behavior.
 
     Return: the requested random subset of the given array
 
@@ -529,7 +533,15 @@ def random_sample(
     if size is None:
         assert frac is not None
         size = round(frac * len(array))
-    return rng.choice(
+    # Reproducibility fix: use a caller-supplied seed/Generator when given, otherwise
+    # fall back to the module-level unseeded rng (backward-compatible default).
+    if seed is None:
+        sampler = rng
+    elif isinstance(seed, np.random.Generator):
+        sampler = seed
+    else:
+        sampler = np.random.default_rng(seed)
+    return sampler.choice(
         a=array,
         size=size,
         replace=replace,
