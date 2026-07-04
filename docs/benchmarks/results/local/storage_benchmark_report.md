@@ -8,6 +8,9 @@ Generated: `2026-07-03T13:10:47-0700`
 - Reason: No alternative satisfied the production follow-up gates.
 - Largest measured dataset: `synthetic-200000` (200000 rows)
 - Backends: legacy-hdf5, flat-hdf5, netcdf-vlen, netcdf-flat, zarr-flat, parquet
+- Concurrency note: this committed 200K-row decision matrix used single-process
+  reads only (`--concurrency 1`). The separate `local-concurrency-smoke` result
+  covers 1/4/8-process reads on the fixture dataset.
 
 ## Primary Metrics On Largest Dataset
 

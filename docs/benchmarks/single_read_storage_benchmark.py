@@ -222,6 +222,15 @@ def _select_flat_vectors(
     ]
 
 
+def _hdf5_take(dataset: Any, indices: np.ndarray) -> Any:
+    indices = np.asarray(indices, dtype=np.int64)
+    if len(indices) == 0:
+        return dataset[:0]
+    if len(indices) == 1 or np.all(indices[1:] >= indices[:-1]):
+        return dataset[list(indices)]
+    return [dataset[int(index)] for index in indices]
+
+
 def _slice_bounds(total: int, chunk_rows: int) -> Iterable[tuple[int, int]]:
     for start in range(0, total, chunk_rows):
         yield start, min(start + chunk_rows, total)
@@ -412,8 +421,8 @@ class LegacyHDF5Backend:
         with h5py.File(path, "r") as handle:
             if indices is None:
                 indices = np.arange(len(handle["read_name"]), dtype=np.int64)
-            selection = list(np.asarray(indices, dtype=np.int64))
-            motifs = _decode_strings(handle["motif"][selection])
+            selection = np.asarray(indices, dtype=np.int64)
+            motifs = _decode_strings(_hdf5_take(handle["motif"], selection))
 
             def vectors(column: str) -> list[np.ndarray]:
                 return [
@@ -421,15 +430,15 @@ class LegacyHDF5Backend:
                         gzip.decompress(np.asarray(value, dtype=np.uint8).tobytes()),
                         dtype=np.uint8,
                     ).copy()
-                    for value in handle[column][selection]
+                    for value in _hdf5_take(handle[column], selection)
                 ]
 
             return ReadData(
-                read_name=_decode_strings(handle["read_name"][selection]),
-                chromosome=_decode_strings(handle["chromosome"][selection]),
-                read_start=np.asarray(handle["read_start"][selection], dtype=np.int64),
-                read_end=np.asarray(handle["read_end"][selection], dtype=np.int64),
-                strand=_decode_strings(handle["strand"][selection]),
+                read_name=_decode_strings(_hdf5_take(handle["read_name"], selection)),
+                chromosome=_decode_strings(_hdf5_take(handle["chromosome"], selection)),
+                read_start=np.asarray(_hdf5_take(handle["read_start"], selection), dtype=np.int64),
+                read_end=np.asarray(_hdf5_take(handle["read_end"], selection), dtype=np.int64),
+                strand=_decode_strings(_hdf5_take(handle["strand"], selection)),
                 motif=motifs,
                 mod_vector=vectors("mod_vector"),
                 val_vector=vectors("val_vector"),
@@ -442,7 +451,7 @@ class LegacyHDF5Backend:
         return self._read(path, None)
 
     def read_indices(self, path: Path, indices: np.ndarray) -> ReadData:
-        return self._read(path, np.sort(indices))
+        return self._read(path, indices)
 
     def read_region(self, path: Path, query: Query) -> ReadData:
         with h5py.File(path, "r") as handle:
@@ -562,14 +571,13 @@ class FlatHDF5Backend:
             if indices is None:
                 indices = np.arange(len(handle["read_name"]), dtype=np.int64)
             indices = np.asarray(indices, dtype=np.int64)
-            selection = list(indices)
-            motifs = _decode_strings(handle["motif"][selection])
+            motifs = _decode_strings(_hdf5_take(handle["motif"], indices))
             return ReadData(
-                read_name=_decode_strings(handle["read_name"][selection]),
-                chromosome=_decode_strings(handle["chromosome"][selection]),
-                read_start=np.asarray(handle["read_start"][selection], dtype=np.int64),
-                read_end=np.asarray(handle["read_end"][selection], dtype=np.int64),
-                strand=_decode_strings(handle["strand"][selection]),
+                read_name=_decode_strings(_hdf5_take(handle["read_name"], indices)),
+                chromosome=_decode_strings(_hdf5_take(handle["chromosome"], indices)),
+                read_start=np.asarray(_hdf5_take(handle["read_start"], indices), dtype=np.int64),
+                read_end=np.asarray(_hdf5_take(handle["read_end"], indices), dtype=np.int64),
+                strand=_decode_strings(_hdf5_take(handle["strand"], indices)),
                 motif=motifs,
                 mod_vector=_select_flat_vectors(
                     np.asarray(handle["mod_offsets"][:], dtype=np.int64),
@@ -590,7 +598,7 @@ class FlatHDF5Backend:
         return self._read(path, None)
 
     def read_indices(self, path: Path, indices: np.ndarray) -> ReadData:
-        return self._read(path, np.sort(indices))
+        return self._read(path, indices)
 
     def read_region(self, path: Path, query: Query) -> ReadData:
         with h5py.File(path, "r") as handle:
@@ -726,7 +734,7 @@ class NetCDFBackend:
         return self._read(path, None)
 
     def read_indices(self, path: Path, indices: np.ndarray) -> ReadData:
-        return self._read(path, np.sort(indices))
+        return self._read(path, indices)
 
     def read_region(self, path: Path, query: Query) -> ReadData:
         assert netCDF4 is not None
@@ -904,7 +912,7 @@ class ZarrBackend:
         return self._read(path, None)
 
     def read_indices(self, path: Path, indices: np.ndarray) -> ReadData:
-        return self._read(path, np.sort(indices))
+        return self._read(path, indices)
 
     def read_region(self, path: Path, query: Query) -> ReadData:
         assert zarr is not None
@@ -1014,11 +1022,17 @@ class ParquetBackend:
         assert pads is not None
         return pads.dataset(path, format="parquet", exclude_invalid_files=True)
 
-    def _from_table(self, path: Path, table: Any) -> ReadData:
+    def _from_table(
+        self, path: Path, table: Any, requested_order: np.ndarray | None = None
+    ) -> ReadData:
         metadata = json.loads((path / "_dimelo_metadata.json").read_text(encoding="utf-8"))
         if table.num_rows:
             row_indices = np.asarray(table["_row_index"].to_numpy(), dtype=np.int64)
-            if np.any(row_indices[1:] < row_indices[:-1]):
+            if requested_order is not None:
+                position_by_row = {int(row): offset for offset, row in enumerate(row_indices)}
+                order = [position_by_row[int(row)] for row in requested_order]
+                table = table.take(pa.array(order, type=pa.int64()))
+            elif np.any(row_indices[1:] < row_indices[:-1]):
                 order = np.argsort(row_indices)
                 table = table.take(pa.array(order, type=pa.int64()))
         motifs = np.asarray(table["motif"].to_pylist(), dtype=object)
@@ -1050,8 +1064,13 @@ class ParquetBackend:
 
     def read_indices(self, path: Path, indices: np.ndarray) -> ReadData:
         assert pads is not None
-        expression = pads.field("_row_index").isin(np.asarray(indices, dtype=np.int64).tolist())
-        return self._from_table(path, self._dataset(path).to_table(filter=expression))
+        requested_order = np.asarray(indices, dtype=np.int64)
+        expression = pads.field("_row_index").isin(requested_order.tolist())
+        return self._from_table(
+            path,
+            self._dataset(path).to_table(filter=expression),
+            requested_order=requested_order,
+        )
 
     def read_region(self, path: Path, query: Query) -> ReadData:
         assert pads is not None

@@ -34,6 +34,7 @@ def test_storage_backend_round_trip_and_selection(tmp_path, backend_name, thresh
 
     storage.assert_logical_equal(data, backend.read_all(path))
     storage.assert_logical_equal(data.take([1, 3]), backend.read_indices(path, np.array([1, 3])))
+    storage.assert_logical_equal(data.take([3, 1]), backend.read_indices(path, np.array([3, 1])))
 
     query = storage.Query("chr1", 9, 30, "A,0")
     expected = data.take(storage._query_indices(data, query))

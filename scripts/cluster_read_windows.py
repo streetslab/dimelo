@@ -114,6 +114,11 @@ def main() -> None:
     motifs = args.motif or ["A,0"]
     samples = load_samples(args)
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    if args.low_memory and len(motifs) > 1:
+        raise ValueError(
+            "--low-memory is currently supported only for single-motif extraction; "
+            "multi-motif clustering uses build_multimotif_read_windows()."
+        )
 
     results = []
     sample_ids = []
@@ -123,20 +128,31 @@ def main() -> None:
         h5_path = Path(sample["extract_h5"])
         if not h5_path.is_file():
             raise FileNotFoundError(f"Missing extract HDF5 for {sample_id}: {h5_path}")
-        result = cluster.extract_read_windows(
-            hdf5_file=h5_path,
-            motifs=motifs,
-            regions=args.regions,
-            config=cluster.ReadWindowExtractionConfig(
+        if len(motifs) == 1:
+            result = cluster.extract_read_windows(
+                hdf5_file=h5_path,
+                motifs=motifs,
+                regions=args.regions,
+                config=cluster.ReadWindowExtractionConfig(
+                    window_size=args.window_size,
+                    orientation_aware=True,
+                    filter_multi_region_reads=True,
+                ),
+                span_full_window=True,
+                low_memory=args.low_memory,
+                region_batch_size=args.region_batch_size,
+                random_state=args.random_state,
+            )
+        else:
+            result = cluster.build_multimotif_read_windows(
+                hdf5_file=h5_path,
+                motifs=motifs,
+                regions=args.regions,
                 window_size=args.window_size,
                 orientation_aware=True,
-                filter_multi_region_reads=True,
-            ),
-            span_full_window=True,
-            low_memory=args.low_memory,
-            region_batch_size=args.region_batch_size,
-            random_state=args.random_state,
-        )
+                span_full_window=True,
+                require_all_motifs=True,
+            )
         results.append(result)
         sample_ids.append(sample_id)
 
@@ -221,9 +237,12 @@ def main() -> None:
         )
 
     profiles = []
-    if reads.data_matrix.shape[1] % len(motifs) != 0:
+    if len(motifs) == 1:
+        motif_width = reads.data_matrix.shape[1]
+    elif reads.data_matrix.shape[1] % len(motifs) != 0:
         raise ValueError("Read-window width is not divisible by the number of motifs.")
-    motif_width = reads.data_matrix.shape[1] // len(motifs)
+    else:
+        motif_width = reads.data_matrix.shape[1] // len(motifs)
     x = np.arange(motif_width) - motif_width // 2
     for label in np.unique(labels):
         cluster_mean = reads.data_matrix[labels == label].mean(axis=0)
@@ -255,6 +274,8 @@ def main() -> None:
         "random_state": args.random_state,
         "low_memory": bool(args.low_memory),
         "region_batch_size": int(args.region_batch_size),
+        "assignment_level": "read_window",
+        "multi_motif": len(motifs) > 1,
         "metrics": {key: None if value is None else float(value) for key, value in fit.metrics.items()},
         "feature_names": feature_names,
     }

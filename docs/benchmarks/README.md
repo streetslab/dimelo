@@ -34,6 +34,11 @@ region reads. Temporary artifacts are written beneath the ignored
 `docs/benchmarks/tmp_bench/` directory. Results are written as JSON, CSV, and a
 markdown summary report in `docs/benchmarks/results/`.
 
+The committed `docs/benchmarks/results/local/` decision matrix was captured with
+single-process reads (`--concurrency 1`) for the fixture, 20K, and 200K datasets.
+The committed `docs/benchmarks/results/local-concurrency-smoke/` artifacts cover
+1/4/8-process reads on the fixture only.
+
 For a quick correctness and API smoke run:
 
 ```bash
