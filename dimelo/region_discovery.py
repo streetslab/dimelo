@@ -8,8 +8,7 @@ from . import global_analysis
 from .models import ContrastSpec, RegionDiscoveryResult
 from .region_contrasts import (
     _adjust_p_values_bh,
-    _beta_binomial_two_sided_p_value,
-    _estimate_beta_binomial_prior,
+    _two_sample_proportion_p_value,
 )
 
 _WINDOW_KEY_COLUMNS = ["window_id", "chromosome", "start", "end", "strand"]
@@ -491,14 +490,14 @@ def _score_with_contrast(
             .abs()
         )
 
+        # STATISTICS CHANGE (review fix #2): symmetric two-sample test replaces the
+        # asymmetric conditional beta-binomial.
         scored["p_value"] = [
-            _beta_binomial_two_sided_p_value(
+            _two_sample_proportion_p_value(
                 int(numerator_modified_count),
                 int(numerator_valid_count),
-                *_estimate_beta_binomial_prior(
-                    int(denominator_modified_count),
-                    int(denominator_valid_count),
-                ),
+                int(denominator_modified_count),
+                int(denominator_valid_count),
             )
             for numerator_modified_count, numerator_valid_count, denominator_modified_count, denominator_valid_count in zip(
                 scored["numerator_modified_count"],
@@ -508,7 +507,15 @@ def _score_with_contrast(
                 strict=False,
             )
         ]
-        scored["adjusted_p_value"] = _adjust_p_values_bh(scored["p_value"])
+        # STATISTICS CHANGE (review fix #1): only windows with valid coverage on
+        # both sides are testable; zero-coverage windows return a degenerate
+        # p=1.0 and are excluded from the BH total.
+        testable = (scored["numerator_valid_count"] > 0) & (
+            scored["denominator_valid_count"] > 0
+        )
+        scored["adjusted_p_value"] = _adjust_p_values_bh(
+            scored["p_value"], testable=testable
+        )
         return scored
 
     if contrast is None or not contrast.numerator or not contrast.denominator:
@@ -550,14 +557,15 @@ def _score_with_contrast(
     )
 
     if score == "beta_binomial":
+        # STATISTICS CHANGE (review fix #2): symmetric two-sample test replaces the
+        # asymmetric conditional beta-binomial. (The beta_binomial branch normally
+        # returns earlier; this path is retained for defensiveness.)
         scored["p_value"] = [
-            _beta_binomial_two_sided_p_value(
+            _two_sample_proportion_p_value(
                 int(numerator_modified_count),
                 int(numerator_valid_count),
-                *_estimate_beta_binomial_prior(
-                    int(denominator_modified_count),
-                    int(denominator_valid_count),
-                ),
+                int(denominator_modified_count),
+                int(denominator_valid_count),
             )
             for numerator_modified_count, numerator_valid_count, denominator_modified_count, denominator_valid_count in zip(
                 scored["numerator_modified_count"],
@@ -772,19 +780,45 @@ def merge_adjacent_hits(hits: pd.DataFrame, merge_distance: int) -> pd.DataFrame
             )
         return merged
 
-    same_chromosome = pd.Series(True, index=ordered.index)
-    if "chromosome" in ordered.columns:
-        same_chromosome = ordered["chromosome"].eq(ordered["chromosome"].shift())
+    # STATISTICS CHANGE (review fix #8): merge using a sweep-line over the running
+    # group-max end rather than only the immediate predecessor's end. Comparing to
+    # ordered["end"].shift() fragments contiguous regions whenever a shorter window
+    # is followed by a window that would still overlap the group extent (e.g. a
+    # window nested inside a longer earlier window). Track the cumulative max end
+    # per (chromosome, strand) run so overlapping/adjacent windows stay grouped.
+    has_chromosome = "chromosome" in ordered.columns
+    has_strand = "strand" in ordered.columns
+    chromosomes = ordered["chromosome"].tolist() if has_chromosome else None
+    strands = ordered["strand"].tolist() if has_strand else None
+    starts = ordered["start"].tolist()
+    ends = ordered["end"].tolist()
 
-    same_strand = pd.Series(True, index=ordered.index)
-    if "strand" in ordered.columns:
-        same_strand = ordered["strand"].eq(ordered["strand"].shift())
+    group_ids: list[int] = []
+    current_group = 0
+    group_max_end: int | None = None
+    previous_chromosome = None
+    previous_strand = None
+    for position in range(len(ordered)):
+        row_chromosome = chromosomes[position] if has_chromosome else None
+        row_strand = strands[position] if has_strand else None
+        if position == 0:
+            current_group = 0
+            group_max_end = ends[position]
+        else:
+            same_chromosome = (not has_chromosome) or row_chromosome == previous_chromosome
+            same_strand = (not has_strand) or row_strand == previous_strand
+            within_distance = starts[position] <= (group_max_end + merge_distance)
+            if same_chromosome and same_strand and within_distance:
+                # Extend the current group and grow its running max end.
+                group_max_end = max(group_max_end, ends[position])
+            else:
+                current_group += 1
+                group_max_end = ends[position]
+        group_ids.append(current_group)
+        previous_chromosome = row_chromosome
+        previous_strand = row_strand
 
-    within_distance = ordered["start"].le(ordered["end"].shift().add(merge_distance))
-    merge_with_previous = (same_chromosome & same_strand & within_distance).fillna(
-        False
-    )
-    merge_group = (~merge_with_previous).cumsum()
+    merge_group = pd.Series(group_ids, index=ordered.index)
 
     merged_rows = [
         _build_merged_hit(group)

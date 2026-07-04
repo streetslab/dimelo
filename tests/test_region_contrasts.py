@@ -2234,8 +2234,14 @@ def test_score_regions_beta_binomial_uses_p_value_tiebreak_when_adjusted_values_
 
     original_add = region_contrasts._add_beta_binomial_scores
 
-    def fake_add_beta_binomial_scores(regions_table, *, multiple_testing):
-        scored = original_add(regions_table, multiple_testing=multiple_testing)
+    def fake_add_beta_binomial_scores(
+        regions_table, *, multiple_testing, replicate_counts
+    ):
+        scored = original_add(
+            regions_table,
+            multiple_testing=multiple_testing,
+            replicate_counts=replicate_counts,
+        )
         scored.loc[scored["region_id"] == "reg1", "p_value"] = 0.02
         scored.loc[scored["region_id"] == "reg2", "p_value"] = 0.01
         scored["adjusted_p_value"] = 0.05

@@ -2197,11 +2197,23 @@ def test_scan_genome_excludes_low_coverage_before_beta_binomial_scoring(monkeypa
             ]
         )
 
-    def fake_p_value(modified_count, valid_count, alpha, beta):
-        observed_p_value_calls.append((modified_count, valid_count, alpha, beta))
+    def fake_p_value(
+        numerator_modified_count,
+        numerator_valid_count,
+        denominator_modified_count,
+        denominator_valid_count,
+    ):
+        observed_p_value_calls.append(
+            (
+                numerator_modified_count,
+                numerator_valid_count,
+                denominator_modified_count,
+                denominator_valid_count,
+            )
+        )
         return 0.5
 
-    def fake_bh_adjustment(p_values):
+    def fake_bh_adjustment(p_values, *, testable=None):
         observed_bh_inputs.append(len(p_values))
         return p_values.astype(float)
 
@@ -2209,7 +2221,7 @@ def test_scan_genome_excludes_low_coverage_before_beta_binomial_scoring(monkeypa
         global_analysis, "build_window_summary", fake_build_window_summary
     )
     monkeypatch.setattr(
-        region_discovery, "_beta_binomial_two_sided_p_value", fake_p_value
+        region_discovery, "_two_sample_proportion_p_value", fake_p_value
     )
     monkeypatch.setattr(region_discovery, "_adjust_p_values_bh", fake_bh_adjustment)
 

@@ -846,7 +846,9 @@ def _resolve_raster_site_selection(
 
     exclude = spec.get("exclude")
     exclude_dict = dict(exclude) if exclude is not None else None
-    selection_seed = spec.get("selection_seed")
+    # Default to a fixed seed (0) so default random site selection is reproducible;
+    # callers can still override via site_selection["selection_seed"].
+    selection_seed = spec.get("selection_seed", 0)
 
     return _RasterSiteSelection(
         mode=mode,
@@ -1564,6 +1566,7 @@ def _extract_read_windows_batched(
     span_full_window: bool,
     region_batch_size: int,
     quiet: bool,
+    random_state: int | None = None,
 ) -> ReadWindowExtractionResult:
     """Low-memory driver for :func:`extract_read_windows`.
 
@@ -1571,9 +1574,17 @@ def _extract_read_windows_batched(
     read vectors are resident at a time (long genomic reads store their entire span, so
     materializing every selected read can exhaust memory). Each batch is windowed via
     ``extract_read_windows`` itself (identical windowing) and the results are concatenated.
-    A shared ``window_size`` guarantees every batch produces the same window width. Row
-    order may differ from the single-pass path; results are otherwise equivalent.
+    A shared ``window_size`` guarantees every batch produces the same window width.
+
+    Row order may differ from the single-pass path. Results are otherwise equivalent, with
+    one exception that this driver handles explicitly: when
+    ``config.filter_multi_region_reads`` is True, a read that spans regions living in
+    DIFFERENT batches is invisible to any single per-batch pass. To preserve single-pass
+    equivalence we therefore run windowing in two phases -- first collecting the per-read
+    region keys across ALL batches to build the multi-region drop-set once, then applying
+    that global drop-set to the concatenated rows -- rather than filtering per batch.
     """
+    cfg = config or ReadWindowExtractionConfig()
     results: list[ReadWindowExtractionResult] = []
     with tempfile.TemporaryDirectory(prefix="dimelo_lowmem_") as tmp:
         for batch in _iter_region_batches(regions, region_batch_size, tmp):
@@ -1589,6 +1600,11 @@ def _extract_read_windows_batched(
                     span_full_window=span_full_window,
                     quiet=quiet,
                     low_memory=False,
+                    random_state=random_state,
+                    # Suppress per-batch multi-region filtering here: a spanning read may
+                    # only be visible once all batches are combined. We refilter globally
+                    # below using the full concatenated metadata.
+                    _drop_names=set() if cfg.filter_multi_region_reads else None,
                 )
             except ValueError as exc:
                 # A batch may legitimately contain no reads that fully span the window;
@@ -1601,18 +1617,67 @@ def _extract_read_windows_batched(
     if not results:
         raise ValueError("No reads produced a full window in any region batch.")
 
-    data_matrix = np.vstack([r.data_matrix for r in results])
-    val_present = all(r.val_matrix is not None for r in results)
-    val_matrix = (
-        np.vstack([r.val_matrix for r in results]) if val_present else None
-    )
+    data_blocks = [r.data_matrix for r in results]
     metadata = [row for r in results for row in r.metadata]
+
+    # val_matrix consistency: only concatenate val matrices when EVERY batch produced one,
+    # warn on mixed presence (previously silently dropped), and require matching widths.
+    val_present_flags = [r.val_matrix is not None for r in results]
+    val_present = all(val_present_flags)
+    if any(val_present_flags) and not val_present:
+        warnings.warn(
+            "low_memory batched extraction produced val_matrix for some region batches "
+            "but not others; dropping val_matrix from the merged result. This usually "
+            "indicates inconsistent val_vector availability across regions.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    if val_present:
+        val_widths = {int(r.val_matrix.shape[1]) for r in results}
+        assert len(val_widths) == 1, (
+            f"Inconsistent val_matrix widths across region batches: {sorted(val_widths)}."
+        )
+        val_matrix = np.vstack([r.val_matrix for r in results])
+    else:
+        val_matrix = None
+
+    data_matrix = np.vstack(data_blocks)
     datasets = results[0].datasets
     regions_dict: dict = {}
     for r in results:
         if r.regions_dict:
             for chrom, entries in r.regions_dict.items():
                 regions_dict.setdefault(chrom, []).extend(entries)
+
+    # Global multi-region filtering across all batches (see docstring). Build the drop-set
+    # from the concatenated metadata so a read spanning regions in different batches -- and
+    # therefore appearing under >1 distinct region key -- is dropped, matching single-pass.
+    if cfg.filter_multi_region_reads:
+        regions_by_name: defaultdict[Any, set[tuple[Any, Any, Any]]] = defaultdict(set)
+        for row in metadata:
+            regions_by_name[row.get("read_name")].add(
+                (
+                    row.get("chromosome"),
+                    row.get("region_start"),
+                    row.get("region_end"),
+                )
+            )
+        drop_names = {name for name, keys in regions_by_name.items() if len(keys) > 1}
+        if drop_names:
+            keep_mask = np.array(
+                [row.get("read_name") not in drop_names for row in metadata],
+                dtype=bool,
+            )
+            data_matrix = data_matrix[keep_mask]
+            if val_matrix is not None:
+                val_matrix = val_matrix[keep_mask]
+            metadata = [row for row, keep in zip(metadata, keep_mask) if keep]
+            if data_matrix.shape[0] == 0:
+                raise ValueError(
+                    "No reads remained after multi-region filtering; all reads spanned "
+                    "multiple regions."
+                )
+
     return ReadWindowExtractionResult(
         data_matrix=data_matrix,
         val_matrix=val_matrix,
@@ -1635,6 +1700,8 @@ def extract_read_windows(
     quiet: bool = True,
     low_memory: bool = False,
     region_batch_size: int = 64,
+    random_state: int | None = None,
+    _drop_names: set[str] | None = None,
 ) -> ReadWindowExtractionResult:
     """
     Extract fixed-length windows from single-read vectors, optionally flipping reads
@@ -1653,8 +1720,15 @@ def extract_read_windows(
             region sets and long genomic reads (whose full spans are stored), which can
             otherwise exhaust memory. Requires an explicit window_size (or config.window_size)
             so every batch shares a window width; row order may differ from the single-pass
-            path but results are otherwise equivalent.
+            path but results are otherwise equivalent. See _extract_read_windows_batched for
+            the one behavioral caveat with filter_multi_region_reads (handled below).
         region_batch_size: number of regions per batch when low_memory is True.
+        random_state: optional integer seed threaded into read_vectors_from_hdf5 subsampling
+            (subset_parameters draws) so a full clustering run can be made reproducible.
+            None preserves prior nondeterministic behavior.
+        _drop_names: internal use. A precomputed set of multi-region read names to drop,
+            passed by the low_memory batched driver so multi-region filtering is applied
+            over the FULL region set rather than per-batch. Not part of the public API.
 
     Returns:
         ReadWindowExtractionResult containing thresholded/binary mod windows by default,
@@ -1678,6 +1752,7 @@ def extract_read_windows(
             span_full_window=span_full_window,
             region_batch_size=region_batch_size,
             quiet=quiet,
+            random_state=random_state,
         )
 
     cfg = config or ReadWindowExtractionConfig()
@@ -1715,6 +1790,7 @@ def extract_read_windows(
         single_strand=single_strand,
         subset_parameters=subset_parameters,
         span_full_window=span_full_window,
+        random_state=random_state,  # reproducible subsampling when a seed is supplied
     )
     idx = _build_dataset_index(dataset_names)
     if effective_window_span is None:
@@ -1723,7 +1799,13 @@ def extract_read_windows(
 
     drop_names: set[str] = set()
     if cfg.filter_multi_region_reads:
-        drop_names = _identify_multi_region_reads(read_tuples, idx)
+        # If the caller (low_memory batched driver) precomputed the multi-region drop-set
+        # over the full region set, use it so cross-batch spanning reads are dropped too.
+        # Otherwise identify multi-region reads from this (single-pass) record set.
+        if _drop_names is not None:
+            drop_names = _drop_names
+        else:
+            drop_names = _identify_multi_region_reads(read_tuples, idx)
 
     matrices: list[np.ndarray] = []
     val_matrices: list[np.ndarray] = []
@@ -4278,7 +4360,7 @@ def plot_multisite_read_raster(
     smooth_sigma_bp: float = 6.0,
     max_rows: int | None = 500,
     downsample_method: str = "auto",  # "auto" | "bin_mean" | "uniform" | "random"
-    downsample_seed: int | None = None,
+    downsample_seed: int | None = 0,  # default fixed seed so default runs are reproducible
     cmap: str = "magma",
     vmin: float | None = None,
     vmax: float | None = None,
@@ -5626,7 +5708,7 @@ def plot_two_site_read_raster(
     window_width_bp: int | None = None,
     max_rows: int | None = 500,
     downsample_method: str = "auto",
-    downsample_seed: int | None = None,
+    downsample_seed: int | None = 0,  # default fixed seed so default runs are reproducible
     **kwargs,
 ):
     """

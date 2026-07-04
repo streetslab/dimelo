@@ -268,9 +268,18 @@ def build_window_summary(
 
 def compute_global_normalization_factors(summary: pd.DataFrame) -> pd.DataFrame:
     factors = summary.copy()
-    factors["reference_fraction"] = factors.groupby("motif", sort=True)[
-        "global_fraction"
-    ].transform("mean")
+    # STATISTICS CHANGE (review fix #9): compute the per-motif reference fraction
+    # as a coverage-weighted pool (sum of modified / sum of valid across samples)
+    # rather than an unweighted mean of per-sample fractions. An unweighted mean
+    # lets a low-coverage sample distort the reference as much as a high-coverage
+    # one. Fall back to NaN when a motif has no valid coverage at all.
+    modified_totals = factors.groupby("motif", sort=True)[
+        "modified_count"
+    ].transform("sum")
+    valid_totals = factors.groupby("motif", sort=True)["valid_count"].transform("sum")
+    factors["reference_fraction"] = modified_totals.div(
+        valid_totals.where(valid_totals != 0)
+    )
     factors["global_offset"] = (
         factors["global_fraction"] - factors["reference_fraction"]
     )

@@ -549,30 +549,219 @@ def _beta_binomial_two_sided_p_value(
     return min(max(tail_probability, 0.0), 1.0)
 
 
-def _adjust_p_values_bh(p_values: pd.Series) -> pd.Series:
+# STATISTICS CHANGE (review fix #2): the previous "differential" test conditioned
+# a beta-binomial prior on the denominator's own counts and treated the reference
+# rate as exact. That was asymmetric (A-vs-B != B-vs-A) and produced false
+# positives when the reference had low coverage (its sampling uncertainty was
+# ignored). Replace it with a symmetric two-sample test (Fisher's exact on the
+# 2x2 table of modified / unmodified counts for numerator and denominator), which
+# accounts for both sides' sampling uncertainty and is order-invariant.
+def _two_sample_proportion_p_value(
+    numerator_modified_count: int,
+    numerator_valid_count: int,
+    denominator_modified_count: int,
+    denominator_valid_count: int,
+) -> float:
+    """Symmetric two-sample test on (modified, unmodified) counts.
+
+    Uses Fisher's exact test on the 2x2 contingency table
+        [[num_mod, num_unmod], [den_mod, den_unmod]].
+    Returns 1.0 when either side has zero valid coverage (structurally
+    untestable). This is symmetric in numerator/denominator and does not
+    treat either rate as known without error.
+    """
+    for name, value in (
+        ("numerator_modified_count", numerator_modified_count),
+        ("numerator_valid_count", numerator_valid_count),
+        ("denominator_modified_count", denominator_modified_count),
+        ("denominator_valid_count", denominator_valid_count),
+    ):
+        if value < 0:
+            raise ValueError(f"two-sample proportion {name} must be >= 0.")
+    if numerator_modified_count > numerator_valid_count:
+        raise ValueError(
+            "two-sample proportion numerator modified_count cannot exceed valid_count."
+        )
+    if denominator_modified_count > denominator_valid_count:
+        raise ValueError(
+            "two-sample proportion denominator modified_count cannot exceed valid_count."
+        )
+
+    if numerator_valid_count <= 0 or denominator_valid_count <= 0:
+        return 1.0
+
+    numerator_unmodified_count = numerator_valid_count - numerator_modified_count
+    denominator_unmodified_count = denominator_valid_count - denominator_modified_count
+    _odds_ratio, p_value = stats.fisher_exact(
+        [
+            [numerator_modified_count, numerator_unmodified_count],
+            [denominator_modified_count, denominator_unmodified_count],
+        ],
+        alternative="two-sided",
+    )
+    p_value = float(p_value)
+    if math.isnan(p_value):
+        return 1.0
+    return min(max(p_value, 0.0), 1.0)
+
+
+def _two_sample_beta_binomial_lrt(
+    numerator_pairs: list[tuple[int, int]],
+    denominator_pairs: list[tuple[int, int]],
+) -> float:
+    """Symmetric two-sample beta-binomial likelihood-ratio test (maintainer choice).
+
+    Each side is a list of per-replicate ``(modified_count, valid_count)`` pairs. Both
+    sides share an overdispersion parameter ``rho`` (intra-class correlation); the null
+    is equal methylation mean across sides, the alternative allows different means. The
+    statistic ``2*(loglik_full - loglik_null)`` is referred to chi-square with 1 df.
+
+    Unlike a pooled binomial / Fisher's-exact test, this accounts for BOTH sides'
+    sampling uncertainty AND replicate-to-replicate overdispersion, and is symmetric in
+    numerator/denominator. Returns a two-sided p-value in [0, 1]; returns 1.0 when either
+    side has no valid coverage (structurally untestable). With a single replicate per
+    side ``rho`` is weakly identified and the test is conservative.
+    """
+    from scipy.optimize import minimize
+
+    num = [(int(k), int(n)) for k, n in numerator_pairs if int(n) > 0]
+    den = [(int(k), int(n)) for k, n in denominator_pairs if int(n) > 0]
+    if not num or not den:
+        return 1.0
+
+    def _sig(x: float) -> float:  # logistic, guarded off 0/1
+        if x >= 0:
+            z = math.exp(-x)
+            p = 1.0 / (1.0 + z)
+        else:
+            z = math.exp(x)
+            p = z / (1.0 + z)
+        return min(max(p, 1e-9), 1.0 - 1e-9)
+
+    def _logit(p: float) -> float:
+        p = min(max(p, 1e-6), 1.0 - 1e-6)
+        return math.log(p / (1.0 - p))
+
+    def _bb_ll(pairs: list[tuple[int, int]], mu: float, rho: float) -> float:
+        # (mu, rho) -> (alpha, beta); rho -> 0 recovers the binomial (no overdispersion)
+        alpha = mu * (1.0 - rho) / rho
+        beta = (1.0 - mu) * (1.0 - rho) / rho
+        return math.fsum(_beta_binomial_logpmf(k, n, alpha, beta) for k, n in pairs)
+
+    def _nll_full(theta: np.ndarray) -> float:
+        return -(
+            _bb_ll(num, _sig(theta[0]), _sig(theta[2]))
+            + _bb_ll(den, _sig(theta[1]), _sig(theta[2]))
+        )
+
+    def _nll_null(theta: np.ndarray) -> float:
+        mu, rho = _sig(theta[0]), _sig(theta[1])
+        return -(_bb_ll(num, mu, rho) + _bb_ll(den, mu, rho))
+
+    num_k = sum(k for k, _ in num); num_n = sum(n for _, n in num)
+    den_k = sum(k for k, _ in den); den_n = sum(n for _, n in den)
+    fn = num_k / num_n
+    fd = den_k / den_n
+    fp = (num_k + den_k) / (num_n + den_n)
+    rho_init = _logit(0.05)
+
+    full = minimize(_nll_full, [_logit(fn), _logit(fd), rho_init], method="Nelder-Mead")
+    null = minimize(_nll_null, [_logit(fp), rho_init], method="Nelder-Mead")
+    stat = 2.0 * (float(null.fun) - float(full.fun))
+    if not math.isfinite(stat) or stat < 0.0:
+        stat = 0.0
+    return float(stats.chi2.sf(stat, df=1))
+
+
+def _replicate_counts_by_region(
+    evidence: pd.DataFrame, contrast: ContrastSpec
+) -> dict[object, tuple[list[tuple[int, int]], list[tuple[int, int]]]]:
+    """Per-region, per-side lists of (modified_count, valid_count) across replicates.
+
+    Feeds the two-sample beta-binomial LRT with replicate-level counts (before pooling),
+    so overdispersion can be estimated. Sides are defined by the contrast's numerator /
+    denominator condition lists.
+    """
+    num_conditions = set(contrast.numerator or [])
+    den_conditions = set(contrast.denominator or [])
+    out: dict[object, tuple[list[tuple[int, int]], list[tuple[int, int]]]] = {}
+    for region_id, region_rows in evidence.groupby("region_id", sort=False):
+        num_pairs: list[tuple[int, int]] = []
+        den_pairs: list[tuple[int, int]] = []
+        for condition, modified_count, valid_count in zip(
+            region_rows["condition"],
+            region_rows["modified_count"],
+            region_rows["valid_count"],
+            strict=False,
+        ):
+            pair = (int(modified_count), int(valid_count))
+            if condition in num_conditions:
+                num_pairs.append(pair)
+            if condition in den_conditions:
+                den_pairs.append(pair)
+        out[region_id] = (num_pairs, den_pairs)
+    return out
+
+
+def _adjust_p_values_bh(
+    p_values: pd.Series,
+    *,
+    testable: pd.Series | None = None,
+) -> pd.Series:
+    """Benjamini-Hochberg adjustment.
+
+    STATISTICS CHANGE (review fix #1): only genuinely testable rows are counted
+    in the multiple-testing total ``m``. Structurally-untestable rows
+    (fabricated/degenerate, e.g. p forced to 1.0 because a side has no valid
+    coverage or too few replicates) are kept in the output with
+    ``adjusted_p_value = NaN`` and excluded from ``m`` so they no longer inflate
+    ``m`` and deflate everyone else's adjusted p-values.
+    """
     if p_values.empty:
         return pd.Series(dtype=float, index=p_values.index)
 
+    # Work positionally so a non-unique index cannot cause label-based ambiguity.
+    p_array = p_values.to_numpy(dtype=float)
+    if testable is None:
+        testable_array = [True] * len(p_array)
+    elif len(testable) == len(p_array):
+        # Callers pass `testable` positionally aligned with `p_values` (same frame),
+        # so align by position; a label reindex would raise on a duplicate index.
+        testable_array = testable.to_numpy().astype(bool).tolist()
+    else:
+        aligned = testable.reindex(p_values.index).fillna(False)
+        testable_array = aligned.astype(bool).to_numpy().tolist()
+
+    adjusted_array = [float("nan")] * len(p_array)
+
+    testable_positions = [
+        position
+        for position in range(len(p_array))
+        # NaN p-values are never testable.
+        if testable_array[position] and not math.isnan(p_array[position])
+    ]
+    total = len(testable_positions)
+    if total == 0:
+        return pd.Series(adjusted_array, index=p_values.index, dtype=float)
+
     ranked = sorted(
-        enumerate(p_values.tolist()), key=lambda item: item[1], reverse=True
+        testable_positions, key=lambda position: p_array[position], reverse=True
     )
-    total = len(ranked)
-    adjusted = [1.0] * total
     running_min = 1.0
-
-    for rank_from_end, (original_index, p_value) in enumerate(ranked, start=1):
+    for rank_from_end, position in enumerate(ranked, start=1):
         rank = total - rank_from_end + 1
-        candidate = min(1.0, p_value * total / rank)
+        candidate = min(1.0, p_array[position] * total / rank)
         running_min = min(running_min, candidate)
-        adjusted[original_index] = running_min
+        adjusted_array[position] = running_min
 
-    return pd.Series(adjusted, index=p_values.index, dtype=float)
+    return pd.Series(adjusted_array, index=p_values.index, dtype=float)
 
 
 def _add_beta_binomial_scores(
     regions_table: pd.DataFrame,
     *,
     multiple_testing: str,
+    replicate_counts: dict[object, tuple[list[tuple[int, int]], list[tuple[int, int]]]],
 ) -> pd.DataFrame:
     if multiple_testing != "fdr_bh":
         raise ValueError(
@@ -581,24 +770,23 @@ def _add_beta_binomial_scores(
         )
 
     scored = regions_table.copy()
+    # STATISTICS CHANGE (review fix #2, maintainer choice): symmetric two-sample
+    # BETA-BINOMIAL likelihood-ratio test over per-replicate counts, replacing both the
+    # old asymmetric conditional beta-binomial and the interim Fisher's-exact stopgap.
+    # This models replicate overdispersion and both sides' sampling uncertainty.
     scored["p_value"] = [
-        _beta_binomial_two_sided_p_value(
-            int(modified_count),
-            int(valid_count),
-            *_estimate_beta_binomial_prior(
-                int(reference_modified_count),
-                int(reference_valid_count),
-            ),
-        )
-        for modified_count, valid_count, reference_modified_count, reference_valid_count in zip(
-            scored["numerator_modified_count"],
-            scored["numerator_valid_count"],
-            scored["denominator_modified_count"],
-            scored["denominator_valid_count"],
-            strict=False,
-        )
+        _two_sample_beta_binomial_lrt(*replicate_counts.get(region_id, ([], [])))
+        for region_id in scored["region_id"]
     ]
-    scored["adjusted_p_value"] = _adjust_p_values_bh(scored["p_value"])
+    # A row is only testable when both sides carry valid coverage; fabricated
+    # zero-coverage rows (see fix #3) are structurally untestable and excluded
+    # from the BH total.
+    testable = (scored["numerator_valid_count"] > 0) & (
+        scored["denominator_valid_count"] > 0
+    )
+    scored["adjusted_p_value"] = _adjust_p_values_bh(
+        scored["p_value"], testable=testable
+    )
     return scored
 
 
@@ -1259,7 +1447,17 @@ def _add_fraction_test_scores(
 
     scored = regions_table.copy()
     scored["p_value"] = scored.apply(_welch_p_value, axis=1)
-    scored["adjusted_p_value"] = _adjust_p_values_bh(scored["p_value"])
+    # STATISTICS CHANGE (review fix #1): only rows with >= 2 replicates per side
+    # are genuinely testable by Welch's t-test; single-replicate rows return a
+    # degenerate p=1.0 and must not be counted in the BH total.
+    testable = scored.apply(
+        lambda row: len(list(row["numerator_sample_values"])) >= 2
+        and len(list(row["denominator_sample_values"])) >= 2,
+        axis=1,
+    )
+    scored["adjusted_p_value"] = _adjust_p_values_bh(
+        scored["p_value"], testable=testable
+    )
     return scored
 
 
@@ -1754,6 +1952,14 @@ def score_regions(
         sort=False,
     )
 
+    # STATISTICS CHANGE (review fix #3): record which side actually contributed a
+    # row before we fillna(0). An outer merge fabricates a zero reference (or a
+    # zero numerator) for regions present on only one side; without these flags
+    # such rows report a huge log2fc (~+/-20) and can be ranked as top hits even
+    # though the "effect" is an artifact of missing coverage on the other side.
+    merged["numerator_present"] = merged["numerator_valid_count"].notna()
+    merged["denominator_present"] = merged["denominator_valid_count"].notna()
+
     for column in [
         "numerator_modified_count",
         "numerator_valid_count",
@@ -1794,10 +2000,17 @@ def score_regions(
     else:
         merged["effect_size"] = merged["delta_fraction"].abs()
 
+    # STATISTICS CHANGE (review fix #3): a row backed by both sides is a genuine
+    # contrast; a row present on only one side is a fabricated-zero comparison.
+    merged["both_sides_present"] = (
+        merged["numerator_present"] & merged["denominator_present"]
+    )
+
     if test == "beta_binomial":
         regions_table = _add_beta_binomial_scores(
             merged,
             multiple_testing=multiple_testing,
+            replicate_counts=_replicate_counts_by_region(evidence, contrast),
         )
         regions_table = regions_table.sort_values(
             by=["adjusted_p_value", "p_value"],
@@ -1805,9 +2018,11 @@ def score_regions(
             kind="mergesort",
         ).reset_index(drop=True)
     else:
+        # Rank genuine (both-sides-present) rows ahead of fabricated-zero rows so a
+        # zero-coverage row is never silently surfaced as the top hit.
         regions_table = merged.sort_values(
-            by="effect_size",
-            ascending=False,
+            by=["both_sides_present", "effect_size"],
+            ascending=[False, False],
             kind="mergesort",
         ).reset_index(drop=True)
     regions_table["rank"] = range(1, len(regions_table) + 1)
@@ -1819,6 +2034,8 @@ def score_regions(
         "delta_fraction",
         "log2_fc",
         "rank",
+        "numerator_present",
+        "denominator_present",
         "numerator_modified_count",
         "numerator_valid_count",
         "numerator_replicate_n",

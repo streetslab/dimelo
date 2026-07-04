@@ -1774,8 +1774,25 @@ def _normalize_legacy_read_cluster_region_association(
             "association_table requires region_id or chrom/chromosome, start, end, and strand columns."
         )
 
-    if "total_reads" not in normalized.columns:
-        normalized["total_reads"] = normalized.loc[:, cluster_columns].sum(axis=1)
+    # Review fix #11: always derive total_reads from the actual per-row sum of the
+    # cluster count columns rather than trusting a supplied 'total_reads' column.
+    # A provided total_reads that disagrees with the cluster-count sum mis-scales
+    # every fraction (fractions no longer sum to 1 per row). If the caller passes
+    # a total_reads column, validate it against the row sum and reject mismatches
+    # instead of silently using it.
+    cluster_row_sum = normalized.loc[:, cluster_columns].sum(axis=1)
+    if "total_reads" in normalized.columns:
+        supplied_total = pd.to_numeric(normalized["total_reads"], errors="coerce")
+        if not np.allclose(
+            supplied_total.fillna(-1.0).to_numpy(dtype=float),
+            cluster_row_sum.to_numpy(dtype=float),
+        ):
+            raise ValueError(
+                "Legacy association 'total_reads' does not match the sum of the "
+                "cluster count columns; refusing to mis-scale fractions. Omit "
+                "'total_reads' to let it be computed from the cluster counts."
+            )
+    normalized["total_reads"] = cluster_row_sum
     if (normalized["total_reads"] <= 0).any():
         raise ValueError(
             "Legacy association rows must have positive total_reads or cluster counts."
