@@ -605,6 +605,104 @@ def _two_sample_proportion_p_value(
     return min(max(p_value, 0.0), 1.0)
 
 
+def _two_sample_beta_binomial_lrt(
+    numerator_pairs: list[tuple[int, int]],
+    denominator_pairs: list[tuple[int, int]],
+) -> float:
+    """Symmetric two-sample beta-binomial likelihood-ratio test (maintainer choice).
+
+    Each side is a list of per-replicate ``(modified_count, valid_count)`` pairs. Both
+    sides share an overdispersion parameter ``rho`` (intra-class correlation); the null
+    is equal methylation mean across sides, the alternative allows different means. The
+    statistic ``2*(loglik_full - loglik_null)`` is referred to chi-square with 1 df.
+
+    Unlike a pooled binomial / Fisher's-exact test, this accounts for BOTH sides'
+    sampling uncertainty AND replicate-to-replicate overdispersion, and is symmetric in
+    numerator/denominator. Returns a two-sided p-value in [0, 1]; returns 1.0 when either
+    side has no valid coverage (structurally untestable). With a single replicate per
+    side ``rho`` is weakly identified and the test is conservative.
+    """
+    from scipy.optimize import minimize
+
+    num = [(int(k), int(n)) for k, n in numerator_pairs if int(n) > 0]
+    den = [(int(k), int(n)) for k, n in denominator_pairs if int(n) > 0]
+    if not num or not den:
+        return 1.0
+
+    def _sig(x: float) -> float:  # logistic, guarded off 0/1
+        if x >= 0:
+            z = math.exp(-x)
+            p = 1.0 / (1.0 + z)
+        else:
+            z = math.exp(x)
+            p = z / (1.0 + z)
+        return min(max(p, 1e-9), 1.0 - 1e-9)
+
+    def _logit(p: float) -> float:
+        p = min(max(p, 1e-6), 1.0 - 1e-6)
+        return math.log(p / (1.0 - p))
+
+    def _bb_ll(pairs: list[tuple[int, int]], mu: float, rho: float) -> float:
+        # (mu, rho) -> (alpha, beta); rho -> 0 recovers the binomial (no overdispersion)
+        alpha = mu * (1.0 - rho) / rho
+        beta = (1.0 - mu) * (1.0 - rho) / rho
+        return math.fsum(_beta_binomial_logpmf(k, n, alpha, beta) for k, n in pairs)
+
+    def _nll_full(theta: np.ndarray) -> float:
+        return -(
+            _bb_ll(num, _sig(theta[0]), _sig(theta[2]))
+            + _bb_ll(den, _sig(theta[1]), _sig(theta[2]))
+        )
+
+    def _nll_null(theta: np.ndarray) -> float:
+        mu, rho = _sig(theta[0]), _sig(theta[1])
+        return -(_bb_ll(num, mu, rho) + _bb_ll(den, mu, rho))
+
+    num_k = sum(k for k, _ in num); num_n = sum(n for _, n in num)
+    den_k = sum(k for k, _ in den); den_n = sum(n for _, n in den)
+    fn = num_k / num_n
+    fd = den_k / den_n
+    fp = (num_k + den_k) / (num_n + den_n)
+    rho_init = _logit(0.05)
+
+    full = minimize(_nll_full, [_logit(fn), _logit(fd), rho_init], method="Nelder-Mead")
+    null = minimize(_nll_null, [_logit(fp), rho_init], method="Nelder-Mead")
+    stat = 2.0 * (float(null.fun) - float(full.fun))
+    if not math.isfinite(stat) or stat < 0.0:
+        stat = 0.0
+    return float(stats.chi2.sf(stat, df=1))
+
+
+def _replicate_counts_by_region(
+    evidence: pd.DataFrame, contrast: ContrastSpec
+) -> dict[object, tuple[list[tuple[int, int]], list[tuple[int, int]]]]:
+    """Per-region, per-side lists of (modified_count, valid_count) across replicates.
+
+    Feeds the two-sample beta-binomial LRT with replicate-level counts (before pooling),
+    so overdispersion can be estimated. Sides are defined by the contrast's numerator /
+    denominator condition lists.
+    """
+    num_conditions = set(contrast.numerator or [])
+    den_conditions = set(contrast.denominator or [])
+    out: dict[object, tuple[list[tuple[int, int]], list[tuple[int, int]]]] = {}
+    for region_id, region_rows in evidence.groupby("region_id", sort=False):
+        num_pairs: list[tuple[int, int]] = []
+        den_pairs: list[tuple[int, int]] = []
+        for condition, modified_count, valid_count in zip(
+            region_rows["condition"],
+            region_rows["modified_count"],
+            region_rows["valid_count"],
+            strict=False,
+        ):
+            pair = (int(modified_count), int(valid_count))
+            if condition in num_conditions:
+                num_pairs.append(pair)
+            if condition in den_conditions:
+                den_pairs.append(pair)
+        out[region_id] = (num_pairs, den_pairs)
+    return out
+
+
 def _adjust_p_values_bh(
     p_values: pd.Series,
     *,
@@ -659,6 +757,7 @@ def _add_beta_binomial_scores(
     regions_table: pd.DataFrame,
     *,
     multiple_testing: str,
+    replicate_counts: dict[object, tuple[list[tuple[int, int]], list[tuple[int, int]]]],
 ) -> pd.DataFrame:
     if multiple_testing != "fdr_bh":
         raise ValueError(
@@ -667,22 +766,13 @@ def _add_beta_binomial_scores(
         )
 
     scored = regions_table.copy()
-    # STATISTICS CHANGE (review fix #2): symmetric two-sample test replaces the
-    # asymmetric conditional beta-binomial.
+    # STATISTICS CHANGE (review fix #2, maintainer choice): symmetric two-sample
+    # BETA-BINOMIAL likelihood-ratio test over per-replicate counts, replacing both the
+    # old asymmetric conditional beta-binomial and the interim Fisher's-exact stopgap.
+    # This models replicate overdispersion and both sides' sampling uncertainty.
     scored["p_value"] = [
-        _two_sample_proportion_p_value(
-            int(modified_count),
-            int(valid_count),
-            int(reference_modified_count),
-            int(reference_valid_count),
-        )
-        for modified_count, valid_count, reference_modified_count, reference_valid_count in zip(
-            scored["numerator_modified_count"],
-            scored["numerator_valid_count"],
-            scored["denominator_modified_count"],
-            scored["denominator_valid_count"],
-            strict=False,
-        )
+        _two_sample_beta_binomial_lrt(*replicate_counts.get(region_id, ([], [])))
+        for region_id in scored["region_id"]
     ]
     # A row is only testable when both sides carry valid coverage; fabricated
     # zero-coverage rows (see fix #3) are structurally untestable and excluded
@@ -1916,6 +2006,7 @@ def score_regions(
         regions_table = _add_beta_binomial_scores(
             merged,
             multiple_testing=multiple_testing,
+            replicate_counts=_replicate_counts_by_region(evidence, contrast),
         )
         regions_table = regions_table.sort_values(
             by=["adjusted_p_value", "p_value"],

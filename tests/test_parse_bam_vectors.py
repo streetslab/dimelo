@@ -189,7 +189,9 @@ def test_read_by_base_txt_to_hdf5_uses_dense_span_vectors(tmp_path):
         no_hits_mod_vector = _decode_vector(h5["mod_vector"], no_hits_index)
         no_hits_val_vector = _decode_vector(h5["val_vector"], no_hits_index)
 
-    assert sparse_span == 10
+    # read_end now reflects the true reference span (max observed ref position + 1),
+    # so a trailing non-motif tail no longer inflates the span (was 10 via seq length).
+    assert sparse_span == 9
     assert len(sparse_mod_vector) == sparse_span
     assert len(sparse_val_vector) == sparse_span
 
@@ -222,13 +224,14 @@ def test_read_by_base_txt_to_hdf5_thresholds_at_write_time(tmp_path):
 
     assert set(np.unique(sparse_mod_vector)).issubset({0, 1})
     assert set(np.unique(sparse_val_vector)).issubset({0, 1})
+    # trailing non-motif position dropped now that read_end = max ref position + 1
     np.testing.assert_array_equal(
         sparse_mod_vector,
-        np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.uint8),
+        np.array([0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.uint8),
     )
     np.testing.assert_array_equal(
         sparse_val_vector,
-        np.array([1, 0, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.uint8),
+        np.array([1, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.uint8),
     )
 
 
@@ -342,13 +345,14 @@ def test_read_vectors_from_hdf5_loads_thresholded_vectors_as_binary(tmp_path):
     sparse_read = reads_by_name["read_sparse"]
     no_hits_read = reads_by_name["read_no_hits"]
 
+    # trailing non-motif position dropped now that read_end = max ref position + 1
     np.testing.assert_array_equal(
         sparse_read[mod_vector_index],
-        np.array([False, False, False, False, False, False, False, False, True, False]),
+        np.array([False, False, False, False, False, False, False, False, True]),
     )
     np.testing.assert_array_equal(
         sparse_read[val_vector_index],
-        np.array([True, False, False, False, False, False, False, False, True, False]),
+        np.array([True, False, False, False, False, False, False, False, True]),
     )
     assert not np.any(no_hits_read[mod_vector_index])
     assert not np.any(no_hits_read[val_vector_index])
@@ -386,28 +390,30 @@ def test_read_by_base_txt_to_hdf5_reconstructs_coordinates_robustly(tmp_path):
         plus_idx = read_name_to_index["read_plus_drift"]
         minus_idx = read_name_to_index["read_minus"]
 
+        # read_end now = max observed reference position + 1 (true span), so trailing
+        # non-motif positions no longer pad the vectors (was 111 / len 11 via seq length).
         assert int(h5["read_start"][plus_idx]) == 100
-        assert int(h5["read_end"][plus_idx]) == 111
+        assert int(h5["read_end"][plus_idx]) == 103
         plus_mod = _decode_vector(h5["mod_vector"], plus_idx)
         plus_val = _decode_vector(h5["val_vector"], plus_idx)
-        assert len(plus_mod) == 11
+        assert len(plus_mod) == 3
         np.testing.assert_array_equal(
-            plus_mod, np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.uint8)
+            plus_mod, np.array([1, 0, 1], dtype=np.uint8)
         )
         np.testing.assert_array_equal(
-            plus_val, np.array([1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.uint8)
+            plus_val, np.array([1, 0, 1], dtype=np.uint8)
         )
 
         assert int(h5["read_start"][minus_idx]) == 200
-        assert int(h5["read_end"][minus_idx]) == 210
+        assert int(h5["read_end"][minus_idx]) == 209
         minus_mod = _decode_vector(h5["mod_vector"], minus_idx)
         minus_val = _decode_vector(h5["val_vector"], minus_idx)
-        assert len(minus_mod) == 10
+        assert len(minus_mod) == 9
         np.testing.assert_array_equal(
-            minus_mod, np.array([1, 0, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.uint8)
+            minus_mod, np.array([1, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.uint8)
         )
         np.testing.assert_array_equal(
-            minus_val, np.array([1, 0, 0, 0, 0, 0, 0, 0, 1, 0], dtype=np.uint8)
+            minus_val, np.array([1, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.uint8)
         )
 
 
@@ -727,7 +733,7 @@ def test_read_vectors_from_hdf5_supports_global_random_read_sample(
         quiet=True,
     )
 
-    def _pick_first(array, n=None, frac=None, replace=False):
+    def _pick_first(array, n=None, frac=None, replace=False, seed=None):
         assert n == 1
         return np.asarray(array[:1])
 

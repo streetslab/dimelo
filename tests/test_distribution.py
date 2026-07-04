@@ -122,6 +122,7 @@ def test_build_distribution_change_accepts_minimal_condition_distribution_shape(
         "count",
         "fraction",
         "replicate_n",
+        "reference_present",
         "reference_fraction",
         "delta_fraction",
         "log2_fc",
