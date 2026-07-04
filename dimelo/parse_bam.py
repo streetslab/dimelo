@@ -1161,15 +1161,23 @@ def _fast_count_reads_and_lines(
         (num_reads, num_lines): reads, and data rows excluding the header.
     """
     try:
-        total = int(
-            subprocess.run(
-                ["wc", "-l", str(input_txt)],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.split()[0]
+        # Count data rows from the tail stream itself rather than from a
+        # wc-of-whole-file (newline count). A modkit txt without a trailing
+        # newline undercounts under `wc -l <file>`; in the pathological
+        # header+1-row-no-newline case that yields 0 data rows and the caller
+        # falsely raises "no data rows". `grep -c ''` counts lines including a
+        # final unterminated line, so it is independent of a trailing newline.
+        tail_lines = subprocess.Popen(
+            ["tail", "-n", "+2", str(input_txt)], stdout=subprocess.PIPE
         )
-        num_lines = max(0, total - 1)  # exclude header row
+        count_lines = subprocess.run(
+            ["grep", "-c", ""], stdin=tail_lines.stdout, capture_output=True, text=True
+        )
+        tail_lines.stdout.close()
+        tail_lines.wait()
+        # grep -c exits 1 with count "0" when there are no matching lines; that
+        # is a legitimate empty-table result, not a tool failure.
+        num_lines = int(count_lines.stdout.split()[0]) if count_lines.stdout.strip() else 0
         if num_lines == 0:
             return 0, 0
         tail = subprocess.Popen(
@@ -1189,7 +1197,19 @@ def _fast_count_reads_and_lines(
         uniq.wait()
         cut.wait()
         tail.wait()
+        # `uniq | wc -l` counts newlines; if the last read id line lacks a
+        # trailing newline it is undercounted. Add one back when the final data
+        # byte is not a newline so num_reads stays correct without a trailing
+        # newline (mirrors the newline-independent num_lines count above).
         num_reads = int(wc.stdout.split()[0])
+        try:
+            with open(input_txt, "rb") as raw:
+                raw.seek(-1, os.SEEK_END)
+                last_byte = raw.read(1)
+            if last_byte not in (b"\n", b""):
+                num_reads += 1
+        except OSError:
+            pass
         if num_reads <= 0:
             raise ValueError("fast count produced no reads")
         return num_reads, num_lines
@@ -1481,8 +1501,14 @@ def read_by_base_txt_to_hdf5(
                         # We subtract 0.25 because in modkit they add 0.5, but our elements are zero when the
                         # base motif isn't present, so to get things to round to the right integers to match the
                         # original .bam file, subtracting 0.25 is good. Anything from 0.001 to 0.4999 would work I think
-                        mod_vector[valid_coordinates] = np.rint(
-                            mod_values * 256 - 0.25
+                        # Fix: clip before uint8 cast. A probability of 1.0 maps to
+                        # rint(256*1.0 - 0.25) = rint(255.75) = 256, which wraps to 0
+                        # under uint8 (a maximally-modified base would look unmodified).
+                        # Clipping to [0, 255] keeps 1.0 -> 255. This single
+                        # flush_current_read finalize covers both the in-loop read
+                        # boundary and the final last-read flush (line ~1617).
+                        mod_vector[valid_coordinates] = np.clip(
+                            np.rint(mod_values * 256 - 0.25), 0, 255
                         ).astype(np.uint8)
                     else:
                         mod_vector[valid_coordinates] = mod_values.astype(np.uint8)
@@ -1558,7 +1584,8 @@ def read_by_base_txt_to_hdf5(
                     ref_strand=line_ref_strand,
                 )
                 start_candidate = pos_in_genome - pos_in_read_ref
-                end_candidate = start_candidate + line_read_len
+                # (end is no longer derived from start + sequence read_length; see the
+                # read_end fix below — it now tracks max observed reference position + 1.)
 
                 if read_name != fields[read_name_idx]:
                     flush_current_read()
@@ -1569,15 +1596,23 @@ def read_by_base_txt_to_hdf5(
                     read_chrom = fields[read_chrom_idx]
                     ref_strand = line_ref_strand
                     read_start = start_candidate
-                    read_end = end_candidate
+                    # Fix: read_end tracks the true reference span as the max observed
+                    # reference position + 1, not start + sequence read_length. Using
+                    # the sequence length overstates the span for reads with reference
+                    # deletions/introns (e.g. spliced RNA) and understates it for reads
+                    # with insertions. Seed with the first row's own reference position.
+                    read_end = pos_in_genome + 1
                     # Instantiate lists
                     mod_values_list = []
                     valid_genomic_positions_list = []
 
-                # keep read extents in reference coordinates by using inferred starts/ends from
-                # each line, which is robust even when rows are not ordered by genomic position
+                # keep read extents in reference coordinates by using inferred starts from
+                # each line, which is robust even when rows are not ordered by genomic
+                # position. read_end is the rightmost aligned reference position observed
+                # (+1) so it reflects the actual reference span (see fix above); this
+                # changes read_end/read_length for gapped reads (expected).
                 read_start = min(read_start, start_candidate)
-                read_end = max(read_end, end_candidate)
+                read_end = max(read_end, pos_in_genome + 1)
 
                 # Regardless of whether its a new read or not,
                 # add modification to vector if motif type is correct
@@ -1596,6 +1631,41 @@ def read_by_base_txt_to_hdf5(
 
             flush_current_read()
             flush_pending_chunk_to_h5()
+
+            # Silent-truncation guard. The per-read datasets were pre-sized to
+            # ``num_reads`` (from _fast_count_reads_and_lines), but the write loop
+            # counts reads independently in ``read_counter``. If the pre-count ever
+            # diverges from the loop count (e.g. the Python fallback's quote handling
+            # differing from ``cut``, or a schema edge case), the two disagree:
+            #   * read_counter > num_reads -> the final chunk's h5py slice assignment
+            #     would run past the dataset end and silently drop the overflow rows.
+            #   * read_counter < num_reads -> trailing pre-sized (default/empty) rows
+            #     would masquerade as real reads.
+            # Fail loud instead of silently corrupting: repair by resizing every
+            # parallel dataset to the actually-written length, and raise if the
+            # overflow already truncated data (unrecoverable).
+            per_read_datasets = [
+                "read_name",
+                "chromosome",
+                "read_start",
+                "read_end",
+                "strand",
+                "motif",
+                "mod_vector",
+                "val_vector",
+            ]
+            if read_counter != num_reads:
+                if read_counter > num_reads:
+                    raise ValueError(
+                        "modkit extract parse wrote more reads than were pre-counted "
+                        f"({read_counter} > {num_reads}); overflow rows were dropped by "
+                        f"the pre-sized hdf5 datasets: {input_txt}"
+                    )
+                # read_counter < num_reads: safe to shrink away the unused tail rows so
+                # the parallel datasets stay consistent with the real read count.
+                for dataset_name in per_read_datasets:
+                    if dataset_name in h5:
+                        h5[dataset_name].resize((old_size + read_counter,))
     return
 
 
