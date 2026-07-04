@@ -3039,6 +3039,432 @@ def cluster_read_windows(
     )
 
 
+def select_k_by_stability(
+    feature_matrix: np.ndarray,
+    *,
+    k_grid: Sequence[int] | None = None,
+    n_boot: int = 10,
+    sample_frac: float = 0.8,
+    stability_thresh: float = 0.7,
+    margin: float = 0.1,
+    random_state: int = 42,
+    default: int | None = None,
+) -> dict[str, Any]:
+    """Choose the number of clusters by *reproducibility* rather than a single
+    internal score.
+
+    For each candidate k the full matrix is clustered (k-means), then re-clustered on
+    many random ``sample_frac`` subsamples; each subsample partition is scored against
+    the full-data labels with the adjusted Rand index (ARI). A k whose partition is
+    recovered under resampling (mean ARI >= ``stability_thresh``) reflects real
+    structure; one that is not is an artifact of the particular sample. Among the k
+    that clear the threshold we keep those within ``margin`` of the peak stability and
+    return the LARGEST (resolve as many robust states as the data supports, without
+    over-splitting when a coarser partition is far more reproducible). Falls back to
+    the most stable k, then ``default`` / the smallest grid value.
+
+    Complements ``cluster_read_windows(auto_k=True, score="silhouette")``, which
+    favours few well-separated blobs and tends to under-split biological state data.
+
+    Returns a dict with ``best_k`` and a per-k ``stats`` list of
+    ``{"k", "stability", "silhouette"}``.
+    """
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import adjusted_rand_score, silhouette_score
+
+    X = np.asarray(feature_matrix)
+    n = X.shape[0]
+    grid = [int(k) for k in (k_grid or range(2, 11)) if 2 <= k < n]
+    rng = np.random.RandomState(random_state)
+    stats: list[dict[str, float]] = []
+    for k in grid:
+        base = KMeans(n_clusters=k, random_state=random_state, n_init=10).fit_predict(X)
+        if len(np.unique(base)) < 2:
+            continue
+        aris = []
+        for _ in range(n_boot):
+            idx = rng.choice(n, int(sample_frac * n), replace=False)
+            lab = KMeans(
+                n_clusters=k, random_state=rng.randint(0, 1_000_000), n_init=10
+            ).fit_predict(X[idx])
+            aris.append(adjusted_rand_score(base[idx], lab))
+        sil = float("nan")
+        with contextlib.suppress(Exception):
+            sil = float(silhouette_score(X, base))
+        stats.append(
+            {"k": int(k), "stability": float(np.mean(aris)), "silhouette": sil}
+        )
+    if not stats:
+        fallback = default if default is not None else (grid[0] if grid else 2)
+        return {"best_k": int(fallback), "stats": stats}
+    stable = [s for s in stats if s["stability"] >= stability_thresh]
+    if stable:
+        peak = max(s["stability"] for s in stats)
+        near = [s for s in stable if s["stability"] >= peak - margin]
+        best = max(near, key=lambda s: s["k"])["k"]
+    else:
+        best = max(stats, key=lambda s: s["stability"])["k"]
+    return {"best_k": int(best), "stats": stats}
+
+
+def bernoulli_mixture(
+    binary_matrix: np.ndarray,
+    n_components: int,
+    *,
+    n_iter: int = 100,
+    tol: float = 1e-5,
+    prior_a: float = 2.0,
+    prior_b: float = 2.0,
+    dirichlet_conc: float = 1.05,
+    random_state: int = 42,
+) -> dict[str, Any]:
+    """Bayesian (MAP) EM for a mixture of ``n_components`` multivariate Bernoulli
+    distributions on a binary read-window matrix ``binary_matrix`` [n_reads x n_pos].
+
+    This is the generative model matching per-position binary methylation calls:
+    component c carries a profile ``mu[c]`` in (0, 1) giving P(methylated) at each
+    position with mixing weight ``pi[c]``; a read is n_pos independent Bernoulli draws
+    at biases ``mu[c]``. Conjugate priors make the fit Bayesian and numerically stable:
+
+    * a per-position ``Beta(prior_a, prior_b)`` prior on each ``mu`` regularizes
+      positions seen in few reads toward the prior mean instead of collapsing to 0/1
+      (``a = b = 2`` is a weak "expect ~0.5, worth one pseudo-observation each way"
+      prior = principled Laplace smoothing);
+    * a symmetric ``Dirichlet(dirichlet_conc)`` prior on the weights shrinks empty
+      components so a slightly-too-large ``n_components`` degrades gracefully.
+
+    EM ascends the log-posterior: the E-step computes responsibilities in log-space
+    (log-sum-exp); the M-step uses the posterior modes
+    ``mu = (S + a - 1) / (N + a + b - 2)`` and
+    ``pi = (N + conc - 1) / (n + k (conc - 1))``. The
+    ``log p(x|c) = const_c + x . (log mu - log(1 - mu))`` identity avoids materializing
+    ``1 - X``.
+
+    Unlike distance-based clustering the assignment is soft (``resp``) and the
+    component means ``mu`` are directly the per-cluster occupancy metaprofiles.
+    Returns dict with ``labels`` (hard argmax), ``resp`` [n x k], ``mu`` [k x n_pos],
+    ``pi`` [k] and the ``logpost`` trajectory.
+    """
+    rng = np.random.RandomState(random_state)
+    X = np.asarray(binary_matrix, dtype=np.float64)
+    n, d = X.shape
+    k = min(int(n_components), n)
+    eps = 1e-6
+    mu = np.clip(X[rng.choice(n, k, replace=False)], eps, 1 - eps)
+    pi = np.full(k, 1.0 / k)
+    log_resp = np.empty((n, k), dtype=np.float64)
+    logpost: list[float] = []
+    prev = -np.inf
+    resp = np.full((n, k), 1.0 / k)
+    for _ in range(int(n_iter)):
+        log_mu = np.log(mu)
+        log_1m = np.log1p(-mu)
+        for c in range(k):
+            log_resp[:, c] = (
+                math.log(pi[c]) + log_1m[c].sum() + X @ (log_mu[c] - log_1m[c])
+            )
+        row_max = log_resp.max(axis=1, keepdims=True)
+        lse = row_max[:, 0] + np.log(np.exp(log_resp - row_max).sum(axis=1))
+        data_ll = float(lse.sum())
+        log_prior = float(
+            ((prior_a - 1) * log_mu + (prior_b - 1) * log_1m).sum()
+            + (dirichlet_conc - 1) * np.log(pi).sum()
+        )
+        current = data_ll + log_prior
+        resp = np.exp(log_resp - lse[:, None])
+        nk = resp.sum(axis=0)
+        s = resp.T @ X
+        mu = np.clip(
+            (s + prior_a - 1) / (nk[:, None] + prior_a + prior_b - 2), eps, 1 - eps
+        )
+        pi = (nk + dirichlet_conc - 1) / (n + k * (dirichlet_conc - 1))
+        logpost.append(current)
+        if current - prev < tol * abs(prev if prev != 0 else 1.0):
+            break
+        prev = current
+    return {
+        "labels": resp.argmax(axis=1),
+        "resp": resp,
+        "mu": mu,
+        "pi": pi,
+        "logpost": logpost,
+    }
+
+
+def _n_states(labels: np.ndarray) -> int:
+    """Number of non-noise clusters in a label vector (noise == -1 is excluded)."""
+    ref = np.asarray(labels)
+    non_noise = ref[ref >= 0]
+    return int(len(np.unique(non_noise if non_noise.size else ref)))
+
+
+def crossvalidate_clusters(
+    feature_matrix: np.ndarray,
+    labels: np.ndarray,
+    *,
+    covariance_type: str = "diag",
+    max_extra_components: int = 3,
+    n_init: int = 3,
+    random_state: int = 42,
+) -> dict[str, Any]:
+    """Bayesian cross-check of a hard partition on the SAME feature matrix.
+
+    Fits a variational ``BayesianGaussianMixture`` with a Dirichlet-PROCESS weight
+    prior, seeded with a few more components than ``labels`` has, and lets variational
+    inference drive unsupported components' weights toward ~0 (automatic relevance
+    determination) — a Bayesian read on how many states the data supports. A high
+    adjusted Rand index versus ``labels`` means the partition is model-agnostic rather
+    than an artifact of the original algorithm's assumptions.
+
+    Returns dict: ``ari`` vs ``labels``, ``n_effective`` (components with weight > 1%),
+    ``mean_confidence`` (average top posterior; low => many ambiguous reads),
+    ``weights``, per-read ``posteriors`` [n x k] and hard ``labels`` (row-aligned).
+    """
+    from sklearn.metrics import adjusted_rand_score
+    from sklearn.mixture import BayesianGaussianMixture
+
+    X = np.asarray(feature_matrix)
+    ref = np.asarray(labels)
+    k = _n_states(ref)
+    if k < 2 or X.shape[0] <= k:
+        return {
+            "ari": float("nan"),
+            "n_effective": 0,
+            "mean_confidence": float("nan"),
+            "weights": None,
+            "posteriors": None,
+            "labels": None,
+        }
+    upper = min(X.shape[0] - 1, k + max(0, int(max_extra_components)))
+    model = BayesianGaussianMixture(
+        n_components=upper,
+        covariance_type=covariance_type,
+        weight_concentration_prior_type="dirichlet_process",
+        weight_concentration_prior=1.0 / upper,
+        n_init=n_init,
+        max_iter=300,
+        random_state=random_state,
+    )
+    pred = model.fit_predict(X)
+    post = model.predict_proba(X)
+    return {
+        "ari": float(adjusted_rand_score(ref, pred)),
+        "n_effective": int(np.sum(model.weights_ > 0.01)),
+        "mean_confidence": float(post.max(axis=1).mean()),
+        "weights": np.asarray(model.weights_),
+        "posteriors": post,
+        "labels": pred,
+    }
+
+
+def bernoulli_crosscheck(
+    binary_matrix: np.ndarray,
+    labels: np.ndarray,
+    *,
+    cap: int = 4000,
+    random_state: int = 42,
+) -> dict[str, Any]:
+    """Cross-check a hard partition against a Bayesian Bernoulli mixture on the RAW
+    binary windows (its correct likelihood), complementing
+    :func:`crossvalidate_clusters` which works in the engineered feature space.
+
+    Fits :func:`bernoulli_mixture` with the same number of states as ``labels`` on a
+    random subsample (<= ``cap`` reads) and reports agreement (adjusted Rand index).
+    Returns dict: ``ari``, ``mean_confidence``, ``mu`` (state profiles) and ``n_used``.
+    """
+    from sklearn.metrics import adjusted_rand_score
+
+    X = np.asarray(binary_matrix)
+    ref = np.asarray(labels)
+    k = _n_states(ref)
+    n = X.shape[0]
+    if k < 2 or n <= k:
+        return {
+            "ari": float("nan"),
+            "mean_confidence": float("nan"),
+            "mu": None,
+            "n_used": 0,
+        }
+    rng = np.random.RandomState(random_state)
+    idx = rng.choice(n, cap, replace=False) if n > cap else np.arange(n)
+    fit = bernoulli_mixture(X[idx], k, random_state=random_state)
+    return {
+        "ari": float(adjusted_rand_score(ref[idx], fit["labels"])),
+        "mean_confidence": float(fit["resp"].max(axis=1).mean()),
+        "mu": fit["mu"],
+        "n_used": int(len(idx)),
+    }
+
+
+def plot_cluster_validation(
+    labels: np.ndarray,
+    *,
+    stability: dict[str, Any] | None = None,
+    gmm: dict[str, Any] | None = None,
+    bernoulli: dict[str, Any] | None = None,
+    best_k: int | None = None,
+    title: str = "",
+    cmap_name: str = "viridis",
+    smooth_window: int = 35,
+    span_bp: int | None = None,
+):
+    """Single-page "is this clustering real?" validation dashboard (six panels):
+
+    (a) k-selection    — stability (bootstrap ARI) and silhouette vs k, chosen k marked;
+    (b) cross-model    — ARI of the partition vs the Bayesian GMM (features) and vs the
+                         Bernoulli mixture (raw binary), with the 0.7 reference line;
+    (c) GMM weights    — Dirichlet-process posterior component weights (bars below the
+                         1% line are auto-pruned); title reports n_effective;
+    (d) BMM profiles   — Bernoulli-mixture component means (per-state P(methylated));
+    (e) confidence     — histogram of the top soft posterior per read (ambiguity);
+    (f) overlap        — partition x GMM-component contingency (row-normalized).
+
+    Inputs are the dicts from :func:`select_k_by_stability` (``stability``),
+    :func:`crossvalidate_clusters` (``gmm``) and :func:`bernoulli_crosscheck`
+    (``bernoulli``); any missing input yields an "n/a" placeholder. Returns the Figure.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib import gridspec
+
+    ref = np.asarray(labels)
+    n_states = _n_states(ref)
+    cmap = plt.get_cmap(cmap_name)
+    fig = plt.figure(figsize=(16, 8.5))
+    grid = gridspec.GridSpec(2, 3, figure=fig, hspace=0.42, wspace=0.32)
+
+    def _na(ax, msg="n/a"):
+        ax.text(0.5, 0.5, msg, ha="center", va="center", fontsize=11)
+        ax.set_axis_off()
+
+    # (a) k-selection
+    ax = fig.add_subplot(grid[0, 0])
+    if stability and stability.get("stats"):
+        stats = stability["stats"]
+        ks = [s["k"] for s in stats]
+        ax.plot(ks, [s["stability"] for s in stats], "o-", color="C0")
+        ax.set_ylim(0, 1.03)
+        ax.set_ylabel("stability (boot ARI)", color="C0")
+        ax.set_xlabel("k")
+        ax2 = ax.twinx()
+        ax2.plot(ks, [s["silhouette"] for s in stats], "s--", color="C3")
+        ax2.set_ylabel("silhouette", color="C3")
+        chosen = best_k if best_k is not None else stability.get("best_k")
+        if chosen is not None:
+            ax.axvline(chosen, color="k", ls=":", lw=1.3)
+        ax.set_title(f"k-selection (chosen k={chosen})", fontsize=10)
+    else:
+        _na(ax, "no k-sweep")
+
+    # (b) cross-model ARI
+    ax = fig.add_subplot(grid[0, 1])
+    names, vals = [], []
+    if gmm and gmm.get("ari") == gmm.get("ari"):
+        names.append("Bayes GMM\n(features)")
+        vals.append(gmm["ari"])
+    if bernoulli and bernoulli.get("ari") == bernoulli.get("ari"):
+        names.append("Bernoulli MM\n(raw binary)")
+        vals.append(bernoulli["ari"])
+    if vals:
+        bars = ax.bar(names, vals, color=["#4c72b0", "#55a868"][: len(vals)])
+        ax.set_ylim(0, 1.06)
+        ax.axhline(0.7, color="grey", ls="--", lw=0.8)
+        for bar, val in zip(bars, vals, strict=False):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                val + 0.02,
+                f"{val:.2f}",
+                ha="center",
+                fontsize=9,
+            )
+        ax.set_ylabel("ARI vs partition")
+        ax.set_title("cross-model agreement", fontsize=10)
+    else:
+        _na(ax)
+
+    # (c) Bayesian-GMM Dirichlet-process weights
+    ax = fig.add_subplot(grid[0, 2])
+    if gmm and gmm.get("weights") is not None:
+        weights = np.sort(np.asarray(gmm["weights"]))[::-1]
+        ax.bar(range(len(weights)), weights, color="#4c72b0")
+        ax.axhline(0.01, color="r", ls="--", lw=0.8)
+        ax.set_xlabel("component (sorted)")
+        ax.set_ylabel("posterior weight")
+        ax.set_title(f"Bayes GMM DP prior: n_eff={gmm.get('n_effective')}", fontsize=10)
+    else:
+        _na(ax)
+
+    # (d) Bernoulli-mixture state profiles
+    ax = fig.add_subplot(grid[1, 0])
+    if bernoulli and bernoulli.get("mu") is not None:
+        mu = np.asarray(bernoulli["mu"])
+        d = mu.shape[1]
+        x_axis = _centered_x_axis(d, span_bp)
+        for c in range(mu.shape[0]):
+            ax.plot(
+                x_axis,
+                _smooth_profile_vector(
+                    mu[c], smoothing="gaussian", smooth_win=smooth_window
+                ),
+                lw=1.3,
+                color=cmap(c / max(1, mu.shape[0] - 1)),
+                label=f"S{c}",
+            )
+        ax.axvline(0, color="k", lw=0.6, alpha=0.4)
+        ax.set_xlabel("position (bp from center)" if span_bp else "position")
+        ax.set_ylabel("P(methylated)")
+        ax.set_title("Bernoulli-MM state profiles (μ)", fontsize=10)
+        ax.legend(fontsize=7, ncol=2, framealpha=0.4)
+    else:
+        _na(ax)
+
+    # (e) soft-assignment confidence
+    ax = fig.add_subplot(grid[1, 1])
+    if gmm and gmm.get("posteriors") is not None:
+        conf = np.asarray(gmm["posteriors"]).max(axis=1)
+        ax.hist(
+            conf,
+            bins=20,
+            range=(1.0 / max(2, n_states), 1.0),
+            color="#8172b3",
+            alpha=0.85,
+        )
+        ax.axvline(np.median(conf), color="k", ls=":", lw=1)
+        ax.set_xlabel("top posterior per read")
+        ax.set_ylabel("reads")
+        ax.set_title(
+            f"soft-assignment confidence (median {np.median(conf):.2f})", fontsize=10
+        )
+    else:
+        _na(ax)
+
+    # (f) partition x GMM-component overlap
+    ax = fig.add_subplot(grid[1, 2])
+    if gmm and gmm.get("labels") is not None:
+        gmm_labels = np.asarray(gmm["labels"])
+        ku = np.sort(np.unique(ref))
+        gu = np.sort(np.unique(gmm_labels))
+        contingency = np.zeros((len(ku), len(gu)))
+        for i, a in enumerate(ku):
+            for j, b in enumerate(gu):
+                contingency[i, j] = np.sum((ref == a) & (gmm_labels == b))
+        row_norm = contingency / contingency.sum(axis=1, keepdims=True).clip(min=1)
+        im = ax.imshow(row_norm, aspect="auto", cmap="magma", vmin=0, vmax=1)
+        ax.set_xticks(range(len(gu)))
+        ax.set_xticklabels(gu, fontsize=7)
+        ax.set_yticks(range(len(ku)))
+        ax.set_yticklabels(ku, fontsize=7)
+        ax.set_xlabel("Bayes-GMM component")
+        ax.set_ylabel("partition cluster")
+        ax.set_title("partition → GMM overlap (row-norm)", fontsize=10)
+        fig.colorbar(im, ax=ax, fraction=0.046)
+    else:
+        _na(ax)
+
+    fig.suptitle(f"{title} — clustering validation", fontsize=12)
+    fig.subplots_adjust(left=0.055, right=0.97, bottom=0.08, top=0.92)
+    return fig
+
+
 def plot_cluster_profiles(
     data_matrix: np.ndarray,
     labels: np.ndarray,

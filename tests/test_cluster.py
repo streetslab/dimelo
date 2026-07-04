@@ -2777,3 +2777,107 @@ def test_extract_read_windows_rejects_nonpositive_window_size(monkeypatch):
             motifs=["A,0"],
             window_size=0,
         )
+
+
+def _two_state_binary_matrix(seed=0, n_per=40, n_pos=200):
+    """Synthetic binary read-window matrix with two clear occupancy states:
+    state A has a dense central methylation footprint, state B is sparse/flat."""
+    rng = np.random.RandomState(seed)
+    center = n_pos // 2
+    state_a = (rng.rand(n_per, n_pos) < 0.05).astype(np.uint8)
+    state_a[:, center - 40 : center + 40] = (
+        rng.rand(n_per, 80) < 0.6
+    ).astype(np.uint8)
+    state_b = (rng.rand(n_per, n_pos) < 0.06).astype(np.uint8)
+    matrix = np.vstack([state_a, state_b]).astype(np.uint8)
+    truth = np.array([0] * n_per + [1] * n_per)
+    return matrix, truth
+
+
+def test_cluster_read_windows_scale_option_standardizes():
+    # Features on wildly different scales: without scaling the huge-variance column
+    # dominates the Euclidean distance. scale=True must run and center/normalize.
+    rng = np.random.default_rng(1)
+    feature_matrix = np.column_stack(
+        [rng.normal(0, 1000, size=40), rng.normal(0, 0.001, size=40)]
+    )
+    result = cluster.cluster_read_windows(
+        feature_matrix, method="kmeans", n_clusters=2, random_state=0, scale=True
+    )
+    assert result.labels_raw.shape[0] == 40
+    assert "silhouette" in result.metrics
+
+
+def test_select_k_by_stability_recovers_two_states():
+    matrix, _ = _two_state_binary_matrix()
+    out = cluster.select_k_by_stability(
+        matrix.astype(float), k_grid=range(2, 6), n_boot=4, random_state=0
+    )
+    assert out["best_k"] == 2
+    assert {"k", "stability", "silhouette"} <= set(out["stats"][0])
+
+
+def test_bernoulli_mixture_recovers_states_and_is_monotone():
+    matrix, truth = _two_state_binary_matrix()
+    from sklearn.metrics import adjusted_rand_score
+
+    fit = cluster.bernoulli_mixture(matrix, 2, random_state=0)
+    # responsibilities are a valid soft assignment
+    np.testing.assert_allclose(fit["resp"].sum(axis=1), 1.0, atol=1e-6)
+    assert fit["mu"].shape == (2, matrix.shape[1])
+    # log-posterior is non-decreasing across EM iterations
+    assert np.all(np.diff(fit["logpost"]) >= -1e-6)
+    # recovers the ground-truth split
+    assert adjusted_rand_score(truth, fit["labels"]) > 0.9
+
+
+def test_crossvalidate_clusters_agrees_and_prunes():
+    matrix, truth = _two_state_binary_matrix()
+    out = cluster.crossvalidate_clusters(
+        matrix.astype(float), truth, random_state=0, max_extra_components=3
+    )
+    assert out["posteriors"].shape[0] == matrix.shape[0]
+    assert out["n_effective"] >= 2
+    assert 0.0 <= out["mean_confidence"] <= 1.0
+    assert out["ari"] > 0.5
+
+
+def test_crossvalidate_clusters_degenerate_single_cluster():
+    matrix, _ = _two_state_binary_matrix()
+    out = cluster.crossvalidate_clusters(matrix.astype(float), np.zeros(matrix.shape[0]))
+    assert out["labels"] is None
+    assert np.isnan(out["ari"])
+
+
+def test_bernoulli_crosscheck_matches_partition():
+    matrix, truth = _two_state_binary_matrix()
+    out = cluster.bernoulli_crosscheck(matrix, truth, random_state=0)
+    assert out["ari"] > 0.9
+    assert out["mu"].shape == (2, matrix.shape[1])
+    assert out["n_used"] == matrix.shape[0]
+
+
+def test_plot_cluster_validation_smoke():
+    matrix, truth = _two_state_binary_matrix()
+    stability = cluster.select_k_by_stability(
+        matrix.astype(float), k_grid=range(2, 5), n_boot=3, random_state=0
+    )
+    gmm = cluster.crossvalidate_clusters(matrix.astype(float), truth, random_state=0)
+    bern = cluster.bernoulli_crosscheck(matrix, truth, random_state=0)
+    fig = cluster.plot_cluster_validation(
+        truth,
+        stability=stability,
+        gmm=gmm,
+        bernoulli=bern,
+        best_k=stability["best_k"],
+        title="synthetic",
+        span_bp=matrix.shape[1],
+    )
+    assert len(fig.axes) >= 6
+
+
+def test_plot_cluster_validation_handles_missing_inputs():
+    _, truth = _two_state_binary_matrix()
+    fig = cluster.plot_cluster_validation(truth)
+    # every panel falls back to an "n/a" placeholder without raising
+    assert fig is not None
