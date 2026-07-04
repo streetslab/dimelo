@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import math
+import tempfile
 import warnings
 from collections import Counter, defaultdict
 from collections.abc import Sequence
@@ -1513,6 +1514,114 @@ def build_multimotif_read_windows(
     )
 
 
+def _iter_region_batches(
+    regions: str | Path | list[str | Path],
+    batch_size: int,
+    tmpdir: str,
+):
+    """Yield region-spec batches (<= ``batch_size`` regions each) for low-memory
+    windowed extraction, preserving BED columns/strand.
+
+    - a list/tuple of regions is sliced directly;
+    - a ``.bed`` file is split into temporary sub-BEDs (all columns kept, so strand and
+      orientation are unchanged);
+    - a single region string (e.g. ``"chr1:100-200"``) yields one batch.
+    """
+    if isinstance(regions, (list, tuple)):
+        seq = list(regions)
+        for i in range(0, len(seq), batch_size):
+            yield seq[i : i + batch_size]
+        return
+    if isinstance(regions, (str, Path)):
+        path = Path(regions)
+        if path.suffix == ".bed" and path.exists():
+            lines = [
+                ln
+                for ln in path.read_text().splitlines()
+                if ln.strip() and not ln.startswith("#")
+            ]
+            if not lines:
+                yield [regions]
+                return
+            for i in range(0, len(lines), batch_size):
+                sub = Path(tmpdir) / f"batch_{i // batch_size}.bed"
+                sub.write_text("\n".join(lines[i : i + batch_size]) + "\n")
+                yield sub
+            return
+    # single region string or unrecognized input -> one batch
+    yield [regions]
+
+
+def _extract_read_windows_batched(
+    hdf5_file: str | Path,
+    motifs: Sequence[str],
+    regions: str | Path | list[str | Path],
+    *,
+    config: ReadWindowExtractionConfig | None,
+    window_size: int | None,
+    single_strand: bool,
+    subset_parameters: dict | None,
+    span_full_window: bool,
+    region_batch_size: int,
+    quiet: bool,
+) -> ReadWindowExtractionResult:
+    """Low-memory driver for :func:`extract_read_windows`.
+
+    Loads reads in region batches instead of all at once, so only one batch's full-length
+    read vectors are resident at a time (long genomic reads store their entire span, so
+    materializing every selected read can exhaust memory). Each batch is windowed via
+    ``extract_read_windows`` itself (identical windowing) and the results are concatenated.
+    A shared ``window_size`` guarantees every batch produces the same window width. Row
+    order may differ from the single-pass path; results are otherwise equivalent.
+    """
+    results: list[ReadWindowExtractionResult] = []
+    with tempfile.TemporaryDirectory(prefix="dimelo_lowmem_") as tmp:
+        for batch in _iter_region_batches(regions, region_batch_size, tmp):
+            try:
+                res = extract_read_windows(
+                    hdf5_file,
+                    motifs,
+                    batch,
+                    config=config,
+                    window_size=window_size,
+                    single_strand=single_strand,
+                    subset_parameters=subset_parameters,
+                    span_full_window=span_full_window,
+                    quiet=quiet,
+                    low_memory=False,
+                )
+            except ValueError as exc:
+                # A batch may legitimately contain no reads that fully span the window;
+                # skip only that case and re-raise anything else.
+                if "No reads produced a full window" in str(exc):
+                    continue
+                raise
+            results.append(res)
+
+    if not results:
+        raise ValueError("No reads produced a full window in any region batch.")
+
+    data_matrix = np.vstack([r.data_matrix for r in results])
+    val_present = all(r.val_matrix is not None for r in results)
+    val_matrix = (
+        np.vstack([r.val_matrix for r in results]) if val_present else None
+    )
+    metadata = [row for r in results for row in r.metadata]
+    datasets = results[0].datasets
+    regions_dict: dict = {}
+    for r in results:
+        if r.regions_dict:
+            for chrom, entries in r.regions_dict.items():
+                regions_dict.setdefault(chrom, []).extend(entries)
+    return ReadWindowExtractionResult(
+        data_matrix=data_matrix,
+        val_matrix=val_matrix,
+        metadata=metadata,
+        datasets=datasets,
+        regions_dict=regions_dict or None,
+    )
+
+
 def extract_read_windows(
     hdf5_file: str | Path,
     motifs: Sequence[str],
@@ -1524,6 +1633,8 @@ def extract_read_windows(
     subset_parameters: dict | None = None,
     span_full_window: bool = False,
     quiet: bool = True,
+    low_memory: bool = False,
+    region_batch_size: int = 64,
 ) -> ReadWindowExtractionResult:
     """
     Extract fixed-length windows from single-read vectors, optionally flipping reads
@@ -1537,11 +1648,37 @@ def extract_read_windows(
         window_size: half-window override in bp (full span = 2 * window_size);
             when omitted, falls back to config.window_size.
             When omitted in both places, full span is inferred from the shortest selected region length.
+        low_memory: if True, load reads in region batches instead of all at once, so only
+            one batch's full-length read vectors are resident at a time. Useful for large
+            region sets and long genomic reads (whose full spans are stored), which can
+            otherwise exhaust memory. Requires an explicit window_size (or config.window_size)
+            so every batch shares a window width; row order may differ from the single-pass
+            path but results are otherwise equivalent.
+        region_batch_size: number of regions per batch when low_memory is True.
 
     Returns:
         ReadWindowExtractionResult containing thresholded/binary mod windows by default,
         plus val matrices and metadata.
     """
+
+    if low_memory and regions is not None:
+        if window_size is None and (config is None or config.window_size is None):
+            raise ValueError(
+                "low_memory=True requires an explicit window_size (or config.window_size) "
+                "so all region batches produce the same window width."
+            )
+        return _extract_read_windows_batched(
+            hdf5_file,
+            motifs,
+            regions,
+            config=config,
+            window_size=window_size,
+            single_strand=single_strand,
+            subset_parameters=subset_parameters,
+            span_full_window=span_full_window,
+            region_batch_size=region_batch_size,
+            quiet=quiet,
+        )
 
     cfg = config or ReadWindowExtractionConfig()
     requested_window_size = _resolve_window_size(
@@ -2720,11 +2857,20 @@ def cluster_read_windows(
     auto_k: bool = False,
     k_grid: Sequence[int] | None = None,
     score: str = "silhouette",
+    scale: bool = False,
     **kwargs,
 ) -> ClusterResult:
     """
     Run clustering on a read feature matrix with support for several algorithms.
     auto_k=True grid-searches K for methods that require it using the requested score.
+
+    scale=True applies a plain per-column StandardScaler to ``feature_matrix`` before
+    clustering. This matters for the distance-based methods (kmeans, agglomerative,
+    spectral, umap_kmeans): without it a high-variance feature family (e.g. the raw
+    PCA/positional block) dominates the Euclidean distance and drowns out lower-variance
+    families such as autocorrelation, so the partition collapses onto overall
+    methylation level. For family-aware weighting use :func:`scale_feature_matrix`
+    beforehand instead.
     """
 
     from sklearn.cluster import (
@@ -2739,6 +2885,10 @@ def cluster_read_windows(
     from sklearn.mixture import GaussianMixture
 
     X = np.asarray(feature_matrix)
+    if scale:
+        from sklearn.preprocessing import StandardScaler
+
+        X = StandardScaler().fit_transform(X)
 
     def fit(
         n_components: int,
