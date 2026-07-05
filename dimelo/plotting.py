@@ -1860,6 +1860,46 @@ def prepare_background_removed_pileup_overlay_data(
     }
 
 
+def prepare_joint_state_distribution_data(
+    *,
+    joint_states: pd.DataFrame,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Tidy per-pair joint-state fractions (from ``joint_occupancy.summarize_joint_states``)
+    for a stacked-bar view of both / a_only / b_only / neither."""
+    states = ["both", "a_only", "b_only", "neither"]
+    _require_columns(
+        joint_states,
+        ("pair_id", *[f"frac_{s}" for s in states]),
+        "joint_states",
+    )
+    table = joint_states.reset_index(drop=True)
+    return {
+        "distribution_table": table,
+        "metadata": {"states": states, "pair_order": table["pair_id"].astype(str).tolist()},
+    }
+
+
+def prepare_joint_occupancy_distance_data(
+    *,
+    pair_summary: pd.DataFrame,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Tidy log2 observed/expected co-occupancy vs 1D anchor distance (from
+    ``joint_occupancy.joint_occupancy``), for the distance-decay / trans-contact view."""
+    _require_columns(
+        pair_summary,
+        ("pair_id", "distance_bp", "log2_obs_exp", "significant"),
+        "pair_summary",
+    )
+    table = pair_summary.loc[
+        :, ["pair_id", "distance_bp", "log2_obs_exp", "significant"]
+    ].copy()
+    table = table.loc[table["distance_bp"].notna()].reset_index(drop=True)
+    return {
+        "distance_table": table,
+        "metadata": {"n_pairs": int(len(table))},
+    }
+
+
 def prepare_footprint_profile_data(
     *,
     profile: pd.DataFrame,

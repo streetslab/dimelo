@@ -484,6 +484,89 @@ def plot_region_discovery_hit_context_matplotlib(
     return fig, axes
 
 
+def plot_joint_state_distribution_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Stacked bar of per-pair joint-state fractions (both / a_only / b_only / neither)."""
+    _require_payload_keys(
+        payload,
+        ("distribution_table", "metadata"),
+        owner="plot_joint_state_distribution_matplotlib",
+    )
+    table = _require_payload_table(payload, "distribution_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    states = list(metadata.get("states") or ["both", "a_only", "b_only", "neither"])
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(table) * 0.8), 4))
+    if table.empty:
+        ax.set_title(title or "Joint occupancy states")
+        ax.set_ylabel("fraction of spanning reads")
+        return fig, ax
+    positions = np.arange(len(table))
+    colors = {
+        "both": "tab:red",
+        "a_only": "tab:orange",
+        "b_only": "tab:blue",
+        "neither": "tab:gray",
+    }
+    bottom = np.zeros(len(table))
+    for state in states:
+        heights = table[f"frac_{state}"].astype(float).fillna(0.0).to_numpy()
+        ax.bar(positions, heights, bottom=bottom, label=state, color=colors.get(state))
+        bottom += heights
+    ax.set_xticks(positions)
+    ax.set_xticklabels(table["pair_id"].astype(str).tolist(), rotation=45, ha="right")
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("fraction of spanning reads")
+    ax.legend(frameon=False, ncol=len(states), fontsize=8)
+    ax.set_title(title or "Joint occupancy states")
+    return fig, ax
+
+
+def plot_joint_occupancy_distance_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Scatter of log2 observed/expected co-occupancy vs 1D anchor distance; significant
+    pairs highlighted. Positive coupling at short distance flags a possible trans-contact
+    artifact (Q4)."""
+    _require_payload_keys(
+        payload,
+        ("distance_table", "metadata"),
+        owner="plot_joint_occupancy_distance_matplotlib",
+    )
+    table = _require_payload_table(payload, "distance_table")
+    fig, ax = _make_axis(ax=ax, figsize=(7, 4))
+    if table.empty:
+        ax.set_title(title or "Joint occupancy vs anchor distance")
+        ax.set_xlabel("anchor distance (bp)")
+        ax.set_ylabel("log2 observed / expected co-occupancy")
+        return fig, ax
+    significant = table["significant"].astype(bool).to_numpy()
+    ax.scatter(
+        table.loc[~significant, "distance_bp"], table.loc[~significant, "log2_obs_exp"],
+        color="tab:gray", alpha=0.7, label="n.s.",
+    )
+    ax.scatter(
+        table.loc[significant, "distance_bp"], table.loc[significant, "log2_obs_exp"],
+        color="tab:red", label="significant",
+    )
+    ax.axhline(0.0, color="black", linewidth=0.6)
+    ax.set_xlabel("anchor distance (bp)")
+    ax.set_ylabel("log2 observed / expected co-occupancy")
+    ax.legend(frameon=False)
+    ax.set_title(title or "Joint occupancy vs anchor distance")
+    return fig, ax
+
+
 def plot_footprint_profile_matplotlib(
     payload: Mapping[str, object],
     *,
