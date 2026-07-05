@@ -484,6 +484,59 @@ def plot_region_discovery_hit_context_matplotlib(
     return fig, axes
 
 
+_LOGO_BASE_COLORS = {"A": "tab:green", "C": "tab:blue", "G": "tab:orange", "T": "tab:red"}
+
+
+def plot_sequence_logo_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Information-content sequence logo (stacked per-base bits per position)."""
+    from matplotlib.patches import Patch
+
+    _require_payload_keys(
+        payload, ("logo_table", "metadata"), owner="plot_sequence_logo_matplotlib"
+    )
+    table = _require_payload_table(payload, "logo_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    positions = list(
+        metadata.get("positions")
+        or sorted(table.get("position", pd.Series(dtype=int)).unique())
+    )
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(positions) * 0.4), 3))
+    if table.empty or not positions:
+        ax.set_title(title or "Sequence logo")
+        ax.set_xlabel("position")
+        ax.set_ylabel("bits")
+        return fig, ax
+    for position in positions:
+        # stack ascending so the highest-information base sits on top
+        column = table.loc[table["position"] == position].sort_values("bits")
+        bottom = 0.0
+        for _, row in column.iterrows():
+            height = float(row["bits"])
+            ax.bar(
+                position, height, bottom=bottom, width=0.9,
+                color=_LOGO_BASE_COLORS.get(str(row["base"]), "tab:gray"),
+            )
+            bottom += height
+    ax.set_xlabel("position")
+    ax.set_ylabel("bits")
+    ax.set_ylim(0, 2)
+    ax.legend(
+        handles=[Patch(color=c, label=b) for b, c in _LOGO_BASE_COLORS.items()],
+        frameon=False, ncol=4, fontsize=8,
+    )
+    ax.set_title(title or "Sequence logo")
+    return fig, ax
+
+
 def plot_state_composition_matplotlib(
     payload: Mapping[str, object],
     *,

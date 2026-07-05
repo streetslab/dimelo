@@ -1860,6 +1860,20 @@ def prepare_background_removed_pileup_overlay_data(
     }
 
 
+def prepare_sequence_logo_data(
+    *,
+    information_content: pd.DataFrame,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Tidy per-(position, base) information-content heights (from
+    ``motifs.information_content``) for a sequence-logo stacked-bar view."""
+    _require_columns(
+        information_content, ("position", "base", "bits"), "information_content"
+    )
+    table = information_content.reset_index(drop=True)
+    positions = sorted(table["position"].astype(int).unique().tolist())
+    return {"logo_table": table, "metadata": {"positions": positions}}
+
+
 def prepare_state_composition_data(
     *,
     composition: pd.DataFrame,
