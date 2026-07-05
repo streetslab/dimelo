@@ -484,6 +484,48 @@ def plot_region_discovery_hit_context_matplotlib(
     return fig, axes
 
 
+def plot_binding_strength_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Ranked per-site binding strength: target occupancy (Beta-posterior mean + credible
+    interval) with control occupancy overlaid; significant sites highlighted."""
+    _require_payload_keys(
+        payload, ("binding_table", "metadata"), owner="plot_binding_strength_matplotlib"
+    )
+    table = _require_payload_table(payload, "binding_table")
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(table) * 0.7), 4))
+    if table.empty:
+        ax.set_title(title or "Binding strength (control-calibrated occupancy)")
+        ax.set_ylabel("occupancy")
+        return fig, ax
+
+    positions = np.arange(len(table))
+    heights = table["occupancy_posterior_mean"].astype(float).to_numpy()
+    lower = np.clip(heights - table["occupancy_ci_low"].astype(float).to_numpy(), 0, None)
+    upper = np.clip(table["occupancy_ci_high"].astype(float).to_numpy() - heights, 0, None)
+    significant = table["significant"].astype(bool).to_numpy()
+    colors = np.where(significant, "tab:red", "tab:gray")
+    ax.bar(
+        positions, heights, color=colors,
+        yerr=np.vstack([lower, upper]), capsize=3, ecolor="black",
+    )
+    # control occupancy overlaid as markers
+    ax.scatter(
+        positions, table["control_occupancy"].astype(float),
+        color="black", marker="_", s=120, zorder=3, label="control occupancy",
+    )
+    ax.set_xticks(positions)
+    ax.set_xticklabels(table["region_id"].astype(str).tolist(), rotation=45, ha="right")
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("occupancy (posterior mean ± CI)")
+    ax.legend(frameon=False, loc="upper right")
+    ax.set_title(title or "Binding strength (control-calibrated occupancy)")
+    return fig, ax
+
+
 def plot_true_signal_read_raster_matplotlib(
     payload: Mapping[str, object],
     *,

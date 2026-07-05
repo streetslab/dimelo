@@ -1860,6 +1860,40 @@ def prepare_background_removed_pileup_overlay_data(
     }
 
 
+def prepare_binding_strength_data(
+    *,
+    binding_strength: pd.DataFrame,
+    top_n: int | None = None,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Tidy per-site binding-strength frame (from ``background.binding_strength``) for a
+    ranked occupancy plot: target occupancy (Beta-posterior mean + credible interval),
+    control occupancy, and significance. Optionally keeps the top-N ranked sites."""
+    _require_columns(
+        binding_strength,
+        (
+            "region_id",
+            "rank",
+            "occupancy",
+            "occupancy_posterior_mean",
+            "occupancy_ci_low",
+            "occupancy_ci_high",
+            "control_occupancy",
+            "occupancy_excess",
+            "significant",
+        ),
+        "binding_strength",
+    )
+    if top_n is not None and top_n < 0:
+        raise ValueError("top_n must be non-negative.")
+    table = binding_strength.sort_values("rank", kind="stable").reset_index(drop=True)
+    if top_n is not None:
+        table = table.head(top_n).copy()
+    return {
+        "binding_table": table,
+        "metadata": {"region_order": table["region_id"].astype(str).tolist(), "top_n": top_n},
+    }
+
+
 def prepare_single_read_plot_data(
     table: pd.DataFrame,
     *,

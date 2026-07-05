@@ -449,6 +449,181 @@ def summarize_site_occupancy(
     return grouped.loc[:, columns]
 
 
+def binding_strength(
+    *,
+    evidence: pd.DataFrame,
+    target_conditions: Sequence[str],
+    control_conditions: Sequence[str],
+    fdr: float = 0.05,
+    min_control_reads: int = 20,
+    prior_alpha: float = 0.5,
+    prior_beta: float = 0.5,
+    credible_mass: float = 0.95,
+) -> pd.DataFrame:
+    """Per-site binding strength (Q6) = control-calibrated single-molecule occupancy.
+
+    Binding strength is the occupancy rate ``bound/total`` (fraction of true-signal reads),
+    reported with a Bayesian Beta-posterior credible interval. It is control-calibrated by
+    comparing the target occupancy against the control occupancy (control reads called
+    against their own null, i.e. the false-positive rate): the excess and a two-proportion
+    test of target-vs-control bound counts (BH across sites) quantify binding above
+    background. Sites are ranked by significance then excess.
+
+    Deliberately does NOT fold single-molecule methylation magnitude or footprint into the
+    strength metric (those are Q5 chromatin-state features); see
+    ``binding_strength_consistency_qc`` for the (separate) signal-level validation view.
+
+    Returns one row per site with ``region_id, rank, n_reads_target, n_bound_target,
+    occupancy, occupancy_posterior_mean, occupancy_ci_low, occupancy_ci_high,
+    n_reads_control, n_bound_control, control_occupancy, occupancy_excess, p_value,
+    q_value, significant``.
+    """
+    from .region_contrasts import _two_sample_proportion_p_value
+
+    target_called = call_true_signal_reads(
+        evidence=evidence,
+        target_conditions=target_conditions,
+        control_conditions=control_conditions,
+        fdr=fdr,
+        min_control_reads=min_control_reads,
+    )
+    # Control occupancy = control reads scored against their own (control-derived) null;
+    # by construction this is the false-positive occupancy baseline.
+    control_called = call_true_signal_reads(
+        evidence=evidence,
+        target_conditions=control_conditions,
+        control_conditions=control_conditions,
+        fdr=fdr,
+        min_control_reads=min_control_reads,
+    )
+
+    output_columns = [
+        "region_id",
+        "rank",
+        "n_reads_target",
+        "n_bound_target",
+        "occupancy",
+        "occupancy_posterior_mean",
+        "occupancy_ci_low",
+        "occupancy_ci_high",
+        "n_reads_control",
+        "n_bound_control",
+        "control_occupancy",
+        "occupancy_excess",
+        "p_value",
+        "q_value",
+        "significant",
+    ]
+    if target_called.empty:
+        return pd.DataFrame(columns=output_columns)
+
+    target_occ = summarize_site_occupancy(
+        target_called,
+        prior_alpha=prior_alpha,
+        prior_beta=prior_beta,
+        credible_mass=credible_mass,
+    ).rename(
+        columns={
+            "n_reads": "n_reads_target",
+            "n_true_signal": "n_bound_target",
+            "occupancy_rate": "occupancy",
+        }
+    )
+    if control_called.empty:
+        control_occ = pd.DataFrame(columns=["region_id", "n_reads", "n_true_signal"])
+    else:
+        control_occ = summarize_site_occupancy(control_called).loc[
+            :, ["region_id", "n_reads", "n_true_signal"]
+        ]
+    control_occ = control_occ.rename(
+        columns={"n_reads": "n_reads_control", "n_true_signal": "n_bound_control"}
+    )
+
+    merged = target_occ.merge(control_occ, on="region_id", how="left")
+    merged["n_reads_control"] = merged["n_reads_control"].fillna(0).astype(int)
+    merged["n_bound_control"] = merged["n_bound_control"].fillna(0).astype(int)
+    merged["control_occupancy"] = (
+        merged["n_bound_control"]
+        / merged["n_reads_control"].where(merged["n_reads_control"] != 0)
+    ).fillna(0.0)
+    merged["occupancy_excess"] = merged["occupancy"] - merged["control_occupancy"]
+
+    p_values: list[float] = []
+    for _, row in merged.iterrows():
+        n_target = int(row["n_reads_target"])
+        n_control = int(row["n_reads_control"])
+        if n_target > 0 and n_control > 0:
+            p_values.append(
+                _two_sample_proportion_p_value(
+                    int(row["n_bound_target"]),
+                    n_target,
+                    int(row["n_bound_control"]),
+                    n_control,
+                )
+            )
+        else:
+            p_values.append(float("nan"))
+    merged["p_value"] = p_values
+    testable = (merged["n_reads_target"] > 0) & (merged["n_reads_control"] > 0)
+    merged["q_value"] = _benjamini_hochberg(merged["p_value"], testable=testable)
+    merged["significant"] = (merged["q_value"] <= fdr).fillna(False)
+
+    merged = merged.sort_values(
+        ["significant", "occupancy_excess"], ascending=[False, False], kind="stable"
+    ).reset_index(drop=True)
+    merged["rank"] = range(1, len(merged) + 1)
+    return merged.loc[:, output_columns]
+
+
+def binding_strength_consistency_qc(called_reads: pd.DataFrame) -> pd.DataFrame:
+    """Consistency QC (validation, NOT the strength metric): per site, the mean
+    ``read_mod_fraction`` of true-signal reads vs background reads. True-bound reads should
+    carry higher signal than unbound reads; ``signal_gap = mean_true - mean_background``
+    should be positive where calling is working. Kept separate from binding strength.
+    """
+    _require_columns = {"region_id", "read_mod_fraction", "is_true_signal"}
+    missing = _require_columns - set(called_reads.columns)
+    if missing:
+        raise ValueError(
+            "binding_strength_consistency_qc requires columns: "
+            f"{', '.join(sorted(missing))}."
+        )
+    columns = [
+        "region_id",
+        "n_true_signal",
+        "n_background",
+        "mean_signal_true",
+        "mean_signal_background",
+        "signal_gap",
+    ]
+    if called_reads.empty:
+        return pd.DataFrame(columns=columns)
+
+    frame = called_reads.copy()
+    frame["_is_signal"] = frame["is_true_signal"].astype(bool)
+    frame["_fraction"] = pd.to_numeric(frame["read_mod_fraction"], errors="coerce")
+
+    rows: list[dict[str, object]] = []
+    for region_id, region_rows in frame.groupby("region_id", sort=False):
+        true_reads = region_rows.loc[region_rows["_is_signal"], "_fraction"]
+        background_reads = region_rows.loc[~region_rows["_is_signal"], "_fraction"]
+        mean_true = float(true_reads.mean()) if len(true_reads) else float("nan")
+        mean_background = (
+            float(background_reads.mean()) if len(background_reads) else float("nan")
+        )
+        rows.append(
+            {
+                "region_id": region_id,
+                "n_true_signal": int(len(true_reads)),
+                "n_background": int(len(background_reads)),
+                "mean_signal_true": mean_true,
+                "mean_signal_background": mean_background,
+                "signal_gap": mean_true - mean_background,
+            }
+        )
+    return pd.DataFrame(rows, columns=columns)
+
+
 def background_removed_pileup(
     called_reads: pd.DataFrame,
     *,
