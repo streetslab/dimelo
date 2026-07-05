@@ -1572,6 +1572,16 @@ def read_by_base_txt_to_hdf5(
             # Loop through txt file
             for fields in iterator:
                 pos_in_genome = int(fields[pos_in_genome_idx])
+                # `modkit extract full` emits a row for every read position, including
+                # soft-clipped / inserted bases that are NOT aligned to the reference
+                # (modkit reports ref_position == -1 for these). They are not part of the
+                # reference pileup, and letting them through corrupts the read extents:
+                # start_candidate = pos_in_genome - offset becomes negative for a -1 row,
+                # so read_start collapses far below the true leftmost aligned position and
+                # the stored per-read vector (sized read_end - read_start) balloons to the
+                # genomic-coordinate scale. Skip unaligned positions entirely.
+                if pos_in_genome < 0:
+                    continue
                 canonical_base = fields[canonical_base_idx]
                 prob = float(fields[prob_idx])
                 mod_code = fields[mod_code_idx]
