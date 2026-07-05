@@ -160,6 +160,124 @@ def import_bedgraph_signal(
     return binned
 
 
+def import_hic_contacts(
+    cool_path: str | Path,
+    pairs: pd.DataFrame,
+    *,
+    balance: bool = False,
+) -> pd.DataFrame:
+    """Hi-C contact frequency between each anchor pair, from a ``.cool`` file (``cooler``).
+
+    ``pairs`` needs ``region_a, region_b`` as ``"chrom:start-end"`` strings (and optionally
+    ``pair_id``). The contact for a pair is the sum of the Hi-C sub-matrix between the two
+    anchor regions (``balance=True`` uses balanced weights and requires a balanced cooler).
+    Returns ``pair_id, region_a, region_b, hic_contact`` (``NaN`` on an empty/absent
+    sub-matrix). This bridges Q7 joint occupancy to 3D architecture and flags the Q4
+    trans-contact confound.
+    """
+    import cooler
+
+    if not {"region_a", "region_b"}.issubset(pairs.columns):
+        raise ValueError("import_hic_contacts pairs requires columns: region_a, region_b.")
+    clr = cooler.Cooler(str(cool_path))
+    matrix = clr.matrix(balance=balance)
+
+    rows: list[dict[str, object]] = []
+    for _, pair in pairs.reset_index(drop=True).iterrows():
+        region_a = str(pair["region_a"])
+        region_b = str(pair["region_b"])
+        pair_id = (
+            str(pair["pair_id"])
+            if "pair_id" in pairs.columns and not pd.isna(pair.get("pair_id"))
+            else f"{region_a}|{region_b}"
+        )
+        try:
+            submatrix = matrix.fetch(region_a, region_b)
+        except (ValueError, KeyError):
+            rows.append(
+                {
+                    "pair_id": pair_id,
+                    "region_a": region_a,
+                    "region_b": region_b,
+                    "hic_contact": float("nan"),
+                }
+            )
+            continue
+        contact = (
+            float(np.nansum(submatrix)) if submatrix.size else float("nan")
+        )
+        rows.append(
+            {
+                "pair_id": pair_id,
+                "region_a": region_a,
+                "region_b": region_b,
+                "hic_contact": contact,
+            }
+        )
+    return pd.DataFrame(
+        rows, columns=["pair_id", "region_a", "region_b", "hic_contact"]
+    )
+
+
+def correlate_hic_vs_joint_occupancy(
+    hic_contacts: pd.DataFrame,
+    joint_summary: pd.DataFrame,
+    *,
+    occupancy_column: str = "log2_obs_exp",
+) -> tuple[pd.DataFrame, dict[str, float]]:
+    """Correlate per-pair Hi-C contact against a joint-occupancy metric (Q7 x architecture).
+
+    Joins ``import_hic_contacts`` output with a ``joint_occupancy.joint_occupancy``
+    pair-summary on ``pair_id`` and correlates ``hic_contact`` vs ``occupancy_column``
+    (default ``log2_obs_exp``). Returns ``(paired, stats)`` with ``pair_id, hic_contact,
+    joint_occupancy`` and the same ``n``/Pearson/Spearman ``stats`` as
+    ``correlate_binned_signals``. High Hi-C contact at high co-occupancy but large 1D
+    distance is the signature of a trans-contact artifact (Q4).
+    """
+    if "pair_id" not in hic_contacts.columns or "hic_contact" not in hic_contacts.columns:
+        raise ValueError(
+            "hic_contacts requires columns: pair_id, hic_contact."
+        )
+    if "pair_id" not in joint_summary.columns or occupancy_column not in joint_summary.columns:
+        raise ValueError(
+            f"joint_summary requires columns: pair_id, {occupancy_column}."
+        )
+    left = hic_contacts.loc[:, ["pair_id", "hic_contact"]]
+    right = joint_summary.loc[:, ["pair_id", occupancy_column]].rename(
+        columns={occupancy_column: "joint_occupancy"}
+    )
+    paired = (
+        left.merge(right, on="pair_id", how="inner")
+        .dropna(subset=["hic_contact", "joint_occupancy"])
+        .reset_index(drop=True)
+    )
+    stats: dict[str, float] = {
+        "n": int(len(paired)),
+        "pearson_r": float("nan"),
+        "pearson_p": float("nan"),
+        "spearman_rho": float("nan"),
+        "spearman_p": float("nan"),
+    }
+    if (
+        len(paired) >= 2
+        and paired["hic_contact"].std() > 0
+        and paired["joint_occupancy"].std() > 0
+    ):
+        pearson_r, pearson_p = _scipy_stats.pearsonr(
+            paired["hic_contact"], paired["joint_occupancy"]
+        )
+        spearman_rho, spearman_p = _scipy_stats.spearmanr(
+            paired["hic_contact"], paired["joint_occupancy"]
+        )
+        stats.update(
+            pearson_r=float(pearson_r),
+            pearson_p=float(pearson_p),
+            spearman_rho=float(spearman_rho),
+            spearman_p=float(spearman_p),
+        )
+    return paired, stats
+
+
 def correlate_binned_signals(
     dimelo_signal: pd.DataFrame,
     external_signal: pd.DataFrame,

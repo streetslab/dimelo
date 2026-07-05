@@ -167,3 +167,84 @@ def test_track_correlation_plotting_empty_and_nan():
     _, ax2 = plotting_matplotlib.plot_track_correlation_matplotlib(nan_payload)
     annotation = " ".join(text.get_text() for text in ax2.texts)
     assert "nan" not in annotation.lower()
+
+
+# --------------------------------------------------------------------------- #
+# S6b: Hi-C (cooler)                                                          #
+# --------------------------------------------------------------------------- #
+
+
+def _write_cool(path):
+    import cooler
+
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1"] * 10,
+            "start": list(range(0, 100, 10)),
+            "end": list(range(10, 101, 10)),
+        }
+    )
+    # high contact between bins {0,1}x{2,3}, medium {2,3}x{8,9}, low {0,1}x{8,9}
+    pix = []
+    for b1 in (0, 1):
+        for b2 in (2, 3):
+            pix.append((b1, b2, 100))
+        for b2 in (8, 9):
+            pix.append((b1, b2, 1))
+    for b1 in (2, 3):
+        for b2 in (8, 9):
+            pix.append((b1, b2, 10))
+    pixels = (
+        pd.DataFrame(pix, columns=["bin1_id", "bin2_id", "count"])
+        .sort_values(["bin1_id", "bin2_id"])
+        .reset_index(drop=True)
+    )
+    cooler.create_cooler(str(path), bins, pixels)
+
+
+def test_import_hic_contacts(tmp_path):
+    pytest.importorskip("cooler")
+    cool_path = tmp_path / "test.cool"
+    _write_cool(cool_path)
+    pairs = pd.DataFrame(
+        {
+            "pair_id": ["near", "mid", "far"],
+            "region_a": ["chr1:0-20", "chr1:20-40", "chr1:0-20"],
+            "region_b": ["chr1:20-40", "chr1:80-100", "chr1:80-100"],
+        }
+    )
+    contacts = tracks.import_hic_contacts(cool_path, pairs).set_index("pair_id")
+    # {0,1}x{2,3} = 4*100 ; {2,3}x{8,9} = 4*10 ; {0,1}x{8,9} = 4*1
+    assert contacts.loc["near", "hic_contact"] == pytest.approx(400.0)
+    assert contacts.loc["mid", "hic_contact"] == pytest.approx(40.0)
+    assert contacts.loc["far", "hic_contact"] == pytest.approx(4.0)
+
+
+def test_correlate_hic_vs_joint_occupancy(tmp_path):
+    pytest.importorskip("cooler")
+    cool_path = tmp_path / "test.cool"
+    _write_cool(cool_path)
+    pairs = pd.DataFrame(
+        {
+            "pair_id": ["near", "mid", "far"],
+            "region_a": ["chr1:0-20", "chr1:20-40", "chr1:0-20"],
+            "region_b": ["chr1:20-40", "chr1:80-100", "chr1:80-100"],
+        }
+    )
+    contacts = tracks.import_hic_contacts(cool_path, pairs)
+    joint = pd.DataFrame(
+        {"pair_id": ["near", "mid", "far"], "log2_obs_exp": [2.0, 1.0, 0.1]}
+    )
+    paired, stats = tracks.correlate_hic_vs_joint_occupancy(contacts, joint)
+    assert stats["n"] == 3
+    # Hi-C contact (400,40,4) and joint occupancy (2.0,1.0,0.1) are rank-concordant
+    assert stats["spearman_rho"] == pytest.approx(1.0)
+    assert list(paired.columns) == ["pair_id", "hic_contact", "joint_occupancy"]
+
+
+def test_correlate_hic_vs_joint_occupancy_validates():
+    with pytest.raises(ValueError, match="hic_contacts requires"):
+        tracks.correlate_hic_vs_joint_occupancy(
+            pd.DataFrame({"pair_id": ["p"]}),
+            pd.DataFrame({"pair_id": ["p"], "log2_obs_exp": [1.0]}),
+        )

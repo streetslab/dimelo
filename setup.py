@@ -37,6 +37,10 @@ setup(
             "umap-learn",
             "pyranges",
             "xgboost",
-        ]
+        ],
+        # Hi-C contact import (tracks.import_hic_contacts) — imported lazily only when used.
+        "hic": [
+            "cooler",
+        ],
     },
 )
