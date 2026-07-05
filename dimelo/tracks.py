@@ -92,15 +92,15 @@ def import_bigwig_signal(
         signals: list[float] = []
         for _, region in binned.iterrows():
             chromosome = region["chromosome"]
-            if chromosome not in available:
+            bin_start = int(region["bin_start"])
+            bin_end = int(region["bin_end"])
+            # A zero-width bin (bins >= region length -> integer edges collide) or a
+            # contig absent from the bigWig yields NaN, matching the bedGraph path;
+            # pyBigWig.stats raises on start >= end.
+            if chromosome not in available or bin_end <= bin_start:
                 signals.append(float("nan"))
                 continue
-            values = bigwig.stats(
-                chromosome,
-                int(region["bin_start"]),
-                int(region["bin_end"]),
-                type=stat,
-            )
+            values = bigwig.stats(chromosome, bin_start, bin_end, type=stat)
             value = values[0] if values else None
             signals.append(float("nan") if value is None else float(value))
     finally:

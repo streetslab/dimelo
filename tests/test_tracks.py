@@ -27,6 +27,16 @@ def test_bin_regions_validates():
         tracks.bin_regions(_regions(), bins=0)
 
 
+def test_bin_regions_absorbs_remainder():
+    # non-divisible region: fractional linspace edges truncate to ints, last bin absorbs
+    binned = tracks.bin_regions(_regions(), bins=3)
+    assert len(binned) == 3
+    assert list(binned["bin_start"]) == [0, 33, 66]
+    assert list(binned["bin_end"]) == [33, 66, 100]
+    # bins tile contiguously with no gaps/overlaps
+    assert list(binned["bin_start"])[1:] == list(binned["bin_end"])[:-1]
+
+
 def _write_bigwig(path):
     import pyBigWig
 
@@ -58,17 +68,37 @@ def test_import_bigwig_signal_missing_contig(tmp_path):
     assert binned["signal"].isna().all()
 
 
+def test_import_bigwig_signal_zero_width_bins_are_nan(tmp_path):
+    # more bins than the region is long -> some integer edges collide (zero-width bins).
+    # These must yield NaN, not crash pyBigWig.stats with 'Invalid interval bounds!'.
+    bw_path = tmp_path / "cov.bw"
+    _write_bigwig(bw_path)
+    short = pd.DataFrame(
+        {"region_id": ["s"], "chromosome": ["chr1"], "start": [0], "end": [3]}
+    )
+    binned = tracks.import_bigwig_signal(bw_path, short, bins=5)
+    assert len(binned) == 5
+    zero_width = binned["bin_end"] <= binned["bin_start"]
+    assert zero_width.any()  # e.g. bins (0,0) and (1,1)
+    assert binned.loc[zero_width, "signal"].isna().all()
+    assert binned.loc[~zero_width, "signal"].notna().any()
+
+
 def test_import_bedgraph_signal_overlap_weighted(tmp_path):
     bg_path = tmp_path / "cov.bedgraph"
     bg_path.write_text("chr1\t0\t50\t1\nchr1\t50\t100\t5\n")
-    binned = tracks.import_bedgraph_signal(bg_path, _regions(), bins=5)
+    # region [0,90] in 3 bins -> edges [0,30,60,90]
+    regions = pd.DataFrame(
+        {"region_id": ["r"], "chromosome": ["chr1"], "start": [0], "end": [90]}
+    )
+    binned = tracks.import_bedgraph_signal(bg_path, regions, bins=3)
     signal = list(binned["signal"])
-    # bins 0,1 (0-40) fully in value-1 interval; bin 2 (40-60) straddles: (10*1+10*5)/20=3
-    assert signal[0] == pytest.approx(1.0)
-    assert signal[1] == pytest.approx(1.0)
-    assert signal[2] == pytest.approx(3.0)
-    assert signal[3] == pytest.approx(5.0)
-    assert signal[4] == pytest.approx(5.0)
+    assert signal[0] == pytest.approx(1.0)  # bin 0-30 fully value 1
+    # bin 30-60 straddles ASYMMETRICALLY: 20bp of value 1 + 10bp of value 5 -> 70/30,
+    # which a plain (unweighted) mean of {1,5}=3.0 would NOT produce.
+    assert signal[1] == pytest.approx(70 / 30)
+    assert signal[1] != pytest.approx(3.0)
+    assert signal[2] == pytest.approx(5.0)  # bin 60-90 fully value 5
 
 
 def test_correlate_binned_signals_positive(tmp_path):
@@ -108,5 +138,32 @@ def test_track_correlation_plotting(tmp_path):
     paired, stats = tracks.correlate_binned_signals(dimelo, external)
 
     payload = plotting.prepare_track_correlation_data(paired=paired, stats=stats)
-    fig, _ = plotting_matplotlib.plot_track_correlation_matplotlib(payload, title="corr")
-    assert fig is not None
+    fig, ax = plotting_matplotlib.plot_track_correlation_matplotlib(payload, title="corr")
+    assert ax.get_xlabel() == "DiMeLo signal"
+    assert ax.get_ylabel() == "external signal"
+    assert ax.collections[0].get_offsets().shape[0] == 5  # 5 scatter points
+    annotation = " ".join(text.get_text() for text in ax.texts)
+    assert "Pearson r = 1.00" in annotation
+
+
+def test_track_correlation_plotting_empty_and_nan():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    from dimelo import plotting, plotting_matplotlib
+
+    # empty paired input -> early return, no scatter, no crash
+    empty = plotting.prepare_track_correlation_data(
+        paired=pd.DataFrame({"dimelo": [], "external": []}), stats={"n": 0}
+    )
+    fig, ax = plotting_matplotlib.plot_track_correlation_matplotlib(empty)
+    assert len(ax.collections) == 0
+
+    # NaN correlation must not be rendered as the literal 'nan'
+    nan_payload = plotting.prepare_track_correlation_data(
+        paired=pd.DataFrame({"dimelo": [0.1, 0.2], "external": [0.3, 0.4]}),
+        stats={"pearson_r": float("nan"), "spearman_rho": float("nan")},
+    )
+    _, ax2 = plotting_matplotlib.plot_track_correlation_matplotlib(nan_payload)
+    annotation = " ".join(text.get_text() for text in ax2.texts)
+    assert "nan" not in annotation.lower()
