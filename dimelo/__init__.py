@@ -1,4 +1,5 @@
 from . import (
+    background,
     chip_atlas,
     cluster,
     distribution,
@@ -39,6 +40,7 @@ from .models import (
 )
 
 __all__ = [
+    "background",
     "chip_atlas",
     "cluster",
     "dmr",
