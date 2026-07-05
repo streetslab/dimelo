@@ -401,12 +401,10 @@ def summarize_site_occupancy(
     if called_reads.empty:
         return pd.DataFrame(columns=columns)
 
-    has_posterior = (
-        "occupancy_posterior" in called_reads.columns
-        and pd.to_numeric(called_reads["occupancy_posterior"], errors="coerce")
-        .notna()
-        .any()
-    )
+    # Resolve on column PRESENCE, not on whether any value is finite, so a site's
+    # posterior occupancy does not depend on the other sites in the batch (a batch with
+    # any finite posterior would otherwise flip zero-coverage-only sites between modes).
+    has_posterior = "occupancy_posterior" in called_reads.columns
     if count_mode == "auto":
         resolved_mode = "posterior" if has_posterior else "hard"
     else:
