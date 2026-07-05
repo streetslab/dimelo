@@ -76,6 +76,101 @@ def fit_beta_binomial(ks, ns) -> tuple[float, float]:
     return mu * s, (1 - mu) * s
 
 
+def _fit_beta_binomial_weighted(
+    ks: np.ndarray,
+    ns: np.ndarray,
+    weights: np.ndarray,
+    *,
+    mu_lower: float = 1e-6,
+) -> tuple[float, float]:
+    """Weighted beta-binomial MLE (the M-step of the occupancy mixture). ``mu_lower``
+    lower-bounds the component mean so the signal component stays above the background
+    (prevents label-switching)."""
+    total_weight = float(np.sum(weights))
+    if total_weight <= 0 or ns.sum() <= 0:
+        # Degenerate weights: fall back to a high-methylation anchor.
+        return 0.9, 0.1
+    weighted_mean = float(np.sum(weights * ks) / max(np.sum(weights * ns), 1e-9))
+    mu0 = min(max(weighted_mean, max(mu_lower, 1e-4)), 1 - 1e-4)
+
+    def nll(p: np.ndarray) -> float:
+        mu = min(max(p[0], 1e-6), 1 - 1e-6)
+        s = max(p[1], 1e-6)
+        alpha = mu * s
+        beta = (1 - mu) * s
+        per_read = betaln(ks + alpha, ns - ks + beta) - betaln(alpha, beta)
+        return -float(np.sum(weights * per_read))
+
+    best = None
+    for s0 in (5.0, 25.0, 100.0):
+        result = minimize(
+            nll,
+            x0=[mu0, s0],
+            method="L-BFGS-B",
+            bounds=[(max(mu_lower, 1e-6), 1 - 1e-6), (1e-3, 1e6)],
+        )
+        if best is None or result.fun < best.fun:
+            best = result
+    mu, s = float(best.x[0]), float(best.x[1])
+    return mu * s, (1 - mu) * s
+
+
+def _occupancy_posterior_em(
+    ks: np.ndarray,
+    ns: np.ndarray,
+    bg_alphas: np.ndarray,
+    bg_betas: np.ndarray,
+    *,
+    max_iter: int = 100,
+    tol: float = 1e-4,
+) -> np.ndarray:
+    """Per-read posterior P(signal | k, n) from a 2-component beta-binomial mixture.
+
+    Component 0 (background) is fixed to each read's assigned control null; component 1
+    (signal, constrained to a mean above the background) and the mixing weight are fit by
+    EM. Reads with ``n == 0`` receive NaN. Returns an array aligned to the inputs.
+    """
+    posterior = np.full(len(ks), np.nan)
+    testable = ns > 0
+    if testable.sum() == 0:
+        return posterior
+
+    k_t = ks[testable].astype(float)
+    n_t = ns[testable].astype(float)
+    a0 = bg_alphas[testable].astype(float)
+    b0 = bg_betas[testable].astype(float)
+
+    f0 = stats.betabinom.pmf(k_t, n_t, a0, b0)
+    background_mean = float(np.mean(a0 / (a0 + b0)))
+    # signal component starts above the background mean
+    mu1 = min(0.95, max(background_mean + 0.2, 0.5))
+    s1 = 20.0
+    alpha1, beta1 = mu1 * s1, (1 - mu1) * s1
+    pi = 0.5
+
+    try:
+        for _ in range(max_iter):
+            f1 = stats.betabinom.pmf(k_t, n_t, alpha1, beta1)
+            numerator = pi * f1
+            responsibilities = numerator / (numerator + (1 - pi) * f0 + 1e-300)
+            pi_new = float(np.mean(responsibilities))
+            alpha1, beta1 = _fit_beta_binomial_weighted(
+                k_t, n_t, responsibilities, mu_lower=background_mean
+            )
+            converged = abs(pi_new - pi) < tol
+            pi = pi_new
+            if converged:
+                break
+        f1 = stats.betabinom.pmf(k_t, n_t, alpha1, beta1)
+        numerator = pi * f1
+        responsibilities = numerator / (numerator + (1 - pi) * f0 + 1e-300)
+    except (ValueError, FloatingPointError):
+        return posterior
+
+    posterior[testable] = responsibilities
+    return posterior
+
+
 def _upper_tail_pvalue(k: int, n: int, alpha: float, beta: float) -> float:
     """``P(K >= k | n, BetaBinom(alpha, beta))`` — one-sided test for more modification
     than the control-derived background. Returns 1.0 when ``n <= 0``."""
@@ -193,6 +288,7 @@ def call_true_signal_reads(
         "p_value",
         "q_value",
         "is_true_signal",
+        "occupancy_posterior",
     ]
     if control.empty:
         raise ValueError(
@@ -209,6 +305,8 @@ def call_true_signal_reads(
     p_values: list[float] = []
     background_rates: list[float] = []
     null_sources: list[str] = []
+    alphas: list[float] = []
+    betas: list[float] = []
     for site, modified_count, valid_count in zip(
         target["region_id"],
         target["modified_count"].astype(int),
@@ -221,6 +319,8 @@ def call_true_signal_reads(
         else:
             alpha, beta = pooled_alpha, pooled_beta
             source = "pooled"
+        alphas.append(alpha)
+        betas.append(beta)
         background_rates.append(alpha / (alpha + beta))
         null_sources.append(source)
         if valid_count <= 0:
@@ -240,6 +340,12 @@ def call_true_signal_reads(
     testable = target["valid_count"] > 0
     target["q_value"] = _benjamini_hochberg(target["p_value"], testable=testable)
     target["is_true_signal"] = (target["q_value"] <= fdr).fillna(False)
+    target["occupancy_posterior"] = _occupancy_posterior_em(
+        target["modified_count"].to_numpy(dtype=float),
+        target["valid_count"].to_numpy(dtype=float),
+        np.asarray(alphas, dtype=float),
+        np.asarray(betas, dtype=float),
+    )
 
     return target.loc[:, output_columns].reset_index(drop=True)
 
@@ -269,3 +375,54 @@ def summarize_site_occupancy(called_reads: pd.DataFrame) -> pd.DataFrame:
         grouped["n_reads"] != 0
     )
     return grouped
+
+
+def background_removed_pileup(
+    called_reads: pd.DataFrame,
+    *,
+    weighting: str = "hard",
+) -> pd.DataFrame:
+    """Per-site background-removed pileup from called reads.
+
+    ``weighting="hard"`` sums counts over ``is_true_signal`` reads only.
+    ``weighting="posterior"`` weights each read's counts by ``occupancy_posterior``
+    (reads with NaN posterior contribute 0). Returns ``region_id, modified_count,
+    valid_count, mod_fraction`` — the background-removed signal track (links to the Q2
+    ensemble ``background_adjusted`` correction).
+    """
+    if weighting not in {"hard", "posterior"}:
+        raise ValueError("weighting must be 'hard' or 'posterior'.")
+    required = {"region_id", "modified_count", "valid_count"}
+    if weighting == "hard":
+        required.add("is_true_signal")
+    else:
+        required.add("occupancy_posterior")
+    missing = required - set(called_reads.columns)
+    if missing:
+        raise ValueError(
+            f"background_removed_pileup requires columns: {', '.join(sorted(missing))}."
+        )
+
+    columns = ["region_id", "modified_count", "valid_count", "mod_fraction"]
+    if called_reads.empty:
+        return pd.DataFrame(columns=columns)
+
+    frame = called_reads.copy()
+    if weighting == "hard":
+        weights = frame["is_true_signal"].astype(bool).astype(float)
+    else:
+        weights = pd.to_numeric(frame["occupancy_posterior"], errors="coerce").fillna(
+            0.0
+        )
+    frame["_w_modified"] = weights * frame["modified_count"].astype(float)
+    frame["_w_valid"] = weights * frame["valid_count"].astype(float)
+
+    pooled = frame.groupby("region_id", sort=False, as_index=False).agg(
+        modified_count=("_w_modified", "sum"),
+        valid_count=("_w_valid", "sum"),
+    )
+    pooled["mod_fraction"] = pooled["modified_count"] / pooled["valid_count"].where(
+        pooled["valid_count"] != 0
+    )
+    pooled["mod_fraction"] = pooled["mod_fraction"].fillna(0.0)
+    return pooled.loc[:, columns]

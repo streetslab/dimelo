@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dimelo import background
+from dimelo import background, plotting, plotting_matplotlib
 
 
 def _read(region_id, condition, read_id, k, n):
@@ -114,6 +114,79 @@ def test_call_true_signal_reads_empty_target_returns_typed_frame():
     assert "is_true_signal" in called.columns
 
 
+def test_occupancy_posterior_ranks_signal_above_background():
+    called = background.call_true_signal_reads(
+        evidence=_evidence(),
+        target_conditions=["target"],
+        control_conditions=["control"],
+        min_control_reads=5,
+    ).set_index("read_id")
+
+    assert "occupancy_posterior" in called.columns
+    # high-methylation reads carry higher occupancy posterior than the background-like one
+    assert called.loc["tA_high", "occupancy_posterior"] > called.loc[
+        "tA_bg", "occupancy_posterior"
+    ]
+    assert 0.0 <= called.loc["tA_bg", "occupancy_posterior"] <= 1.0
+    assert 0.0 <= called.loc["tA_high", "occupancy_posterior"] <= 1.0
+
+
+def test_occupancy_posterior_nan_for_zero_coverage():
+    evidence = pd.concat(
+        [_evidence(), pd.DataFrame([_read("siteA", "target", "tA_zero", 0, 0)])],
+        ignore_index=True,
+    )
+    called = background.call_true_signal_reads(
+        evidence=evidence,
+        target_conditions=["target"],
+        control_conditions=["control"],
+        min_control_reads=5,
+    ).set_index("read_id")
+    assert np.isnan(called.loc["tA_zero", "occupancy_posterior"])
+
+
+def test_background_removed_pileup_hard_uses_true_signal_only():
+    called = background.call_true_signal_reads(
+        evidence=_evidence(),
+        target_conditions=["target"],
+        control_conditions=["control"],
+        min_control_reads=5,
+    )
+    pileup = background.background_removed_pileup(called, weighting="hard").set_index(
+        "region_id"
+    )
+    # siteA: only tA_high (18/20) is true signal (tA_bg dropped)
+    assert pileup.loc["siteA", "modified_count"] == pytest.approx(18.0)
+    assert pileup.loc["siteA", "valid_count"] == pytest.approx(20.0)
+    assert pileup.loc["siteA", "mod_fraction"] == pytest.approx(0.9)
+    # siteB: tB_high (19/20) is true signal
+    assert pileup.loc["siteB", "mod_fraction"] == pytest.approx(0.95)
+
+
+def test_background_removed_pileup_posterior_weights_counts():
+    called = background.call_true_signal_reads(
+        evidence=_evidence(),
+        target_conditions=["target"],
+        control_conditions=["control"],
+        min_control_reads=5,
+    )
+    pileup = background.background_removed_pileup(called, weighting="posterior")
+    # posterior-weighted counts are bounded by the raw counts and non-negative
+    assert (pileup["valid_count"] >= 0).all()
+    assert (pileup["mod_fraction"] >= 0).all() and (pileup["mod_fraction"] <= 1).all()
+
+
+def test_background_removed_pileup_rejects_bad_weighting():
+    called = background.call_true_signal_reads(
+        evidence=_evidence(),
+        target_conditions=["target"],
+        control_conditions=["control"],
+        min_control_reads=5,
+    )
+    with pytest.raises(ValueError, match="weighting must be"):
+        background.background_removed_pileup(called, weighting="soft")
+
+
 def test_summarize_site_occupancy_rate():
     called = background.call_true_signal_reads(
         evidence=_evidence(),
@@ -127,3 +200,73 @@ def test_summarize_site_occupancy_rate():
     assert occupancy.loc["siteA", "n_true_signal"] == 1
     assert occupancy.loc["siteA", "occupancy_rate"] == pytest.approx(0.5)
     assert occupancy.loc["siteB", "occupancy_rate"] == pytest.approx(1.0)
+
+
+# --------------------------------------------------------------------------- #
+# S2 plotting                                                                 #
+# --------------------------------------------------------------------------- #
+
+
+def _called():
+    return background.call_true_signal_reads(
+        evidence=_evidence(),
+        target_conditions=["target"],
+        control_conditions=["control"],
+        min_control_reads=5,
+    )
+
+
+def test_prepare_true_signal_read_data_orders_and_validates():
+    payload = plotting.prepare_true_signal_read_data(called_reads=_called())
+    table = payload["read_table"]
+    assert "read_order" in table.columns
+    assert set(payload["metadata"]["region_ids"]) == {"siteA", "siteB"}
+    # within a region, reads are ordered by ascending mod fraction
+    site_a = table.loc[table["region_id"] == "siteA"]
+    assert list(site_a["read_mod_fraction"]) == sorted(site_a["read_mod_fraction"])
+
+    with pytest.raises(ValueError, match="color_by"):
+        plotting.prepare_true_signal_read_data(called_reads=_called(), color_by="nope")
+    with pytest.raises(ValueError, match="No called reads"):
+        plotting.prepare_true_signal_read_data(called_reads=_called(), region_id="ghost")
+
+
+def test_prepare_background_removed_pileup_overlay():
+    payload = plotting.prepare_background_removed_pileup_overlay_data(
+        called_reads=_called()
+    )
+    overlay = payload["overlay_table"]
+    assert set(overlay["stage"]) == {"raw", "background_removed"}
+    removed = overlay.loc[overlay["stage"] == "background_removed"].set_index("region_id")
+    # siteA background-removed = true-signal read only (18/20 = 0.9)
+    assert removed.loc["siteA", "mod_fraction"] == pytest.approx(0.9)
+    raw = overlay.loc[overlay["stage"] == "raw"].set_index("region_id")
+    # siteA raw pools both target reads (18+1)/(20+20) = 0.475
+    assert raw.loc["siteA", "mod_fraction"] == pytest.approx(19 / 40)
+
+
+def test_s2_renderers_smoke():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    called = _called()
+    occupancy = background.summarize_site_occupancy(called)
+
+    fig1, _ = plotting_matplotlib.plot_true_signal_read_raster_matplotlib(
+        plotting.prepare_true_signal_read_data(called_reads=called), title="raster"
+    )
+    assert fig1 is not None
+    fig1b, _ = plotting_matplotlib.plot_true_signal_read_raster_matplotlib(
+        plotting.prepare_true_signal_read_data(
+            called_reads=called, color_by="occupancy_posterior"
+        )
+    )
+    assert fig1b is not None
+    fig2, _ = plotting_matplotlib.plot_occupancy_rate_track_matplotlib(
+        plotting.prepare_occupancy_rate_track_data(site_occupancy=occupancy)
+    )
+    assert fig2 is not None
+    fig3, _ = plotting_matplotlib.plot_background_removed_pileup_overlay_matplotlib(
+        plotting.prepare_background_removed_pileup_overlay_data(called_reads=called)
+    )
+    assert fig3 is not None

@@ -1746,6 +1746,120 @@ def prepare_dmr_multi_summary_data(
     return {"summary_table": summary_table, "metadata": metadata}
 
 
+def prepare_true_signal_read_data(
+    *,
+    called_reads: pd.DataFrame,
+    region_id: str | None = None,
+    color_by: str = "is_true_signal",
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Per-read frame for a single-molecule true-signal raster (from
+    ``background.call_true_signal_reads``). Reads are ordered by ``read_mod_fraction``
+    within each region and colored by ``is_true_signal`` or ``occupancy_posterior``.
+    """
+    _require_columns(
+        called_reads,
+        (
+            "region_id",
+            "read_id",
+            "read_mod_fraction",
+            "is_true_signal",
+            "occupancy_posterior",
+            "background_rate",
+        ),
+        "called_reads",
+    )
+    if color_by not in {"is_true_signal", "occupancy_posterior"}:
+        raise ValueError(
+            "color_by must be 'is_true_signal' or 'occupancy_posterior'."
+        )
+    table = called_reads.copy()
+    if region_id is not None:
+        table = table.loc[table["region_id"] == region_id].copy()
+        if table.empty:
+            raise ValueError(f"No called reads for region_id {region_id!r}.")
+    table = table.sort_values(
+        ["region_id", "read_mod_fraction"], kind="stable"
+    ).reset_index(drop=True)
+    table["read_order"] = table.groupby("region_id", sort=False).cumcount()
+    return {
+        "read_table": table,
+        "metadata": {
+            "color_by": color_by,
+            "region_ids": table["region_id"].drop_duplicates().tolist(),
+        },
+    }
+
+
+def prepare_occupancy_rate_track_data(
+    *,
+    site_occupancy: pd.DataFrame,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Tidy per-site control-calibrated occupancy-rate track (from
+    ``background.summarize_site_occupancy``), sorted by descending occupancy."""
+    _require_columns(
+        site_occupancy,
+        ("region_id", "n_reads", "n_true_signal", "occupancy_rate"),
+        "site_occupancy",
+    )
+    track = site_occupancy.sort_values(
+        "occupancy_rate", ascending=False, kind="stable"
+    ).reset_index(drop=True)
+    return {
+        "track_table": track,
+        "metadata": {"region_order": track["region_id"].tolist()},
+    }
+
+
+def prepare_background_removed_pileup_overlay_data(
+    *,
+    called_reads: pd.DataFrame,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Per-site raw-vs-background-removed pileup fractions for an overlay.
+
+    Raw = pooled modification fraction over all target reads; removed = pooled over
+    ``is_true_signal`` reads only. Returns a long frame with one row per
+    ``(region_id, stage)`` where ``stage`` is ``"raw"`` or ``"background_removed"``.
+    """
+    _require_columns(
+        called_reads,
+        ("region_id", "modified_count", "valid_count", "is_true_signal"),
+        "called_reads",
+    )
+    columns = ["region_id", "stage", "modified_count", "valid_count", "mod_fraction"]
+    if called_reads.empty:
+        return {
+            "overlay_table": pd.DataFrame(columns=columns),
+            "metadata": {"region_order": [], "stages": ["raw", "background_removed"]},
+        }
+
+    frame = called_reads.copy()
+
+    def _pool(subset: pd.DataFrame, stage: str) -> pd.DataFrame:
+        pooled = subset.groupby("region_id", sort=False, as_index=False).agg(
+            modified_count=("modified_count", "sum"),
+            valid_count=("valid_count", "sum"),
+        )
+        pooled["mod_fraction"] = pooled["modified_count"] / pooled["valid_count"].where(
+            pooled["valid_count"] != 0
+        )
+        pooled["mod_fraction"] = pooled["mod_fraction"].fillna(0.0)
+        pooled["stage"] = stage
+        return pooled
+
+    raw = _pool(frame, "raw")
+    removed = _pool(frame.loc[frame["is_true_signal"].astype(bool)], "background_removed")
+    overlay = pd.concat([raw, removed], ignore_index=True)
+    region_order = raw.sort_values("region_id", kind="stable")["region_id"].tolist()
+    overlay = overlay.loc[:, columns].reset_index(drop=True)
+    return {
+        "overlay_table": overlay,
+        "metadata": {
+            "region_order": region_order,
+            "stages": ["raw", "background_removed"],
+        },
+    }
+
+
 def prepare_single_read_plot_data(
     table: pd.DataFrame,
     *,

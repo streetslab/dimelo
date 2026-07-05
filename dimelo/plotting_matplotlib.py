@@ -484,6 +484,144 @@ def plot_region_discovery_hit_context_matplotlib(
     return fig, axes
 
 
+def plot_true_signal_read_raster_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    axes=None,
+    title: str | None = None,
+):
+    """Single-molecule raster: reads (rows) vs read_mod_fraction, colored by call."""
+    _require_payload_keys(
+        payload, ("read_table", "metadata"), owner="plot_true_signal_read_raster_matplotlib"
+    )
+    read_table = _require_payload_table(payload, "read_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    color_by = str(metadata.get("color_by") or "is_true_signal")
+    region_ids = list(
+        metadata.get("region_ids")
+        or read_table.get("region_id", pd.Series(dtype="object")).drop_duplicates()
+    )
+
+    fig, axes = _make_axes(axes=axes, n_axes=len(region_ids) or 1, figsize=(7, 3))
+    if not region_ids:
+        axes[0].set_title(title or "Single-molecule true-signal raster")
+        axes[0].set_xlabel("read modification fraction")
+        axes[0].set_ylabel("read")
+        return fig, axes
+
+    for index, region in enumerate(region_ids):
+        ax = axes[index]
+        sub = read_table.loc[read_table["region_id"] == region]
+        if not sub.empty:
+            if color_by == "occupancy_posterior":
+                sc = ax.scatter(
+                    sub["read_mod_fraction"], sub["read_order"],
+                    c=sub["occupancy_posterior"], cmap="viridis", vmin=0.0, vmax=1.0, s=18,
+                )
+                fig.colorbar(sc, ax=ax, label="occupancy posterior")
+            else:
+                is_sig = sub["is_true_signal"].astype(bool)
+                ax.scatter(
+                    sub.loc[~is_sig, "read_mod_fraction"], sub.loc[~is_sig, "read_order"],
+                    color="tab:gray", s=18, alpha=0.7, label="background",
+                )
+                ax.scatter(
+                    sub.loc[is_sig, "read_mod_fraction"], sub.loc[is_sig, "read_order"],
+                    color="tab:red", s=18, label="true signal",
+                )
+                ax.legend(frameon=False, loc="lower right", fontsize=8)
+            background_rate = sub["background_rate"].iloc[0]
+            ax.axvline(float(background_rate), color="black", linewidth=0.8, linestyle="--")
+        ax.set_xlim(-0.02, 1.02)
+        ax.set_title(str(region))
+        ax.set_xlabel("read modification fraction")
+        ax.set_ylabel("read")
+
+    for ax in axes[len(region_ids) :]:
+        ax.set_visible(False)
+    if title:
+        fig.suptitle(title)
+    return fig, axes
+
+
+def plot_occupancy_rate_track_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Bar of per-site control-calibrated occupancy rate."""
+    _require_payload_keys(
+        payload, ("track_table", "metadata"), owner="plot_occupancy_rate_track_matplotlib"
+    )
+    track = _require_payload_table(payload, "track_table")
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(track) * 0.6), 4))
+    if track.empty:
+        ax.set_title(title or "Control-calibrated occupancy rate")
+        ax.set_ylabel("occupancy rate")
+        return fig, ax
+    positions = np.arange(len(track))
+    ax.bar(positions, track["occupancy_rate"].astype(float), color="tab:red")
+    ax.set_xticks(positions)
+    ax.set_xticklabels(track["region_id"].astype(str).tolist(), rotation=45, ha="right")
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("occupancy rate")
+    ax.set_title(title or "Control-calibrated occupancy rate")
+    return fig, ax
+
+
+def plot_background_removed_pileup_overlay_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Grouped bars of raw vs background-removed modification fraction per site."""
+    _require_payload_keys(
+        payload,
+        ("overlay_table", "metadata"),
+        owner="plot_background_removed_pileup_overlay_matplotlib",
+    )
+    overlay = _require_payload_table(payload, "overlay_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    region_order = list(
+        metadata.get("region_order")
+        or overlay.get("region_id", pd.Series(dtype="object")).drop_duplicates()
+    )
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(region_order) * 0.7), 4))
+    if overlay.empty or not region_order:
+        ax.set_title(title or "Raw vs background-removed pileup")
+        ax.set_ylabel("modification fraction")
+        return fig, ax
+    raw = overlay.loc[overlay["stage"] == "raw"].set_index("region_id")[
+        "mod_fraction"
+    ].to_dict()
+    removed = overlay.loc[overlay["stage"] == "background_removed"].set_index(
+        "region_id"
+    )["mod_fraction"].to_dict()
+    positions = np.arange(len(region_order))
+    width = 0.4
+    ax.bar(positions - width / 2, [float(raw.get(r, 0.0)) for r in region_order],
+           width, label="raw", color="tab:gray")
+    ax.bar(positions + width / 2, [float(removed.get(r, 0.0)) for r in region_order],
+           width, label="background-removed", color="tab:red")
+    ax.set_xticks(positions)
+    ax.set_xticklabels([str(r) for r in region_order], rotation=45, ha="right")
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("modification fraction")
+    ax.legend(frameon=False)
+    ax.set_title(title or "Raw vs background-removed pileup")
+    return fig, ax
+
+
 def plot_region_contrast_correction_overlay_matplotlib(
     payload: Mapping[str, object],
     *,
