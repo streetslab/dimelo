@@ -4,6 +4,7 @@ import math
 from collections.abc import Iterable
 from functools import partial
 
+import numpy as np
 import pandas as pd
 from scipy import stats
 
@@ -493,25 +494,6 @@ def _zero_safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series
     return numerator.div(denominator.where(denominator != 0), fill_value=0).fillna(0.0)
 
 
-def _estimate_beta_binomial_prior(
-    denominator_modified_count: int,
-    denominator_valid_count: int,
-) -> tuple[float, float]:
-    if denominator_modified_count < 0:
-        raise ValueError("beta-binomial denominator modified_count must be >= 0.")
-    if denominator_valid_count < 0:
-        raise ValueError("beta-binomial denominator valid_count must be >= 0.")
-    if denominator_modified_count > denominator_valid_count:
-        raise ValueError(
-            "beta-binomial denominator modified_count cannot exceed valid_count."
-        )
-
-    denominator_unmodified_count = denominator_valid_count - denominator_modified_count
-    return float(denominator_modified_count + 1), float(
-        denominator_unmodified_count + 1
-    )
-
-
 def _log_beta_function(alpha: float, beta: float) -> float:
     return math.lgamma(alpha) + math.lgamma(beta) - math.lgamma(alpha + beta)
 
@@ -526,27 +508,6 @@ def _beta_binomial_logpmf(k: int, n: int, alpha: float, beta: float) -> float:
         + _log_beta_function(k + alpha, n - k + beta)
         - _log_beta_function(alpha, beta)
     )
-
-
-def _beta_binomial_two_sided_p_value(
-    k: int, n: int, alpha: float, beta: float
-) -> float:
-    if k < 0:
-        raise ValueError("beta-binomial modified_count must be >= 0.")
-    if n < 0:
-        raise ValueError("beta-binomial valid_count must be >= 0.")
-    if k > n:
-        raise ValueError("beta-binomial modified_count cannot exceed valid_count.")
-    if n <= 0:
-        return 1.0
-
-    support = list(range(n + 1))
-    logpmf = [_beta_binomial_logpmf(x, n, alpha, beta) for x in support]
-    observed_logpmf = logpmf[k]
-    tail_probability = sum(
-        math.exp(value) for value in logpmf if value <= observed_logpmf + 1e-12
-    )
-    return min(max(tail_probability, 0.0), 1.0)
 
 
 # Symmetric two-sample test on pooled (modified, valid) counts. Used by
@@ -665,8 +626,10 @@ def _two_sample_beta_binomial_lrt(
         mu, rho = _sig(theta[0]), _sig(theta[1])
         return -(_bb_ll(num, mu, rho) + _bb_ll(den, mu, rho))
 
-    num_k = sum(k for k, _ in num); num_n = sum(n for _, n in num)
-    den_k = sum(k for k, _ in den); den_n = sum(n for _, n in den)
+    num_k = sum(k for k, _ in num)
+    num_n = sum(n for _, n in num)
+    den_k = sum(k for k, _ in den)
+    den_n = sum(n for _, n in den)
     fn = num_k / num_n
     fd = den_k / den_n
     fp = (num_k + den_k) / (num_n + den_n)
@@ -797,8 +760,145 @@ def _add_beta_binomial_scores(
     return scored
 
 
+def _apply_global_normalization(
+    evidence: pd.DataFrame,
+    *,
+    factors: pd.DataFrame,
+    motif: str,
+) -> pd.DataFrame:
+    """Additively subtract the per-(sample, motif) ``global_offset`` from each
+    replicate's per-region ``mod_fraction``, clamp to [0, 1], and re-derive an integer
+    ``modified_count`` so both the pooled effect-size path and the per-replicate
+    beta-binomial LRT see the normalized signal. ``valid_count`` is left unchanged.
+
+    Samples absent from ``factors`` (for this motif) or whose ``global_offset`` is NaN
+    (a motif with zero pooled valid coverage) are treated as offset 0.0 (identity).
+    """
+    motif_factors = factors.loc[
+        factors["motif"] == motif, ["sample_id", "global_offset"]
+    ]
+    offset_by_sample = dict(
+        zip(
+            motif_factors["sample_id"],
+            motif_factors["global_offset"],
+            strict=False,
+        )
+    )
+
+    out = evidence.copy()
+    offsets = out["sample_id"].map(offset_by_sample).astype(float).fillna(0.0)
+    p_norm = (out["mod_fraction"].astype(float) - offsets).clip(lower=0.0, upper=1.0)
+    out["mod_fraction"] = p_norm
+    out["modified_count"] = (
+        (p_norm * out["valid_count"].astype(float)).round().astype(int)
+    )
+    return out
+
+
+def _pool_background_rate(
+    evidence: pd.DataFrame,
+    *,
+    background_conditions: Iterable[str],
+) -> pd.DataFrame:
+    """Coverage-weighted background rate ``b`` per region over the background
+    condition(s), matching ``_pool_region_groups`` semantics
+    (``b = sum(modified_count) / sum(valid_count)``). Returns the region keys plus
+    ``background_fraction`` and ``background_present``.
+
+    Raises when a requested background condition is entirely absent from ``evidence``
+    (mirrors the numerator/denominator behavior in ``_pool_region_groups``). A region
+    with no background rows degrades gracefully to ``background_present = False`` and
+    ``background_fraction = 0.0``.
+    """
+    conditions = list(background_conditions)
+    keys = ["region_id", "chromosome", "start", "end", "strand"]
+    side_evidence = evidence.loc[evidence["condition"].isin(conditions)].copy()
+    available = set(side_evidence["condition"].dropna().unique())
+    missing = sorted(set(conditions) - available)
+    if missing:
+        raise ValueError(
+            f"Missing background evidence for requested condition(s): "
+            f"{', '.join(missing)}."
+        )
+    pooled = side_evidence.groupby(
+        keys, dropna=False, sort=False, as_index=False
+    ).agg(
+        _bg_modified=("modified_count", "sum"),
+        _bg_valid=("valid_count", "sum"),
+    )
+    pooled["background_fraction"] = _zero_safe_divide(
+        pooled["_bg_modified"], pooled["_bg_valid"]
+    )
+    pooled["background_present"] = pooled["_bg_valid"] > 0
+    return pooled.loc[:, [*keys, "background_fraction", "background_present"]]
+
+
+def _apply_background_correction(
+    evidence: pd.DataFrame,
+    *,
+    background_rate: pd.DataFrame,
+    contrast: ContrastSpec,
+) -> pd.DataFrame:
+    """Correct each numerator/denominator replicate fraction against its region's
+    background rate ``b``: ``c = clamp((p - b) / (1 - b), 0, 1)``. When background
+    saturates the signal (``b >= 1``) ``c`` is set to 0 (no recoverable enrichment;
+    avoids dividing by ``1 - b <= 0``). Re-derives an integer ``modified_count`` from
+    the corrected fraction; ``valid_count`` is unchanged. Rows whose condition is not in
+    numerator/denominator (e.g. the background condition itself) are left untouched.
+    """
+    b_by_region = dict(
+        zip(
+            background_rate["region_id"],
+            background_rate["background_fraction"],
+            strict=False,
+        )
+    )
+    corrected_conditions = set(contrast.numerator or []) | set(
+        contrast.denominator or []
+    )
+
+    out = evidence.copy()
+    in_scope = out["condition"].isin(corrected_conditions).to_numpy()
+    b = out["region_id"].map(b_by_region).astype(float).fillna(0.0).to_numpy()
+    p = out["mod_fraction"].astype(float).to_numpy()
+    valid = out["valid_count"].astype(float).to_numpy()
+    denom = 1.0 - b
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where(denom > 0.0, (p - b) / denom, 0.0)
+    corrected = np.clip(ratio, 0.0, 1.0)
+
+    new_fraction = np.where(in_scope, corrected, p)
+    new_modified = np.where(
+        in_scope,
+        np.round(new_fraction * valid).astype(int),
+        out["modified_count"].to_numpy(),
+    )
+    out["mod_fraction"] = new_fraction
+    out["modified_count"] = new_modified.astype(int)
+    return out
+
+
+def _region_raw_overlay_frame(pooled: pd.DataFrame) -> pd.DataFrame:
+    """Pre-correction pooled fractions for the raw-vs-corrected overlay, keyed on
+    region_id: ``raw_fraction`` (numerator), ``raw_reference_fraction`` (denominator),
+    ``raw_delta_fraction``."""
+    numerator = pooled.loc[
+        pooled["contrast_side"] == "numerator", ["region_id", "fraction"]
+    ].rename(columns={"fraction": "raw_fraction"})
+    denominator = pooled.loc[
+        pooled["contrast_side"] == "denominator", ["region_id", "fraction"]
+    ].rename(columns={"fraction": "raw_reference_fraction"})
+    overlay = numerator.merge(denominator, on="region_id", how="outer")
+    overlay["raw_fraction"] = overlay["raw_fraction"].fillna(0.0)
+    overlay["raw_reference_fraction"] = overlay["raw_reference_fraction"].fillna(0.0)
+    overlay["raw_delta_fraction"] = (
+        overlay["raw_fraction"] - overlay["raw_reference_fraction"]
+    )
+    return overlay.reset_index(drop=True)
+
+
 def _pool_region_groups(evidence: pd.DataFrame, contrast: ContrastSpec) -> pd.DataFrame:
-    if contrast.mode not in {"pairwise", "group_vs_group"}:
+    if contrast.mode not in {"pairwise", "group_vs_group", "background_adjusted"}:
         raise NotImplementedError(
             f"Effect-size pooling is not implemented for contrast mode '{contrast.mode}'."
         )
@@ -1788,6 +1888,8 @@ def score_regions(
     occupancy_table: pd.DataFrame | None = None,
     read_table: pd.DataFrame | None = None,
     feature_table: pd.DataFrame | None = None,
+    normalization_mode: str = "none",
+    global_normalization_factors: pd.DataFrame | None = None,
 ) -> RegionContrastResult:
     validate_region_contrast_request(
         analysis_unit=analysis_unit,
@@ -1795,7 +1897,28 @@ def score_regions(
         signal_source=signal_source,
         test=test,
     )
+    if normalization_mode not in {"none", "global"}:
+        raise ValueError(
+            f"Unsupported normalization_mode {normalization_mode!r}; "
+            "expected one of 'none', 'global'."
+        )
     contrast_metadata = contrast.metadata or {}
+    # The explicit param wins when set to a non-default; otherwise fall back to the
+    # contrast metadata (backward compatible with callers that only set metadata).
+    applied_normalization_mode = (
+        normalization_mode
+        if normalization_mode != "none"
+        else contrast_metadata.get("normalization_mode", "none")
+    )
+    # S1 normalization/background correction is implemented only on the ensemble path.
+    # The single_read / cluster_occupancy branches return before that block, so a
+    # 'global' request there would be silently unapplied yet recorded as normalized.
+    # Fail loud instead of mislabeling an uncorrected result.
+    if applied_normalization_mode != "none" and analysis_unit != "ensemble_region":
+        raise ValueError(
+            f"normalization_mode={applied_normalization_mode!r} is only supported for "
+            f"analysis_unit='ensemble_region', not {analysis_unit!r}."
+        )
 
     if analysis_unit == "single_read":
         if representation == "read_mod_fraction":
@@ -1820,9 +1943,7 @@ def score_regions(
                 "signal_source": signal_source,
                 "test": test,
                 "multiple_testing": multiple_testing,
-                "normalization_mode": contrast_metadata.get(
-                    "normalization_mode", "none"
-                ),
+                "normalization_mode": applied_normalization_mode,
                 "biological_interpretation": contrast_metadata.get(
                     "biological_interpretation",
                     "region-level difference in sample-level read modification fraction",
@@ -1862,9 +1983,7 @@ def score_regions(
                 "signal_source": signal_source,
                 "test": test,
                 "multiple_testing": multiple_testing,
-                "normalization_mode": contrast_metadata.get(
-                    "normalization_mode", "none"
-                ),
+                "normalization_mode": applied_normalization_mode,
                 "biological_interpretation": contrast_metadata.get(
                     "biological_interpretation",
                     "region-level difference in sample-level read feature summaries",
@@ -1904,7 +2023,7 @@ def score_regions(
             "signal_source": signal_source,
             "test": test,
             "multiple_testing": multiple_testing,
-            "normalization_mode": contrast_metadata.get("normalization_mode", "none"),
+            "normalization_mode": applied_normalization_mode,
             "biological_interpretation": contrast_metadata.get(
                 "biological_interpretation",
                 "region-level difference in sample-level cluster occupancy",
@@ -1925,6 +2044,37 @@ def score_regions(
         regions=regions,
         motifs=motifs,
     )
+
+    # S1a: global normalization FIRST, on the raw per-replicate fractions, so both the
+    # pooled effect-size path and the beta-binomial LRT below see the normalized signal.
+    if applied_normalization_mode == "global":
+        if global_normalization_factors is None:
+            raise ValueError(
+                "normalization_mode='global' requires global_normalization_factors "
+                "(output of global_analysis.compute_global_normalization_factors)."
+            )
+        evidence = _apply_global_normalization(
+            evidence,
+            factors=global_normalization_factors,
+            motif=list(motifs)[0],
+        )
+
+    # S1b: background correction SECOND (after global normalization), for the
+    # background_adjusted mode. Keep the pre-correction pooled fractions for the
+    # raw-vs-corrected overlay, and compute the per-region background rate on the
+    # (already normalized) evidence before correcting numerator/denominator counts.
+    raw_overlay = None
+    background_rate = None
+    if contrast.mode == "background_adjusted":
+        raw_overlay = _region_raw_overlay_frame(
+            _pool_region_groups(evidence=evidence, contrast=contrast)
+        )
+        background_rate = _pool_background_rate(
+            evidence, background_conditions=contrast.background or []
+        )
+        evidence = _apply_background_correction(
+            evidence, background_rate=background_rate, contrast=contrast
+        )
 
     pooled = _pool_region_groups(evidence=evidence, contrast=contrast)
     numerator = (
@@ -2013,6 +2163,22 @@ def score_regions(
         merged["numerator_present"] & merged["denominator_present"]
     )
 
+    # S1b: attach the per-region background rate so it surfaces in the summary. The
+    # numerator/denominator fractions and counts are already background-corrected
+    # (evidence was corrected before pooling); this only annotates the result. The
+    # testable mask reads *_valid_count, which correction leaves unchanged, so BH
+    # scope is identical to the raw path.
+    if contrast.mode == "background_adjusted" and background_rate is not None:
+        merged = merged.merge(
+            background_rate.loc[
+                :, ["region_id", "background_fraction", "background_present"]
+            ],
+            on="region_id",
+            how="left",
+        )
+        merged["background_fraction"] = merged["background_fraction"].fillna(0.0)
+        merged["background_present"] = merged["background_present"].fillna(False)
+
     if test == "beta_binomial":
         regions_table = _add_beta_binomial_scores(
             merged,
@@ -2056,6 +2222,8 @@ def score_regions(
         summary_columns.extend(
             ["count", "reference_count", "delta_count", "log2_fc_count"]
         )
+    if contrast.mode == "background_adjusted":
+        summary_columns.extend(["background_fraction", "background_present"])
     summary = regions_table.loc[:, summary_columns].copy()
 
     metadata = {
@@ -2065,7 +2233,9 @@ def score_regions(
         "signal_source": signal_source,
         "test": test,
         "multiple_testing": multiple_testing,
-        "normalization_mode": contrast_metadata.get("normalization_mode", "none"),
+        "normalization_mode": applied_normalization_mode,
+        "background_correction": contrast.mode == "background_adjusted",
+        "background_conditions": list(contrast.background or []),
         "biological_interpretation": contrast_metadata.get(
             "biological_interpretation",
             "region-level difference in pooled modified fraction",
@@ -2073,11 +2243,15 @@ def score_regions(
         "renderer": contrast_metadata.get("renderer", "region_effect_sizes"),
     }
 
+    plot_data = {"region_effect_sizes": summary.copy()}
+    if raw_overlay is not None:
+        plot_data["region_effect_sizes_raw"] = raw_overlay
+
     return RegionContrastResult(
         regions=regions_table,
         summary=summary,
         contrast=contrast,
-        plot_data={"region_effect_sizes": summary.copy()},
+        plot_data=plot_data,
         metadata=metadata,
         figures={},
     )

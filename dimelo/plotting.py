@@ -730,6 +730,108 @@ def prepare_region_contrast_profile_data(
     return prepared
 
 
+def prepare_region_contrast_correction_overlay_data(
+    *,
+    result,
+    top_n: int | None = None,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Region-level raw-vs-corrected overlay for a ``background_adjusted`` contrast.
+
+    Background correction (S1b) operates on the pooled per-region rate, so the overlay
+    is region-level (not per-position like ``prepare_region_contrast_profile_data``).
+    Consumes ``result.summary`` (corrected ``fraction`` / ``reference_fraction`` /
+    ``delta_fraction`` [+ ``background_fraction``]) and
+    ``result.plot_data['region_effect_sizes_raw']`` (pre-correction ``raw_*``), and
+    returns a tidy long frame with one row per ``(region_id, stage)`` where ``stage`` is
+    ``"raw"`` or ``"corrected"``. Optionally keeps only the top-N regions by absolute
+    corrected ``delta_fraction``.
+    """
+    plot_data = getattr(result, "plot_data", {}) or {}
+    if "region_effect_sizes_raw" not in plot_data:
+        raise ValueError(
+            "prepare_region_contrast_correction_overlay_data requires a "
+            "background_adjusted result (result.plot_data must contain "
+            "'region_effect_sizes_raw')."
+        )
+    if top_n is not None and top_n < 0:
+        raise ValueError("top_n must be non-negative.")
+
+    summary = result.summary.copy()
+    raw = plot_data["region_effect_sizes_raw"].copy()
+    _require_columns(
+        summary,
+        ("region_id", "fraction", "reference_fraction", "delta_fraction"),
+        "result.summary",
+    )
+    _require_columns(
+        raw,
+        ("region_id", "raw_fraction", "raw_reference_fraction", "raw_delta_fraction"),
+        "result.plot_data['region_effect_sizes_raw']",
+    )
+
+    value_columns = ["region_id", "fraction", "reference_fraction", "delta_fraction"]
+    corrected = summary.loc[:, value_columns].copy()
+    corrected["stage"] = "corrected"
+
+    raw_stage = (
+        raw.rename(
+            columns={
+                "raw_fraction": "fraction",
+                "raw_reference_fraction": "reference_fraction",
+                "raw_delta_fraction": "delta_fraction",
+            }
+        )
+        .loc[:, value_columns]
+        .copy()
+    )
+    raw_stage["stage"] = "raw"
+
+    overlay = pd.concat([raw_stage, corrected], ignore_index=True)
+    if "background_fraction" in summary.columns:
+        overlay = overlay.merge(
+            summary.loc[:, ["region_id", "background_fraction"]].drop_duplicates(
+                "region_id"
+            ),
+            on="region_id",
+            how="left",
+        )
+
+    order_column = "rank" if "rank" in summary.columns else "region_id"
+    region_order = (
+        summary.sort_values(order_column, kind="stable")["region_id"]
+        .drop_duplicates()
+        .tolist()
+    )
+    if top_n is not None:
+        region_order = (
+            summary.assign(_abs_delta=summary["delta_fraction"].abs())
+            .sort_values("_abs_delta", ascending=False, kind="stable")["region_id"]
+            .drop_duplicates()
+            .head(top_n)
+            .tolist()
+        )
+        overlay = overlay.loc[overlay["region_id"].isin(region_order)].copy()
+
+    overlay["region_id"] = pd.Categorical(
+        overlay["region_id"], categories=region_order, ordered=True
+    )
+    overlay = (
+        overlay.sort_values(["region_id", "stage"], kind="stable")
+        .reset_index(drop=True)
+    )
+    overlay["region_id"] = overlay["region_id"].astype(str)
+
+    return {
+        "overlay_table": overlay,
+        "metadata": {
+            "stages": ["raw", "corrected"],
+            "region_order": [str(region) for region in region_order],
+            "top_n": top_n,
+            "background_correction": True,
+        },
+    }
+
+
 def prepare_region_contrast_heatmap_data(
     *,
     result,
@@ -1308,6 +1410,340 @@ def prepare_region_discovery_hit_context_data(
             "score_column": active_score_column,
         },
     }
+
+
+_DMR_CHROM_COLUMNS = ("chromosome", "chrom", "#chrom", "contig")
+_DMR_START_COLUMNS = ("start", "chrom_start", "start_position")
+_DMR_END_COLUMNS = ("end", "chrom_end", "end_position")
+
+
+def _first_present_column(
+    table: pd.DataFrame,
+    candidates: Sequence[str],
+    *,
+    owner: str,
+    kind: str,
+) -> str:
+    for candidate in candidates:
+        if candidate in table.columns:
+            return candidate
+    raise ValueError(
+        f"{owner} must include one of {tuple(candidates)} for the {kind} coordinate."
+    )
+
+
+def _dmr_add_position_features(
+    table: pd.DataFrame,
+    *,
+    chrom_column: str,
+    start_column: str,
+    end_column: str,
+) -> pd.DataFrame:
+    out = table.copy()
+    out["contig"] = out[chrom_column].astype(str)
+    starts = pd.to_numeric(out[start_column], errors="coerce")
+    ends = pd.to_numeric(out[end_column], errors="coerce")
+    out["start"] = starts
+    out["end"] = ends
+    out["midpoint"] = (starts + ends) / 2.0
+    out["span"] = (ends - starts).abs()
+    return out
+
+
+def _dmr_coordinate_key_set(table: pd.DataFrame, *, owner: str) -> set:
+    chrom_column = _first_present_column(
+        table, _DMR_CHROM_COLUMNS, owner=owner, kind="chromosome"
+    )
+    start_column = _first_present_column(
+        table, _DMR_START_COLUMNS, owner=owner, kind="start"
+    )
+    end_column = _first_present_column(
+        table, _DMR_END_COLUMNS, owner=owner, kind="end"
+    )
+    return set(
+        zip(
+            table[chrom_column].astype(str),
+            pd.to_numeric(table[start_column], errors="coerce"),
+            pd.to_numeric(table[end_column], errors="coerce"),
+            strict=True,
+        )
+    )
+
+
+def prepare_dmr_site_data(
+    *,
+    result,
+    contigs: list[str] | None = None,
+    top_n: int | None = None,
+    pvalue_column: str = "map_pvalue",
+    effect_size_column: str = "effect_size",
+    only_high_confidence: bool = False,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Tidy per-site DMR frame from a ``ModkitDMRPairResult`` for Manhattan-style plots.
+
+    Detects the genomic-coordinate columns of ``modkit dmr pair`` output flexibly,
+    adds ``contig``/``start``/``end``/``midpoint``/``span``/``neg_log10_pvalue`` and an
+    ``is_high_confidence`` flag (membership in ``result.high_confidence_sites``), and
+    optionally keeps only the top-N sites by absolute effect size.
+    """
+    if not hasattr(result, "sites") or not hasattr(result, "high_confidence_sites"):
+        raise TypeError(
+            "prepare_dmr_site_data requires a ModkitDMRPairResult-like object with "
+            "'sites' and 'high_confidence_sites' attributes."
+        )
+    if top_n is not None and top_n < 0:
+        raise ValueError("top_n must be non-negative.")
+
+    high_confidence = result.high_confidence_sites
+    source = high_confidence if only_high_confidence else result.sites
+    sites = source.copy()
+
+    metadata: dict[str, object] = {
+        "pvalue_column": pvalue_column,
+        "effect_size_column": effect_size_column,
+        "only_high_confidence": only_high_confidence,
+        "top_n": top_n,
+        "n_high_confidence": int(len(high_confidence)),
+    }
+    site_columns = [
+        "contig",
+        "start",
+        "end",
+        "midpoint",
+        "span",
+        effect_size_column,
+        pvalue_column,
+        "neg_log10_pvalue",
+        "is_high_confidence",
+    ]
+
+    if sites.empty:
+        metadata["contig_order"] = []
+        return {
+            "site_table": pd.DataFrame(columns=site_columns),
+            "metadata": metadata,
+        }
+
+    chrom_column = _first_present_column(
+        sites, _DMR_CHROM_COLUMNS, owner="result.sites", kind="chromosome"
+    )
+    start_column = _first_present_column(
+        sites, _DMR_START_COLUMNS, owner="result.sites", kind="start"
+    )
+    end_column = _first_present_column(
+        sites, _DMR_END_COLUMNS, owner="result.sites", kind="end"
+    )
+    site_table = _dmr_add_position_features(
+        sites,
+        chrom_column=chrom_column,
+        start_column=start_column,
+        end_column=end_column,
+    )
+
+    if pvalue_column in site_table.columns:
+        pvals = pd.to_numeric(site_table[pvalue_column], errors="coerce")
+        site_table[pvalue_column] = pvals
+        with np.errstate(divide="ignore", invalid="ignore"):
+            site_table["neg_log10_pvalue"] = -np.log10(pvals.where(pvals > 0))
+    else:
+        site_table["neg_log10_pvalue"] = np.nan
+
+    if effect_size_column in site_table.columns:
+        site_table[effect_size_column] = pd.to_numeric(
+            site_table[effect_size_column], errors="coerce"
+        )
+
+    if only_high_confidence:
+        site_table["is_high_confidence"] = True
+    elif high_confidence.empty:
+        site_table["is_high_confidence"] = False
+    else:
+        hc_keys = _dmr_coordinate_key_set(
+            high_confidence, owner="result.high_confidence_sites"
+        )
+        site_table["is_high_confidence"] = [
+            (contig, start, end) in hc_keys
+            for contig, start, end in zip(
+                site_table["contig"],
+                site_table["start"],
+                site_table["end"],
+                strict=True,
+            )
+        ]
+
+    if contigs is not None:
+        site_table = site_table.loc[site_table["contig"].isin(contigs)].copy()
+        if site_table.empty:
+            raise ValueError("Requested contigs are not present in result.sites.")
+        contig_order = list(contigs)
+    else:
+        contig_order = site_table["contig"].drop_duplicates().tolist()
+
+    if top_n is not None and effect_size_column in site_table.columns:
+        ordered_index = (
+            site_table[effect_size_column]
+            .abs()
+            .sort_values(ascending=False, kind="stable")
+            .index
+        )
+        site_table = site_table.loc[ordered_index].head(top_n).copy()
+
+    site_table = _sort_discovery_table(
+        site_table,
+        contig_order=contig_order,
+        sort_columns=["start", "end"],
+    )
+    metadata["contig_order"] = contig_order
+    return {"site_table": site_table, "metadata": metadata}
+
+
+def prepare_dmr_segment_data(
+    *,
+    result,
+    contigs: list[str] | None = None,
+    score_column: str = "score",
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Tidy segment frame from a ``ModkitDMRPairResult`` HMM segmentation output.
+
+    Returns an empty ``segment_table`` (with ``metadata['has_segments'] = False``)
+    when the pair result was produced without ``segment_path=...``.
+    """
+    if not hasattr(result, "segments"):
+        raise TypeError(
+            "prepare_dmr_segment_data requires a ModkitDMRPairResult-like object with "
+            "a 'segments' attribute."
+        )
+    segments = result.segments
+    metadata: dict[str, object] = {
+        "score_column": score_column,
+        "has_segments": segments is not None,
+    }
+    segment_columns = ["contig", "start", "end", "midpoint", "span", score_column]
+
+    if segments is None or segments.empty:
+        metadata["contig_order"] = []
+        return {
+            "segment_table": pd.DataFrame(columns=segment_columns),
+            "metadata": metadata,
+        }
+
+    chrom_column = _first_present_column(
+        segments, _DMR_CHROM_COLUMNS, owner="result.segments", kind="chromosome"
+    )
+    start_column = _first_present_column(
+        segments, _DMR_START_COLUMNS, owner="result.segments", kind="start"
+    )
+    end_column = _first_present_column(
+        segments, _DMR_END_COLUMNS, owner="result.segments", kind="end"
+    )
+    segment_table = _dmr_add_position_features(
+        segments,
+        chrom_column=chrom_column,
+        start_column=start_column,
+        end_column=end_column,
+    )
+    if score_column in segment_table.columns:
+        segment_table[score_column] = pd.to_numeric(
+            segment_table[score_column], errors="coerce"
+        )
+
+    if contigs is not None:
+        segment_table = segment_table.loc[
+            segment_table["contig"].isin(contigs)
+        ].copy()
+        if segment_table.empty:
+            raise ValueError("Requested contigs are not present in result.segments.")
+        contig_order = list(contigs)
+    else:
+        contig_order = segment_table["contig"].drop_duplicates().tolist()
+
+    segment_table = _sort_discovery_table(
+        segment_table,
+        contig_order=contig_order,
+        sort_columns=["start", "end"],
+    )
+    metadata["contig_order"] = contig_order
+    return {"segment_table": segment_table, "metadata": metadata}
+
+
+def prepare_dmr_multi_summary_data(
+    *,
+    result,
+    pvalue_max: float = 0.01,
+    abs_effect_size_min: float = 0.1,
+    min_total_coverage: int | None = None,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Per-pair site/significance summary from a ``ModkitDMRMultiResult`` manifest.
+
+    Reads each pairwise bed file listed in ``result.pair_files`` and counts total
+    sites and significant sites (reusing ``dmr._select_high_confidence_sites`` with the
+    same thresholds as the pair workflow). Pairs whose bed lacks an ``effect_size``
+    column contribute ``n_significant = 0``.
+    """
+    from pathlib import Path
+
+    from dimelo import dmr as _dmr
+
+    if not hasattr(result, "pair_files"):
+        raise TypeError(
+            "prepare_dmr_multi_summary_data requires a ModkitDMRMultiResult-like "
+            "object with a 'pair_files' attribute."
+        )
+    pair_files = result.pair_files
+    metadata: dict[str, object] = {
+        "pvalue_max": float(pvalue_max),
+        "abs_effect_size_min": float(abs_effect_size_min),
+        "min_total_coverage": min_total_coverage,
+    }
+    summary_columns = [
+        "pair_name",
+        "pair_file",
+        "n_sites",
+        "n_significant",
+        "significant_fraction",
+    ]
+
+    if pair_files is None or pair_files.empty:
+        return {
+            "summary_table": pd.DataFrame(columns=summary_columns),
+            "metadata": metadata,
+        }
+
+    _require_columns(pair_files, ("pair_file", "pair_name"), "result.pair_files")
+
+    rows: list[dict[str, object]] = []
+    for _, pair_row in pair_files.iterrows():
+        path = Path(pair_row["pair_file"])
+        table = _dmr._bed_table_from_path(path)
+        n_sites = int(len(table))
+        if table.empty or "effect_size" not in table.columns:
+            n_significant = 0
+        else:
+            significant = _dmr._select_high_confidence_sites(
+                table,
+                pvalue_max=pvalue_max,
+                abs_effect_size_min=abs_effect_size_min,
+                min_total_coverage=min_total_coverage,
+            )
+            n_significant = int(len(significant))
+        rows.append(
+            {
+                "pair_name": str(pair_row["pair_name"]),
+                "pair_file": str(path),
+                "n_sites": n_sites,
+                "n_significant": n_significant,
+                "significant_fraction": (
+                    n_significant / n_sites if n_sites else 0.0
+                ),
+            }
+        )
+
+    summary_table = (
+        pd.DataFrame(rows, columns=summary_columns)
+        .sort_values("pair_name", kind="stable")
+        .reset_index(drop=True)
+    )
+    return {"summary_table": summary_table, "metadata": metadata}
 
 
 def prepare_single_read_plot_data(

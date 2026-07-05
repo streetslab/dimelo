@@ -484,6 +484,239 @@ def plot_region_discovery_hit_context_matplotlib(
     return fig, axes
 
 
+def plot_region_contrast_correction_overlay_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Grouped bars of raw vs background-corrected ``delta_fraction`` per region."""
+    _require_payload_keys(
+        payload,
+        ("overlay_table", "metadata"),
+        owner="plot_region_contrast_correction_overlay_matplotlib",
+    )
+    overlay = _require_payload_table(payload, "overlay_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    region_order = list(
+        metadata.get("region_order")
+        or overlay.get("region_id", pd.Series(dtype="object")).drop_duplicates()
+    )
+
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(region_order) * 0.7), 4))
+
+    if overlay.empty or not region_order:
+        ax.set_title(title or "Background correction: raw vs corrected")
+        ax.set_xlabel("Region")
+        ax.set_ylabel("delta fraction (numerator - denominator)")
+        return fig, ax
+
+    raw = (
+        overlay.loc[overlay["stage"] == "raw"]
+        .set_index("region_id")["delta_fraction"]
+        .to_dict()
+    )
+    corrected = (
+        overlay.loc[overlay["stage"] == "corrected"]
+        .set_index("region_id")["delta_fraction"]
+        .to_dict()
+    )
+    positions = np.arange(len(region_order))
+    width = 0.4
+    ax.bar(
+        positions - width / 2,
+        [float(raw.get(region, 0.0)) for region in region_order],
+        width,
+        label="raw",
+        color="tab:gray",
+    )
+    ax.bar(
+        positions + width / 2,
+        [float(corrected.get(region, 0.0)) for region in region_order],
+        width,
+        label="corrected",
+        color="tab:blue",
+    )
+    ax.axhline(0.0, color="black", linewidth=0.6)
+    ax.set_xticks(positions)
+    ax.set_xticklabels([str(region) for region in region_order], rotation=45, ha="right")
+    ax.set_ylabel("delta fraction (numerator - denominator)")
+    ax.set_xlabel("Region")
+    ax.legend(frameon=False)
+    ax.set_title(title or "Background correction: raw vs corrected")
+    return fig, ax
+
+
+def plot_dmr_site_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    axes=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("site_table", "metadata"),
+        owner="plot_dmr_site_matplotlib",
+    )
+    site_table = _require_payload_table(payload, "site_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    effect_column = str(metadata.get("effect_size_column") or "effect_size")
+    y_column = effect_column if effect_column in site_table.columns else "neg_log10_pvalue"
+    contigs = list(
+        metadata.get("contig_order")
+        or site_table.get("contig", pd.Series(dtype="object")).dropna().unique()
+    )
+
+    fig, axes = _make_axes(axes=axes, n_axes=len(contigs) or 1, figsize=(8, 3))
+
+    y_label = y_column.replace("_", " ").title()
+    if not contigs:
+        axes[0].set_title(title or "DMR sites")
+        axes[0].set_xlabel("Genomic midpoint")
+        axes[0].set_ylabel(y_label)
+        return fig, axes
+
+    for index, contig in enumerate(contigs):
+        ax = axes[index]
+        contig_table = site_table.loc[site_table["contig"] == contig]
+        if not contig_table.empty and y_column in contig_table.columns:
+            is_hc = (
+                contig_table["is_high_confidence"].astype(bool)
+                if "is_high_confidence" in contig_table.columns
+                else pd.Series(False, index=contig_table.index)
+            )
+            background = contig_table.loc[~is_hc]
+            highlighted = contig_table.loc[is_hc]
+            if not background.empty:
+                ax.scatter(
+                    background["midpoint"],
+                    background[y_column],
+                    s=12,
+                    color="tab:gray",
+                    alpha=0.6,
+                )
+            if not highlighted.empty:
+                ax.scatter(
+                    highlighted["midpoint"],
+                    highlighted[y_column],
+                    s=20,
+                    color="tab:red",
+                    zorder=3,
+                    label="high confidence",
+                )
+        ax.axhline(0.0, color="black", linewidth=0.6, alpha=0.4)
+        ax.set_title(str(contig))
+        ax.set_xlabel("Genomic midpoint")
+        ax.set_ylabel(y_label)
+
+    for ax in axes[len(contigs) :]:
+        ax.set_visible(False)
+
+    if title:
+        fig.suptitle(title)
+    return fig, axes
+
+
+def plot_dmr_segment_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    axes=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("segment_table", "metadata"),
+        owner="plot_dmr_segment_matplotlib",
+    )
+    segment_table = _require_payload_table(payload, "segment_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    score_column = str(metadata.get("score_column") or "score")
+    contigs = list(
+        metadata.get("contig_order")
+        or segment_table.get("contig", pd.Series(dtype="object")).dropna().unique()
+    )
+
+    fig, axes = _make_axes(axes=axes, n_axes=len(contigs) or 1, figsize=(8, 3))
+
+    y_label = score_column.replace("_", " ").title()
+    if not contigs:
+        axes[0].set_title(title or "DMR segments")
+        axes[0].set_xlabel("Genomic position")
+        axes[0].set_ylabel(y_label)
+        return fig, axes
+
+    for index, contig in enumerate(contigs):
+        ax = axes[index]
+        contig_table = segment_table.loc[segment_table["contig"] == contig]
+        has_score = score_column in contig_table.columns
+        for _, segment in contig_table.iterrows():
+            height = float(segment[score_column]) if has_score else 1.0
+            ax.plot(
+                [float(segment["start"]), float(segment["end"])],
+                [height, height],
+                color="tab:blue",
+                linewidth=3.0,
+                solid_capstyle="butt",
+            )
+        ax.set_title(str(contig))
+        ax.set_xlabel("Genomic position")
+        ax.set_ylabel(y_label)
+
+    for ax in axes[len(contigs) :]:
+        ax.set_visible(False)
+
+    if title:
+        fig.suptitle(title)
+    return fig, axes
+
+
+def plot_dmr_multi_summary_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+    value_column: str = "n_significant",
+):
+    _require_payload_keys(
+        payload,
+        ("summary_table", "metadata"),
+        owner="plot_dmr_multi_summary_matplotlib",
+    )
+    summary_table = _require_payload_table(payload, "summary_table")
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
+
+    if summary_table.empty or value_column not in summary_table.columns:
+        ax.set_title(title or "DMR multi-sample summary")
+        ax.set_xlabel("Sample pair")
+        ax.set_ylabel(value_column.replace("_", " ").title())
+        return fig, ax
+
+    positions = range(len(summary_table))
+    ax.bar(list(positions), summary_table[value_column].astype(float), color="tab:blue")
+    ax.set_xticks(list(positions))
+    ax.set_xticklabels(
+        summary_table["pair_name"].astype(str).tolist(),
+        rotation=45,
+        ha="right",
+    )
+    ax.set_xlabel("Sample pair")
+    ax.set_ylabel(value_column.replace("_", " ").title())
+    ax.set_title(title or "DMR multi-sample summary")
+    return fig, ax
+
+
 def plot_shared_cluster_distribution_matplotlib(
     payload: Mapping[str, object],
     *,

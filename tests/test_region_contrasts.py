@@ -2265,48 +2265,6 @@ def test_score_regions_beta_binomial_uses_p_value_tiebreak_when_adjusted_values_
     assert list(result.summary["rank"]) == [1, 2]
 
 
-def test_beta_binomial_two_sided_p_value_rejects_invalid_counts():
-    with pytest.raises(ValueError, match="modified_count"):
-        region_contrasts._beta_binomial_two_sided_p_value(6, 5, 2.0, 2.0)
-
-
-@pytest.mark.parametrize(
-    ("denominator_modified_count", "denominator_valid_count"),
-    [
-        (-1, 5),
-        (3, -1),
-        (6, 5),
-    ],
-)
-def test_estimate_beta_binomial_prior_rejects_invalid_denominator_counts(
-    denominator_modified_count, denominator_valid_count
-):
-    with pytest.raises(ValueError):
-        region_contrasts._estimate_beta_binomial_prior(
-            denominator_modified_count,
-            denominator_valid_count,
-        )
-
-
-@pytest.mark.parametrize(
-    ("modified_count", "valid_count"),
-    [
-        (-1, 5),
-        (1, -1),
-    ],
-)
-def test_beta_binomial_two_sided_p_value_rejects_negative_counts(
-    modified_count, valid_count
-):
-    with pytest.raises(ValueError):
-        region_contrasts._beta_binomial_two_sided_p_value(
-            modified_count,
-            valid_count,
-            2.0,
-            2.0,
-        )
-
-
 def test_score_regions_rejects_missing_denominator_condition(monkeypatch):
     contrast = ContrastSpec(
         mode="pairwise",
