@@ -350,11 +350,31 @@ def call_true_signal_reads(
     return target.loc[:, output_columns].reset_index(drop=True)
 
 
-def summarize_site_occupancy(called_reads: pd.DataFrame) -> pd.DataFrame:
-    """Per-site control-calibrated occupancy rate = fraction of true-signal reads.
+def summarize_site_occupancy(
+    called_reads: pd.DataFrame,
+    *,
+    prior_alpha: float = 0.5,
+    prior_beta: float = 0.5,
+    credible_mass: float = 0.95,
+    count_mode: str = "auto",
+) -> pd.DataFrame:
+    """Per-site control-calibrated occupancy with a Bayesian Beta-Binomial posterior.
 
-    Returns ``region_id, n_reads, n_true_signal, occupancy_rate`` (feeds Q6 binding
-    strength).
+    Models occupancy ``theta`` as ``Beta-Binomial`` conjugate: bound reads out of spanning
+    reads with a ``Beta(prior_alpha, prior_beta)`` prior (default Jeffreys ``Beta(0.5,
+    0.5)``). Reports the posterior mean and a ``credible_mass`` credible interval alongside
+    the raw point estimate. Feeds Q6 binding strength.
+
+    ``count_mode``:
+    - ``"posterior"`` — use the soft ``occupancy_posterior`` as the expected number of bound
+      reads (propagates read-level uncertainty); trials = reads with a finite posterior.
+    - ``"hard"`` — use the binary ``is_true_signal`` calls; trials = all reads.
+    - ``"auto"`` — ``"posterior"`` when an ``occupancy_posterior`` column is present with any
+      finite value, else ``"hard"``.
+
+    Returns ``region_id, n_reads, n_true_signal, occupancy_rate,
+    occupancy_posterior_mean, occupancy_ci_low, occupancy_ci_high, credible_mass,
+    count_mode``.
     """
     required = {"region_id", "read_id", "is_true_signal"}
     missing = required - set(called_reads.columns)
@@ -362,19 +382,71 @@ def summarize_site_occupancy(called_reads: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(
             f"summarize_site_occupancy requires columns: {', '.join(sorted(missing))}."
         )
+    if not 0.0 < credible_mass < 1.0:
+        raise ValueError("credible_mass must be in the open interval (0, 1).")
+    if count_mode not in {"auto", "hard", "posterior"}:
+        raise ValueError("count_mode must be 'auto', 'hard', or 'posterior'.")
+
+    columns = [
+        "region_id",
+        "n_reads",
+        "n_true_signal",
+        "occupancy_rate",
+        "occupancy_posterior_mean",
+        "occupancy_ci_low",
+        "occupancy_ci_high",
+        "credible_mass",
+        "count_mode",
+    ]
     if called_reads.empty:
-        return pd.DataFrame(
-            columns=["region_id", "n_reads", "n_true_signal", "occupancy_rate"]
+        return pd.DataFrame(columns=columns)
+
+    has_posterior = (
+        "occupancy_posterior" in called_reads.columns
+        and pd.to_numeric(called_reads["occupancy_posterior"], errors="coerce")
+        .notna()
+        .any()
+    )
+    if count_mode == "auto":
+        resolved_mode = "posterior" if has_posterior else "hard"
+    else:
+        resolved_mode = count_mode
+    if resolved_mode == "posterior" and "occupancy_posterior" not in called_reads.columns:
+        raise ValueError(
+            "count_mode='posterior' requires an 'occupancy_posterior' column."
         )
-    grouped = called_reads.groupby("region_id", sort=False, as_index=False).agg(
+
+    frame = called_reads.copy()
+    frame["_is_signal"] = frame["is_true_signal"].astype(bool).astype(float)
+    if resolved_mode == "posterior":
+        posterior = pd.to_numeric(frame["occupancy_posterior"], errors="coerce")
+        # only reads with a finite posterior are informative trials
+        frame["_trials"] = posterior.notna().astype(float)
+        frame["_bound"] = posterior.fillna(0.0)
+    else:
+        frame["_trials"] = 1.0
+        frame["_bound"] = frame["_is_signal"]
+
+    grouped = frame.groupby("region_id", sort=False, as_index=False).agg(
         n_reads=("read_id", "size"),
-        n_true_signal=("is_true_signal", "sum"),
+        n_true_signal=("_is_signal", "sum"),
+        _successes=("_bound", "sum"),
+        _trials=("_trials", "sum"),
     )
     grouped["n_true_signal"] = grouped["n_true_signal"].astype(int)
     grouped["occupancy_rate"] = grouped["n_true_signal"] / grouped["n_reads"].where(
         grouped["n_reads"] != 0
     )
-    return grouped
+
+    a_post = prior_alpha + grouped["_successes"]
+    b_post = prior_beta + (grouped["_trials"] - grouped["_successes"]).clip(lower=0.0)
+    grouped["occupancy_posterior_mean"] = a_post / (a_post + b_post)
+    lower_quantile = (1.0 - credible_mass) / 2.0
+    grouped["occupancy_ci_low"] = stats.beta.ppf(lower_quantile, a_post, b_post)
+    grouped["occupancy_ci_high"] = stats.beta.ppf(1.0 - lower_quantile, a_post, b_post)
+    grouped["credible_mass"] = credible_mass
+    grouped["count_mode"] = resolved_mode
+    return grouped.loc[:, columns]
 
 
 def background_removed_pileup(

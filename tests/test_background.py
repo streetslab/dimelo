@@ -32,6 +32,17 @@ def test_fit_beta_binomial_requires_coverage():
         background.fit_beta_binomial(np.array([0, 0]), np.array([0, 0]))
 
 
+def test_upper_tail_pvalue_is_one_sided():
+    # null mean = 2/(2+8) = 0.2. A read far ABOVE the null gets a tiny p-value; a read far
+    # BELOW the null gets p ~ 1 (an upper tail, not a two-sided test).
+    alpha, beta = 2.0, 8.0
+    p_high = background._upper_tail_pvalue(18, 20, alpha, beta)
+    p_low = background._upper_tail_pvalue(0, 20, alpha, beta)
+    assert p_high < 0.05
+    assert p_low == pytest.approx(1.0)
+    assert background._upper_tail_pvalue(5, 0, alpha, beta) == 1.0  # no coverage
+
+
 def _evidence():
     rows = []
     # siteA: 6 low-methylation control reads -> per-site null (min_control_reads=5)
@@ -164,16 +175,34 @@ def test_background_removed_pileup_hard_uses_true_signal_only():
 
 
 def test_background_removed_pileup_posterior_weights_counts():
-    called = background.call_true_signal_reads(
-        evidence=_evidence(),
-        target_conditions=["target"],
-        control_conditions=["control"],
-        min_control_reads=5,
+    # Hand-built called reads where is_true_signal and occupancy_posterior DIFFER, so the
+    # hard and posterior branches give distinct, exactly-pinned results (a hard->posterior
+    # mis-wiring would be caught).
+    called = pd.DataFrame(
+        [
+            {"region_id": "siteX", "read_id": "r1", "modified_count": 10,
+             "valid_count": 20, "is_true_signal": True, "occupancy_posterior": 0.5},
+            {"region_id": "siteX", "read_id": "r2", "modified_count": 4,
+             "valid_count": 20, "is_true_signal": False, "occupancy_posterior": 0.3},
+        ]
     )
-    pileup = background.background_removed_pileup(called, weighting="posterior")
-    # posterior-weighted counts are bounded by the raw counts and non-negative
-    assert (pileup["valid_count"] >= 0).all()
-    assert (pileup["mod_fraction"] >= 0).all() and (pileup["mod_fraction"] <= 1).all()
+
+    hard = background.background_removed_pileup(called, weighting="hard").set_index(
+        "region_id"
+    )
+    # hard: only the true-signal read r1 (10/20)
+    assert hard.loc["siteX", "modified_count"] == pytest.approx(10.0)
+    assert hard.loc["siteX", "valid_count"] == pytest.approx(20.0)
+    assert hard.loc["siteX", "mod_fraction"] == pytest.approx(0.5)
+
+    post = background.background_removed_pileup(called, weighting="posterior").set_index(
+        "region_id"
+    )
+    # posterior: weight each read by occupancy_posterior
+    # modified = 0.5*10 + 0.3*4 = 6.2 ; valid = 0.5*20 + 0.3*20 = 16 ; fraction = 0.3875
+    assert post.loc["siteX", "modified_count"] == pytest.approx(6.2)
+    assert post.loc["siteX", "valid_count"] == pytest.approx(16.0)
+    assert post.loc["siteX", "mod_fraction"] == pytest.approx(6.2 / 16.0)
 
 
 def test_background_removed_pileup_rejects_bad_weighting():
@@ -200,6 +229,34 @@ def test_summarize_site_occupancy_rate():
     assert occupancy.loc["siteA", "n_true_signal"] == 1
     assert occupancy.loc["siteA", "occupancy_rate"] == pytest.approx(0.5)
     assert occupancy.loc["siteB", "occupancy_rate"] == pytest.approx(1.0)
+
+    # Bayesian Beta-posterior occupancy: mean within its credible interval, in [0, 1]
+    for site in ("siteA", "siteB"):
+        low = occupancy.loc[site, "occupancy_ci_low"]
+        high = occupancy.loc[site, "occupancy_ci_high"]
+        mean = occupancy.loc[site, "occupancy_posterior_mean"]
+        assert 0.0 <= low <= mean <= high <= 1.0
+    assert occupancy.loc["siteA", "credible_mass"] == pytest.approx(0.95)
+    # auto mode uses the soft posterior when occupancy_posterior is present
+    assert occupancy.loc["siteA", "count_mode"] == "posterior"
+
+
+def test_summarize_site_occupancy_hard_count_mode_conjugate_mean():
+    # hard mode with Jeffreys prior: siteB has 1/1 true signal ->
+    # posterior mean = (0.5 + 1) / (0.5 + 0.5 + 1) = 1.5/2 = 0.75
+    called = background.call_true_signal_reads(
+        evidence=_evidence(),
+        target_conditions=["target"],
+        control_conditions=["control"],
+        min_control_reads=5,
+    )
+    occupancy = background.summarize_site_occupancy(
+        called, count_mode="hard"
+    ).set_index("region_id")
+    assert occupancy.loc["siteB", "count_mode"] == "hard"
+    assert occupancy.loc["siteB", "occupancy_posterior_mean"] == pytest.approx(0.75)
+    # credible interval widens the single-read estimate away from the point 1.0
+    assert occupancy.loc["siteB", "occupancy_ci_low"] < 1.0
 
 
 # --------------------------------------------------------------------------- #

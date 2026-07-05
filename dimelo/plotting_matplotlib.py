@@ -565,11 +565,32 @@ def plot_occupancy_rate_track_matplotlib(
         ax.set_ylabel("occupancy rate")
         return fig, ax
     positions = np.arange(len(track))
-    ax.bar(positions, track["occupancy_rate"].astype(float), color="tab:red")
+    has_posterior = {
+        "occupancy_posterior_mean",
+        "occupancy_ci_low",
+        "occupancy_ci_high",
+    }.issubset(track.columns)
+    if has_posterior:
+        # Bayesian Beta-posterior mean with a credible interval
+        heights = track["occupancy_posterior_mean"].astype(float).to_numpy()
+        lower = heights - track["occupancy_ci_low"].astype(float).to_numpy()
+        upper = track["occupancy_ci_high"].astype(float).to_numpy() - heights
+        ax.bar(
+            positions,
+            heights,
+            color="tab:red",
+            yerr=np.vstack([np.clip(lower, 0, None), np.clip(upper, 0, None)]),
+            capsize=3,
+            ecolor="black",
+        )
+        ylabel = "occupancy (posterior mean ± CI)"
+    else:
+        ax.bar(positions, track["occupancy_rate"].astype(float), color="tab:red")
+        ylabel = "occupancy rate"
     ax.set_xticks(positions)
     ax.set_xticklabels(track["region_id"].astype(str).tolist(), rotation=45, ha="right")
     ax.set_ylim(0, 1)
-    ax.set_ylabel("occupancy rate")
+    ax.set_ylabel(ylabel)
     ax.set_title(title or "Control-calibrated occupancy rate")
     return fig, ax
 
