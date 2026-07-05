@@ -484,6 +484,48 @@ def plot_region_discovery_hit_context_matplotlib(
     return fig, axes
 
 
+def plot_state_composition_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Stacked bar of per-site single-molecule chromatin-state composition (Q10)."""
+    _require_payload_keys(
+        payload,
+        ("composition_table", "metadata"),
+        owner="plot_state_composition_matplotlib",
+    )
+    table = _require_payload_table(payload, "composition_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    site_column = str(metadata.get("site_column") or "region_id")
+    states = list(metadata.get("states") or [])
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(table) * 0.8), 4))
+    if table.empty or not states:
+        ax.set_title(title or "Single-molecule state composition")
+        ax.set_ylabel("fraction of reads")
+        return fig, ax
+    positions = np.arange(len(table))
+    bottom = np.zeros(len(table))
+    for state in states:
+        if state not in table.columns:
+            continue
+        heights = table[state].astype(float).fillna(0.0).to_numpy()
+        ax.bar(positions, heights, bottom=bottom, label=str(state))
+        bottom += heights
+    ax.set_xticks(positions)
+    ax.set_xticklabels(table[site_column].astype(str).tolist(), rotation=45, ha="right")
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("fraction of reads")
+    ax.legend(frameon=False, fontsize=7, ncol=max(1, len(states) // 2))
+    ax.set_title(title or "Single-molecule state composition")
+    return fig, ax
+
+
 def plot_track_correlation_matplotlib(
     payload: Mapping[str, object],
     *,

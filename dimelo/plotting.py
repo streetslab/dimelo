@@ -1860,6 +1860,38 @@ def prepare_background_removed_pileup_overlay_data(
     }
 
 
+def prepare_state_composition_data(
+    *,
+    composition: pd.DataFrame,
+    site_column: str = "region_id",
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Pivot per-site single-molecule state composition (from
+    ``integration.single_molecule_state_composition``) into a wide site x state fraction
+    table for a stacked-bar view."""
+    _require_columns(
+        composition, (site_column, "combined_state", "fraction"), "composition"
+    )
+    states = sorted(composition["combined_state"].astype(str).unique())
+    wide = (
+        composition.pivot_table(
+            index=site_column,
+            columns="combined_state",
+            values="fraction",
+            fill_value=0.0,
+        )
+        .reindex(columns=states, fill_value=0.0)
+        .reset_index()
+    )
+    return {
+        "composition_table": wide,
+        "metadata": {
+            "states": states,
+            "site_order": wide[site_column].astype(str).tolist(),
+            "site_column": site_column,
+        },
+    }
+
+
 def prepare_track_correlation_data(
     *,
     paired: pd.DataFrame,
