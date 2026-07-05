@@ -16,6 +16,9 @@ setup(
         "matplotlib",
         # scikit-learn backs the core clustering/classification path (KMeans, etc.).
         "scikit-learn",
+        # hmmlearn backs the single-molecule footprint HMM (dimelo.footprint), imported
+        # by dimelo/__init__, so it is required for `import dimelo`.
+        "hmmlearn",
         "seaborn",
         "pysam",
         "h5py",
