@@ -75,6 +75,39 @@ def test_single_molecule_state_composition():
     assert s2.iloc[0]["fraction"] == pytest.approx(1.0)
 
 
+def test_single_molecule_state_composition_handles_nan_states():
+    # reads that lack a footprint call (NaN after a read-level join) must not crash;
+    # the missing value becomes a literal label, not a TypeError under pandas >= 3.
+    import numpy as np
+
+    read_states = pd.DataFrame(
+        {
+            "region_id": ["s1", "s1", "s1"],
+            "read_id": ["r0", "r1", "r2"],
+            "is_true_signal": [True, True, False],
+            "footprint_present": [True, np.nan, False],
+        }
+    )
+    composition = integration.single_molecule_state_composition(
+        read_states, state_columns=["is_true_signal", "footprint_present"]
+    )
+    states = set(composition["combined_state"])
+    assert "True|nan" in states  # NaN footprint stringified, not dropped/crashed
+    assert composition["fraction"].sum() == pytest.approx(1.0)
+
+
+def test_build_integrated_site_table_raises_on_residual_collision():
+    # trans has a column literally named like occupancy's prefixed output -> the
+    # on-collision prefixing can't disambiguate, so it must fail loud.
+    occupancy = pd.DataFrame({"region_id": ["s1"], "n_reads": [5]})
+    binding_strength = pd.DataFrame({"region_id": ["s1"], "n_reads": [7]})
+    trans = pd.DataFrame({"region_id": ["s1"], "occupancy_n_reads": [99]})
+    with pytest.raises(ValueError, match="colliding column names"):
+        integration.build_integrated_site_table(
+            occupancy=occupancy, binding_strength=binding_strength, trans=trans
+        )
+
+
 def test_single_molecule_state_composition_validates():
     with pytest.raises(ValueError, match="state_columns must be non-empty"):
         integration.single_molecule_state_composition(

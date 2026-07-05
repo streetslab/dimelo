@@ -87,6 +87,22 @@ def build_integrated_site_table(
         )
         frames.append(renamed)
 
+    # Guard against a residual collision the on-collision prefixing can't catch: a source
+    # column whose raw name already equals another source's prefixed output (e.g. a source
+    # literally named-column "occupancy_n_reads"). Fail loud rather than let the merge
+    # silently emit _x/_y suffixes.
+    output_counts: Counter[str] = Counter()
+    for frame in frames:
+        for column in frame.columns:
+            if column != site_column:
+                output_counts[column] += 1
+    residual = sorted(column for column, count in output_counts.items() if count > 1)
+    if residual:
+        raise ValueError(
+            "build_integrated_site_table produced colliding column names after "
+            f"prefixing: {residual}. Rename the offending source column(s)."
+        )
+
     return reduce(
         lambda left, right: left.merge(right, on=site_column, how="outer"), frames
     ).reset_index(drop=True)
@@ -120,9 +136,10 @@ def single_molecule_state_composition(
         return pd.DataFrame(columns=columns)
 
     frame = read_states.copy()
-    frame["combined_state"] = (
-        frame[state_columns].astype(str).agg("|".join, axis=1)
-    )
+    # elementwise str() so missing values (NaN/None from joining per-read outputs) become
+    # a literal 'nan'/'None' label instead of crashing '|'.join under pandas >= 3
+    # (astype(str) preserves NaN there); DataFrame.map is elementwise (pandas >= 2.1).
+    frame["combined_state"] = frame[state_columns].map(str).agg("|".join, axis=1)
     grouped = (
         frame.groupby([site_column, "combined_state"], sort=False)
         .size()
