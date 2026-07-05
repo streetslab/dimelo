@@ -222,6 +222,7 @@ def call_footprints(
         "protected_end",
         "protected_width",
         "footprint_score",
+        "n_observed",
     ]
     if n_reads == 0:
         return pd.DataFrame(columns=columns), (hmm or BernoulliHMM())
@@ -230,10 +231,31 @@ def call_footprints(
         hmm = BernoulliHMM().fit([reads[i] for i in range(n_reads)])
     protected_state = int(np.argmin(hmm.p_emit))
     width_ceiling = max_width if max_width is not None else n_positions
+    anchor_lo = max(0, anchor_index - anchor_tolerance)
+    anchor_hi = min(n_positions, anchor_index + anchor_tolerance + 1)
+
+    def _absent_row(read_index: int, n_observed: int) -> dict[str, object]:
+        return {
+            "read_index": read_index,
+            "footprint_present": False,
+            "protected_start": pd.NA,
+            "protected_end": pd.NA,
+            "protected_width": 0,
+            "footprint_score": float("nan"),
+            "n_observed": n_observed,
+        }
 
     rows: list[dict[str, object]] = []
     for i in range(n_reads):
         obs = reads[i]
+        valid = ~np.isnan(obs)
+        n_observed = int(valid.sum())
+        # A footprint call requires actual methylation data near the anchor; otherwise
+        # Viterbi decodes from the transition/start prior over missing positions and would
+        # emit a spurious full-width footprint (S4 review finding).
+        if not valid[anchor_lo:anchor_hi].any():
+            rows.append(_absent_row(i, n_observed))
+            continue
         path = hmm.viterbi(obs)
         gamma = hmm.posterior(obs)
         runs = _protected_runs(path, protected_state)
@@ -243,7 +265,13 @@ def call_footprints(
             overlaps_anchor = (
                 start - anchor_tolerance <= anchor_index < end + anchor_tolerance
             )
-            if overlaps_anchor and min_width <= width <= width_ceiling:
+            # the run must be backed by at least one observed position (not a pure
+            # prior-fill over missing calls)
+            if (
+                overlaps_anchor
+                and min_width <= width <= width_ceiling
+                and valid[start:end].any()
+            ):
                 score = float(gamma[start:end, protected_state].mean())
                 if best is None or width > best["protected_width"]:
                     best = {
@@ -253,18 +281,11 @@ def call_footprints(
                         "footprint_score": score,
                     }
         if best is None:
-            rows.append(
-                {
-                    "read_index": i,
-                    "footprint_present": False,
-                    "protected_start": pd.NA,
-                    "protected_end": pd.NA,
-                    "protected_width": 0,
-                    "footprint_score": float("nan"),
-                }
-            )
+            rows.append(_absent_row(i, n_observed))
         else:
-            rows.append({"read_index": i, "footprint_present": True, **best})
+            rows.append(
+                {"read_index": i, "footprint_present": True, "n_observed": n_observed, **best}
+            )
     return pd.DataFrame(rows, columns=columns), hmm
 
 

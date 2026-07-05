@@ -76,6 +76,80 @@ def test_call_footprints_anchor_off_the_footprint():
     assert not bool(table.loc[table["read_index"] < 15, "footprint_present"].any())
 
 
+def test_call_footprints_smooths_isolated_methylation_flip():
+    # A footprinted read with one spurious methylation inside the protected center should
+    # stay a single protected run when the transition prior is sticky enough to outweigh
+    # the single emission (Viterbi's global optimum, not greedy per-column decoding).
+    # With p_emit=(0.1, 0.9), stay=0.9 the switch penalty (2 transitions) exceeds the
+    # emission gain, so the flip is smoothed -> one width-5 protected run.
+    noisy = np.array([1.0] * 5 + [0.0, 1.0, 0.0, 0.0, 0.0] + [1.0] * 5)  # flip at pos 6
+    sticky = footprint.BernoulliHMM(p_emit=(0.1, 0.9), stay=0.9)
+    table, _ = footprint.call_footprints(
+        noisy[None, :], anchor_index=7, min_width=3, hmm=sticky
+    )
+    row = table.iloc[0]
+    assert bool(row["footprint_present"]) is True
+    assert row["protected_start"] == 5
+    assert row["protected_width"] == 5
+
+
+def test_call_footprints_requires_data_near_anchor():
+    reads = _footprint_reads()
+    hmm = footprint.BernoulliHMM().fit([reads[i] for i in range(reads.shape[0])])
+    # an all-nan read and a read observed only in the flanks (nan across the anchor) must
+    # not produce a footprint, despite Viterbi's prior fallback over missing positions.
+    all_nan = np.full(15, np.nan)
+    flanks_only = np.array([1.0] * 5 + [np.nan] * 5 + [1.0] * 5)  # anchor region missing
+    probe = np.vstack([all_nan, flanks_only])
+    table, _ = footprint.call_footprints(probe, anchor_index=7, min_width=3, hmm=hmm)
+    assert not bool(table["footprint_present"].any())
+    assert table.iloc[0]["n_observed"] == 0
+    assert table.iloc[1]["n_observed"] == 10
+
+
+def test_call_footprints_max_width_ceiling():
+    reads = _footprint_reads()
+    hmm = footprint.BernoulliHMM().fit([reads[i] for i in range(reads.shape[0])])
+    rejected, _ = footprint.call_footprints(
+        reads, anchor_index=7, min_width=3, max_width=4, hmm=hmm
+    )
+    assert not bool(rejected.loc[rejected["read_index"] < 15, "footprint_present"].any())
+    accepted, _ = footprint.call_footprints(
+        reads, anchor_index=7, min_width=3, max_width=5, hmm=hmm
+    )
+    assert bool(accepted.loc[accepted["read_index"] < 15, "footprint_present"].all())
+
+
+def test_call_footprints_anchor_tolerance_boundary():
+    reads = _footprint_reads()  # protected run [5, 10)
+    hmm = footprint.BernoulliHMM().fit([reads[i] for i in range(reads.shape[0])])
+    # with anchor_tolerance=2, the run [5,10) reaches down to anchor 3 (5-2) but not 2
+    inside, _ = footprint.call_footprints(
+        reads, anchor_index=3, min_width=3, anchor_tolerance=2, hmm=hmm
+    )
+    outside, _ = footprint.call_footprints(
+        reads, anchor_index=2, min_width=3, anchor_tolerance=2, hmm=hmm
+    )
+    assert bool(inside.loc[inside["read_index"] < 15, "footprint_present"].all())
+    assert not bool(outside.loc[outside["read_index"] < 15, "footprint_present"].any())
+
+
+def test_call_footprints_ties_prefer_leftmost_run():
+    # two equal-width protected runs both overlapping the anchor -> the widest rule ties,
+    # and the first (leftmost) run is chosen.
+    pattern = np.array(
+        [1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0]
+    )  # protected runs [3,6) and [8,11)
+    reads = np.vstack([np.tile(pattern, (15, 1)), np.ones((5, 13))])
+    table, _ = footprint.call_footprints(
+        reads, anchor_index=7, min_width=3, anchor_tolerance=2, hmm=None
+    )
+    footprinted = table.loc[table["read_index"] < 15]
+    assert bool(footprinted["footprint_present"].all())
+    assert (footprinted["protected_start"] == 3).all()
+    assert (footprinted["protected_width"] == 3).all()
+
+
 def test_aggregate_footprint_profile_dips_at_center():
     reads = _footprint_reads()
     profile = footprint.aggregate_footprint_profile(reads).set_index("position")
