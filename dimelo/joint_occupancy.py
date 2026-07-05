@@ -142,42 +142,49 @@ def joint_occupancy(
         n_b_only = int((~is_a & is_b).sum())
         n_neither = int((~is_a & ~is_b).sum())
 
-        for read_id, sa, sb in zip(
-            spanning.get("read_id", pd.Series(dtype=object)),
-            is_a,
-            is_b,
-            strict=False,
-        ):
-            joint_state = (
-                "both"
-                if sa and sb
-                else "a_only"
-                if sa
-                else "b_only"
-                if sb
-                else "neither"
+        # Emit per-read joint states by iterating the merged frame once (no per-read
+        # re-lookup, so duplicate read_ids are handled row-by-row).
+        if n:
+            posterior_a_values = (
+                spanning["occupancy_posterior_a"].to_numpy(dtype=float)
+                if has_posterior
+                else np.full(n, np.nan)
             )
-            read_rows.append(
-                {
-                    "pair_id": pair_id,
-                    "site_a": site_a,
-                    "site_b": site_b,
-                    "read_id": read_id,
-                    "joint_state": joint_state,
-                    "is_signal_a": bool(sa),
-                    "is_signal_b": bool(sb),
-                    "posterior_a": (
-                        float(spanning.loc[spanning["read_id"] == read_id, "occupancy_posterior_a"].iloc[0])
-                        if has_posterior
-                        else float("nan")
-                    ),
-                    "posterior_b": (
-                        float(spanning.loc[spanning["read_id"] == read_id, "occupancy_posterior_b"].iloc[0])
-                        if has_posterior
-                        else float("nan")
-                    ),
-                }
+            posterior_b_values = (
+                spanning["occupancy_posterior_b"].to_numpy(dtype=float)
+                if has_posterior
+                else np.full(n, np.nan)
             )
+            for read_id, sa, sb, post_a, post_b in zip(
+                spanning["read_id"],
+                is_a,
+                is_b,
+                posterior_a_values,
+                posterior_b_values,
+                strict=True,
+            ):
+                joint_state = (
+                    "both"
+                    if sa and sb
+                    else "a_only"
+                    if sa
+                    else "b_only"
+                    if sb
+                    else "neither"
+                )
+                read_rows.append(
+                    {
+                        "pair_id": pair_id,
+                        "site_a": site_a,
+                        "site_b": site_b,
+                        "read_id": read_id,
+                        "joint_state": joint_state,
+                        "is_signal_a": bool(sa),
+                        "is_signal_b": bool(sb),
+                        "posterior_a": float(post_a),
+                        "posterior_b": float(post_b),
+                    }
+                )
 
         testable = n >= min_spanning_reads
         if n > 0:
