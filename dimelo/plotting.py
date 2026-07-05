@@ -1860,6 +1860,22 @@ def prepare_background_removed_pileup_overlay_data(
     }
 
 
+def prepare_footprint_profile_data(
+    *,
+    profile: pd.DataFrame,
+    anchor_index: int | None = None,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Tidy aggregate footprint profile (from ``footprint.aggregate_footprint_profile``)
+    for plotting: methylation density and protected-state posterior by position, sorted."""
+    _require_columns(
+        profile,
+        ("position", "mean_methylation", "mean_protected_posterior", "n_observed"),
+        "profile",
+    )
+    table = profile.sort_values("position", kind="stable").reset_index(drop=True)
+    return {"profile_table": table, "metadata": {"anchor_index": anchor_index}}
+
+
 def prepare_binding_strength_data(
     *,
     binding_strength: pd.DataFrame,

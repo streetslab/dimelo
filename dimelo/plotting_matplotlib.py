@@ -484,6 +484,54 @@ def plot_region_discovery_hit_context_matplotlib(
     return fig, axes
 
 
+def plot_footprint_profile_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Aggregate footprint profile: methylation density (left axis) and protected-state
+    posterior (right axis) vs position; the footprint is a methylation dip / posterior
+    rise at the anchor."""
+    _require_payload_keys(
+        payload, ("profile_table", "metadata"), owner="plot_footprint_profile_matplotlib"
+    )
+    table = _require_payload_table(payload, "profile_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
+    if table.empty:
+        ax.set_title(title or "Aggregate footprint profile")
+        ax.set_xlabel("position")
+        return fig, ax
+    ax.plot(
+        table["position"], table["mean_methylation"],
+        color="tab:blue", marker=".", label="methylation",
+    )
+    ax.set_xlabel("position")
+    ax.set_ylabel("mean methylation", color="tab:blue")
+    ax.set_ylim(0, 1)
+    ax.tick_params(axis="y", labelcolor="tab:blue")
+
+    ax_right = ax.twinx()
+    ax_right.plot(
+        table["position"], table["mean_protected_posterior"],
+        color="tab:red", marker=".", linestyle="--", label="protected posterior",
+    )
+    ax_right.set_ylabel("mean protected posterior", color="tab:red")
+    ax_right.set_ylim(0, 1)
+    ax_right.tick_params(axis="y", labelcolor="tab:red")
+
+    anchor_index = metadata.get("anchor_index")
+    if anchor_index is not None:
+        ax.axvline(float(anchor_index), color="black", linewidth=0.8, linestyle=":")
+    ax.set_title(title or "Aggregate footprint profile")
+    return fig, ax
+
+
 def plot_binding_strength_matplotlib(
     payload: Mapping[str, object],
     *,
