@@ -92,6 +92,10 @@ def cluster_feature_enrichment(
         "q_value",
         "significant",
     ]
+    # Drop sites with no cluster label so the 2x2 "other clusters" background and the
+    # tested clusters share one population (groupby drops NaN groups; the totals must too,
+    # else unassigned/noise sites silently inflate every cluster's background row).
+    sites = sites[sites[cluster_column].notna()]
     if sites.empty:
         return pd.DataFrame(columns=columns)
 

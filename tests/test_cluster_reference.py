@@ -43,6 +43,21 @@ def test_site_overlaps_group_validates():
         )
 
 
+def test_site_overlaps_group_half_open_boundaries():
+    site = pd.DataFrame({"chromosome": ["chr1"], "start": [100], "end": [200]})
+
+    def _overlaps(ref_start, ref_end):
+        ref = pd.DataFrame(
+            {"chromosome": ["chr1"], "start": [ref_start], "end": [ref_end]}
+        )
+        return bool(cluster_reference.site_overlaps_group(site, ref)["overlaps"].iloc[0])
+
+    assert _overlaps(0, 100) is False  # touching at ref.end == site.start -> no overlap
+    assert _overlaps(200, 300) is False  # touching at ref.start == site.end -> no overlap
+    assert _overlaps(199, 300) is True  # 1 bp overlap
+    assert _overlaps(100, 101) is True  # 1 bp overlap at the left edge
+
+
 def test_cluster_feature_enrichment_finds_associated_cluster():
     with_flag = cluster_reference.site_overlaps_group(_sites(), _ctcf_peaks())
     enrichment = cluster_reference.cluster_feature_enrichment(
@@ -55,6 +70,23 @@ def test_cluster_feature_enrichment_finds_associated_cluster():
     assert enrichment.loc["C0", "odds_ratio"] > 1.0
     assert bool(enrichment.loc["C0", "significant"]) is True
     assert bool(enrichment.loc["C1", "significant"]) is False
+
+
+def test_cluster_feature_enrichment_ignores_unlabeled_sites():
+    # unlabeled (NaN-cluster) sites must not be tested NOR leak into the 2x2 background
+    sites = pd.DataFrame(
+        {
+            "cluster": ["C0", "C0", "C1", "C1", float("nan"), float("nan")],
+            "overlaps": [True, True, False, False, True, True],
+        }
+    )
+    enrichment = cluster_reference.cluster_feature_enrichment(
+        sites, feature_column="overlaps"
+    ).set_index("cluster")
+    assert set(enrichment.index) == {"C0", "C1"}
+    assert enrichment["n_sites"].sum() == 4  # the 2 unlabeled sites are excluded
+    assert enrichment.loc["C0", "feature_fraction"] == pytest.approx(1.0)
+    assert enrichment.loc["C1", "feature_fraction"] == pytest.approx(0.0)
 
 
 def test_annotate_clusters_by_site_groups_labels_association():

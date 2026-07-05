@@ -64,14 +64,20 @@ def fetch_jaspar_matrix(
     cache_file = cache_root / f"{matrix_id}.json"
 
     if cache_file.exists() and not refresh:
-        payload = json.loads(cache_file.read_text())
-    else:
-        import requests
+        try:
+            return jaspar_matrix_from_json(json.loads(cache_file.read_text()))
+        except (ValueError, json.JSONDecodeError):
+            # corrupt / previously-poisoned cache -> fall through and refetch
+            pass
 
-        response = requests.get(
-            JASPAR_MATRIX_URL.format(matrix_id=matrix_id), timeout=timeout
-        )
-        response.raise_for_status()
-        payload = response.json()
-        cache_file.write_text(json.dumps(payload))
-    return jaspar_matrix_from_json(payload)
+    import requests
+
+    response = requests.get(
+        JASPAR_MATRIX_URL.format(matrix_id=matrix_id), timeout=timeout
+    )
+    response.raise_for_status()
+    payload = response.json()
+    # validate BEFORE writing the cache so a malformed 200 never poisons it
+    frame = jaspar_matrix_from_json(payload)
+    cache_file.write_text(json.dumps(payload))
+    return frame
