@@ -24,6 +24,7 @@ from . import (
     region_discovery,
     regulatory_enrichment,
     shared_cluster_tests,
+    tracks,
     workflows,
 )
 from .models import (
@@ -67,6 +68,7 @@ __all__ = [
     "region_analysis",
     "region_contrasts",
     "shared_cluster_tests",
+    "tracks",
     "ChipAtlasEnrichmentResult",
     "CohortSpec",
     "ContrastSpec",

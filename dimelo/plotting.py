@@ -1860,6 +1860,21 @@ def prepare_background_removed_pileup_overlay_data(
     }
 
 
+def prepare_track_correlation_data(
+    *,
+    paired: pd.DataFrame,
+    stats: dict[str, float] | None = None,
+) -> dict[str, pd.DataFrame | dict[str, object]]:
+    """Tidy DiMeLo-vs-external paired binned signal (from
+    ``tracks.correlate_binned_signals``) for a correlation scatter; ``stats`` carries the
+    Pearson/Spearman coefficients for annotation."""
+    _require_columns(paired, ("dimelo", "external"), "paired")
+    return {
+        "paired_table": paired.reset_index(drop=True),
+        "metadata": dict(stats or {}),
+    }
+
+
 def prepare_joint_state_distribution_data(
     *,
     joint_states: pd.DataFrame,

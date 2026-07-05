@@ -484,6 +484,47 @@ def plot_region_discovery_hit_context_matplotlib(
     return fig, axes
 
 
+def plot_track_correlation_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Scatter of DiMeLo vs external binned signal, annotated with the correlation."""
+    _require_payload_keys(
+        payload, ("paired_table", "metadata"), owner="plot_track_correlation_matplotlib"
+    )
+    paired = _require_payload_table(payload, "paired_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    fig, ax = _make_axis(ax=ax, figsize=(5, 5))
+    if paired.empty:
+        ax.set_title(title or "DiMeLo vs external signal")
+        ax.set_xlabel("DiMeLo signal")
+        ax.set_ylabel("external signal")
+        return fig, ax
+    ax.scatter(paired["dimelo"], paired["external"], color="tab:blue", alpha=0.7)
+    ax.set_xlabel("DiMeLo signal")
+    ax.set_ylabel("external signal")
+    annotations = []
+    if metadata.get("pearson_r") is not None and not pd.isna(metadata.get("pearson_r")):
+        annotations.append(f"Pearson r = {float(metadata['pearson_r']):.2f}")
+    if metadata.get("spearman_rho") is not None and not pd.isna(
+        metadata.get("spearman_rho")
+    ):
+        annotations.append(f"Spearman ρ = {float(metadata['spearman_rho']):.2f}")
+    if annotations:
+        ax.text(
+            0.05, 0.95, "\n".join(annotations), transform=ax.transAxes,
+            va="top", ha="left", fontsize=9,
+        )
+    ax.set_title(title or "DiMeLo vs external signal")
+    return fig, ax
+
+
 def plot_joint_state_distribution_matplotlib(
     payload: Mapping[str, object],
     *,
