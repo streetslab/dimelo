@@ -21,11 +21,30 @@ def test_estimate_cis_reach_half_decay():
     assert reach == 50
 
 
-def test_estimate_cis_reach_never_decays_returns_max_offset():
+def test_estimate_cis_reach_flat_peak_equals_background_returns_max_offset():
+    # peak == background -> the peak<=background branch returns the max offset
     profile = pd.DataFrame(
         {"offset_bp": [0, 50, 100], "mean_density": [1.0, 1.0, 1.0]}
     )
     assert trans_contact.estimate_cis_reach(profile) == 100
+
+
+def test_estimate_cis_reach_no_crossing_returns_max_offset():
+    # explicit background so peak > background, but nothing drops below the threshold
+    # (threshold = 0 + 0.5*1.0 = 0.5; all densities >= 0.9) -> len(below)==0 branch
+    profile = pd.DataFrame(
+        {"offset_bp": [0, 50, 100], "mean_density": [1.0, 0.9, 0.95]}
+    )
+    assert trans_contact.estimate_cis_reach(profile, background_level=0.0) == 100
+
+
+def test_estimate_cis_reach_honors_decay_fraction():
+    profile = pd.DataFrame(
+        {"offset_bp": [0, 25, 50, 75, 100], "mean_density": [1.0, 0.8, 0.4, 0.1, 0.0]}
+    )
+    # decay_fraction 0.9 -> threshold = 0 + 0.1*1.0 = 0.1; first density < 0.1 is at 100
+    assert trans_contact.estimate_cis_reach(profile, decay_fraction=0.9) == 100
+    # (vs the default 0.5 -> threshold 0.5 -> reach 50, per the half-decay test)
 
 
 def _positions():
@@ -60,12 +79,32 @@ def test_classify_cis_trans_assigns_three_classes():
     # within 100 bp of the bound site at chr1:1000 -> cis
     assert _row("chr1", 1000)["classification"] == trans_contact.CIS
     assert _row("chr1", 1050)["classification"] == trans_contact.CIS
+    # numeric distance is pinned (catches an off-by-one that doesn't flip a class)
+    assert _row("chr1", 1050)["nearest_bound_distance"] == pytest.approx(50.0)
     # chr1:5000 is distal (4000 bp) with high Hi-C contact (90 >= 50) -> trans
     assert _row("chr1", 5000)["classification"] == trans_contact.TRANS
     # chr2:1000 has no bound site on chr2 -> distal, low Hi-C -> background
     chr2_row = _row("chr2", 1000)
     assert np.isinf(chr2_row["nearest_bound_distance"])
     assert chr2_row["classification"] == trans_contact.DISTAL_BACKGROUND
+
+
+def test_classify_cis_trans_reach_boundary_is_inclusive():
+    # a position exactly cis_reach_bp away is cis (<=), not distal -> pins the boundary
+    positions = pd.DataFrame(
+        {
+            "chromosome": ["chr1"],
+            "position": [1100],
+            "signal": [0.5],
+            "hic_contact": [0.0],
+        }
+    )
+    bound = pd.DataFrame({"chromosome": ["chr1"], "position": [1000]})
+    classified = trans_contact.classify_cis_trans(
+        positions, bound, cis_reach_bp=100, hic_contact_threshold=50.0
+    ).iloc[0]
+    assert classified["nearest_bound_distance"] == pytest.approx(100.0)
+    assert classified["classification"] == trans_contact.CIS
 
 
 def test_classify_cis_trans_without_hic_has_no_trans():
