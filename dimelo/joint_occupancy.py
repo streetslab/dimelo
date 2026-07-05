@@ -211,10 +211,17 @@ def joint_occupancy(
         if has_posterior and n >= 2:
             post_a = spanning["occupancy_posterior_a"].to_numpy(dtype=float)
             post_b = spanning["occupancy_posterior_b"].to_numpy(dtype=float)
-            if np.nanstd(post_a) > 0 and np.nanstd(post_b) > 0:
-                rho, corr_p = stats.spearmanr(post_a, post_b)
-                posterior_corr = float(rho)
-                posterior_corr_p = float(corr_p)
+            # Correlate only over reads with a finite posterior at BOTH anchors, so a
+            # single low-coverage read (NaN posterior) does not propagate through
+            # spearmanr and null out the coupling for an otherwise well-sampled pair.
+            finite = np.isfinite(post_a) & np.isfinite(post_b)
+            if finite.sum() >= 2:
+                pa = post_a[finite]
+                pb = post_b[finite]
+                if np.std(pa) > 0 and np.std(pb) > 0:
+                    rho, corr_p = stats.spearmanr(pa, pb)
+                    posterior_corr = float(rho)
+                    posterior_corr_p = float(corr_p)
 
         pair_rows.append(
             {

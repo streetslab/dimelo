@@ -41,16 +41,28 @@ def _called_reads():
             rows.append(_read("siteC", f"i{idx}", sa, 0.9 if sa else 0.1))
             rows.append(_read("siteD", f"i{idx}", sb, 0.9 if sb else 0.1))
             idx += 1
+
+    # Asymmetric coupled pair (siteE, siteF): n_a_only (5) != n_b_only (1), so an
+    # a_only/b_only label or contingency transpose is detectable.
+    asym = (
+        [(True, True)] * 10
+        + [(True, False)] * 5
+        + [(False, True)] * 1
+        + [(False, False)] * 4
+    )
+    for j, (sa, sb) in enumerate(asym):
+        rows.append(_read("siteE", f"e{j}", sa, 0.9 if sa else 0.1))
+        rows.append(_read("siteF", f"e{j}", sb, 0.9 if sb else 0.1))
     return pd.DataFrame(rows)
 
 
 def _pairs():
     return pd.DataFrame(
         {
-            "pair_id": ["coupled", "independent"],
-            "site_a": ["siteA", "siteC"],
-            "site_b": ["siteB", "siteD"],
-            "distance_bp": [1000, 50000],
+            "pair_id": ["coupled", "independent", "asymmetric"],
+            "site_a": ["siteA", "siteC", "siteE"],
+            "site_b": ["siteB", "siteD", "siteF"],
+            "distance_bp": [1000, 50000, 2000],
         }
     )
 
@@ -81,6 +93,43 @@ def test_joint_occupancy_detects_positive_coupling():
     assert set(coupled_reads["joint_state"]) <= {"both", "a_only", "b_only", "neither"}
     assert (coupled_reads["joint_state"] == "both").sum() == 12
     assert "lonely" not in set(coupled_reads["read_id"])
+
+
+def test_joint_occupancy_asymmetric_contingency_orientation():
+    # asymmetric pair pins a_only (5) vs b_only (1) so a contingency/label transpose is
+    # caught (a symmetric fixture would leave all four cells and the OR unchanged).
+    pair_summary, per_read = joint_occupancy.joint_occupancy(
+        called_reads=_called_reads(), pairs=_pairs()
+    )
+    asym = pair_summary.set_index("pair_id").loc["asymmetric"]
+    assert asym["n_both"] == 10
+    assert asym["n_a_only"] == 5
+    assert asym["n_b_only"] == 1
+    assert asym["n_neither"] == 4
+
+    asym_reads = per_read[per_read["pair_id"] == "asymmetric"]
+    assert (asym_reads["joint_state"] == "a_only").sum() == 5
+    assert (asym_reads["joint_state"] == "b_only").sum() == 1
+
+
+def test_joint_occupancy_posterior_corr_ignores_nan_reads():
+    # a single read with a NaN posterior at one anchor must not null the correlation for
+    # an otherwise well-sampled, correlated pair.
+    rows = []
+    for i in range(6):
+        post = 0.9 if i % 2 == 0 else 0.1
+        rows.append(_read("siteA", f"r{i}", i % 2 == 0, post))
+        rows.append(_read("siteB", f"r{i}", i % 2 == 0, post))
+    # one extra spanning read with a NaN posterior at siteA
+    rows.append(_read("siteA", "rn", True, float("nan")))
+    rows.append(_read("siteB", "rn", True, 0.9))
+    pairs = pd.DataFrame({"pair_id": ["p"], "site_a": ["siteA"], "site_b": ["siteB"]})
+    pair_summary, _ = joint_occupancy.joint_occupancy(
+        called_reads=pd.DataFrame(rows), pairs=pairs, min_spanning_reads=3
+    )
+    corr = pair_summary.iloc[0]["posterior_corr"]
+    assert not pd.isna(corr)
+    assert corr > 0.5
 
 
 def test_summarize_joint_states_fractions():
@@ -145,7 +194,7 @@ def test_joint_occupancy_plotting():
     assert fig1 is not None
 
     oe_payload = plotting.prepare_joint_occupancy_distance_data(pair_summary=pair_summary)
-    assert len(oe_payload["distance_table"]) == 2  # both pairs have distances
+    assert len(oe_payload["distance_table"]) == 3  # all pairs have distances
     fig2, _ = plotting_matplotlib.plot_joint_occupancy_distance_matplotlib(
         oe_payload, title="distance"
     )
