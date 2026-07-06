@@ -154,15 +154,19 @@ def format_browser_data(
         read_tuples, columns=entry_labels, exclude=to_exclude
     )
 
-    # For each row, pull out just the positions of valid bases and the probabilities at those positions
-    # TODO: I don't like using iterrows, but it seems silly to have two calls to apply that do basically the same thing redundantly; just looping once instead
+    # For each row, pull out just the positions of valid bases and the probabilities at those positions.
+    # Iterate over NumPy-backed column arrays to avoid iterrows() per-row Series overhead.
+    mod_vectors = read_df["mod_vector"].to_numpy(copy=False)
+    val_vectors = read_df["val_vector"].to_numpy(copy=False)
+    read_starts = read_df["read_start"].to_numpy(copy=False)
     prob_vectors = []
     pos_vectors = []
-    for _, row in read_df.iterrows():
-        selector = row.val_vector == 1
-        all_positions = np.arange(len(row.mod_vector)) + row.read_start
-        prob_vectors.append(row.mod_vector[selector])
-        pos_vectors.append(all_positions[selector])
+    for mod_vector, val_vector, read_start in zip(
+        mod_vectors, val_vectors, read_starts, strict=False
+    ):
+        selected_indices = np.flatnonzero(val_vector == 1)
+        prob_vectors.append(mod_vector[selected_indices])
+        pos_vectors.append(selected_indices + read_start)
     read_df["prob_vector"] = prob_vectors
     read_df["pos_vector"] = pos_vectors
 
@@ -237,32 +241,56 @@ def collapse_rows(
     TODO: This could be improved by checking for overlaps on both ends of the seed read for each row.
         This might allow other types of pre-sorting to work more effectively.
     """
+    read_count = len(read_extent_df)
     # Sentinel value for un-indexed reads is -1
-    collapsed_indices = -np.ones(len(read_extent_df), dtype=int)
+    collapsed_indices = -np.ones(read_count, dtype=int)
+    if read_count == 0:
+        return pd.Series(collapsed_indices, index=read_extent_df["y_index"])
 
-    # Collapse reads
+    starts = read_extent_df["read_start"].to_numpy(copy=False)
+    ends = read_extent_df["read_end"].to_numpy(copy=False)
+
+    # parent[i] points to the next unassigned index at or after i; parent[n] is a sentinel.
+    parent = np.arange(read_count + 1, dtype=int)
+
+    def _find_next_unassigned(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def _mark_assigned(index: int) -> None:
+        parent[index] = _find_next_unassigned(index + 1)
+
     curr_y_idx = 0
-    for seed_read_idx in range(len(read_extent_df)):
-        # If seed read has been indexed already, move on
-        if collapsed_indices[seed_read_idx] != -1:
-            continue
-        collapsed_indices[seed_read_idx] = curr_y_idx
+    seed_search_start = 0
+    while True:
+        seed_read_idx = _find_next_unassigned(seed_search_start)
+        if seed_read_idx >= read_count:
+            break
 
-        # Add any other non-indexed reads that fit onto the current row
-        curr_row_end = read_extent_df.iloc[seed_read_idx]["read_end"]
-        for other_read_idx in range(seed_read_idx + 1, len(read_extent_df)):
-            # If other read has been indexed already, move on
-            if collapsed_indices[other_read_idx] != -1:
-                continue
-            # If other read fits onto the current row, index it
-            if (
-                read_extent_df.iloc[other_read_idx]["read_start"]
-                > curr_row_end + minimum_gap
-            ):
-                collapsed_indices[other_read_idx] = curr_y_idx
-                curr_row_end = read_extent_df.iloc[other_read_idx]["read_end"]
+        collapsed_indices[seed_read_idx] = curr_y_idx
+        _mark_assigned(seed_read_idx)
+
+        curr_row_end = int(ends[seed_read_idx])
+        scan_cursor = seed_read_idx
+        while True:
+            # Preserve the original one-pass scan semantics while skipping impossible ranges.
+            start_threshold = int(
+                np.searchsorted(starts, curr_row_end + minimum_gap, side="right")
+            )
+            candidate_start = max(scan_cursor + 1, start_threshold)
+            candidate_idx = _find_next_unassigned(candidate_start)
+            if candidate_idx >= read_count:
+                break
+
+            collapsed_indices[candidate_idx] = curr_y_idx
+            _mark_assigned(candidate_idx)
+            curr_row_end = int(ends[candidate_idx])
+            scan_cursor = candidate_idx
 
         curr_y_idx += 1
+        seed_search_start = seed_read_idx
 
     # Series mapping original indices to collapsed indices
     idx_map_orig2collapse = pd.Series(
@@ -274,14 +302,18 @@ def collapse_rows(
         match meta_sort:
             case "full_extent":
                 # sort by full extent of the covered reads in the row (max end - min start)
-                idx_map_meta2collapse = (
-                    read_extent_df.groupby(collapsed_indices)
-                    .apply(
-                        lambda row_group: row_group.read_end.max()
-                        - row_group.read_start.min()
+                grouped = (
+                    read_extent_df.assign(_collapsed=collapsed_indices)
+                    .groupby("_collapsed", sort=False)
+                    .agg(
+                        start_min=("read_start", "min"),
+                        end_max=("read_end", "max"),
                     )
+                )
+                idx_map_meta2collapse = (
+                    (grouped["end_max"] - grouped["start_min"])
                     .sort_values(ascending=False)
-                    .reset_index()["index"]
+                    .index
                 )
             case "covered_bases":
                 # sort by number of bases covered by reads in the row
@@ -290,14 +322,15 @@ def collapse_rows(
                     read_lengths.groupby(collapsed_indices)
                     .sum()
                     .sort_values(ascending=False)
-                    .reset_index()["index"]
+                    .index
                 )
             case _:
                 raise ValueError(f"Invalid meta sorting option: {meta_sort}")
 
         # Series mapping collapsed indices to meta indices
         idx_map_collapse2meta = pd.Series(
-            idx_map_meta2collapse.index.values, index=idx_map_meta2collapse
+            np.arange(len(idx_map_meta2collapse), dtype=int),
+            index=idx_map_meta2collapse,
         )
 
         # Return Series mapping original indices to meta indices
@@ -365,21 +398,43 @@ def make_browser_figure(
         plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(range=[region_start, region_end]),
     )
-    # TODO: I feel like there has to be a cleaner way to do this, maybe using plotly express, but I dont know and I'm just trying to get this done first. Lots of iterrows. Sad.
     fig = plotly.graph_objects.Figure(layout=layout)
-    for _, row in read_extent_df.iterrows():
-        # TODO: How can I get the hover information for the reads to match the ones for the mod events? Not sure how to get customdata and hovertemplate working here.
+    if not read_extent_df.empty:
+        starts = read_extent_df["read_start"].to_numpy(copy=False)
+        ends = read_extent_df["read_end"].to_numpy(copy=False)
+        y_values = read_extent_df["y_index"].to_numpy(copy=False)
+        read_names = read_extent_df["read_name"].astype(str).to_numpy(copy=False)
+
+        n_reads = len(read_extent_df)
+        x_coords = np.empty(n_reads * 3, dtype=object)
+        y_coords = np.empty(n_reads * 3, dtype=float)
+        hover_text = np.empty(n_reads * 3, dtype=object)
+
+        x_coords[0::3] = starts
+        x_coords[1::3] = ends
+        x_coords[2::3] = None
+
+        y_coords[0::3] = y_values
+        y_coords[1::3] = y_values
+        y_coords[2::3] = np.nan
+
+        hover_text[0::3] = read_names
+        hover_text[1::3] = read_names
+        hover_text[2::3] = ""
+
         fig.add_trace(
             plotly.graph_objects.Scatter(
-                x=[row.read_start, row.read_end],
-                y=[row.y_index, row.y_index],
+                x=x_coords,
+                y=y_coords,
                 mode="lines",
                 line=dict(width=width, color="lightgrey"),
                 showlegend=False,
                 hoverinfo="text",
-                hovertext=row.read_name,
+                hovertext=hover_text,
+                connectgaps=False,
             )
         )
+
     for motif_idx, (motif, motif_df) in enumerate(mod_event_df.groupby("motif")):
         min_overall = motif_df["prob"].min()
         max_overall = motif_df["prob"].max()

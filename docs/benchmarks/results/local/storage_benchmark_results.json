@@ -1,0 +1,1081 @@
+{
+  "configuration": {
+    "backends": [
+      "legacy-hdf5",
+      "flat-hdf5",
+      "netcdf-vlen",
+      "netcdf-flat",
+      "zarr-flat",
+      "parquet"
+    ],
+    "chunk_rows": 2000,
+    "concurrency": [
+      1
+    ],
+    "fixture": "dimelo/test/data/test_targets/megalodon_peaks_nothresh/reads.combined_basemods.h5",
+    "random_rows": 256,
+    "repeats": 5,
+    "seed": 42,
+    "sizes": [
+      "fixture",
+      "20000",
+      "200000"
+    ],
+    "warmups": 1
+  },
+  "created_at": "2026-07-03T13:10:47-0700",
+  "datasets": [
+    {
+      "name": "fixture",
+      "results": [
+        {
+          "artifact_bytes": 4867472,
+          "artifact_files": 1,
+          "backend": "legacy-hdf5",
+          "capabilities": {
+            "layout": "gzip bytes in HDF5 VLEN uint8",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 493641728,
+              "seconds": 0.007355916080996394,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 491991040,
+            "open_seconds": 472887296,
+            "random_read_seconds": 501764096,
+            "region_read_seconds": 492568576,
+            "write_seconds": 472879104
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.09591316618025303,
+              "median": 0.0933690001256764,
+              "min": 0.08930329093709588
+            },
+            "open_seconds": {
+              "max": 0.0006568338721990585,
+              "median": 0.0005669589154422283,
+              "min": 0.0004781670868396759
+            },
+            "random_read_seconds": {
+              "max": 0.02282437519170344,
+              "median": 0.021931458031758666,
+              "min": 0.020425874972715974
+            },
+            "region_read_seconds": {
+              "max": 0.007356000132858753,
+              "median": 0.007082582917064428,
+              "min": 0.0065032499842345715
+            },
+            "write_seconds": {
+              "max": 0.26436266605742276,
+              "median": 0.2590822910424322,
+              "min": 0.2572472922038287
+            }
+          }
+        },
+        {
+          "artifact_bytes": 4583385,
+          "artifact_files": 1,
+          "backend": "flat-hdf5",
+          "capabilities": {
+            "layout": "contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 643485696,
+              "seconds": 0.017372542060911655,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 641101824,
+            "open_seconds": 635731968,
+            "random_read_seconds": 644124672,
+            "region_read_seconds": 641253376,
+            "write_seconds": 635740160
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.381898625055328,
+              "median": 0.3652083328925073,
+              "min": 0.3638272078242153
+            },
+            "open_seconds": {
+              "max": 0.0006213751621544361,
+              "median": 0.0005739161279052496,
+              "min": 0.0004318340215831995
+            },
+            "random_read_seconds": {
+              "max": 0.5093231669161469,
+              "median": 0.282619290985167,
+              "min": 0.28185237501747906
+            },
+            "region_read_seconds": {
+              "max": 0.0055005839094519615,
+              "median": 0.005087082972750068,
+              "min": 0.0046659589279443026
+            },
+            "write_seconds": {
+              "max": 0.6399806670378894,
+              "median": 0.6397940840106457,
+              "min": 0.6347713330760598
+            }
+          }
+        },
+        {
+          "artifact_bytes": 89858853,
+          "artifact_files": 1,
+          "backend": "netcdf-vlen",
+          "capabilities": {
+            "layout": "native NetCDF VLEN",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 607014912,
+              "seconds": 0.013364125043153763,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 754327552,
+            "open_seconds": 752619520,
+            "random_read_seconds": 755245056,
+            "region_read_seconds": 755048448,
+            "write_seconds": 752631808
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.0780467081349343,
+              "median": 0.058799208141863346,
+              "min": 0.054745708825066686
+            },
+            "open_seconds": {
+              "max": 0.004816875094547868,
+              "median": 0.0032659999560564756,
+              "min": 0.002661834005266428
+            },
+            "random_read_seconds": {
+              "max": 0.2979213329963386,
+              "median": 0.1528734581079334,
+              "min": 0.1384809580631554
+            },
+            "region_read_seconds": {
+              "max": 0.010875666979700327,
+              "median": 0.009532292140647769,
+              "min": 0.009238332975655794
+            },
+            "write_seconds": {
+              "max": 0.06991666695103049,
+              "median": 0.06079104100354016,
+              "min": 0.056455457815900445
+            }
+          }
+        },
+        {
+          "artifact_bytes": 6074943,
+          "artifact_files": 1,
+          "backend": "netcdf-flat",
+          "capabilities": {
+            "layout": "contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 815984640,
+              "seconds": 0.012266332982107997,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 826753024,
+            "open_seconds": 815820800,
+            "random_read_seconds": 817500160,
+            "region_read_seconds": 817020928,
+            "write_seconds": 827686912
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.30467858305200934,
+              "median": 0.2972828750498593,
+              "min": 0.29024095786735415
+            },
+            "open_seconds": {
+              "max": 0.004530332982540131,
+              "median": 0.003637084038928151,
+              "min": 0.0035953749902546406
+            },
+            "random_read_seconds": {
+              "max": 0.2721530001144856,
+              "median": 0.24980283388867974,
+              "min": 0.24802516703493893
+            },
+            "region_read_seconds": {
+              "max": 0.0194199588149786,
+              "median": 0.012528292136266828,
+              "min": 0.01156108290888369
+            },
+            "write_seconds": {
+              "max": 0.5078172499779612,
+              "median": 0.47155129187740386,
+              "min": 0.46779941697604954
+            }
+          }
+        },
+        {
+          "artifact_bytes": 2574779,
+          "artifact_files": 61,
+          "backend": "zarr-flat",
+          "capabilities": {
+            "layout": "Zarr v3 sharded contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 835694592,
+              "seconds": 0.02066108421422541,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 835776512,
+            "open_seconds": 835452928,
+            "random_read_seconds": 836018176,
+            "region_read_seconds": 835780608,
+            "write_seconds": 835493888
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.15880037494935095,
+              "median": 0.13284650002606213,
+              "min": 0.1316027920693159
+            },
+            "open_seconds": {
+              "max": 0.006008000113070011,
+              "median": 0.004736708011478186,
+              "min": 0.004335499834269285
+            },
+            "random_read_seconds": {
+              "max": 1.197193416999653,
+              "median": 0.9982245829887688,
+              "min": 0.9944239999167621
+            },
+            "region_read_seconds": {
+              "max": 0.022799375001341105,
+              "median": 0.01853062491863966,
+              "min": 0.018225125037133694
+            },
+            "write_seconds": {
+              "max": 0.4362345419358462,
+              "median": 0.37030850001610816,
+              "min": 0.3554638752248138
+            }
+          }
+        },
+        {
+          "artifact_bytes": 4351274,
+          "artifact_files": 2,
+          "backend": "parquet",
+          "capabilities": {
+            "layout": "partition fragments with list<uint8> vectors",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 3043721216,
+              "seconds": 0.24388766707852483,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 3057061888,
+            "open_seconds": 3053166592,
+            "random_read_seconds": 3064848384,
+            "region_read_seconds": 3055898624,
+            "write_seconds": 3065810944
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.6491702909115702,
+              "median": 0.5842792079783976,
+              "min": 0.5506104580126703
+            },
+            "open_seconds": {
+              "max": 0.002443708013743162,
+              "median": 0.0016677090898156166,
+              "min": 0.00138066615909338
+            },
+            "random_read_seconds": {
+              "max": 0.39890312496572733,
+              "median": 0.3910674159415066,
+              "min": 0.3222608750220388
+            },
+            "region_read_seconds": {
+              "max": 0.31396175012923777,
+              "median": 0.26547983288764954,
+              "min": 0.26109079201705754
+            },
+            "write_seconds": {
+              "max": 0.8358046249486506,
+              "median": 0.7934642501641065,
+              "min": 0.7851661671884358
+            }
+          }
+        }
+      ],
+      "rows": 1926
+    },
+    {
+      "name": "synthetic-20000",
+      "results": [
+        {
+          "artifact_bytes": 50092591,
+          "artifact_files": 1,
+          "backend": "legacy-hdf5",
+          "capabilities": {
+            "layout": "gzip bytes in HDF5 VLEN uint8",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 1440333824,
+              "seconds": 0.07471399987116456,
+              "total_rows": 216
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 2608193536,
+            "open_seconds": 2250784768,
+            "random_read_seconds": 2604326912,
+            "region_read_seconds": 2602782720,
+            "write_seconds": 2317881344
+          },
+          "query_rows": 216,
+          "random_rows": 256,
+          "rows": 20000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 1.2889313329942524,
+              "median": 1.1937739171553403,
+              "min": 1.0361561658792198
+            },
+            "open_seconds": {
+              "max": 0.000550874974578619,
+              "median": 0.0005472921766340733,
+              "min": 0.0005215411074459553
+            },
+            "random_read_seconds": {
+              "max": 0.052632665960118175,
+              "median": 0.04300637496635318,
+              "min": 0.03828041721135378
+            },
+            "region_read_seconds": {
+              "max": 0.09241254208609462,
+              "median": 0.08221166604198515,
+              "min": 0.0740012910682708
+            },
+            "write_seconds": {
+              "max": 3.5909625000786036,
+              "median": 3.028764790855348,
+              "min": 2.994781166082248
+            }
+          }
+        },
+        {
+          "artifact_bytes": 48254050,
+          "artifact_files": 1,
+          "backend": "flat-hdf5",
+          "capabilities": {
+            "layout": "contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 1556496384,
+              "seconds": 0.21666145883500576,
+              "total_rows": 216
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 2230542336,
+            "open_seconds": 1704148992,
+            "random_read_seconds": 1799602176,
+            "region_read_seconds": 1789620224,
+            "write_seconds": 1712779264
+          },
+          "query_rows": 216,
+          "random_rows": 256,
+          "rows": 20000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 4.656637500040233,
+              "median": 4.487313499907032,
+              "min": 4.323990667006001
+            },
+            "open_seconds": {
+              "max": 0.0006865409668534994,
+              "median": 0.000606499845162034,
+              "min": 0.0005352089647203684
+            },
+            "random_read_seconds": {
+              "max": 0.5780738750472665,
+              "median": 0.5692262500524521,
+              "min": 0.5662237091455609
+            },
+            "region_read_seconds": {
+              "max": 0.22848058422096074,
+              "median": 0.22167662507854402,
+              "min": 0.22002595802769065
+            },
+            "write_seconds": {
+              "max": 7.023659124970436,
+              "median": 6.952321249991655,
+              "min": 6.868083084002137
+            }
+          }
+        },
+        {
+          "artifact_bytes": 941591860,
+          "artifact_files": 1,
+          "backend": "netcdf-vlen",
+          "capabilities": {
+            "layout": "native NetCDF VLEN",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 2113290240,
+              "seconds": 0.15033516706898808,
+              "total_rows": 216
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 2405212160,
+            "open_seconds": 2220777472,
+            "random_read_seconds": 2404982784,
+            "region_read_seconds": 2405195776,
+            "write_seconds": 2220785664
+          },
+          "query_rows": 216,
+          "random_rows": 256,
+          "rows": 20000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.8439072091132402,
+              "median": 0.6007610829547048,
+              "min": 0.5446125839371234
+            },
+            "open_seconds": {
+              "max": 0.00883570802398026,
+              "median": 0.0032235411927103996,
+              "min": 0.003038500202819705
+            },
+            "random_read_seconds": {
+              "max": 0.22722591599449515,
+              "median": 0.15266529098153114,
+              "min": 0.15030383318662643
+            },
+            "region_read_seconds": {
+              "max": 0.15543150017037988,
+              "median": 0.1529224591795355,
+              "min": 0.15127033297903836
+            },
+            "write_seconds": {
+              "max": 1.414093374973163,
+              "median": 0.7689816248603165,
+              "min": 0.6550574589055032
+            }
+          }
+        },
+        {
+          "artifact_bytes": 62868380,
+          "artifact_files": 1,
+          "backend": "netcdf-flat",
+          "capabilities": {
+            "layout": "contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 1946497024,
+              "seconds": 0.26686724997125566,
+              "total_rows": 216
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 3255521280,
+            "open_seconds": 1987817472,
+            "random_read_seconds": 1967067136,
+            "region_read_seconds": 1951649792,
+            "write_seconds": 1996234752
+          },
+          "query_rows": 216,
+          "random_rows": 256,
+          "rows": 20000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 5.121207790914923,
+              "median": 4.603595040971413,
+              "min": 4.470805499935523
+            },
+            "open_seconds": {
+              "max": 0.004930249880999327,
+              "median": 0.004035499878227711,
+              "min": 0.0035585418809205294
+            },
+            "random_read_seconds": {
+              "max": 0.2708959998562932,
+              "median": 0.2663907080423087,
+              "min": 0.26433974993415177
+            },
+            "region_read_seconds": {
+              "max": 0.28498745802789927,
+              "median": 0.2718012500554323,
+              "min": 0.2642977910581976
+            },
+            "write_seconds": {
+              "max": 5.257409541867673,
+              "median": 4.973986292025074,
+              "min": 4.904496375005692
+            }
+          }
+        },
+        {
+          "artifact_bytes": 35658059,
+          "artifact_files": 465,
+          "backend": "zarr-flat",
+          "capabilities": {
+            "layout": "Zarr v3 sharded contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 1646501888,
+              "seconds": 0.9330468338448554,
+              "total_rows": 216
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 2592894976,
+            "open_seconds": 2160263168,
+            "random_read_seconds": 2156822528,
+            "region_read_seconds": 2150187008,
+            "write_seconds": 2228269056
+          },
+          "query_rows": 216,
+          "random_rows": 256,
+          "rows": 20000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 1.9165903751272708,
+              "median": 1.718015749938786,
+              "min": 1.62302429205738
+            },
+            "open_seconds": {
+              "max": 0.005985416006296873,
+              "median": 0.0056910410057753325,
+              "min": 0.005090832943096757
+            },
+            "random_read_seconds": {
+              "max": 1.127006750088185,
+              "median": 1.0661499160341918,
+              "min": 1.0504097500815988
+            },
+            "region_read_seconds": {
+              "max": 0.9818525409791619,
+              "median": 0.9089959999546409,
+              "min": 0.8931671669706702
+            },
+            "write_seconds": {
+              "max": 4.224817208945751,
+              "median": 4.051764250034466,
+              "min": 3.87094695889391
+            }
+          }
+        },
+        {
+          "artifact_bytes": 48452087,
+          "artifact_files": 11,
+          "backend": "parquet",
+          "capabilities": {
+            "layout": "partition fragments with list<uint8> vectors",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 3337523200,
+              "seconds": 2.2779931670520455,
+              "total_rows": 216
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 3897946112,
+            "open_seconds": 2409623552,
+            "random_read_seconds": 3583176704,
+            "region_read_seconds": 3696177152,
+            "write_seconds": 3365707776
+          },
+          "query_rows": 216,
+          "random_rows": 256,
+          "rows": 20000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 18.74800366605632,
+              "median": 17.100097791990265,
+              "min": 16.623542417073622
+            },
+            "open_seconds": {
+              "max": 0.008026541909202933,
+              "median": 0.006611666874960065,
+              "min": 0.0063467081636190414
+            },
+            "random_read_seconds": {
+              "max": 8.580846374854445,
+              "median": 7.180311874952167,
+              "min": 6.645614875014871
+            },
+            "region_read_seconds": {
+              "max": 3.354046083986759,
+              "median": 2.1410890829283744,
+              "min": 1.9507839998696
+            },
+            "write_seconds": {
+              "max": 9.706926750019193,
+              "median": 8.904947041999549,
+              "min": 8.762409624876454
+            }
+          }
+        }
+      ],
+      "rows": 20000
+    },
+    {
+      "name": "synthetic-200000",
+      "results": [
+        {
+          "artifact_bytes": 497662068,
+          "artifact_files": 1,
+          "backend": "legacy-hdf5",
+          "capabilities": {
+            "layout": "gzip bytes in HDF5 VLEN uint8",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 782135296,
+              "seconds": 0.5632397909648716,
+              "total_rows": 239
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 3124850688,
+            "open_seconds": 871010304,
+            "random_read_seconds": 2024816640,
+            "region_read_seconds": 2087493632,
+            "write_seconds": 871088128
+          },
+          "query_rows": 239,
+          "random_rows": 256,
+          "rows": 200000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 14.308948000194505,
+              "median": 13.969315415946767,
+              "min": 13.828875666949898
+            },
+            "open_seconds": {
+              "max": 0.003614166984334588,
+              "median": 0.0006444579921662807,
+              "min": 0.0006127499509602785
+            },
+            "random_read_seconds": {
+              "max": 0.16158191696740687,
+              "median": 0.14070587512105703,
+              "min": 0.13601387478411198
+            },
+            "region_read_seconds": {
+              "max": 0.5641392909456044,
+              "median": 0.557787082856521,
+              "min": 0.5485267918556929
+            },
+            "write_seconds": {
+              "max": 29.572764334036037,
+              "median": 29.448076040949672,
+              "min": 29.387484834063798
+            }
+          }
+        },
+        {
+          "artifact_bytes": 479111009,
+          "artifact_files": 1,
+          "backend": "flat-hdf5",
+          "capabilities": {
+            "layout": "contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 1137983488,
+              "seconds": 0.5143992500379682,
+              "total_rows": 239
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 2792521728,
+            "open_seconds": 847945728,
+            "random_read_seconds": 921010176,
+            "region_read_seconds": 921026560,
+            "write_seconds": 1711034368
+          },
+          "query_rows": 239,
+          "random_rows": 256,
+          "rows": 200000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 53.44575158320367,
+              "median": 52.615314500173554,
+              "min": 52.58652454102412
+            },
+            "open_seconds": {
+              "max": 0.008689708076417446,
+              "median": 0.0048675830475986,
+              "min": 0.0006563749630004168
+            },
+            "random_read_seconds": {
+              "max": 0.8286600830033422,
+              "median": 0.8137262088712305,
+              "min": 0.7783730840310454
+            },
+            "region_read_seconds": {
+              "max": 0.634110625134781,
+              "median": 0.6041989580262452,
+              "min": 0.5909484580624849
+            },
+            "write_seconds": {
+              "max": 70.0529470841866,
+              "median": 69.42552516702563,
+              "min": 68.84531704103574
+            }
+          }
+        },
+        {
+          "artifact_bytes": 9310034160,
+          "artifact_files": 1,
+          "backend": "netcdf-vlen",
+          "capabilities": {
+            "layout": "native NetCDF VLEN",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 1122410496,
+              "seconds": 0.48990987497381866,
+              "total_rows": 239
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 2881003520,
+            "open_seconds": 732123136,
+            "random_read_seconds": 1943212032,
+            "region_read_seconds": 2067161088,
+            "write_seconds": 1160499200
+          },
+          "query_rows": 239,
+          "random_rows": 256,
+          "rows": 200000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 24.411798540968448,
+              "median": 24.265371666057035,
+              "min": 23.489358957856894
+            },
+            "open_seconds": {
+              "max": 0.009142749942839146,
+              "median": 0.00502533302642405,
+              "min": 0.004604416899383068
+            },
+            "random_read_seconds": {
+              "max": 0.38816704181954265,
+              "median": 0.3558000000193715,
+              "min": 0.331805458990857
+            },
+            "region_read_seconds": {
+              "max": 0.5907752499915659,
+              "median": 0.5581220409367234,
+              "min": 0.5171605839859694
+            },
+            "write_seconds": {
+              "max": 27.596990917110816,
+              "median": 21.705633082892746,
+              "min": 19.497734583215788
+            }
+          }
+        },
+        {
+          "artifact_bytes": 623343972,
+          "artifact_files": 1,
+          "backend": "netcdf-flat",
+          "capabilities": {
+            "layout": "contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 3650752512,
+              "seconds": 0.5519385829102248,
+              "total_rows": 239
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 5326221312,
+            "open_seconds": 3287138304,
+            "random_read_seconds": 2823979008,
+            "region_read_seconds": 2820104192,
+            "write_seconds": 4217085952
+          },
+          "query_rows": 239,
+          "random_rows": 256,
+          "rows": 200000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 96.91182141681202,
+              "median": 94.27518037497066,
+              "min": 92.24439445813186
+            },
+            "open_seconds": {
+              "max": 0.007352458080276847,
+              "median": 0.006179125048220158,
+              "min": 0.005060791969299316
+            },
+            "random_read_seconds": {
+              "max": 0.4075622910168022,
+              "median": 0.39457858400419354,
+              "min": 0.3205813330132514
+            },
+            "region_read_seconds": {
+              "max": 0.6290407080668956,
+              "median": 0.5692485840991139,
+              "min": 0.5672345831990242
+            },
+            "write_seconds": {
+              "max": 52.57664024992846,
+              "median": 50.587023874977604,
+              "min": 48.08037666697055
+            }
+          }
+        },
+        {
+          "artifact_bytes": 354510398,
+          "artifact_files": 4451,
+          "backend": "zarr-flat",
+          "capabilities": {
+            "layout": "Zarr v3 sharded contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 1648914432,
+              "seconds": 1.346775374840945,
+              "total_rows": 239
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 4347826176,
+            "open_seconds": 1465147392,
+            "random_read_seconds": 1702723584,
+            "region_read_seconds": 1696133120,
+            "write_seconds": 2713591808
+          },
+          "query_rows": 239,
+          "random_rows": 256,
+          "rows": 200000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 29.283983208006248,
+              "median": 27.20272379182279,
+              "min": 25.16765591595322
+            },
+            "open_seconds": {
+              "max": 0.027674874989315867,
+              "median": 0.02547829202376306,
+              "min": 0.021788458107039332
+            },
+            "random_read_seconds": {
+              "max": 1.3984842081554234,
+              "median": 1.308362958021462,
+              "min": 1.2199449581094086
+            },
+            "region_read_seconds": {
+              "max": 1.191254167119041,
+              "median": 1.1188272091094404,
+              "min": 1.0625749579630792
+            },
+            "write_seconds": {
+              "max": 44.69864504202269,
+              "median": 42.07316537480801,
+              "min": 40.53357158298604
+            }
+          }
+        },
+        {
+          "artifact_bytes": 481736252,
+          "artifact_files": 101,
+          "backend": "parquet",
+          "capabilities": {
+            "layout": "partition fragments with list<uint8> vectors",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 2787016704,
+              "seconds": 2.41195633308962,
+              "total_rows": 239
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 3816214528,
+            "open_seconds": 1630060544,
+            "random_read_seconds": 3933921280,
+            "region_read_seconds": 3668684800,
+            "write_seconds": 3692572672
+          },
+          "query_rows": 239,
+          "random_rows": 256,
+          "rows": 200000,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 79.48471029195935,
+              "median": 72.72814929089509,
+              "min": 69.4959588330239
+            },
+            "open_seconds": {
+              "max": 0.06171045801602304,
+              "median": 0.05951875005848706,
+              "min": 0.05042308405973017
+            },
+            "random_read_seconds": {
+              "max": 69.14112387504429,
+              "median": 66.57579666585661,
+              "min": 64.46903520799242
+            },
+            "region_read_seconds": {
+              "max": 3.1994534581899643,
+              "median": 2.5169815830886364,
+              "min": 2.2410064169671386
+            },
+            "write_seconds": {
+              "max": 79.65843487507664,
+              "median": 76.77940866700374,
+              "min": 75.7769308341667
+            }
+          }
+        }
+      ],
+      "rows": 200000
+    }
+  ],
+  "decision": {
+    "best_by_metric": {
+      "artifact_bytes": "zarr-flat",
+      "random_read_seconds": "legacy-hdf5",
+      "region_read_seconds": "legacy-hdf5",
+      "write_seconds": "netcdf-vlen"
+    },
+    "improvements_vs_legacy": {
+      "flat-hdf5": {
+        "artifact_bytes": 0.03727641745844291,
+        "random_read_seconds": -4.783171514132846,
+        "region_read_seconds": -0.08320715304492396,
+        "write_seconds": -1.3575572499366149
+      },
+      "legacy-hdf5": {
+        "artifact_bytes": 0.0,
+        "random_read_seconds": 0.0,
+        "region_read_seconds": 0.0,
+        "write_seconds": 0.0
+      },
+      "netcdf-flat": {
+        "artifact_bytes": -0.2525446725427344,
+        "random_read_seconds": -1.8042793782755397,
+        "region_read_seconds": -0.020548165410888802,
+        "write_seconds": -0.7178379940554589
+      },
+      "netcdf-vlen": {
+        "artifact_bytes": -17.707542243303944,
+        "random_read_seconds": -1.5286790598705073,
+        "region_read_seconds": -0.0006005124365500985,
+        "write_seconds": 0.2629184652773411
+      },
+      "parquet": {
+        "artifact_bytes": 0.03200126556561269,
+        "random_read_seconds": -472.15576985380164,
+        "region_read_seconds": -3.5124415040211265,
+        "write_seconds": -1.6072809836621051
+      },
+      "zarr-flat": {
+        "artifact_bytes": 0.287648344538889,
+        "random_read_seconds": -8.298566651149464,
+        "region_read_seconds": -1.0058320522227568,
+        "write_seconds": -0.42872374128286833
+      }
+    },
+    "reason": "No alternative satisfied the production follow-up gates.",
+    "recommendation": "retain current HDF5"
+  },
+  "environment": {
+    "cpu_count": 10,
+    "packages": {
+      "h5py": "3.11.0",
+      "netCDF4": "1.7.4",
+      "numpy": "1.26.4",
+      "pyarrow": "24.0.0",
+      "zarr": "3.0.10"
+    },
+    "platform": "macOS-26.5.1-x86_64-i386-64bit",
+    "processor": "i386",
+    "python": "3.11.3 (main, May 21 2023, 16:08:19) [Clang 14.0.3 (clang-1403.0.22.14.1)]"
+  },
+  "schema_version": "single-read-benchmark-v1"
+}

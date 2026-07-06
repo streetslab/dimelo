@@ -1,0 +1,481 @@
+{
+  "configuration": {
+    "backends": [
+      "legacy-hdf5",
+      "flat-hdf5",
+      "netcdf-vlen",
+      "netcdf-flat",
+      "zarr-flat",
+      "parquet"
+    ],
+    "chunk_rows": 2000,
+    "concurrency": [
+      1,
+      4,
+      8
+    ],
+    "fixture": "dimelo/test/data/test_targets/megalodon_peaks_nothresh/reads.combined_basemods.h5",
+    "random_rows": 256,
+    "repeats": 1,
+    "seed": 42,
+    "sizes": [
+      "fixture"
+    ],
+    "warmups": 0
+  },
+  "created_at": "2026-07-03T21:15:38-0700",
+  "datasets": [
+    {
+      "name": "fixture",
+      "results": [
+        {
+          "artifact_bytes": 4867472,
+          "artifact_files": 1,
+          "backend": "legacy-hdf5",
+          "capabilities": {
+            "layout": "gzip bytes in HDF5 VLEN uint8",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 355377152,
+              "seconds": 0.007865791907534003,
+              "total_rows": 0
+            },
+            "4": {
+              "parent_peak_rss_bytes": 355745792,
+              "seconds": 5.082655292004347,
+              "total_rows": 0
+            },
+            "8": {
+              "parent_peak_rss_bytes": 314191872,
+              "seconds": 3.6266151659656316,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 351698944,
+            "open_seconds": 274624512,
+            "random_read_seconds": 355332096,
+            "region_read_seconds": 352149504,
+            "write_seconds": 274530304
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.1984096250962466,
+              "median": 0.1984096250962466,
+              "min": 0.1984096250962466
+            },
+            "open_seconds": {
+              "max": 0.0020989589393138885,
+              "median": 0.0020989589393138885,
+              "min": 0.0020989589393138885
+            },
+            "random_read_seconds": {
+              "max": 0.022167667048051953,
+              "median": 0.022167667048051953,
+              "min": 0.022167667048051953
+            },
+            "region_read_seconds": {
+              "max": 0.008223166922107339,
+              "median": 0.008223166922107339,
+              "min": 0.008223166922107339
+            },
+            "write_seconds": {
+              "max": 0.42798558296635747,
+              "median": 0.42798558296635747,
+              "min": 0.42798558296635747
+            }
+          }
+        },
+        {
+          "artifact_bytes": 4583385,
+          "artifact_files": 1,
+          "backend": "flat-hdf5",
+          "capabilities": {
+            "layout": "contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 402509824,
+              "seconds": 0.0052312498446553946,
+              "total_rows": 0
+            },
+            "4": {
+              "parent_peak_rss_bytes": 402501632,
+              "seconds": 1.6970167090184987,
+              "total_rows": 0
+            },
+            "8": {
+              "parent_peak_rss_bytes": 397901824,
+              "seconds": 2.51033033314161,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 398585856,
+            "open_seconds": 306667520,
+            "random_read_seconds": 402481152,
+            "region_read_seconds": 399196160,
+            "write_seconds": 306663424
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.3976663751527667,
+              "median": 0.3976663751527667,
+              "min": 0.3976663751527667
+            },
+            "open_seconds": {
+              "max": 0.0006888750940561295,
+              "median": 0.0006888750940561295,
+              "min": 0.0006888750940561295
+            },
+            "random_read_seconds": {
+              "max": 0.2862029578536749,
+              "median": 0.2862029578536749,
+              "min": 0.2862029578536749
+            },
+            "region_read_seconds": {
+              "max": 0.005363834090530872,
+              "median": 0.005363834090530872,
+              "min": 0.005363834090530872
+            },
+            "write_seconds": {
+              "max": 0.7034401251003146,
+              "median": 0.7034401251003146,
+              "min": 0.7034401251003146
+            }
+          }
+        },
+        {
+          "artifact_bytes": 89858853,
+          "artifact_files": 1,
+          "backend": "netcdf-vlen",
+          "capabilities": {
+            "layout": "native NetCDF VLEN",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 484618240,
+              "seconds": 0.009748207870870829,
+              "total_rows": 0
+            },
+            "4": {
+              "parent_peak_rss_bytes": 484610048,
+              "seconds": 1.7082586670294404,
+              "total_rows": 0
+            },
+            "8": {
+              "parent_peak_rss_bytes": 456675328,
+              "seconds": 2.3361356661189348,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 483753984,
+            "open_seconds": 391503872,
+            "random_read_seconds": 484487168,
+            "region_read_seconds": 484192256,
+            "write_seconds": 386666496
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.10484645795077085,
+              "median": 0.10484645795077085,
+              "min": 0.10484645795077085
+            },
+            "open_seconds": {
+              "max": 0.006890875054523349,
+              "median": 0.006890875054523349,
+              "min": 0.006890875054523349
+            },
+            "random_read_seconds": {
+              "max": 0.15293279103934765,
+              "median": 0.15293279103934765,
+              "min": 0.15293279103934765
+            },
+            "region_read_seconds": {
+              "max": 0.011224833084270358,
+              "median": 0.011224833084270358,
+              "min": 0.011224833084270358
+            },
+            "write_seconds": {
+              "max": 0.13091691583395004,
+              "median": 0.13091691583395004,
+              "min": 0.13091691583395004
+            }
+          }
+        },
+        {
+          "artifact_bytes": 6074943,
+          "artifact_files": 1,
+          "backend": "netcdf-flat",
+          "capabilities": {
+            "layout": "contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 620785664,
+              "seconds": 0.012986708199605346,
+              "total_rows": 0
+            },
+            "4": {
+              "parent_peak_rss_bytes": 620769280,
+              "seconds": 1.6013119590934366,
+              "total_rows": 0
+            },
+            "8": {
+              "parent_peak_rss_bytes": 615907328,
+              "seconds": 2.6666140828747302,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 650354688,
+            "open_seconds": 497819648,
+            "random_read_seconds": 624537600,
+            "region_read_seconds": 621088768,
+            "write_seconds": 521932800
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.336238875053823,
+              "median": 0.336238875053823,
+              "min": 0.336238875053823
+            },
+            "open_seconds": {
+              "max": 0.006763790966942906,
+              "median": 0.006763790966942906,
+              "min": 0.006763790966942906
+            },
+            "random_read_seconds": {
+              "max": 0.25436337501741946,
+              "median": 0.25436337501741946,
+              "min": 0.25436337501741946
+            },
+            "region_read_seconds": {
+              "max": 0.014396749902516603,
+              "median": 0.014396749902516603,
+              "min": 0.014396749902516603
+            },
+            "write_seconds": {
+              "max": 0.5481579578481615,
+              "median": 0.5481579578481615,
+              "min": 0.5481579578481615
+            }
+          }
+        },
+        {
+          "artifact_bytes": 2574779,
+          "artifact_files": 61,
+          "backend": "zarr-flat",
+          "capabilities": {
+            "layout": "Zarr v3 sharded contiguous values plus offsets",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 542142464,
+              "seconds": 0.01894775009714067,
+              "total_rows": 0
+            },
+            "4": {
+              "parent_peak_rss_bytes": 542126080,
+              "seconds": 1.7477021249942482,
+              "total_rows": 0
+            },
+            "8": {
+              "parent_peak_rss_bytes": 506359808,
+              "seconds": 2.3794292081147432,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 550141952,
+            "open_seconds": 509566976,
+            "random_read_seconds": 542142464,
+            "region_read_seconds": 542113792,
+            "write_seconds": 509546496
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.36186600010842085,
+              "median": 0.36186600010842085,
+              "min": 0.36186600010842085
+            },
+            "open_seconds": {
+              "max": 0.004914457909762859,
+              "median": 0.004914457909762859,
+              "min": 0.004914457909762859
+            },
+            "random_read_seconds": {
+              "max": 1.0899307080544531,
+              "median": 1.0899307080544531,
+              "min": 1.0899307080544531
+            },
+            "region_read_seconds": {
+              "max": 0.09465145808644593,
+              "median": 0.09465145808644593,
+              "min": 0.09465145808644593
+            },
+            "write_seconds": {
+              "max": 0.42205250007100403,
+              "median": 0.42205250007100403,
+              "min": 0.42205250007100403
+            }
+          }
+        },
+        {
+          "artifact_bytes": 4351274,
+          "artifact_files": 2,
+          "backend": "parquet",
+          "capabilities": {
+            "layout": "partition fragments with list<uint8> vectors",
+            "reopen_append": true
+          },
+          "concurrent_region_reads": {
+            "1": {
+              "parent_peak_rss_bytes": 2211647488,
+              "seconds": 0.3597353750374168,
+              "total_rows": 0
+            },
+            "4": {
+              "parent_peak_rss_bytes": 2123051008,
+              "seconds": 5.221955999964848,
+              "total_rows": 0
+            },
+            "8": {
+              "parent_peak_rss_bytes": 62078976,
+              "seconds": 9.653969041071832,
+              "total_rows": 0
+            }
+          },
+          "peak_rss_bytes": {
+            "full_read_seconds": 1603629056,
+            "open_seconds": 1277382656,
+            "random_read_seconds": 2284982272,
+            "region_read_seconds": 2009788416,
+            "write_seconds": 1332391936
+          },
+          "query_rows": 0,
+          "random_rows": 256,
+          "rows": 1926,
+          "status": "success",
+          "timings": {
+            "full_read_seconds": {
+              "max": 0.5816595831420273,
+              "median": 0.5816595831420273,
+              "min": 0.5816595831420273
+            },
+            "open_seconds": {
+              "max": 0.019425917183980346,
+              "median": 0.019425917183980346,
+              "min": 0.019425917183980346
+            },
+            "random_read_seconds": {
+              "max": 0.5439487500116229,
+              "median": 0.5439487500116229,
+              "min": 0.5439487500116229
+            },
+            "region_read_seconds": {
+              "max": 0.4831694159656763,
+              "median": 0.4831694159656763,
+              "min": 0.4831694159656763
+            },
+            "write_seconds": {
+              "max": 1.1247785829473287,
+              "median": 1.1247785829473287,
+              "min": 1.1247785829473287
+            }
+          }
+        }
+      ],
+      "rows": 1926
+    }
+  ],
+  "decision": {
+    "best_by_metric": {
+      "artifact_bytes": "zarr-flat",
+      "random_read_seconds": "legacy-hdf5",
+      "region_read_seconds": "flat-hdf5",
+      "write_seconds": "netcdf-vlen"
+    },
+    "improvements_vs_legacy": {
+      "flat-hdf5": {
+        "artifact_bytes": 0.05836438298977375,
+        "random_read_seconds": -11.910828966949222,
+        "region_read_seconds": 0.3477167444928516,
+        "write_seconds": -0.6436070585013367
+      },
+      "legacy-hdf5": {
+        "artifact_bytes": 0.0,
+        "random_read_seconds": 0.0,
+        "region_read_seconds": 0.0,
+        "write_seconds": 0.0
+      },
+      "netcdf-flat": {
+        "artifact_bytes": -0.2480694290588626,
+        "random_read_seconds": -10.47452162945457,
+        "region_read_seconds": -0.750754914607421,
+        "write_seconds": -0.2807860350082174
+      },
+      "netcdf-vlen": {
+        "artifact_bytes": -17.46109294516743,
+        "random_read_seconds": -5.89891230808553,
+        "region_read_seconds": -0.3650255662563866,
+        "write_seconds": 0.694109051696162
+      },
+      "parquet": {
+        "artifact_bytes": 0.10605053300768859,
+        "random_read_seconds": -23.53793395725979,
+        "region_read_seconds": -57.757096936304826,
+        "write_seconds": -1.628075869171845
+      },
+      "zarr-flat": {
+        "artifact_bytes": 0.47102335668289413,
+        "random_read_seconds": -48.16758744579908,
+        "region_read_seconds": -10.510341329930068,
+        "write_seconds": 0.013862810177462956
+      }
+    },
+    "reason": "No alternative satisfied the production follow-up gates.",
+    "recommendation": "retain current HDF5"
+  },
+  "environment": {
+    "cpu_count": 10,
+    "packages": {
+      "h5py": "3.11.0",
+      "netCDF4": "1.7.4",
+      "numpy": "1.26.4",
+      "pyarrow": "24.0.0",
+      "zarr": "3.0.10"
+    },
+    "platform": "macOS-26.5.1-x86_64-i386-64bit",
+    "processor": "i386",
+    "python": "3.11.3 (main, May 21 2023, 16:08:19) [Clang 14.0.3 (clang-1403.0.22.14.1)]"
+  },
+  "schema_version": "single-read-benchmark-v1"
+}

@@ -61,6 +61,7 @@ def plot_depth_histogram(
         one_depth_per_region=one_depth_per_region,
         quiet=quiet,
         cores=cores,
+        split_large_regions=split_large_regions,
     )
 
     axes = make_depth_histogram_plot(
@@ -96,8 +97,9 @@ def by_modification(
 
 def by_regions(
     mod_file_name: str | Path,
-    regions_list: list[str | Path | list[str | Path]],
-    motif: str,
+    regions_list: list[str | Path | list[str | Path]] | None = None,
+    motif: str | None = None,
+    regions: list[str | Path | list[str | Path]] | None = None,
     sample_names: list[str] | None = None,
     **kwargs,
 ) -> Axes:
@@ -108,14 +110,28 @@ def by_regions(
 
     See plot_depth_histogram for details.
     """
-    if sample_names is None:
-        sample_names = regions_list
+    if regions is not None:
+        if regions_list is not None and regions_list != regions:
+            raise ValueError(
+                "Pass either regions_list or regions to by_regions, not both with different values."
+            )
+        regions_list = regions
+    if regions_list is None:
+        raise ValueError("by_regions requires regions_list (or alias regions).")
+    if motif is None:
+        raise ValueError("by_regions requires motif.")
+
+    sample_names_for_plot = (
+        sample_names
+        if sample_names is not None
+        else [str(region) for region in regions_list]
+    )
     n_beds = len(regions_list)
     return plot_depth_histogram(
         mod_file_names=[mod_file_name] * n_beds,
         regions_list=regions_list,
         motifs=[motif] * n_beds,
-        sample_names=[f"{sample_name} depth" for sample_name in sample_names],
+        sample_names=[f"{sample_name} depth" for sample_name in sample_names_for_plot],
         **kwargs,
     )
 
@@ -134,14 +150,17 @@ def by_dataset(
 
     See plot_depth_histogram for details.
     """
-    if sample_names is None:
-        sample_names = mod_file_names
+    sample_names_for_plot = (
+        sample_names
+        if sample_names is not None
+        else [str(mod_file) for mod_file in mod_file_names]
+    )
     n_mod_files = len(mod_file_names)
     return plot_depth_histogram(
         mod_file_names=mod_file_names,
         regions_list=[regions] * n_mod_files,
         motifs=[motif] * n_mod_files,
-        sample_names=[f"{sample_name} depth" for sample_name in sample_names],
+        sample_names=[f"{sample_name} depth" for sample_name in sample_names_for_plot],
         **kwargs,
     )
 
@@ -155,6 +174,7 @@ def get_depth_counts(
     one_depth_per_region: bool = False,
     quiet: bool = False,
     cores: int | None = 1,
+    split_large_regions: bool = False,
 ) -> list[np.ndarray]:
     """
     Get the depth counts, ready for plotting.
@@ -171,8 +191,6 @@ def get_depth_counts(
             the region of interest, False means we always grab both strands within the regions
         one_depth_per_region: if True, each region will only report a single depth value, averaging across all non-zero depths. If False
             depths will be reported separately for all nonzero count positions in each region for a more granular view of depth distribution.
-        regions_5to3prime: True means negative strand regions get flipped, False means no flipping
-        smooth_window: size of the moving window to use for smoothing. If set to None, no smoothing is performed
         quiet: disables progress bars
         cores: CPU cores across which to parallelize processing
 
@@ -181,12 +199,12 @@ def get_depth_counts(
     """
     if not utils.check_len_equal(mod_file_names, regions_list, motifs):
         raise ValueError("Unequal number of inputs")
-    # TODO: redefinition error; still need to figure out how to do this elegantly in a way mypy likes
-    # dimelo/plot_depth_histogram.py:53: error: Item "str" of "str | Path" has no attribute "suffix"  [union-attr]
-    mod_file_names = [Path(fn) for fn in mod_file_names]
+    mod_file_paths = [Path(fn) for fn in mod_file_names]
 
     depth_vectors = []
-    for mod_file, regions, motif in zip(mod_file_names, regions_list, motifs):
+    for mod_file, regions, motif in zip(
+        mod_file_paths, regions_list, motifs, strict=False
+    ):
         match mod_file.suffix:
             case ".gz":
                 pileup_vectors_list = load_processed.regions_to_list(
@@ -198,6 +216,7 @@ def get_depth_counts(
                     single_strand=single_strand,
                     quiet=quiet,
                     cores=cores,
+                    split_large_regions=split_large_regions,
                 )
                 # places where read depth is zero are assumed to not have the motif present - this may not always be true,
                 # but with the available information in a pileup file it's the best we can do

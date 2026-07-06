@@ -1,8 +1,13 @@
 name: dimelo-toolkit
 channels:
   - conda-forge
+  - bioconda
   - nanoporetech
   - defaults
 dependencies:
   - python=3.11
-  - nanoporetech::modkit==0.2.4
+  - pip
+  - libcurl
+  # Project default for parsing/DMR workflows and notebooks.
+  - nanoporetech::modkit==0.6.1
+  - bioconda::crossmap=0.7.3

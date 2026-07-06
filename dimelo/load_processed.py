@@ -1,7 +1,8 @@
 import concurrent.futures
 import gzip
 import multiprocessing
-from collections import defaultdict
+import os
+import warnings
 from functools import partial
 from multiprocessing import shared_memory
 from pathlib import Path
@@ -20,6 +21,14 @@ from . import test_data, utils
 # on 32 cores is fairly similar, but sitting in the middle of the range should support 10x more cores (beyond
 # the reasonable upper bound) and 10x fewer cores (which is about the reasonable lower bound).
 DEFAULT_CHUNK_SIZE = 1_000_000
+AUTO_PARALLEL_MIN_TASKS = 64
+AUTO_PARALLEL_TASKS_PER_CORE = 16
+AUTO_PARALLEL_BATCHES_PER_WORKER = 8
+AUTO_PARALLEL_CHUNKS_PER_TASK = 8
+AUTO_PARALLEL_MEMORY_FRACTION = 0.5
+AUTO_PARALLEL_PROCESS_OVERHEAD_BYTES = 64 * 1024 * 1024
+_CGROUP_MEMORY_SENTINEL_LIMIT = 1 << 60
+_TABIX_CACHE: dict[str, pysam.TabixFile] = {}
 
 ################################################################################################################
 ####                                           Loader wrappers                                              ####
@@ -58,6 +67,7 @@ def regions_to_list(
     Returns:
         List(function_handle return objects per region)
     """
+    executor = kwargs.pop("executor", None)
     regions_dict = utils.regions_dict_from_input(
         regions,
         window_size,
@@ -70,37 +80,73 @@ def regions_to_list(
         for start, end, strand in region_list
     ]
 
-    cores_to_run = utils.cores_to_run(cores)
+    cores_to_run = _resolve_cores_for_task_count(
+        requested_cores=cores,
+        task_count=len(region_strings),
+    )
     # quiet and cores logic below is driven by the following:
     # If the parallelization is within regions:
     #    (1) progress bars should happen within regions if at all, because we assume regions are
     #        large if they make sense to parallelize
     #    (2) the cores_to_run will be allocated to within-region parallelization, and the top-level
     #        jobs sequence is run sequentially
-    with concurrent.futures.ProcessPoolExecutor(
-        max_workers=1 if split_large_regions else cores_to_run
-    ) as executor:
-        # Use functools.partial to pre-fill arguments
+    # For single-core, avoid process-pool startup and run regions directly.
+    if not split_large_regions and cores_to_run == 1:
         process_partial = partial(
             apply_loader_function_to_region,
             function_handle=function_handle,
-            quiet=quiet or not split_large_regions,
-            cores=cores_to_run
-            if split_large_regions
-            else 1,  # if parallelization is within region
+            quiet=quiet,
+            cores=1,
             **kwargs,
         )
-        results = list(
+        return list(
             tqdm(
-                executor.map(process_partial, region_strings),
+                map(process_partial, region_strings),
                 total=len(region_strings),
                 desc="Loading data",
-                disable=quiet or split_large_regions,
+                disable=quiet,
                 leave=False,
             )
         )
 
-    return results
+    process_partial = partial(
+        _apply_loader_function_to_region_batch,
+        function_handle=function_handle,
+        quiet=quiet or not split_large_regions,
+        cores=cores_to_run
+        if split_large_regions
+        else 1,  # if parallelization is within region
+        **kwargs,
+    )
+
+    # Keep enough tasks per worker to amortize process overhead on large region lists.
+    if split_large_regions:
+        batch_size = 1
+    else:
+        target_batches = max(1, cores_to_run * AUTO_PARALLEL_BATCHES_PER_WORKER)
+        batch_size = max(1, len(region_strings) // target_batches)
+    region_batches = list(_iter_batches(region_strings, batch_size=batch_size))
+
+    def _collect(mapped_batches) -> list:
+        return [
+            item
+            for batch in tqdm(
+                mapped_batches,
+                total=len(region_batches),
+                desc="Loading data",
+                disable=quiet or split_large_regions,
+                leave=False,
+            )
+            for item in batch
+        ]
+
+    if executor is not None and not split_large_regions:
+        return _collect(executor.map(process_partial, region_batches))
+
+    with concurrent.futures.ProcessPoolExecutor(
+        max_workers=1 if split_large_regions else cores_to_run
+    ) as local_executor:
+        return _collect(local_executor.map(process_partial, region_batches))
 
 
 def apply_loader_function_to_region(region_string, function_handle, **kwargs):
@@ -116,6 +162,295 @@ def apply_loader_function_to_region(region_string, function_handle, **kwargs):
         function_handle return value
     """
     return function_handle(regions=region_string, **kwargs)
+
+
+def _apply_loader_function_to_region_batch(region_batch, function_handle, **kwargs):
+    return [
+        function_handle(regions=region_string, **kwargs)
+        for region_string in region_batch
+    ]
+
+
+def _iter_batches(items: list[str], *, batch_size: int):
+    for idx in range(0, len(items), batch_size):
+        yield items[idx : idx + batch_size]
+
+
+def _parallel_chunk_batch_size(*, task_count: int, workers: int) -> int:
+    target_tasks = max(1, workers * AUTO_PARALLEL_CHUNKS_PER_TASK)
+    return max(1, task_count // target_tasks)
+
+
+def _get_tabix_file(path: str | Path) -> pysam.TabixFile:
+    key = str(path)
+    cached = _TABIX_CACHE.get(key)
+    if cached is None:
+        cached = pysam.TabixFile(key)
+        _TABIX_CACHE[key] = cached
+    return cached
+
+
+def _clear_tabix_cache() -> None:
+    _TABIX_CACHE.clear()
+
+
+def _resolve_cores_for_task_count(
+    *, requested_cores: int | None, task_count: int
+) -> int:
+    """
+    Resolve worker count for loader-style fanout.
+
+    If cores are explicitly requested, honor that request. For automatic mode (cores=None),
+    avoid expensive multiprocessing startup for small task batches.
+    """
+    resolved = utils.cores_to_run(requested_cores)
+    if requested_cores is not None:
+        return resolved
+
+    cores_by_tasks = 1
+    if task_count >= AUTO_PARALLEL_MIN_TASKS:
+        cores_by_tasks = max(1, task_count // AUTO_PARALLEL_TASKS_PER_CORE)
+
+    return max(1, min(resolved, cores_by_tasks))
+
+
+def _parse_positive_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    digits = []
+    for char in text:
+        if char.isdigit():
+            digits.append(char)
+        else:
+            break
+    if not digits:
+        return None
+    parsed = int("".join(digits))
+    return parsed if parsed > 0 else None
+
+
+def _cgroup_memory_limit_bytes() -> int | None:
+    candidates: list[int] = []
+    for candidate_path in (
+        "/sys/fs/cgroup/memory.max",
+        "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+    ):
+        try:
+            value = Path(candidate_path).read_text(encoding="utf-8").strip()
+        except Exception:
+            continue
+        if not value or value.lower() == "max":
+            continue
+        parsed = _parse_positive_int(value)
+        if parsed is None or parsed >= _CGROUP_MEMORY_SENTINEL_LIMIT:
+            continue
+        candidates.append(parsed)
+    if not candidates:
+        return None
+    return min(candidates)
+
+
+def _slurm_memory_limit_bytes() -> int | None:
+    mem_per_node_mb = _parse_positive_int(os.environ.get("SLURM_MEM_PER_NODE"))
+    mem_per_cpu_mb = _parse_positive_int(os.environ.get("SLURM_MEM_PER_CPU"))
+    cpus_per_task = _parse_positive_int(os.environ.get("SLURM_CPUS_PER_TASK"))
+    cpus_on_node = _parse_positive_int(os.environ.get("SLURM_CPUS_ON_NODE"))
+
+    candidates: list[int] = []
+    if mem_per_node_mb is not None:
+        candidates.append(mem_per_node_mb * 1024 * 1024)
+    if mem_per_cpu_mb is not None:
+        cpus = cpus_per_task or cpus_on_node
+        if cpus is not None:
+            candidates.append(mem_per_cpu_mb * cpus * 1024 * 1024)
+
+    if not candidates:
+        return None
+    return min(candidates)
+
+
+def _available_memory_bytes() -> int | None:
+    override = _parse_positive_int(os.environ.get("DIMELO_AVAILABLE_MEMORY_BYTES"))
+    if override is not None:
+        return override
+
+    candidates: list[int] = []
+    try:
+        import psutil  # type: ignore
+
+        candidates.append(int(psutil.virtual_memory().available))
+    except Exception:
+        pass
+
+    cgroup_limit = _cgroup_memory_limit_bytes()
+    if cgroup_limit is not None:
+        candidates.append(cgroup_limit)
+
+    slurm_limit = _slurm_memory_limit_bytes()
+    if slurm_limit is not None:
+        candidates.append(slurm_limit)
+
+    if not candidates:
+        return None
+    return min(candidates)
+
+
+def _memory_limited_cores(
+    *,
+    requested_cores: int | None,
+    task_count: int,
+    bytes_per_task: int,
+    extra_shared_bytes: int = 0,
+) -> int:
+    """
+    Resolve worker count using CPU availability, task fanout, and available memory.
+
+    Explicit cores override auto-tuning and are always returned unchanged.
+    """
+    baseline = _resolve_cores_for_task_count(
+        requested_cores=requested_cores,
+        task_count=task_count,
+    )
+    if requested_cores is not None:
+        return baseline
+
+    available = _available_memory_bytes()
+    if available is None:
+        return baseline
+
+    budget = int(available * AUTO_PARALLEL_MEMORY_FRACTION) - max(
+        0, int(extra_shared_bytes)
+    )
+    if budget <= 0:
+        return 1
+
+    per_worker = max(1, int(bytes_per_task)) + AUTO_PARALLEL_PROCESS_OVERHEAD_BYTES
+    memory_cap = max(1, budget // per_worker)
+    return max(1, min(baseline, memory_cap))
+
+
+def _pileup_counts_from_bedmethyl_single_core(
+    *,
+    bedmethyl_file: str | Path,
+    parsed_motif: utils.ParsedMotif,
+    chunks_list: list[dict],
+    single_strand: bool,
+    quiet: bool,
+) -> tuple[int, int]:
+    """Single-process fallback used when only one core is requested."""
+    source_tabix = _get_tabix_file(bedmethyl_file)
+    total_valid = 0
+    total_modified = 0
+
+    for chunk in tqdm(
+        chunks_list,
+        total=len(chunks_list),
+        disable=quiet,
+        desc="Loading data",
+        leave=False,
+    ):
+        chromosome = chunk["chromosome"]
+        subregion_start = chunk["subregion_start"]
+        subregion_end = chunk["subregion_end"]
+        strand = chunk["strand"]
+
+        if chromosome not in source_tabix.contigs:
+            continue
+
+        for row in source_tabix.fetch(
+            chromosome, max(subregion_start, 0), subregion_end
+        ):
+            keep_basemod, _, modified_in_row, valid_in_row = process_pileup_row(
+                row=row,
+                parsed_motif=parsed_motif,
+                region_strand=strand,
+                single_strand=single_strand,
+            )
+            if keep_basemod:
+                total_valid += valid_in_row
+                total_modified += modified_in_row
+
+    return total_modified, total_valid
+
+
+def _pileup_vectors_from_bedmethyl_single_core(
+    *,
+    bedmethyl_file: str | Path,
+    parsed_motif: utils.ParsedMotif,
+    chunks_list: list[dict],
+    region_len: int,
+    single_strand: bool,
+    regions_5to3prime: bool,
+    quiet: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Single-process fallback used when only one core is requested."""
+    source_tabix = _get_tabix_file(bedmethyl_file)
+    valid_base_counts = np.zeros(region_len, dtype=np.int32)
+    modified_base_counts = np.zeros(region_len, dtype=np.int32)
+
+    for chunk in tqdm(
+        chunks_list,
+        total=len(chunks_list),
+        disable=quiet,
+        desc="Loading data",
+        leave=False,
+    ):
+        chromosome = chunk["chromosome"]
+        region_start = chunk["region_start"]
+        region_end = chunk["region_end"]
+        subregion_start = chunk["subregion_start"]
+        subregion_end = chunk["subregion_end"]
+        strand = chunk["strand"]
+
+        flip_coords = regions_5to3prime and strand == "-"
+        if flip_coords:
+            subregion_offset = region_end - subregion_end
+        else:
+            subregion_offset = subregion_start - region_start
+
+        if region_end - region_start > region_len:
+            print(
+                f"WARNING: You have specified a region at {chromosome}:{region_start}-{region_end} that is longer than the first region; the end of the region will be skipped. To make a profile plot with differently-sized region, consider using the window_size parameter to make a profile across centered windows."
+            )
+
+        subregion_len = subregion_end - subregion_start
+        valid_base_subregion = np.zeros(subregion_len, dtype=np.int32)
+        modified_base_subregion = np.zeros(subregion_len, dtype=np.int32)
+
+        if chromosome in source_tabix.contigs:
+            for row in source_tabix.fetch(
+                chromosome, max(subregion_start, 0), subregion_end
+            ):
+                keep_basemod, genomic_coord, modified_in_row, valid_in_row = (
+                    process_pileup_row(
+                        row=row,
+                        parsed_motif=parsed_motif,
+                        region_strand=strand,
+                        single_strand=single_strand,
+                    )
+                )
+                if keep_basemod:
+                    if flip_coords:
+                        pileup_coord_in_subregion = subregion_end - genomic_coord - 1
+                    else:
+                        pileup_coord_in_subregion = genomic_coord - subregion_start
+                    if pileup_coord_in_subregion < subregion_len:
+                        valid_base_subregion[pileup_coord_in_subregion] += valid_in_row
+                        modified_base_subregion[pileup_coord_in_subregion] += (
+                            modified_in_row
+                        )
+
+        valid_base_counts[subregion_offset : subregion_offset + subregion_len] += (
+            valid_base_subregion
+        )
+        modified_base_counts[subregion_offset : subregion_offset + subregion_len] += (
+            modified_base_subregion
+        )
+
+    return modified_base_counts, valid_base_counts
 
 
 ################################################################################################################
@@ -147,8 +482,6 @@ def pileup_counts_from_bedmethyl(
     If no regions are specified, returns the sum total for the motif of interest across the
     entire bedmethyl file.
 
-    TODO: Consider renaming this method, e.g. counts_from_pileup
-
     Args:
         bedmethyl_file: Path to bedmethyl file
         regions: Path to bed file specifying regions
@@ -171,32 +504,38 @@ def pileup_counts_from_bedmethyl(
         regions_dict, chunk_size=chunk_size
     )
 
-    cores_to_run = utils.cores_to_run(cores)
-
-    # Initialize shared memory as length-one numpy arrays to make it easy to map to buffer in subprocesses
-    shm_valid = shared_memory.SharedMemory(
-        create=True, size=np.dtype(np.int32).itemsize
-    )
-    shm_modified = shared_memory.SharedMemory(
-        create=True, size=np.dtype(np.int32).itemsize
+    cores_to_run = _memory_limited_cores(
+        requested_cores=cores,
+        task_count=len(chunks_list),
+        bytes_per_task=0,
     )
 
-    manager = multiprocessing.Manager()
-    lock = manager.Lock()
+    if cores_to_run == 1:
+        return _pileup_counts_from_bedmethyl_single_core(
+            bedmethyl_file=bedmethyl_file,
+            parsed_motif=parsed_motif,
+            chunks_list=chunks_list,
+            single_strand=single_strand,
+            quiet=quiet,
+        )
 
+    batch_size = _parallel_chunk_batch_size(
+        task_count=len(chunks_list),
+        workers=cores_to_run,
+    )
+    chunk_batches = list(_iter_batches(chunks_list, batch_size=batch_size))
+    modified_base_count = 0
+    valid_base_count = 0
     with concurrent.futures.ProcessPoolExecutor(max_workers=cores_to_run) as executor:
         futures = [
             executor.submit(
-                pileup_counts_process_chunk,
+                _pileup_counts_process_chunk_batch_local,
                 bedmethyl_file,
                 parsed_motif,
-                chunk,
-                shm_modified.name,
-                shm_valid.name,
-                lock,
+                chunk_batch,
                 single_strand,
             )
-            for chunk in chunks_list
+            for chunk_batch in chunk_batches
         ]
         for future in tqdm(
             concurrent.futures.as_completed(futures),
@@ -206,22 +545,11 @@ def pileup_counts_from_bedmethyl(
             leave=False,
         ):
             try:
-                future.result()
+                modified_in_batch, valid_in_batch = future.result()
+                modified_base_count += int(modified_in_batch)
+                valid_base_count += int(valid_in_batch)
             except Exception as err:
                 raise RuntimeError("pileup_counts_process_chunk failed.") from err
-
-    # Directly convert shared memory buffers to integers
-    modified_base_count = int.from_bytes(
-        shm_modified.buf[:4], byteorder="little", signed=True
-    )
-    valid_base_count = int.from_bytes(
-        shm_valid.buf[:4], byteorder="little", signed=True
-    )
-    # Close and unlink shared memory - not fully handled by garbage collection otherwise
-    shm_modified.close()
-    shm_modified.unlink()
-    shm_valid.close()
-    shm_valid.unlink()
 
     return modified_base_count, valid_base_count
 
@@ -259,8 +587,6 @@ def pileup_vectors_from_bedmethyl(
     A region must be provided because otherwise there is no way to know what vector to return.
     However, a region can be a whole chromosome if desired.
 
-    TODO: Consider renaming this method, e.g. vectors_from_pileup
-
     Args:
         bedmethyl_file: Path to bedmethyl file
         regions: Path to bed file specifying centered equal-length regions
@@ -283,13 +609,38 @@ def pileup_vectors_from_bedmethyl(
     chunks_list = utils.process_chunks_from_regions_dict(
         regions_dict, chunk_size=chunk_size
     )
-
-    cores_to_run = utils.cores_to_run(cores)
-
     # Peek at a region to figure out what size the vectors should be
     first_key = next(iter(regions_dict))
     first_tuple = regions_dict[first_key][0]
     region_len = first_tuple[1] - first_tuple[0]
+
+    max_chunk_span = max(
+        (
+            max(0, int(chunk["subregion_end"]) - int(chunk["subregion_start"]))
+            for chunk in chunks_list
+        ),
+        default=0,
+    )
+    per_worker_bytes = 2 * max_chunk_span * np.dtype(np.int32).itemsize
+    shared_bytes = 2 * region_len * np.dtype(np.int32).itemsize
+    cores_to_run = _memory_limited_cores(
+        requested_cores=cores,
+        task_count=len(chunks_list),
+        bytes_per_task=per_worker_bytes,
+        extra_shared_bytes=shared_bytes,
+    )
+
+    # Avoid process-pool/shared-memory startup overhead for single-core workloads.
+    if cores_to_run == 1:
+        return _pileup_vectors_from_bedmethyl_single_core(
+            bedmethyl_file=bedmethyl_file,
+            parsed_motif=parsed_motif,
+            chunks_list=chunks_list,
+            region_len=region_len,
+            single_strand=single_strand,
+            regions_5to3prime=regions_5to3prime,
+            quiet=quiet,
+        )
 
     # Initialize shared memory as numpy arrays to make it easy to map to buffer in subprocesses
     shm_valid = shared_memory.SharedMemory(
@@ -302,13 +653,18 @@ def pileup_vectors_from_bedmethyl(
     manager = multiprocessing.Manager()
     lock = manager.Lock()
 
+    batch_size = _parallel_chunk_batch_size(
+        task_count=len(chunks_list),
+        workers=cores_to_run,
+    )
+    chunk_batches = list(_iter_batches(chunks_list, batch_size=batch_size))
     with concurrent.futures.ProcessPoolExecutor(max_workers=cores_to_run) as executor:
         futures = [
             executor.submit(
-                pileup_vectors_process_chunk,
+                _pileup_vectors_process_chunk_batch,
                 bedmethyl_file,
                 parsed_motif,
-                chunk,
+                chunk_batch,
                 region_len,
                 shm_modified.name,
                 shm_valid.name,
@@ -316,7 +672,7 @@ def pileup_vectors_from_bedmethyl(
                 single_strand,
                 regions_5to3prime,
             )
-            for chunk in chunks_list
+            for chunk_batch in chunk_batches
         ]
         for future in tqdm(
             concurrent.futures.as_completed(futures),
@@ -389,34 +745,28 @@ def pileup_vectors_process_chunk(
     single_strand,
     regions_5to3prime,
 ) -> None:
-    """
-    Helper function to allow pileup_vectors_from_bedmethyl to operate in a parallized fashion.
-
-    Sum up modified and valid counts for a subregion chunk in a bedmethyl file.
-
-    Args:
-        bedmethyl_file: Path to bedmethyl file
-        parsed_motif: ParsedMotif object
-        chunk: a dict containing subregion chunk information
-        shm_name_modified: the name string for the shared memory location containing the modified counts array
-        shm_name_valid: the name string for the shared memory location containing the valid counts array
-        lock: a manager.Lock object to allow synchronization in accessing shared memory
-        single_strand: True if only single-strand mods are desired
-        regions_5to3prime: True means negative strand regions get flipped, False means no flipping
-
-    Returns:
-        None. Counts are added to arrays in-place to shared memory.
-    """
-    source_tabix = pysam.TabixFile(str(bedmethyl_file))
-    existing_valid = shared_memory.SharedMemory(name=shm_name_valid)
-    existing_modified = shared_memory.SharedMemory(name=shm_name_modified)
-    valid_base_counts = np.ndarray(
-        (region_len,), dtype=np.int32, buffer=existing_valid.buf
-    )
-    modified_base_counts = np.ndarray(
-        (region_len,), dtype=np.int32, buffer=existing_modified.buf
+    _pileup_vectors_process_chunk_batch(
+        bedmethyl_file=bedmethyl_file,
+        parsed_motif=parsed_motif,
+        chunk_batch=[chunk],
+        region_len=region_len,
+        shm_name_modified=shm_name_modified,
+        shm_name_valid=shm_name_valid,
+        lock=lock,
+        single_strand=single_strand,
+        regions_5to3prime=regions_5to3prime,
     )
 
+
+def _pileup_vectors_local_contribution(
+    *,
+    source_tabix: pysam.TabixFile,
+    parsed_motif: utils.ParsedMotif,
+    chunk: dict,
+    region_len: int,
+    single_strand: bool,
+    regions_5to3prime: bool,
+) -> tuple[int, np.ndarray, np.ndarray] | None:
     chromosome = chunk["chromosome"]
     region_start = chunk["region_start"]
     region_end = chunk["region_end"]
@@ -425,7 +775,6 @@ def pileup_vectors_process_chunk(
     strand = chunk["strand"]
 
     flip_coords = regions_5to3prime and strand == "-"
-
     if flip_coords:
         subregion_offset = region_end - subregion_end
     else:
@@ -436,48 +785,85 @@ def pileup_vectors_process_chunk(
             f"WARNING: You have specified a region at {chromosome}:{region_start}-{region_end} that is longer than the first region; the end of the region will be skipped. To make a profile plot with differently-sized region, consider using the window_size parameter to make a profile across centered windows."
         )
 
-    valid_base_subregion = np.zeros(subregion_end - subregion_start, dtype=int)
-    modified_base_subregion = np.zeros(subregion_end - subregion_start, dtype=int)
+    subregion_span = subregion_end - subregion_start
+    valid_base_subregion = np.zeros(subregion_span, dtype=np.int32)
+    modified_base_subregion = np.zeros(subregion_span, dtype=np.int32)
 
-    # tabix throws and error if the contig is not present
-    # by the current design, this should be silent
-    if chromosome in source_tabix.contigs:
-        for row in source_tabix.fetch(
-            chromosome, max(subregion_start, 0), subregion_end
-        ):
-            (
-                keep_basemod,
-                genomic_coord,
-                modified_in_row,
-                valid_in_row,
-            ) = process_pileup_row(
-                row=row,
-                parsed_motif=parsed_motif,
-                region_strand=strand,
-                single_strand=single_strand,
-            )
-            if keep_basemod:
-                if flip_coords:
-                    # We want to flip the coordinates for this region so that it is recorded along the 5 prime to 3 prime direction
-                    # This will enable analyses where the orientation of protein binding / transcriptional dynamics / etc is relevant for our pileup signal
-                    pileup_coord_in_subregion = subregion_end - genomic_coord - 1
-                else:
-                    # Normal coordinates are the default. This will be used both for the '+' case and the '.' (no strand specified) case
-                    pileup_coord_in_subregion = genomic_coord - subregion_start
-                if pileup_coord_in_subregion < (subregion_end - subregion_start):
-                    valid_base_subregion[pileup_coord_in_subregion] += valid_in_row
-                    modified_base_subregion[pileup_coord_in_subregion] += (
-                        modified_in_row
-                    )
+    if chromosome not in source_tabix.contigs:
+        return subregion_offset, valid_base_subregion, modified_base_subregion
 
-    with lock:
-        valid_base_counts[
-            subregion_offset : subregion_offset + abs(subregion_end - subregion_start)
-        ] += valid_base_subregion
-        modified_base_counts[
-            subregion_offset : subregion_offset + abs(subregion_end - subregion_start)
-        ] += modified_base_subregion
-    # Close the file descriptor/handle to the shared memory
+    for row in source_tabix.fetch(chromosome, max(subregion_start, 0), subregion_end):
+        keep_basemod, genomic_coord, modified_in_row, valid_in_row = process_pileup_row(
+            row=row,
+            parsed_motif=parsed_motif,
+            region_strand=strand,
+            single_strand=single_strand,
+        )
+        if not keep_basemod:
+            continue
+        if flip_coords:
+            pileup_coord_in_subregion = subregion_end - genomic_coord - 1
+        else:
+            pileup_coord_in_subregion = genomic_coord - subregion_start
+        if pileup_coord_in_subregion < subregion_span:
+            valid_base_subregion[pileup_coord_in_subregion] += valid_in_row
+            modified_base_subregion[pileup_coord_in_subregion] += modified_in_row
+
+    return subregion_offset, valid_base_subregion, modified_base_subregion
+
+
+def _pileup_vectors_process_chunk_batch(
+    bedmethyl_file,
+    parsed_motif,
+    chunk_batch,
+    region_len,
+    shm_name_modified,
+    shm_name_valid,
+    lock,
+    single_strand,
+    regions_5to3prime,
+) -> None:
+    """
+    Worker helper that processes a batch of chunks and acquires the shared-memory lock once.
+    """
+    source_tabix = _get_tabix_file(bedmethyl_file)
+    existing_valid = shared_memory.SharedMemory(name=shm_name_valid)
+    existing_modified = shared_memory.SharedMemory(name=shm_name_modified)
+    valid_base_counts = np.ndarray(
+        (region_len,), dtype=np.int32, buffer=existing_valid.buf
+    )
+    modified_base_counts = np.ndarray(
+        (region_len,), dtype=np.int32, buffer=existing_modified.buf
+    )
+
+    updates: list[tuple[int, np.ndarray, np.ndarray]] = []
+    for chunk in chunk_batch:
+        contribution = _pileup_vectors_local_contribution(
+            source_tabix=source_tabix,
+            parsed_motif=parsed_motif,
+            chunk=chunk,
+            region_len=region_len,
+            single_strand=single_strand,
+            regions_5to3prime=regions_5to3prime,
+        )
+        if contribution is not None:
+            updates.append(contribution)
+
+    if updates:
+        with lock:
+            for (
+                subregion_offset,
+                valid_base_subregion,
+                modified_base_subregion,
+            ) in updates:
+                subregion_span = len(valid_base_subregion)
+                valid_base_counts[
+                    subregion_offset : subregion_offset + subregion_span
+                ] += valid_base_subregion
+                modified_base_counts[
+                    subregion_offset : subregion_offset + subregion_span
+                ] += modified_base_subregion
+
     existing_modified.close()
     existing_valid.close()
 
@@ -491,67 +877,62 @@ def pileup_counts_process_chunk(
     lock,
     single_strand,
 ) -> None:
-    """
-    Helper function to allow pileup_counts_from_bedmethyl to operate in a parallized fashion.
-
-    Sum up modified and valid counts for a subregion chunk in a bedmethyl file.
-
-    Args:
-        bedmethyl_file: Path to bedmethyl file
-        parsed_motif: ParsedMotif object
-        chunk: a dict containing subregion chunk information
-        shm_name_modified: the name string for the shared memory location containing the modified counts sum
-        shm_name_valid: the name string for the shared memory location containing the valid counts sum
-        lock: a manager.Lock object to allow synchronization in accessing shared memory
-        single_strand: True if only single-strand mods are desired
-
-    Returns:
-        None. Counts are added in-place to shared memory.
-    """
-    source_tabix = pysam.TabixFile(str(bedmethyl_file))
+    modified_subregion_counts, valid_subregion_counts = (
+        _pileup_counts_process_chunk_batch_local(
+            bedmethyl_file=bedmethyl_file,
+            parsed_motif=parsed_motif,
+            chunk_batch=[chunk],
+            single_strand=single_strand,
+        )
+    )
     existing_valid = shared_memory.SharedMemory(name=shm_name_valid)
     existing_modified = shared_memory.SharedMemory(name=shm_name_modified)
     valid_base_counts = np.ndarray((1,), dtype=np.int32, buffer=existing_valid.buf)
     modified_base_counts = np.ndarray(
         (1,), dtype=np.int32, buffer=existing_modified.buf
     )
+    with lock:
+        valid_base_counts[0] += valid_subregion_counts
+        modified_base_counts[0] += modified_subregion_counts
+    existing_valid.close()
+    existing_modified.close()
 
-    chromosome = chunk["chromosome"]
-    subregion_start = chunk["subregion_start"]
-    subregion_end = chunk["subregion_end"]
-    strand = chunk["strand"]
 
-    valid_base_subregion_counts = 0
-    modified_base_subregion_counts = 0
+def _pileup_counts_process_chunk_batch_local(
+    bedmethyl_file,
+    parsed_motif,
+    chunk_batch,
+    single_strand,
+) -> tuple[int, int]:
+    """
+    Worker helper for counts mode that accumulates locally and returns one tuple per batch.
+    """
+    source_tabix = _get_tabix_file(bedmethyl_file)
+    valid_total = 0
+    modified_total = 0
 
-    # tabix throws and error if the contig is not present
-    # by the current design, this should be silent
-    if chromosome in source_tabix.contigs:
+    for chunk in chunk_batch:
+        chromosome = chunk["chromosome"]
+        subregion_start = chunk["subregion_start"]
+        subregion_end = chunk["subregion_end"]
+        strand = chunk["strand"]
+
+        if chromosome not in source_tabix.contigs:
+            continue
         for row in source_tabix.fetch(
             chromosome, max(subregion_start, 0), subregion_end
         ):
-            (
-                keep_basemod,
-                _,
-                modified_in_row,
-                valid_in_row,
-            ) = process_pileup_row(
+            keep_basemod, _, modified_in_row, valid_in_row = process_pileup_row(
                 row=row,
                 parsed_motif=parsed_motif,
                 region_strand=strand,
                 single_strand=single_strand,
             )
             if keep_basemod:
-                valid_base_subregion_counts += valid_in_row
-                modified_base_subregion_counts += modified_in_row
+                valid_total += valid_in_row
+                modified_total += modified_in_row
 
-    with lock:
-        valid_base_counts[0] += valid_base_subregion_counts
-        modified_base_counts[0] += modified_base_subregion_counts
-
-    # Close the file descriptor/handle to the shared memory
-    existing_valid.close()
-    existing_modified.close()
+    return modified_total, valid_total
 
 
 def process_pileup_row(
@@ -578,44 +959,89 @@ def process_pileup_row(
     """
     tabix_fields = row.split("\t")
     pileup_basemod = tabix_fields[3]
-    pileup_strand = tabix_fields[5]
 
-    if single_strand and pileup_strand.strip() != region_strand:
-        # We are on the wrong strand, can't keep this position
-        keep_basemod = False
-    elif len(pileup_basemod.split(",")) == 3:
-        pileup_modname, pileup_motif, pileup_mod_coord = pileup_basemod.split(",")
-        if (
+    if single_strand and tabix_fields[5] != region_strand:
+        # We are on the wrong strand, can't keep this position.
+        return (False, 0, 0, 0)
+
+    pileup_basemod_parts = pileup_basemod.split(",")
+    if len(pileup_basemod_parts) == 3:
+        pileup_modname, pileup_motif, pileup_mod_coord = pileup_basemod_parts
+        keep_basemod = (
             pileup_motif == parsed_motif.motif_seq
             and int(pileup_mod_coord) == parsed_motif.modified_pos
             and pileup_modname in parsed_motif.mod_codes
-        ):
-            keep_basemod = True
-        else:
-            keep_basemod = False
-    elif len(pileup_basemod.split(",")) == 1:
+        )
+    elif len(pileup_basemod_parts) == 1:
         keep_basemod = pileup_basemod in parsed_motif.mod_codes
     else:
         raise ValueError(
             f"Unexpected format in bedmethyl file: {row} contains {pileup_basemod} which cannot be parsed."
         )
 
-    pileup_info = tabix_fields[9].split(" ")
-    genomic_coord = int(tabix_fields[1])
-    valid_in_row = int(pileup_info[0])
-    modified_in_row = int(pileup_info[2])
+    if not keep_basemod:
+        return (False, 0, 0, 0)
 
-    return (
-        keep_basemod,
-        genomic_coord,
-        modified_in_row,
-        valid_in_row,
-    )
+    genomic_coord = int(tabix_fields[1])
+
+    # Modern modkit pileup bedMethyl format (0.6.x) emits full 18-column rows:
+    # chrom, start, end, mod, score, strand, thickStart, thickEnd, color,
+    # valid_cov, frac_mod, N_mod, N_canonical, N_other_mod, N_delete, N_fail,
+    # N_diff, N_nocall.
+    # Legacy/older formats may encode summary info in tabix_fields[9] as a
+    # whitespace-delimited payload where [0]=valid and [2]=modified.
+    try:
+        if len(tabix_fields) >= 13:
+            valid_in_row = int(float(tabix_fields[9]))
+            modified_in_row = int(float(tabix_fields[11]))
+        else:
+            pileup_info = tabix_fields[9].split()
+            valid_in_row = int(float(pileup_info[0]))
+            modified_in_row = int(float(pileup_info[2]))
+    except Exception:
+        if not getattr(process_pileup_row, "_warned_malformed_bedmethyl_row", False):
+            warnings.warn(
+                "Skipping malformed bedMethyl row while loading pileup data. "
+                "This warning is shown once per process.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            process_pileup_row._warned_malformed_bedmethyl_row = True
+        return (False, 0, 0, 0)
+
+    return (True, genomic_coord, modified_in_row, valid_in_row)
 
 
 ################################################################################################################
 ####                                        Single read loaders                                             ####
 ################################################################################################################
+
+
+def _validate_subset_parameters(subset_parameters: dict | None) -> None:
+    if subset_parameters is None:
+        return
+    if not isinstance(subset_parameters, dict):
+        raise ValueError("subset_parameters must be provided as a dictionary.")
+    if "array" in subset_parameters:
+        raise ValueError(
+            "subset_parameters cannot include 'array'; this is set internally."
+        )
+    if "n" not in subset_parameters and "frac" not in subset_parameters:
+        raise ValueError("subset_parameters must include at least one of n or frac.")
+
+
+def _subset_indices(
+    relevant_read_indices: np.ndarray,
+    subset_parameters: dict | None,
+    seed: int | None = None,
+) -> np.ndarray:
+    if subset_parameters is None or relevant_read_indices.size == 0:
+        return relevant_read_indices
+    # Reproducibility fix: thread an optional seed into random_sample so subsetting
+    # is deterministic when a seed is supplied (None preserves prior behavior).
+    return np.sort(
+        utils.random_sample(relevant_read_indices, seed=seed, **subset_parameters)
+    )
 
 
 def read_vectors_from_hdf5(
@@ -630,6 +1056,9 @@ def read_vectors_from_hdf5(
     cores: int | None = None,  # currently unused
     subset_parameters: dict | None = None,
     span_full_window: bool = False,
+    random_sample_n_reads: int | None = None,
+    min_read_length_bp: int | None = None,
+    random_state: int | None = None,
 ) -> tuple[list[tuple], list[str], dict | None]:
     """
     User-facing function.
@@ -681,6 +1110,13 @@ def read_vectors_from_hdf5(
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
         span_full_window: If True, only load reads that fully span the window defined by region_start-region_end
+        random_sample_n_reads: Optional global random sample size applied after filtering and
+            region/motif selection. Samples unique read names (not tuple rows), then retains all
+            motif rows associated with those reads.
+        min_read_length_bp: Optional minimum read length filter (bp) applied before loading vectors.
+        random_state: Optional integer seed threaded into utils.random_sample for all subsampling
+            (both subset_parameters per-region draws and the random_sample_n_reads global draw).
+            When None (default), sampling uses the module-level unseeded rng (prior behavior).
 
     Returns:
         a list of tuples, each tuple containing all datasets corresponding to an individual read that
@@ -691,6 +1127,18 @@ def read_vectors_from_hdf5(
     TODO: The way the subsetting is implemented is confusing, in that you need to pass all but one of
         the available parameters.
     """
+    _validate_subset_parameters(subset_parameters)
+    if random_sample_n_reads is not None and int(random_sample_n_reads) <= 0:
+        raise ValueError("random_sample_n_reads must be > 0 when provided.")
+    if min_read_length_bp is not None and int(min_read_length_bp) < 0:
+        raise ValueError("min_read_length_bp must be >= 0 when provided.")
+    random_sample_n_reads = (
+        int(random_sample_n_reads) if random_sample_n_reads is not None else None
+    )
+    min_read_length_bp = (
+        int(min_read_length_bp) if min_read_length_bp is not None else None
+    )
+
     with h5py.File(file, "r") as h5:
         datasets: list[str] = [
             name for name, obj in h5.items() if isinstance(obj, h5py.Dataset)
@@ -698,8 +1146,9 @@ def read_vectors_from_hdf5(
         if "threshold" in h5:
             # we are looking at an .h5 file with the new, much better compressed format that does
             # not know the data type intrinsically for mod and val vectors, so we must check
+            metadata_datasets = {"threshold", "threshold_by_motif_json"}
             readwise_datasets = [
-                dataset for dataset in datasets if dataset not in ["threshold"]
+                dataset for dataset in datasets if dataset not in metadata_datasets
             ]
             compressed_binary_datasets = ["mod_vector", "val_vector"]
             threshold_applied_to_h5 = h5["threshold"][()]
@@ -715,6 +1164,7 @@ def read_vectors_from_hdf5(
         read_chromosomes = np.array(h5["chromosome"], dtype=str)
         read_starts = np.array(h5["read_start"])
         read_ends = np.array(h5["read_end"])
+        read_lengths = read_ends - read_starts
         read_motifs = np.array(h5["motif"], dtype=str)
         ref_strands = np.array(h5["strand"], dtype=str)
 
@@ -735,6 +1185,11 @@ def read_vectors_from_hdf5(
                         & (read_starts < region_end)
                         & (read_starts <= region_start if span_full_window else True)
                         & (read_ends >= region_end if span_full_window else True)
+                        & (
+                            read_lengths >= min_read_length_bp
+                            if min_read_length_bp is not None
+                            else True
+                        )
                         & np.isin(read_motifs, motifs)
                         & (read_chromosomes == chrom)
                         & (
@@ -743,12 +1198,11 @@ def read_vectors_from_hdf5(
                             | (ref_strands == region_strand)
                         )
                     )
-                    if subset_parameters is not None:
-                        relevant_read_indices = np.sort(
-                            utils.random_sample(
-                                relevant_read_indices, **subset_parameters
-                            )
-                        )
+                    relevant_read_indices = _subset_indices(
+                        relevant_read_indices,
+                        subset_parameters=subset_parameters,
+                        seed=random_state,  # deterministic subset when random_state given
+                    )
                     read_tuples_raw += list(
                         zip(
                             *(
@@ -766,15 +1220,24 @@ def read_vectors_from_hdf5(
                             [region_start for _ in relevant_read_indices],
                             [region_end for _ in relevant_read_indices],
                             [region_strand for _ in relevant_read_indices],
+                            strict=False,
                         )
                     )
         else:
             regions_dict = None
-            relevant_read_indices = np.flatnonzero(np.isin(read_motifs, motifs))
-            if subset_parameters is not None:
-                relevant_read_indices = np.sort(
-                    utils.random_sample(relevant_read_indices, **subset_parameters)
+            relevant_read_indices = np.flatnonzero(
+                np.isin(read_motifs, motifs)
+                & (
+                    read_lengths >= min_read_length_bp
+                    if min_read_length_bp is not None
+                    else True
                 )
+            )
+            relevant_read_indices = _subset_indices(
+                relevant_read_indices,
+                subset_parameters=subset_parameters,
+                seed=random_state,  # deterministic subset when random_state given
+            )
             read_tuples_raw = list(
                 zip(
                     *(
@@ -792,6 +1255,7 @@ def read_vectors_from_hdf5(
                     [-1 for _ in relevant_read_indices],
                     [-1 for _ in relevant_read_indices],
                     ["." for _ in relevant_read_indices],
+                    strict=False,
                 )
             )
     #  We add region information (start, end, and strand; chromosome is already present!)
@@ -813,25 +1277,56 @@ def read_vectors_from_hdf5(
             for tup in read_tuples_raw
         ]
 
+    # Optional global random sample by unique read name, applied after filtering/loading.
+    if random_sample_n_reads is not None and read_tuples_processed:
+        read_name_idx_pre = readwise_datasets.index("read_name")
+        unique_read_names = np.array(
+            sorted({row[read_name_idx_pre] for row in read_tuples_processed}, key=str)
+        )
+        if random_sample_n_reads < unique_read_names.size:
+            sampled_names = set(
+                # deterministic global read-name sample when random_state given
+                utils.random_sample(
+                    unique_read_names, n=random_sample_n_reads, seed=random_state
+                ).tolist()
+            )
+            read_tuples_processed = [
+                row
+                for row in read_tuples_processed
+                if row[read_name_idx_pre] in sampled_names
+            ]
+
     read_start_idx = readwise_datasets.index("read_start")
     read_end_idx = readwise_datasets.index("read_end")
+    read_name_idx = readwise_datasets.index("read_name")
+    motif_idx = readwise_datasets.index("motif")
+    mod_vector_idx = readwise_datasets.index("mod_vector")
+    val_vector_idx = readwise_datasets.index("val_vector")
 
     if calculate_mod_fractions:
         # Add the MOTIF_mod_fraction entries to the readwise_datasets list for future reference in sorting
         readwise_datasets += [f"{motif}_mod_fraction" for motif in motifs]
-        # dict[read_name][motif]=modified fraction of motif in read, float
-        mod_fractions_by_read_name_by_motif: defaultdict[
-            str, defaultdict[str, float]
-        ] = defaultdict(lambda: defaultdict(lambda: 0.0))
-        for motif in motifs:
-            for read_tuple in read_tuples_processed:
-                if read_tuple[readwise_datasets.index("motif")] == motif:
-                    mod_sum = np.sum(read_tuple[readwise_datasets.index("mod_vector")])
-                    val_sum = np.sum(read_tuple[readwise_datasets.index("val_vector")])
-                    mod_fraction = mod_sum / val_sum if val_sum > 0 else 0
-                    mod_fractions_by_read_name_by_motif[
-                        read_tuple[readwise_datasets.index("read_name")]
-                    ][motif] = mod_fraction
+        # dict[read_name][motif_index]=modified fraction of motif in read, float
+        motif_idx_by_name = {motif: i for i, motif in enumerate(motifs)}
+        mod_fractions_by_read_name: dict[str, list[float]] = {}
+        for read_tuple in read_tuples_processed:
+            motif = read_tuple[motif_idx]
+            motif_fraction_idx = motif_idx_by_name.get(motif)
+            if motif_fraction_idx is None:
+                continue
+            mod_sum = np.sum(read_tuple[mod_vector_idx])
+            val_sum = np.sum(read_tuple[val_vector_idx])
+            mod_fraction = mod_sum / val_sum if val_sum > 0 else 0
+            read_name = read_tuple[read_name_idx]
+            if read_name not in mod_fractions_by_read_name:
+                mod_fractions_by_read_name[read_name] = [0.0] * len(motifs)
+            mod_fractions_by_read_name[read_name][motif_fraction_idx] = mod_fraction
+
+        empty_mod_fractions = tuple(0.0 for _ in motifs)
+        mod_fractions_by_read_name_tup = {
+            read_name: tuple(mod_fractions)
+            for read_name, mod_fractions in mod_fractions_by_read_name.items()
+        }
 
         read_tuples_all = []
         for read_tuple in read_tuples_processed:
@@ -839,11 +1334,8 @@ def read_vectors_from_hdf5(
             read_tuples_all.append(
                 tuple(val for val in read_tuple)
                 + (read_length,)
-                + tuple(
-                    mod_frac
-                    for mod_frac in mod_fractions_by_read_name_by_motif[
-                        read_tuple[readwise_datasets.index("read_name")]
-                    ].values()
+                + mod_fractions_by_read_name_tup.get(
+                    read_tuple[read_name_idx], empty_mod_fractions
                 )
             )
     else:
@@ -919,6 +1411,8 @@ def readwise_binary_modification_arrays(
     quiet: bool = True,  # currently unused; change to default False when pbars are implemented
     cores: int | None = None,  # currently unused
     subset_parameters: dict | None = None,
+    random_sample_n_reads: int | None = None,
+    min_read_length_bp: int | None = None,
 ) -> tuple[list[np.ndarray], np.ndarray[int], np.ndarray[str], dict | None]:
     """
     Primarily designed as a helper function for single-read plotting, but can be used by a user.
@@ -969,6 +1463,8 @@ def readwise_binary_modification_arrays(
         subset_parameters: Parameters to pass to the utils.random_sample() method, to subset the
             reads to be returned. If not None, at least one of n or frac must be provided. The array
             parameter should not be provided here.
+        random_sample_n_reads: Optional global random sample size by unique read name.
+        min_read_length_bp: Optional minimum read length filter (bp) applied before loading vectors.
 
     Returns:
         Returns a tuple of three arrays, of length (N_READS * len(mod_names)), and a dict of regions.
@@ -991,6 +1487,11 @@ def readwise_binary_modification_arrays(
             window_size=window_size,
             single_strand=single_strand,
             sort_by=sort_by,
+            quiet=quiet,
+            cores=cores,
+            subset_parameters=subset_parameters,
+            random_sample_n_reads=random_sample_n_reads,
+            min_read_length_bp=min_read_length_bp,
         )
         read_name_index = datasets.index("read_name")
         mod_vector_index = datasets.index("mod_vector")
@@ -999,6 +1500,14 @@ def readwise_binary_modification_arrays(
         region_end_index = datasets.index("region_end")
         read_start_index = datasets.index("read_start")
         region_strand_index = datasets.index("region_strand")
+
+        if len(sorted_read_data_converted) == 0:
+            return (
+                np.array([], dtype=int),
+                np.array([], dtype=int),
+                np.array([], dtype=str),
+                regions_dict,
+            )
 
         # Check this .h5 file was created with a threshold, i.e. that the mod calls are binarized
         if thresh is None:
@@ -1013,18 +1522,26 @@ def readwise_binary_modification_arrays(
         mod_coords_list = []
         motifs_list = []
 
-        read_names = np.array(
-            [read_data[read_name_index] for read_data in sorted_read_data_converted]
-        )
-        # TODO: handle the case where a read shows up in more than one different region
-        _, unique_first_indices = np.unique(read_names, return_index=True)
-        unique_in_order = read_names[np.sort(unique_first_indices)]
-        string_to_int = {
-            read_name: index for index, read_name in enumerate(unique_in_order)
-        }
-        read_ints = np.array([string_to_int[read_name] for read_name in read_names])
+        read_ids_by_region_key: dict[tuple[str, int, int, str], int] = {}
+        read_ints = np.empty(len(sorted_read_data_converted), dtype=int)
+        next_read_int = 0
+        for idx, read_data in enumerate(sorted_read_data_converted):
+            read_key = (
+                read_data[read_name_index],
+                read_data[region_start_index],
+                read_data[region_end_index],
+                read_data[region_strand_index],
+            )
+            read_int = read_ids_by_region_key.get(read_key)
+            if read_int is None:
+                read_int = next_read_int
+                read_ids_by_region_key[read_key] = read_int
+                next_read_int += 1
+            read_ints[idx] = read_int
 
-        for read_int, read_data in zip(read_ints, sorted_read_data_converted):
+        for read_int, read_data in zip(
+            read_ints, sorted_read_data_converted, strict=False
+        ):
             if thresh is None:
                 mod_pos_in_read = np.flatnonzero(read_data[mod_vector_index])
             else:

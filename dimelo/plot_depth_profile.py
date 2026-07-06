@@ -89,8 +89,9 @@ def by_modification(
 
 def by_regions(
     mod_file_name: str | Path,
-    regions_list: list[str | Path | list[str | Path]],
-    motif: str,
+    regions_list: list[str | Path | list[str | Path]] | None = None,
+    motif: str | None = None,
+    regions: list[str | Path | list[str | Path]] | None = None,
     sample_names: list[str] | None = None,
     **kwargs,
 ) -> Axes:
@@ -101,14 +102,28 @@ def by_regions(
 
     See plot_depth_profile for details.
     """
-    if sample_names is None:
-        sample_names = regions_list
+    if regions is not None:
+        if regions_list is not None and regions_list != regions:
+            raise ValueError(
+                "Pass either regions_list or regions to by_regions, not both with different values."
+            )
+        regions_list = regions
+    if regions_list is None:
+        raise ValueError("by_regions requires regions_list (or alias regions).")
+    if motif is None:
+        raise ValueError("by_regions requires motif.")
+
+    sample_names_for_plot = (
+        sample_names
+        if sample_names is not None
+        else [str(region) for region in regions_list]
+    )
     n_beds = len(regions_list)
     return plot_depth_profile(
         mod_file_names=[mod_file_name] * n_beds,
         regions_list=regions_list,
         motifs=[motif] * n_beds,
-        sample_names=[f"{sample_name} depth" for sample_name in sample_names],
+        sample_names=[f"{sample_name} depth" for sample_name in sample_names_for_plot],
         **kwargs,
     )
 
@@ -127,14 +142,17 @@ def by_dataset(
 
     See plot_depth_profile for details.
     """
-    if sample_names is None:
-        sample_names = mod_file_names
+    sample_names_for_plot = (
+        sample_names
+        if sample_names is not None
+        else [str(mod_file) for mod_file in mod_file_names]
+    )
     n_mod_files = len(mod_file_names)
     return plot_depth_profile(
         mod_file_names=mod_file_names,
         regions_list=[regions] * n_mod_files,
         motifs=[motif] * n_mod_files,
-        sample_names=[f"{sample_name} depth" for sample_name in sample_names],
+        sample_names=[f"{sample_name} depth" for sample_name in sample_names_for_plot],
         **kwargs,
     )
 
@@ -173,12 +191,12 @@ def get_depth_profiles(
     """
     if not utils.check_len_equal(mod_file_names, regions_list, motifs):
         raise ValueError("Unequal number of inputs")
-    # TODO: redefinition error; still need to figure out how to do this elegantly in a way mypy likes
-    # dimelo/plot_depth_profile.py:53: error: Item "str" of "str | Path" has no attribute "suffix"  [union-attr]
-    mod_file_names = [Path(fn) for fn in mod_file_names]
+    mod_file_paths = [Path(fn) for fn in mod_file_names]
 
     trace_vectors = []
-    for mod_file, regions, motif in zip(mod_file_names, regions_list, motifs):
+    for mod_file, regions, motif in zip(
+        mod_file_paths, regions_list, motifs, strict=False
+    ):
         match mod_file.suffix:
             case ".gz":
                 _, valid_base_counts = load_processed.pileup_vectors_from_bedmethyl(
@@ -229,15 +247,22 @@ def make_depth_profile_plot(
     """
     if not utils.check_len_equal(trace_vectors, sample_names):
         raise ValueError("Unequal number of inputs")
+    x_axis_label = kwargs.pop("x_label", "Position (bp)")
+    legend_title = kwargs.pop("legend_title", "Mod, index")
+    vector_len = len(trace_vectors[0])
+    half = vector_len // 2
+    if vector_len % 2 == 0:
+        indep_vector = np.arange(-half, half)
+    else:
+        indep_vector = np.arange(-half, half + 1)
     axes = utils.line_plot(
-        indep_vector=np.arange(
-            -len(trace_vectors[0]) // 2,
-            len(trace_vectors[0]) // 2 + len(trace_vectors[0]) % 2,
-        ),
-        indep_name="pos",
+        indep_vector=indep_vector,
+        indep_name="position_bp",
         dep_vectors=trace_vectors,
         dep_names=sample_names,
         y_label="per strand reads\nwith motif and mod info",
+        legend_title=legend_title,
         **kwargs,
     )
+    axes.set_xlabel(x_axis_label)
     return axes

@@ -1,9 +1,106 @@
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from matplotlib.axes import Axes
 
-from . import load_processed, utils
+from . import load_processed, plotting, utils
+
+
+def _looks_like_motif_spec(label: str) -> bool:
+    parts = str(label).split(",")
+    if len(parts) < 2:
+        return False
+    return bool(parts[0]) and parts[1].strip().isdigit()
+
+
+def _legacy_aggregate_axis_spec(
+    *,
+    window_size: int,
+    relative: bool,
+    regions_5to3prime: bool,
+) -> plotting.AxisSpec:
+    return plotting.AxisSpec(
+        orientation="region_5to3" if regions_5to3prime else "genomic",
+        coordinate_mode="fixed_window",
+        anchor="center" if relative else "absolute",
+        upstream_bp=window_size,
+        downstream_bp=window_size,
+    )
+
+
+def _legacy_aggregate_profile_table(
+    trace_vectors: list[np.ndarray],
+    sample_names: list[str],
+) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+
+    for sample_name, trace_vector in zip(sample_names, trace_vectors, strict=True):
+        positions = np.arange(
+            -(len(trace_vector) // 2),
+            len(trace_vector) // 2 + len(trace_vector) % 2,
+        )
+        for position, value in zip(positions, trace_vector, strict=True):
+            rows.append(
+                {
+                    "sample_name": sample_name,
+                    "position": float(position),
+                    "anchor": 0.0,
+                    "region_strand": "+",
+                    "value": float(value),
+                }
+            )
+
+    return pd.DataFrame(rows)
+
+
+def _prepare_legacy_aggregate_profile_vectors(
+    prepared_table: pd.DataFrame,
+    *,
+    sample_names: list[str],
+) -> list[np.ndarray]:
+    prepared_vectors: list[np.ndarray] = []
+    for sample_name in sample_names:
+        sample_table = prepared_table.loc[
+            prepared_table["sample_name"] == sample_name
+        ].copy()
+        sample_table = sample_table.sort_values("plot_x")
+        prepared_vectors.append(sample_table["value"].to_numpy())
+    return prepared_vectors
+
+
+def _route_legacy_aggregate_axis_through_shared_core(
+    *,
+    window_size: int,
+    relative: bool,
+    regions_5to3prime: bool,
+    trace_vectors: list[np.ndarray],
+    sample_names: list[str],
+) -> list[np.ndarray]:
+    axis = _legacy_aggregate_axis_spec(
+        window_size=window_size,
+        relative=relative,
+        regions_5to3prime=regions_5to3prime,
+    )
+    aggregation = plotting.AggregationSpec()
+    aggregate_table = _legacy_aggregate_profile_table(
+        trace_vectors,
+        sample_names,
+    )
+    prepared_payload = plotting.prepare_aggregate_plot_data(
+        aggregate_table,
+        plot_family="aggregate_profile",
+        axis=axis,
+        aggregation=aggregation,
+        value_column="value",
+        position_column="position",
+        anchor_column="anchor",
+        region_strand_column="region_strand",
+    )
+    return _prepare_legacy_aggregate_profile_vectors(
+        prepared_payload["plot_table"],
+        sample_names=sample_names,
+    )
 
 
 def plot_enrichment_profile(
@@ -28,11 +125,6 @@ def plot_enrichment_profile(
 
     This is the most flexible method for enrichment profile plotting. For most use cases, consider
     using one of the plot_enrichment_profile.by_* methods.
-
-    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
-    TODO: Should the more restrictive meta versions allow *args, or only **kwargs?
-    No, we want to be able to pass kwargs down to the line plotter, I think. Especially if we swap it out for one that takes more different standard args.
-    TODO: It's mildly confusing that there are required args that are only seen as *args or **kwargs in the more restrictive meta versions... But this is so much cleaner...
 
     Args:
         mod_file_names: list of paths to modified base data files
@@ -65,6 +157,14 @@ def plot_enrichment_profile(
         smooth_window=smooth_window,
         quiet=quiet,
         cores=cores,
+    )
+
+    trace_vectors = _route_legacy_aggregate_axis_through_shared_core(
+        window_size=window_size,
+        relative=relative,
+        regions_5to3prime=regions_5to3prime,
+        trace_vectors=trace_vectors,
+        sample_names=sample_names,
     )
 
     if relative:
@@ -112,21 +212,11 @@ def by_modification(
     )
 
 
-"""
-TODO: Re-assignment issue:
-dimelo/plot_enrichment_profile.py:142: error: Incompatible types in assignment (expression has type "list[str | Path | list[str | Path]]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment_profile.py:148: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-dimelo/plot_enrichment_profile.py:168: error: Incompatible types in assignment (expression has type "list[str | Path]", variable has type "list[str] | None")  [assignment]
-dimelo/plot_enrichment_profile.py:174: error: Argument "sample_names" to "plot_enrichment_profile" has incompatible type "list[str] | None"; expected "list[str]"  [arg-type]
-
-If sample names is None we assign it non-None values, so it's not clear what the problem is to me. We could make an intermediate dummy variable I guess? If that is the complaint?
-"""
-
-
 def by_regions(
     mod_file_name: str | Path,
-    regions_list: list[str | Path | list[str | Path]],
-    motif: str,
+    regions_list: list[str | Path | list[str | Path]] | None = None,
+    motif: str | None = None,
+    regions: list[str | Path | list[str | Path]] | None = None,
     sample_names: list[str] | None = None,
     **kwargs,
 ) -> Axes:
@@ -137,14 +227,28 @@ def by_regions(
 
     See plot_enrichment_profile for details.
     """
-    if sample_names is None:
-        sample_names = regions_list
+    if regions is not None:
+        if regions_list is not None and regions_list != regions:
+            raise ValueError(
+                "Pass either regions_list or regions to by_regions, not both with different values."
+            )
+        regions_list = regions
+    if regions_list is None:
+        raise ValueError("by_regions requires regions_list (or alias regions).")
+    if motif is None:
+        raise ValueError("by_regions requires motif.")
+
+    sample_names_for_plot = (
+        sample_names
+        if sample_names is not None
+        else [str(region) for region in regions_list]
+    )
     n_beds = len(regions_list)
     return plot_enrichment_profile(
         mod_file_names=[mod_file_name] * n_beds,
         regions_list=regions_list,
         motifs=[motif] * n_beds,
-        sample_names=sample_names,
+        sample_names=sample_names_for_plot,
         **kwargs,
     )
 
@@ -163,14 +267,17 @@ def by_dataset(
 
     See plot_enrichment_profile for details.
     """
-    if sample_names is None:
-        sample_names = mod_file_names
+    sample_names_for_plot = (
+        sample_names
+        if sample_names is not None
+        else [str(mod_file) for mod_file in mod_file_names]
+    )
     n_mod_files = len(mod_file_names)
     return plot_enrichment_profile(
         mod_file_names=mod_file_names,
         regions_list=[regions] * n_mod_files,
         motifs=[motif] * n_mod_files,
-        sample_names=sample_names,
+        sample_names=sample_names_for_plot,
         **kwargs,
     )
 
@@ -192,10 +299,6 @@ def get_enrichment_profiles(
     This helper function can be useful during plot prototyping, when repeatedly building plots from the same data.
     Its outputs can be passed as the first argument to make_enrichment_profile_plot().
 
-    TODO: I feel like this should be able to take in data directly as vectors/other datatypes, not just read from files.
-    TODO: Style-wise, is it cleaner to have it be a match statement or calling a method from a global dict? Cleaner here with a dict, cleaner overall with the match statements?
-    TODO: I think it's reasonable for smoothing min_periods to be always set to 1 for this method, as it's a visualization tool, not quantitative. Is this unreasonable?
-
     Args:
         mod_file_names: list of paths to modified base data files
         bed_file_names: list of paths to bed files specifying centered equal-length regions
@@ -213,12 +316,12 @@ def get_enrichment_profiles(
     """
     if not utils.check_len_equal(mod_file_names, regions_list, motifs):
         raise ValueError("Unequal number of inputs")
-    # TODO: redefinition error; still need to figure out how to do this elegantly in a way mypy likes
-    # dimelo/plot_enrichment_profile.py:53: error: Item "str" of "str | Path" has no attribute "suffix"  [union-attr]
-    mod_file_names = [Path(fn) for fn in mod_file_names]
+    mod_file_paths = [Path(fn) for fn in mod_file_names]
 
     trace_vectors = []
-    for mod_file, regions, motif in zip(mod_file_names, regions_list, motifs):
+    for mod_file, regions, motif in zip(
+        mod_file_paths, regions_list, motifs, strict=False
+    ):
         match mod_file.suffix:
             case ".gz":
                 modified_base_counts, valid_base_counts = (
@@ -281,6 +384,14 @@ def make_enrichment_profile_plot(
     """
     if not utils.check_len_equal(trace_vectors, sample_names):
         raise ValueError("Unequal number of inputs")
+    legend_title = kwargs.pop("legend_title", None)
+    if (
+        legend_title is None
+        and sample_names
+        and all(_looks_like_motif_spec(name) for name in sample_names)
+    ):
+        legend_title = "Modifications (motif, mod_index)"
+    resolved_legend_title = "variable" if legend_title is None else str(legend_title)
     axes = utils.line_plot(
         indep_vector=np.arange(
             offset_center - len(trace_vectors[0]) // 2,
@@ -290,6 +401,7 @@ def make_enrichment_profile_plot(
         dep_vectors=trace_vectors,
         dep_names=sample_names,
         y_label="fraction modified bases",
+        legend_title=resolved_legend_title,
         **kwargs,
     )
     return axes

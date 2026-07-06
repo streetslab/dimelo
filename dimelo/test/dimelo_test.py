@@ -62,12 +62,12 @@ class TestParseToPlot(DiMeLoParsingTestCase):
                 # Read and compare file contents
                 file1_contents = f1.read()
                 file2_contents = f2.read()
-                assert (
-                    file1_contents == file2_contents
-                ), f"{test_case}: {pileup_bed} does not match {pileup_target}."
-            assert filecmp.cmp(
-                regions_processed, regions_target, shallow=False
-            ), f"{test_case}: {regions_processed} does not match {regions_target}."
+                assert file1_contents == file2_contents, (
+                    f"{test_case}: {pileup_bed} does not match {pileup_target}."
+                )
+            assert filecmp.cmp(regions_processed, regions_target, shallow=False), (
+                f"{test_case}: {regions_processed} does not match {regions_target}."
+            )
         else:
             print(f"{test_case} skipped for pileup.")
 
@@ -119,13 +119,13 @@ class TestParseToPlot(DiMeLoParsingTestCase):
                             for target_item in target_dataset
                         ], f"{test_case}: {dataset} does not match."
                     else:
-                        assert (
-                            test_dataset == target_dataset
-                        ), f"{test_case}: {dataset} does not match."
+                        assert test_dataset == target_dataset, (
+                            f"{test_case}: {dataset} does not match."
+                        )
             # assert os.path.getsize(extract_h5) == os.path.getsize(extract_target), f"{test_case}: {extract_h5} does not match {extract_target}."
-            assert filecmp.cmp(
-                regions_processed, regions_target, shallow=False
-            ), f"{test_case}: {regions_processed} does not match {regions_target}."
+            assert filecmp.cmp(regions_processed, regions_target, shallow=False), (
+                f"{test_case}: {regions_processed} does not match {regions_target}."
+            )
         else:
             print(f"{test_case} skipped for extract.")
 
@@ -159,9 +159,9 @@ class TestParseToPlot(DiMeLoParsingTestCase):
                     motif=motif,
                     **kwargs_counts_from_bedmethyl,
                 )
-                assert (
-                    actual == expected
-                ), f"{test_case}: Counts for motif {motif} are not equal"
+                assert actual == expected, (
+                    f"{test_case}: Counts for motif {motif} are not equal"
+                )
 
             kwargs_vectors_from_bedmethyl = filter_kwargs_for_func(
                 dm.load_processed.pileup_vectors_from_bedmethyl, kwargs
@@ -173,16 +173,16 @@ class TestParseToPlot(DiMeLoParsingTestCase):
                     motif=motif,
                     **kwargs_vectors_from_bedmethyl,
                 )
-                assert len(expected_tuple) == len(
-                    actual_tuple
-                ), f"{test_case}: Unexpected number of arrays returned for {motif}"
+                assert len(expected_tuple) == len(actual_tuple), (
+                    f"{test_case}: Unexpected number of arrays returned for {motif}"
+                )
 
-                for expected, actual in zip(expected_tuple, actual_tuple):
+                for expected, actual in zip(expected_tuple, actual_tuple, strict=False):
                     # TODO: The following was the original assertion error message, but it was not written in a functional way. Find a way to make it work as intended.
                     # assert np.array_equal(expected, actual), f"{test_case}: Arrays for motif {motif} are not equal: expected {value} but got {actual[key]}"
-                    assert np.array_equal(
-                        expected, actual
-                    ), f"{test_case}: Arrays for motif {motif} are not equal."
+                    assert np.array_equal(expected, actual), (
+                        f"{test_case}: Arrays for motif {motif} are not equal."
+                    )
         else:
             print(
                 f"{test_case} loading skipped for pileup_load_plot, continuing to plotting."
@@ -277,13 +277,13 @@ mismatch values expected {value[np.where(value != actual[key])]} vs actual {actu
 {value[np.where(value != actual[key])[0]]} vs {actual[key][np.where(value != actual[key])[0]]}.
                     """
                 elif isinstance(value, (str, int, bool)):
-                    assert (
-                        actual[key] == expected[key]
-                    ), f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
+                    assert actual[key] == expected[key], (
+                        f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
+                    )
                 else:
-                    assert np.isclose(
-                        actual[key], value, atol=1e-4
-                    ), f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
+                    assert np.isclose(actual[key], value, atol=1e-4), (
+                        f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
+                    )
         else:
             print("{test_case} skipped for read_vectors_from_hdf5.")
         kwargs_plot_reads_plot_reads = filter_kwargs_for_func(
@@ -301,9 +301,9 @@ mismatch values expected {value[np.where(value != actual[key])]} vs actual {actu
                     mod_file_name=extract_h5,
                     **kwargs_plot_reads_plot_reads,
                 )
-            assert "No threshold has been applied" in str(
-                excinfo.value
-            ), f"{test_case}: unexpected exception {excinfo.value}"
+            assert "No threshold has been applied" in str(excinfo.value), (
+                f"{test_case}: unexpected exception {excinfo.value}"
+            )
             # providing a threshold should be enough to run plot_reads.plot_reads without an error
             kwargs_plot_reads_plot_reads["thresh"] = 0.75
             ax = dm.plot_reads.plot_reads(
@@ -384,9 +384,9 @@ class TestLoadProcessed:
                     motif=motif,
                     **kwargs_counts_from_bedmethyl,
                 )
-                assert (
-                    actual == expected
-                ), f"{test_case}: Counts for motif {motif} are not equal"
+                assert actual == expected, (
+                    f"{test_case}: Counts for motif {motif} are not equal"
+                )
         else:
             print(f"{test_case} skipped for pileup_counts_from_bedmethyl.")
 
@@ -407,14 +407,14 @@ class TestLoadProcessed:
                     motif=motif,
                     **kwargs_vectors_from_bedmethyl,
                 )
-                assert len(expected_tuple) == len(
-                    actual_tuple
-                ), f"{test_case}: Unexpected number of arrays returned for {motif}"
+                assert len(expected_tuple) == len(actual_tuple), (
+                    f"{test_case}: Unexpected number of arrays returned for {motif}"
+                )
 
-                for expected, actual in zip(expected_tuple, actual_tuple):
-                    assert np.array_equal(
-                        expected, actual
-                    ), f"{test_case}: Arrays for motif {motif} are not equal"
+                for expected, actual in zip(expected_tuple, actual_tuple, strict=False):
+                    assert np.array_equal(expected, actual), (
+                        f"{test_case}: Arrays for motif {motif} are not equal"
+                    )
         else:
             print(f"{test_case} skipped for pileup_vectors_from_bedmethyl.")
 
@@ -450,13 +450,13 @@ mismatch values expected {value[np.where(value != actual[key])]} vs actual {actu
 {value[np.where(value != actual[key])[0]]} vs {actual[key][np.where(value != actual[key])[0]]}.
                     """
                 elif isinstance(value, (str, int, bool)):
-                    assert (
-                        actual[key] == expected[key]
-                    ), f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
+                    assert actual[key] == expected[key], (
+                        f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
+                    )
                 else:
-                    assert np.isclose(
-                        actual[key], value, atol=1e-4
-                    ), f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
+                    assert np.isclose(actual[key], value, atol=1e-4), (
+                        f"{test_case}: Values for {key} are not equal: expected {value} but got {actual[key]}."
+                    )
         else:
             print("{test_case} skipped for read_vectors_from_hdf5.")
 
@@ -560,9 +560,9 @@ class TestPlotEnrichment:
                     sample_names=["label" for _ in regions_list],
                     **kwargs_plot_enrichment_plot_enrichment,
                 )
-                assert isinstance(
-                    ax, Axes
-                ), f"{test_case}: plotting failed for {motif}."
+                assert isinstance(ax, Axes), (
+                    f"{test_case}: plotting failed for {motif}."
+                )
         else:
             print(f"{test_case} skipped for plot_enrichment.plot_enrichment.")
 
@@ -589,9 +589,9 @@ class TestPlotEnrichment:
                     sample_names=["label" for _ in regions_list],
                     **kwargs_plot_enrichment_by_regions,
                 )
-                assert isinstance(
-                    ax, Axes
-                ), f"{test_case}: plotting failed for {motif}."
+                assert isinstance(ax, Axes), (
+                    f"{test_case}: plotting failed for {motif}."
+                )
         else:
             print(f"{test_case} skipped for plot_enrichment.by_regions.")
 
@@ -720,9 +720,9 @@ class TestPlotEnrichmentProfile:
                     sample_names=["label" for _ in regions_list],
                     **kwargs_plot_enrichment_profile_plot_enrichment_profile,
                 )
-                assert isinstance(
-                    ax, Axes
-                ), f"{test_case}: plotting failed for {motif}."
+                assert isinstance(ax, Axes), (
+                    f"{test_case}: plotting failed for {motif}."
+                )
         else:
             print(
                 f"{test_case} skipped for plot_enrichment_profile.plot_enrichment_profile."
@@ -753,9 +753,9 @@ class TestPlotEnrichmentProfile:
                     sample_names=["label" for _ in regions_list],
                     **kwargs_plot_enrichment_profile_by_regions,
                 )
-                assert isinstance(
-                    ax, Axes
-                ), f"{test_case}: plotting failed for {motif}."
+                assert isinstance(ax, Axes), (
+                    f"{test_case}: plotting failed for {motif}."
+                )
         else:
             print(f"{test_case} skipped for plot_enrichment_profile.by_regions.")
 
@@ -886,9 +886,9 @@ class TestPlotDepthProfile:
                     sample_names=["label" for _ in regions_list],
                     **kwargs_plot_depth_profile_plot_depth_profile,
                 )
-                assert isinstance(
-                    ax, Axes
-                ), f"{test_case}: plotting failed for {motif}."
+                assert isinstance(ax, Axes), (
+                    f"{test_case}: plotting failed for {motif}."
+                )
         else:
             print(f"{test_case} skipped for plot_depth_profile.plot_depth_profile.")
 
@@ -917,9 +917,9 @@ class TestPlotDepthProfile:
                     sample_names=["label" for _ in regions_list],
                     **kwargs_plot_depth_profile_by_regions,
                 )
-                assert isinstance(
-                    ax, Axes
-                ), f"{test_case}: plotting failed for {motif}."
+                assert isinstance(ax, Axes), (
+                    f"{test_case}: plotting failed for {motif}."
+                )
         else:
             print(f"{test_case} skipped for plot_depth_profile.by_regions.")
 
@@ -1046,9 +1046,9 @@ class TestPlotDepthHistogram:
                     sample_names=["label" for _ in regions_list],
                     **kwargs_plot_depth_histogram_plot_depth_histogram,
                 )
-                assert isinstance(
-                    ax, Axes
-                ), f"{test_case}: plotting failed for {motif}."
+                assert isinstance(ax, Axes), (
+                    f"{test_case}: plotting failed for {motif}."
+                )
         else:
             print(f"{test_case} skipped for plot_depth_histogram.plot_depth_histogram.")
 
@@ -1077,9 +1077,9 @@ class TestPlotDepthHistogram:
                     sample_names=["label" for _ in regions_list],
                     **kwargs_plot_depth_histogram_by_regions,
                 )
-                assert isinstance(
-                    ax, Axes
-                ), f"{test_case}: plotting failed for {motif}."
+                assert isinstance(ax, Axes), (
+                    f"{test_case}: plotting failed for {motif}."
+                )
         else:
             print(f"{test_case} skipped for plot_depth_histogram.by_regions.")
 
@@ -1168,9 +1168,9 @@ class TestPlotReads:
                         mod_file_name=results["extract"][0],
                         **kwargs_plot_reads_plot_reads,
                     )
-                assert "No threshold has been applied" in str(
-                    excinfo.value
-                ), f"{test_case}: unexpected exception {excinfo.value}"
+                assert "No threshold has been applied" in str(excinfo.value), (
+                    f"{test_case}: unexpected exception {excinfo.value}"
+                )
                 # providing a threshold should be enough to run plot_reads.plot_reads without an error
                 kwargs_plot_reads_plot_reads["thresh"] = 0.75
                 ax = dm.plot_reads.plot_reads(
@@ -1208,9 +1208,9 @@ class TestPlotReadBrowser:
                     region=kwargs["regions"],
                     **kwargs_plot_read_browser,
                 )
-                assert isinstance(
-                    fig, plotly.graph_objs.Figure
-                ), f"{test_case}: plotting failed."
+                assert isinstance(fig, plotly.graph_objs.Figure), (
+                    f"{test_case}: plotting failed."
+                )
             else:
                 with pytest.raises(ValueError) as excinfo:
                     fig = dm.plot_read_browser.plot_read_browser(
@@ -1222,22 +1222,23 @@ class TestPlotReadBrowser:
                     isinstance(kwargs["regions"], list)
                     or Path(kwargs["regions"]).suffix == ".bed"
                 ) and kwargs["thresh"] is None:
-                    assert (
-                        "Invalid region" in str(excinfo.value)
-                    ), f"{test_case}: unexpected exception for no-threshold bad-region case {excinfo.value}"
+                    assert "Invalid region" in str(excinfo.value), (
+                        f"{test_case}: unexpected exception for no-threshold bad-region case {excinfo.value}"
+                    )
                 elif (
                     kwargs["thresh"] is not None
                     and not isinstance(kwargs["regions"], list)
                     and Path(kwargs["regions"]).suffix != ".bed"
                 ):
-                    assert (
-                        "A threshold has been applied" in str(excinfo.value)
-                    ), f"{test_case}: unexpected exception thresholded valid-region case {excinfo.value}"
+                    assert "A threshold has been applied" in str(excinfo.value), (
+                        f"{test_case}: unexpected exception thresholded valid-region case {excinfo.value}"
+                    )
                 else:
-                    assert (
-                        "A threshold has been applied" in str(excinfo.value)
-                        or "Invalid region" in str(excinfo.value)
-                    ), f"{test_case}: unexpected exception thresholded bad-region case {excinfo.value}"
+                    assert "A threshold has been applied" in str(
+                        excinfo.value
+                    ) or "Invalid region" in str(excinfo.value), (
+                        f"{test_case}: unexpected exception thresholded bad-region case {excinfo.value}"
+                    )
 
         else:
             print(f"{test_case} skipped for test_unit__plot_read_browser")

@@ -1,5 +1,8 @@
+import contextlib
 import multiprocessing
+import os
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -42,12 +45,51 @@ DEFAULT_COLORSCALES.update([(k, ["white", v]) for k, v in DEFAULT_COLORS.items()
 rng = np.random.default_rng()
 
 
+def _parse_positive_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    digits = []
+    for char in text:
+        if char.isdigit():
+            digits.append(char)
+        else:
+            break
+    if not digits:
+        return None
+    parsed = int("".join(digits))
+    return parsed if parsed > 0 else None
+
+
+def _effective_cpu_count() -> int:
+    candidates: list[int] = []
+
+    with contextlib.suppress(Exception):
+        candidates.append(int(multiprocessing.cpu_count()))
+
+    try:
+        affinity = os.sched_getaffinity(0)
+        if affinity:
+            candidates.append(len(affinity))
+    except Exception:
+        pass
+
+    slurm_cpus_per_task = _parse_positive_int(os.environ.get("SLURM_CPUS_PER_TASK"))
+    if slurm_cpus_per_task is not None:
+        candidates.append(slurm_cpus_per_task)
+
+    if not candidates:
+        return 1
+    return max(1, min(candidates))
+
+
 def cores_to_run(cores):
-    cores_avail = multiprocessing.cpu_count()
-    if cores is None or cores > cores_avail:
+    cores_avail = _effective_cpu_count()
+    if cores is None:
         return cores_avail
-    else:
-        return cores
+    return max(1, min(int(cores), cores_avail))
 
 
 class ParsedMotif:
@@ -133,7 +175,7 @@ def process_chunks_from_regions_dict(
 
 
 def regions_dict_from_input(
-    regions: str | Path | list[str | Path] | None = None,
+    regions: str | Path | Sequence[str | Path] | None = None,
     window_size: int | None = None,
 ) -> dict:
     """
@@ -152,7 +194,7 @@ def regions_dict_from_input(
             "Invalid window_size. To disable windowing, set window_size to None or do not pass a value (the default is None)."
         )
 
-    if isinstance(regions, list):
+    if isinstance(regions, Sequence) and not isinstance(regions, (str, Path)):
         for region in regions:
             add_region_to_dict(region, window_size, regions_dict)
     else:
@@ -325,6 +367,7 @@ def line_plot(
     dep_vectors: list[np.ndarray],
     dep_names: list[str],
     y_label: str,
+    legend_title: str = "variable",
     **kwargs,
 ) -> Axes:
     """
@@ -333,14 +376,13 @@ def line_plot(
     Takes in one independent vector and arbitrarily many dependent vectors. Plots all dependent vectors on the same axes against the same dependent vector.
     All vectors must be of equal length.
 
-    TODO: Right now, this always generates a legend with the title "variable". I could add a parameter to specify this (by passing the var_name argument to pd.DataFrame.melt), but then that percolates upwards to other methods. How to do this cleanly?
-
     Args:
         indep_vector: parallel with each entry in dep_vectors; independent variable values shared across each overlayed line
         indep_name: name of independent variable; set as x axis label
         dep_vectors: outer list parallel with dep_names; each inner vector parallel with indep_vector; dependent variable values for each overlayed line
         dep_names: parallel with dep_vectors; names of each overlayed line; set as legend entries
         y_label: y-axis label
+        legend_title: legend heading shown for the overlaid traces
         kwargs: other keyword parameters passed through to seaborn.lineplot
 
     Returns:
@@ -350,11 +392,16 @@ def line_plot(
         ValueError: raised if any vectors are of unequal length
     """
     # construct dict of {vector_name: vector}, including the x vector using dict union operations
-    data_dict = {indep_name: indep_vector} | dict(zip(dep_names, dep_vectors))
+    data_dict = {indep_name: indep_vector} | dict(
+        zip(dep_names, dep_vectors, strict=False)
+    )
+    hue_column = legend_title if legend_title else "variable"
     # construct long-form data table for plotting
     try:
         data_table = pd.DataFrame(data_dict).melt(
-            id_vars=indep_name, value_name=y_label
+            id_vars=indep_name,
+            value_name=y_label,
+            var_name=hue_column,
         )
     except ValueError as e:
         raise ValueError(
@@ -362,7 +409,7 @@ def line_plot(
         ) from e
     # plot lines
     return sns.lineplot(
-        data=data_table, x=indep_name, y=y_label, hue="variable", **kwargs
+        data=data_table, x=indep_name, y=y_label, hue=hue_column, **kwargs
     )
 
 
@@ -456,6 +503,7 @@ def random_sample(
     n: int | None = None,
     frac: float | None = None,
     replace: bool = False,
+    seed: int | np.random.Generator | None = None,
     # shuffle: bool = True,
 ):
     """
@@ -469,6 +517,9 @@ def random_sample(
         n: Number of elements to return; mutually exclusive with frac
         frac: Fraction of elements to return; mutually exclusive with n
         replace: When True, sample with replacement
+        seed: Optional source of randomness for a reproducible draw. Accepts an int seed
+            or a pre-built numpy Generator. When None (default), the module-level unseeded
+            ``rng`` is used, preserving the historical nondeterministic behavior.
 
     Return: the requested random subset of the given array
 
@@ -482,7 +533,15 @@ def random_sample(
     if size is None:
         assert frac is not None
         size = round(frac * len(array))
-    return rng.choice(
+    # Reproducibility fix: use a caller-supplied seed/Generator when given, otherwise
+    # fall back to the module-level unseeded rng (backward-compatible default).
+    if seed is None:
+        sampler = rng
+    elif isinstance(seed, np.random.Generator):
+        sampler = seed
+    else:
+        sampler = np.random.default_rng(seed)
+    return sampler.choice(
         a=array,
         size=size,
         replace=replace,

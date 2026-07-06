@@ -81,21 +81,17 @@ def pileup_to_bigwig(
             # count up the number of rows, for progress tracking, and pull out the last row so as to grab the length of the chromosome
             # note: the tqdm progress bar slows things down by about 33%, which was deemed better at the time of writing this than
             # 90 seconds without any status updates
-            rows_count, last_row = list(
-                tail(
-                    n=1,
-                    iterable=enumerate(
-                        tqdm(
-                            tabix.fetch(contig),
-                            mininterval=1.0,
-                            desc=f"Indexing {contig}.",
-                            leave=False,
-                        )
-                    ),
-                )
-            )[0]
-            fields = last_row.split("\t")
-            max_coord = int(fields[2])
+            rows_count = 0
+            max_coord = 0
+            for row in tqdm(
+                tabix.fetch(contig),
+                mininterval=1.0,
+                desc=f"Indexing {contig}.",
+                leave=False,
+            ):
+                rows_count += 1
+                fields = row.split("\t")
+                max_coord = max(max_coord, int(fields[2]))
             contig_lengths_tuples.append((contig, max_coord))
             lines_by_contig[contig] = rows_count
     # If we have a fasta file we can just reference that for contig lengths
@@ -123,10 +119,111 @@ def pileup_to_bigwig(
             tabix.contigs,
             desc=f"Step 2: Writing {bedmethyl_file.name} contents to {output_file_path.name}",
         ):
+            contig_is_sorted = True
+            previous_coord: int | None = None
+
+            for row in tabix.fetch(contig):
+                keep_basemod, genomic_coord, _modified_in_row, valid_in_row = (
+                    load_processed.process_pileup_row(
+                        row=row,
+                        parsed_motif=parsed_motif,
+                        region_strand=strand,
+                        single_strand=(strand != "."),
+                    )
+                )
+                if keep_basemod and valid_in_row > 0:
+                    if previous_coord is not None and genomic_coord < previous_coord:
+                        contig_is_sorted = False
+                        break
+                    previous_coord = genomic_coord
+
+            pending_coord: int | None = None
+            pending_modified = 0
+            pending_valid = 0
             contig_list = []
             start_list = []
             end_list = []
             values_list = []
+
+            def _queue_entry(
+                target_contig: str,
+                target_contig_list: list[str],
+                target_start_list: list[int],
+                target_end_list: list[int],
+                target_values_list: list[float],
+                coord: int,
+                modified_sum: int,
+                valid_sum: int,
+            ) -> None:
+                if valid_sum <= 0:
+                    return
+                target_contig_list.append(target_contig)
+                target_start_list.append(int(coord))
+                target_end_list.append(int(coord) + 1)
+                target_values_list.append(float(modified_sum) / float(valid_sum))
+
+            def _flush_chunk(
+                target_contig_list: list[str],
+                target_start_list: list[int],
+                target_end_list: list[int],
+                target_values_list: list[float],
+            ) -> tuple[list[str], list[int], list[int], list[float]]:
+                if not target_values_list:
+                    return (
+                        target_contig_list,
+                        target_start_list,
+                        target_end_list,
+                        target_values_list,
+                    )
+                bw.addEntries(
+                    target_contig_list,  # Contig names
+                    target_start_list,  # Start positions
+                    ends=target_end_list,  # End positions
+                    values=target_values_list,  # Corresponding values
+                )
+                return [], [], [], []
+
+            if not contig_is_sorted:
+                rows_by_coord: dict[int, list[int]] = {}
+                for row in tqdm(
+                    tabix.fetch(contig),
+                    desc=f"Writing {contig}.",
+                    total=lines_by_contig[contig],
+                    leave=False,
+                ):
+                    keep_basemod, genomic_coord, modified_in_row, valid_in_row = (
+                        load_processed.process_pileup_row(
+                            row=row,
+                            parsed_motif=parsed_motif,
+                            region_strand=strand,
+                            single_strand=(strand != "."),
+                        )
+                    )
+                    if keep_basemod and valid_in_row > 0:
+                        counts = rows_by_coord.setdefault(int(genomic_coord), [0, 0])
+                        counts[0] += int(modified_in_row)
+                        counts[1] += int(valid_in_row)
+
+                for coord in sorted(rows_by_coord):
+                    modified_sum, valid_sum = rows_by_coord[coord]
+                    _queue_entry(
+                        contig,
+                        contig_list,
+                        start_list,
+                        end_list,
+                        values_list,
+                        coord,
+                        modified_sum,
+                        valid_sum,
+                    )
+                    if len(values_list) >= chunk_size:
+                        contig_list, start_list, end_list, values_list = _flush_chunk(
+                            contig_list, start_list, end_list, values_list
+                        )
+                contig_list, start_list, end_list, values_list = _flush_chunk(
+                    contig_list, start_list, end_list, values_list
+                )
+                continue
 
             for row in tqdm(
                 tabix.fetch(contig),
@@ -143,25 +240,45 @@ def pileup_to_bigwig(
                     )
                 )
                 if keep_basemod and valid_in_row > 0:
-                    contig_list.append(contig)
-                    start_list.append(genomic_coord)
-                    end_list.append(genomic_coord + 1)
-                    values_list.append(modified_in_row / valid_in_row)
-
-                    if len(values_list) > chunk_size:
-                        bw.addEntries(
-                            contig_list,  # Contig names
-                            start_list,  # Start positions
-                            ends=end_list,  # End positions
-                            values=values_list,  # Corresponding values
+                    if pending_coord is None:
+                        pending_coord = genomic_coord
+                        pending_modified = int(modified_in_row)
+                        pending_valid = int(valid_in_row)
+                    elif genomic_coord == pending_coord:
+                        pending_modified += int(modified_in_row)
+                        pending_valid += int(valid_in_row)
+                    else:
+                        _queue_entry(
+                            contig,
+                            contig_list,
+                            start_list,
+                            end_list,
+                            values_list,
+                            pending_coord,
+                            pending_modified,
+                            pending_valid,
                         )
-                        contig_list = []
-                        start_list = []
-                        end_list = []
-                        values_list = []
-            bw.addEntries(
-                contig_list,  # Contig names
-                start_list,  # Start positions
-                ends=end_list,  # End positions
-                values=values_list,  # Corresponding values
+                        if len(values_list) >= chunk_size:
+                            contig_list, start_list, end_list, values_list = (
+                                _flush_chunk(
+                                    contig_list, start_list, end_list, values_list
+                                )
+                            )
+                        pending_coord = genomic_coord
+                        pending_modified = int(modified_in_row)
+                        pending_valid = int(valid_in_row)
+
+            if pending_coord is not None:
+                _queue_entry(
+                    contig,
+                    contig_list,
+                    start_list,
+                    end_list,
+                    values_list,
+                    pending_coord,
+                    pending_modified,
+                    pending_valid,
+                )
+            contig_list, start_list, end_list, values_list = _flush_chunk(
+                contig_list, start_list, end_list, values_list
             )
