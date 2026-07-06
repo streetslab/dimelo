@@ -98,6 +98,21 @@ def test_load_encode_peaks_plain_and_gzip(tmp_path):
     assert gz_table.loc[0, "end"] == 200
 
 
+def test_load_encode_peaks_skips_ucsc_track_header(tmp_path):
+    # UCSC track/browser header lines are not '#'-commented; they must be dropped, not
+    # crash astype(int) with IntCastingNaNError.
+    bed = tmp_path / "peaks.bed"
+    bed.write_text(
+        'track name="peaks" description="x"\n'
+        "browser position chr1:1-1000\n"
+        "chr1\t100\t200\n"
+        "chr1\t300\t400\n"
+    )
+    table = encode.load_encode_peaks(bed)
+    assert list(table["chromosome"]) == ["chr1", "chr1"]
+    assert list(table["start"]) == [100, 300]
+
+
 def test_download_encode_file_cache_hit_no_network(tmp_path):
     # pre-populate the cache so no network request is attempted
     cached = tmp_path / "ENCFF001.bigWig"

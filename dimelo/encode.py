@@ -116,6 +116,12 @@ def load_encode_peaks(path: str | Path, *, max_peaks: int | None = None) -> pd.D
         usecols=[0, 1, 2],
         names=["chromosome", "start", "end"],
     )
+    # Coerce coords and drop non-data rows: UCSC 'track'/'browser' header lines are not
+    # '#'-commented, so read_csv keeps them; they coerce to NaN in start/end and are
+    # dropped here (rather than crashing astype(int) with IntCastingNaNError).
+    table["start"] = pd.to_numeric(table["start"], errors="coerce")
+    table["end"] = pd.to_numeric(table["end"], errors="coerce")
+    table = table.dropna(subset=["start", "end"]).copy()
     table["chromosome"] = table["chromosome"].astype(str)
     table["start"] = table["start"].astype(int)
     table["end"] = table["end"].astype(int)
