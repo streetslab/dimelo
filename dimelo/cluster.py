@@ -1671,7 +1671,9 @@ def _extract_read_windows_batched(
             data_matrix = data_matrix[keep_mask]
             if val_matrix is not None:
                 val_matrix = val_matrix[keep_mask]
-            metadata = [row for row, keep in zip(metadata, keep_mask) if keep]
+            metadata = [
+                row for row, keep in zip(metadata, keep_mask, strict=False) if keep
+            ]
             if data_matrix.shape[0] == 0:
                 raise ValueError(
                     "No reads remained after multi-region filtering; all reads spanned "

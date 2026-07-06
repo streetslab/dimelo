@@ -9,8 +9,6 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-_LOGGER = logging.getLogger(__name__)
-
 from . import (
     chip_atlas,
     cluster,
@@ -35,6 +33,8 @@ from .models import (
     SharedClusterResult,
     UniBindJobResult,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 _SUPPORTED_SIGNAL_NORMALIZATION = {"none", "per_sample_global", "control_regions"}
 _SUPPORTED_FEATURE_SCALING = {"none", "robust_zscore"}

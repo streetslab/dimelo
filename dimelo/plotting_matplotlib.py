@@ -484,6 +484,707 @@ def plot_region_discovery_hit_context_matplotlib(
     return fig, axes
 
 
+_LOGO_BASE_COLORS = {"A": "tab:green", "C": "tab:blue", "G": "tab:orange", "T": "tab:red"}
+
+
+def plot_sequence_logo_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Information-content sequence logo (stacked per-base bits per position)."""
+    from matplotlib.patches import Patch
+
+    _require_payload_keys(
+        payload, ("logo_table", "metadata"), owner="plot_sequence_logo_matplotlib"
+    )
+    table = _require_payload_table(payload, "logo_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    positions = list(
+        metadata.get("positions")
+        or sorted(table.get("position", pd.Series(dtype=int)).unique())
+    )
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(positions) * 0.4), 3))
+    if table.empty or not positions:
+        ax.set_title(title or "Sequence logo")
+        ax.set_xlabel("position")
+        ax.set_ylabel("bits")
+        return fig, ax
+    for position in positions:
+        # stack ascending so the highest-information base sits on top
+        column = table.loc[table["position"] == position].sort_values("bits")
+        bottom = 0.0
+        for _, row in column.iterrows():
+            height = float(row["bits"])
+            ax.bar(
+                position, height, bottom=bottom, width=0.9,
+                color=_LOGO_BASE_COLORS.get(str(row["base"]), "tab:gray"),
+            )
+            bottom += height
+    ax.set_xlabel("position")
+    ax.set_ylabel("bits")
+    ax.set_ylim(0, 2)
+    ax.legend(
+        handles=[Patch(color=c, label=b) for b, c in _LOGO_BASE_COLORS.items()],
+        frameon=False, ncol=4, fontsize=8,
+    )
+    ax.set_title(title or "Sequence logo")
+    return fig, ax
+
+
+def plot_state_composition_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Stacked bar of per-site single-molecule chromatin-state composition (Q10)."""
+    _require_payload_keys(
+        payload,
+        ("composition_table", "metadata"),
+        owner="plot_state_composition_matplotlib",
+    )
+    table = _require_payload_table(payload, "composition_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    site_column = str(metadata.get("site_column") or "region_id")
+    states = list(metadata.get("states") or [])
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(table) * 0.8), 4))
+    if table.empty or not states:
+        ax.set_title(title or "Single-molecule state composition")
+        ax.set_ylabel("fraction of reads")
+        return fig, ax
+    positions = np.arange(len(table))
+    bottom = np.zeros(len(table))
+    for state in states:
+        if state not in table.columns:
+            continue
+        heights = table[state].astype(float).fillna(0.0).to_numpy()
+        ax.bar(positions, heights, bottom=bottom, label=str(state))
+        bottom += heights
+    ax.set_xticks(positions)
+    ax.set_xticklabels(table[site_column].astype(str).tolist(), rotation=45, ha="right")
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("fraction of reads")
+    ax.legend(frameon=False, fontsize=7, ncol=max(1, len(states) // 2))
+    ax.set_title(title or "Single-molecule state composition")
+    return fig, ax
+
+
+def plot_track_correlation_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Scatter of DiMeLo vs external binned signal, annotated with the correlation."""
+    _require_payload_keys(
+        payload, ("paired_table", "metadata"), owner="plot_track_correlation_matplotlib"
+    )
+    paired = _require_payload_table(payload, "paired_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    fig, ax = _make_axis(ax=ax, figsize=(5, 5))
+    if paired.empty:
+        ax.set_title(title or "DiMeLo vs external signal")
+        ax.set_xlabel("DiMeLo signal")
+        ax.set_ylabel("external signal")
+        return fig, ax
+    ax.scatter(paired["dimelo"], paired["external"], color="tab:blue", alpha=0.7)
+    ax.set_xlabel("DiMeLo signal")
+    ax.set_ylabel("external signal")
+    annotations = []
+    if metadata.get("pearson_r") is not None and not pd.isna(metadata.get("pearson_r")):
+        annotations.append(f"Pearson r = {float(metadata['pearson_r']):.2f}")
+    if metadata.get("spearman_rho") is not None and not pd.isna(
+        metadata.get("spearman_rho")
+    ):
+        annotations.append(f"Spearman ρ = {float(metadata['spearman_rho']):.2f}")
+    if annotations:
+        ax.text(
+            0.05, 0.95, "\n".join(annotations), transform=ax.transAxes,
+            va="top", ha="left", fontsize=9,
+        )
+    ax.set_title(title or "DiMeLo vs external signal")
+    return fig, ax
+
+
+def plot_joint_state_distribution_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Stacked bar of per-pair joint-state fractions (both / a_only / b_only / neither)."""
+    _require_payload_keys(
+        payload,
+        ("distribution_table", "metadata"),
+        owner="plot_joint_state_distribution_matplotlib",
+    )
+    table = _require_payload_table(payload, "distribution_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    states = list(metadata.get("states") or ["both", "a_only", "b_only", "neither"])
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(table) * 0.8), 4))
+    if table.empty:
+        ax.set_title(title or "Joint occupancy states")
+        ax.set_ylabel("fraction of spanning reads")
+        return fig, ax
+    positions = np.arange(len(table))
+    colors = {
+        "both": "tab:red",
+        "a_only": "tab:orange",
+        "b_only": "tab:blue",
+        "neither": "tab:gray",
+    }
+    bottom = np.zeros(len(table))
+    for state in states:
+        heights = table[f"frac_{state}"].astype(float).fillna(0.0).to_numpy()
+        ax.bar(positions, heights, bottom=bottom, label=state, color=colors.get(state))
+        bottom += heights
+    ax.set_xticks(positions)
+    ax.set_xticklabels(table["pair_id"].astype(str).tolist(), rotation=45, ha="right")
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("fraction of spanning reads")
+    ax.legend(frameon=False, ncol=len(states), fontsize=8)
+    ax.set_title(title or "Joint occupancy states")
+    return fig, ax
+
+
+def plot_joint_occupancy_distance_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Scatter of log2 observed/expected co-occupancy vs 1D anchor distance; significant
+    pairs highlighted. Positive coupling at short distance flags a possible trans-contact
+    artifact (Q4)."""
+    _require_payload_keys(
+        payload,
+        ("distance_table", "metadata"),
+        owner="plot_joint_occupancy_distance_matplotlib",
+    )
+    table = _require_payload_table(payload, "distance_table")
+    fig, ax = _make_axis(ax=ax, figsize=(7, 4))
+    if table.empty:
+        ax.set_title(title or "Joint occupancy vs anchor distance")
+        ax.set_xlabel("anchor distance (bp)")
+        ax.set_ylabel("log2 observed / expected co-occupancy")
+        return fig, ax
+    significant = table["significant"].astype(bool).to_numpy()
+    ax.scatter(
+        table.loc[~significant, "distance_bp"], table.loc[~significant, "log2_obs_exp"],
+        color="tab:gray", alpha=0.7, label="n.s.",
+    )
+    ax.scatter(
+        table.loc[significant, "distance_bp"], table.loc[significant, "log2_obs_exp"],
+        color="tab:red", label="significant",
+    )
+    ax.axhline(0.0, color="black", linewidth=0.6)
+    ax.set_xlabel("anchor distance (bp)")
+    ax.set_ylabel("log2 observed / expected co-occupancy")
+    ax.legend(frameon=False)
+    ax.set_title(title or "Joint occupancy vs anchor distance")
+    return fig, ax
+
+
+def plot_footprint_profile_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Aggregate footprint profile: methylation density (left axis) and protected-state
+    posterior (right axis) vs position; the footprint is a methylation dip / posterior
+    rise at the anchor."""
+    _require_payload_keys(
+        payload, ("profile_table", "metadata"), owner="plot_footprint_profile_matplotlib"
+    )
+    table = _require_payload_table(payload, "profile_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
+    if table.empty:
+        ax.set_title(title or "Aggregate footprint profile")
+        ax.set_xlabel("position")
+        return fig, ax
+    ax.plot(
+        table["position"], table["mean_methylation"],
+        color="tab:blue", marker=".", label="methylation",
+    )
+    ax.set_xlabel("position")
+    ax.set_ylabel("mean methylation", color="tab:blue")
+    ax.set_ylim(0, 1)
+    ax.tick_params(axis="y", labelcolor="tab:blue")
+
+    ax_right = ax.twinx()
+    ax_right.plot(
+        table["position"], table["mean_protected_posterior"],
+        color="tab:red", marker=".", linestyle="--", label="protected posterior",
+    )
+    ax_right.set_ylabel("mean protected posterior", color="tab:red")
+    ax_right.set_ylim(0, 1)
+    ax_right.tick_params(axis="y", labelcolor="tab:red")
+
+    anchor_index = metadata.get("anchor_index")
+    if anchor_index is not None:
+        ax.axvline(float(anchor_index), color="black", linewidth=0.8, linestyle=":")
+    ax.set_title(title or "Aggregate footprint profile")
+    return fig, ax
+
+
+def plot_binding_strength_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Ranked per-site binding strength: target occupancy (Beta-posterior mean + credible
+    interval) with control occupancy overlaid; significant sites highlighted."""
+    _require_payload_keys(
+        payload, ("binding_table", "metadata"), owner="plot_binding_strength_matplotlib"
+    )
+    table = _require_payload_table(payload, "binding_table")
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(table) * 0.7), 4))
+    if table.empty:
+        ax.set_title(title or "Binding strength (control-calibrated occupancy)")
+        ax.set_ylabel("occupancy")
+        return fig, ax
+
+    positions = np.arange(len(table))
+    heights = table["occupancy_posterior_mean"].astype(float).to_numpy()
+    lower = np.clip(heights - table["occupancy_ci_low"].astype(float).to_numpy(), 0, None)
+    upper = np.clip(table["occupancy_ci_high"].astype(float).to_numpy() - heights, 0, None)
+    significant = table["significant"].astype(bool).to_numpy()
+    colors = np.where(significant, "tab:red", "tab:gray")
+    ax.bar(
+        positions, heights, color=colors,
+        yerr=np.vstack([lower, upper]), capsize=3, ecolor="black",
+    )
+    # control occupancy overlaid as markers
+    ax.scatter(
+        positions, table["control_occupancy"].astype(float),
+        color="black", marker="_", s=120, zorder=3, label="control occupancy",
+    )
+    ax.set_xticks(positions)
+    ax.set_xticklabels(table["region_id"].astype(str).tolist(), rotation=45, ha="right")
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("occupancy (posterior mean ± CI)")
+    ax.legend(frameon=False, loc="upper right")
+    ax.set_title(title or "Binding strength (control-calibrated occupancy)")
+    return fig, ax
+
+
+def plot_true_signal_read_raster_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    axes=None,
+    title: str | None = None,
+):
+    """Single-molecule raster: reads (rows) vs read_mod_fraction, colored by call."""
+    _require_payload_keys(
+        payload, ("read_table", "metadata"), owner="plot_true_signal_read_raster_matplotlib"
+    )
+    read_table = _require_payload_table(payload, "read_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    color_by = str(metadata.get("color_by") or "is_true_signal")
+    region_ids = list(
+        metadata.get("region_ids")
+        or read_table.get("region_id", pd.Series(dtype="object")).drop_duplicates()
+    )
+
+    fig, axes = _make_axes(axes=axes, n_axes=len(region_ids) or 1, figsize=(7, 3))
+    if not region_ids:
+        axes[0].set_title(title or "Single-molecule true-signal raster")
+        axes[0].set_xlabel("read modification fraction")
+        axes[0].set_ylabel("read")
+        return fig, axes
+
+    for index, region in enumerate(region_ids):
+        ax = axes[index]
+        sub = read_table.loc[read_table["region_id"] == region]
+        if not sub.empty:
+            if color_by == "occupancy_posterior":
+                sc = ax.scatter(
+                    sub["read_mod_fraction"], sub["read_order"],
+                    c=sub["occupancy_posterior"], cmap="viridis", vmin=0.0, vmax=1.0, s=18,
+                )
+                fig.colorbar(sc, ax=ax, label="occupancy posterior")
+            else:
+                is_sig = sub["is_true_signal"].astype(bool)
+                ax.scatter(
+                    sub.loc[~is_sig, "read_mod_fraction"], sub.loc[~is_sig, "read_order"],
+                    color="tab:gray", s=18, alpha=0.7, label="background",
+                )
+                ax.scatter(
+                    sub.loc[is_sig, "read_mod_fraction"], sub.loc[is_sig, "read_order"],
+                    color="tab:red", s=18, label="true signal",
+                )
+                ax.legend(frameon=False, loc="lower right", fontsize=8)
+            background_rate = sub["background_rate"].iloc[0]
+            ax.axvline(float(background_rate), color="black", linewidth=0.8, linestyle="--")
+        ax.set_xlim(-0.02, 1.02)
+        ax.set_title(str(region))
+        ax.set_xlabel("read modification fraction")
+        ax.set_ylabel("read")
+
+    for ax in axes[len(region_ids) :]:
+        ax.set_visible(False)
+    if title:
+        fig.suptitle(title)
+    return fig, axes
+
+
+def plot_occupancy_rate_track_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Bar of per-site control-calibrated occupancy rate."""
+    _require_payload_keys(
+        payload, ("track_table", "metadata"), owner="plot_occupancy_rate_track_matplotlib"
+    )
+    track = _require_payload_table(payload, "track_table")
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(track) * 0.6), 4))
+    if track.empty:
+        ax.set_title(title or "Control-calibrated occupancy rate")
+        ax.set_ylabel("occupancy rate")
+        return fig, ax
+    positions = np.arange(len(track))
+    has_posterior = {
+        "occupancy_posterior_mean",
+        "occupancy_ci_low",
+        "occupancy_ci_high",
+    }.issubset(track.columns)
+    if has_posterior:
+        # Bayesian Beta-posterior mean with a credible interval
+        heights = track["occupancy_posterior_mean"].astype(float).to_numpy()
+        lower = heights - track["occupancy_ci_low"].astype(float).to_numpy()
+        upper = track["occupancy_ci_high"].astype(float).to_numpy() - heights
+        ax.bar(
+            positions,
+            heights,
+            color="tab:red",
+            yerr=np.vstack([np.clip(lower, 0, None), np.clip(upper, 0, None)]),
+            capsize=3,
+            ecolor="black",
+        )
+        ylabel = "occupancy (posterior mean ± CI)"
+    else:
+        ax.bar(positions, track["occupancy_rate"].astype(float), color="tab:red")
+        ylabel = "occupancy rate"
+    ax.set_xticks(positions)
+    ax.set_xticklabels(track["region_id"].astype(str).tolist(), rotation=45, ha="right")
+    ax.set_ylim(0, 1)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title or "Control-calibrated occupancy rate")
+    return fig, ax
+
+
+def plot_background_removed_pileup_overlay_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Grouped bars of raw vs background-removed modification fraction per site."""
+    _require_payload_keys(
+        payload,
+        ("overlay_table", "metadata"),
+        owner="plot_background_removed_pileup_overlay_matplotlib",
+    )
+    overlay = _require_payload_table(payload, "overlay_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    region_order = list(
+        metadata.get("region_order")
+        or overlay.get("region_id", pd.Series(dtype="object")).drop_duplicates()
+    )
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(region_order) * 0.7), 4))
+    if overlay.empty or not region_order:
+        ax.set_title(title or "Raw vs background-removed pileup")
+        ax.set_ylabel("modification fraction")
+        return fig, ax
+    raw = overlay.loc[overlay["stage"] == "raw"].set_index("region_id")[
+        "mod_fraction"
+    ].to_dict()
+    removed = overlay.loc[overlay["stage"] == "background_removed"].set_index(
+        "region_id"
+    )["mod_fraction"].to_dict()
+    positions = np.arange(len(region_order))
+    width = 0.4
+    ax.bar(positions - width / 2, [float(raw.get(r, 0.0)) for r in region_order],
+           width, label="raw", color="tab:gray")
+    ax.bar(positions + width / 2, [float(removed.get(r, 0.0)) for r in region_order],
+           width, label="background-removed", color="tab:red")
+    ax.set_xticks(positions)
+    ax.set_xticklabels([str(r) for r in region_order], rotation=45, ha="right")
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("modification fraction")
+    ax.legend(frameon=False)
+    ax.set_title(title or "Raw vs background-removed pileup")
+    return fig, ax
+
+
+def plot_region_contrast_correction_overlay_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+):
+    """Grouped bars of raw vs background-corrected ``delta_fraction`` per region."""
+    _require_payload_keys(
+        payload,
+        ("overlay_table", "metadata"),
+        owner="plot_region_contrast_correction_overlay_matplotlib",
+    )
+    overlay = _require_payload_table(payload, "overlay_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    region_order = list(
+        metadata.get("region_order")
+        or overlay.get("region_id", pd.Series(dtype="object")).drop_duplicates()
+    )
+
+    fig, ax = _make_axis(ax=ax, figsize=(max(6.0, len(region_order) * 0.7), 4))
+
+    if overlay.empty or not region_order:
+        ax.set_title(title or "Background correction: raw vs corrected")
+        ax.set_xlabel("Region")
+        ax.set_ylabel("delta fraction (numerator - denominator)")
+        return fig, ax
+
+    raw = (
+        overlay.loc[overlay["stage"] == "raw"]
+        .set_index("region_id")["delta_fraction"]
+        .to_dict()
+    )
+    corrected = (
+        overlay.loc[overlay["stage"] == "corrected"]
+        .set_index("region_id")["delta_fraction"]
+        .to_dict()
+    )
+    positions = np.arange(len(region_order))
+    width = 0.4
+    ax.bar(
+        positions - width / 2,
+        [float(raw.get(region, 0.0)) for region in region_order],
+        width,
+        label="raw",
+        color="tab:gray",
+    )
+    ax.bar(
+        positions + width / 2,
+        [float(corrected.get(region, 0.0)) for region in region_order],
+        width,
+        label="corrected",
+        color="tab:blue",
+    )
+    ax.axhline(0.0, color="black", linewidth=0.6)
+    ax.set_xticks(positions)
+    ax.set_xticklabels([str(region) for region in region_order], rotation=45, ha="right")
+    ax.set_ylabel("delta fraction (numerator - denominator)")
+    ax.set_xlabel("Region")
+    ax.legend(frameon=False)
+    ax.set_title(title or "Background correction: raw vs corrected")
+    return fig, ax
+
+
+def plot_dmr_site_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    axes=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("site_table", "metadata"),
+        owner="plot_dmr_site_matplotlib",
+    )
+    site_table = _require_payload_table(payload, "site_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    effect_column = str(metadata.get("effect_size_column") or "effect_size")
+    y_column = effect_column if effect_column in site_table.columns else "neg_log10_pvalue"
+    contigs = list(
+        metadata.get("contig_order")
+        or site_table.get("contig", pd.Series(dtype="object")).dropna().unique()
+    )
+
+    fig, axes = _make_axes(axes=axes, n_axes=len(contigs) or 1, figsize=(8, 3))
+
+    y_label = y_column.replace("_", " ").title()
+    if not contigs:
+        axes[0].set_title(title or "DMR sites")
+        axes[0].set_xlabel("Genomic midpoint")
+        axes[0].set_ylabel(y_label)
+        return fig, axes
+
+    for index, contig in enumerate(contigs):
+        ax = axes[index]
+        contig_table = site_table.loc[site_table["contig"] == contig]
+        if not contig_table.empty and y_column in contig_table.columns:
+            is_hc = (
+                contig_table["is_high_confidence"].astype(bool)
+                if "is_high_confidence" in contig_table.columns
+                else pd.Series(False, index=contig_table.index)
+            )
+            background = contig_table.loc[~is_hc]
+            highlighted = contig_table.loc[is_hc]
+            if not background.empty:
+                ax.scatter(
+                    background["midpoint"],
+                    background[y_column],
+                    s=12,
+                    color="tab:gray",
+                    alpha=0.6,
+                )
+            if not highlighted.empty:
+                ax.scatter(
+                    highlighted["midpoint"],
+                    highlighted[y_column],
+                    s=20,
+                    color="tab:red",
+                    zorder=3,
+                    label="high confidence",
+                )
+        ax.axhline(0.0, color="black", linewidth=0.6, alpha=0.4)
+        ax.set_title(str(contig))
+        ax.set_xlabel("Genomic midpoint")
+        ax.set_ylabel(y_label)
+
+    for ax in axes[len(contigs) :]:
+        ax.set_visible(False)
+
+    if title:
+        fig.suptitle(title)
+    return fig, axes
+
+
+def plot_dmr_segment_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    axes=None,
+    title: str | None = None,
+):
+    _require_payload_keys(
+        payload,
+        ("segment_table", "metadata"),
+        owner="plot_dmr_segment_matplotlib",
+    )
+    segment_table = _require_payload_table(payload, "segment_table")
+    metadata = (
+        payload.get("metadata", {})
+        if isinstance(payload.get("metadata", {}), Mapping)
+        else {}
+    )
+    score_column = str(metadata.get("score_column") or "score")
+    contigs = list(
+        metadata.get("contig_order")
+        or segment_table.get("contig", pd.Series(dtype="object")).dropna().unique()
+    )
+
+    fig, axes = _make_axes(axes=axes, n_axes=len(contigs) or 1, figsize=(8, 3))
+
+    y_label = score_column.replace("_", " ").title()
+    if not contigs:
+        axes[0].set_title(title or "DMR segments")
+        axes[0].set_xlabel("Genomic position")
+        axes[0].set_ylabel(y_label)
+        return fig, axes
+
+    for index, contig in enumerate(contigs):
+        ax = axes[index]
+        contig_table = segment_table.loc[segment_table["contig"] == contig]
+        has_score = score_column in contig_table.columns
+        for _, segment in contig_table.iterrows():
+            height = float(segment[score_column]) if has_score else 1.0
+            ax.plot(
+                [float(segment["start"]), float(segment["end"])],
+                [height, height],
+                color="tab:blue",
+                linewidth=3.0,
+                solid_capstyle="butt",
+            )
+        ax.set_title(str(contig))
+        ax.set_xlabel("Genomic position")
+        ax.set_ylabel(y_label)
+
+    for ax in axes[len(contigs) :]:
+        ax.set_visible(False)
+
+    if title:
+        fig.suptitle(title)
+    return fig, axes
+
+
+def plot_dmr_multi_summary_matplotlib(
+    payload: Mapping[str, object],
+    *,
+    ax=None,
+    title: str | None = None,
+    value_column: str = "n_significant",
+):
+    _require_payload_keys(
+        payload,
+        ("summary_table", "metadata"),
+        owner="plot_dmr_multi_summary_matplotlib",
+    )
+    summary_table = _require_payload_table(payload, "summary_table")
+    fig, ax = _make_axis(ax=ax, figsize=(8, 4))
+
+    if summary_table.empty or value_column not in summary_table.columns:
+        ax.set_title(title or "DMR multi-sample summary")
+        ax.set_xlabel("Sample pair")
+        ax.set_ylabel(value_column.replace("_", " ").title())
+        return fig, ax
+
+    positions = range(len(summary_table))
+    ax.bar(list(positions), summary_table[value_column].astype(float), color="tab:blue")
+    ax.set_xticks(list(positions))
+    ax.set_xticklabels(
+        summary_table["pair_name"].astype(str).tolist(),
+        rotation=45,
+        ha="right",
+    )
+    ax.set_xlabel("Sample pair")
+    ax.set_ylabel(value_column.replace("_", " ").title())
+    ax.set_title(title or "DMR multi-sample summary")
+    return fig, ax
+
+
 def plot_shared_cluster_distribution_matplotlib(
     payload: Mapping[str, object],
     *,
