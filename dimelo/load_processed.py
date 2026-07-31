@@ -181,13 +181,15 @@ def pileup_counts_from_bedmethyl(
             total=len(chunks_list),
             disable=quiet,
             desc="Loading data",
-            leave=False
+            leave=False,
         ):
-            modified_base_subregion_counts, valid_base_subregion_counts = pileup_counts_process_chunk(
-                bedmethyl_file,
-                parsed_motif,
-                chunk,
-                single_strand,
+            modified_base_subregion_counts, valid_base_subregion_counts = (
+                pileup_counts_process_chunk(
+                    bedmethyl_file,
+                    parsed_motif,
+                    chunk,
+                    single_strand,
+                )
             )
             valid_base_count += valid_base_subregion_counts
             modified_base_count += modified_base_subregion_counts
@@ -199,11 +201,13 @@ def pileup_counts_from_bedmethyl(
         shm_modified = shared_memory.SharedMemory(
             create=True, size=np.dtype(np.int32).itemsize
         )
-    
+
         manager = multiprocessing.Manager()
         lock = manager.Lock()
 
-        with concurrent.futures.ProcessPoolExecutor(max_workers=cores_to_run) as executor:
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=cores_to_run
+        ) as executor:
             futures = [
                 executor.submit(
                     pileup_counts_process_chunk_parallel,
@@ -227,7 +231,9 @@ def pileup_counts_from_bedmethyl(
                 try:
                     future.result()
                 except Exception as err:
-                    raise RuntimeError("pileup_counts_process_chunk_parallel failed.") from err
+                    raise RuntimeError(
+                        "pileup_counts_process_chunk_parallel failed."
+                    ) from err
 
         # Directly convert shared memory buffers to integers
         modified_base_count = int.from_bytes(
@@ -322,7 +328,12 @@ def pileup_vectors_from_bedmethyl(
             desc="Loading data",
             leave=False,
         ):
-            subregion_start_idx, subregion_end_idx, modified_base_subregion, valid_base_subregion = pileup_vectors_process_chunk(
+            (
+                subregion_start_idx,
+                subregion_end_idx,
+                modified_base_subregion,
+                valid_base_subregion,
+            ) = pileup_vectors_process_chunk(
                 bedmethyl_file,
                 parsed_motif,
                 chunk,
@@ -330,12 +341,12 @@ def pileup_vectors_from_bedmethyl(
                 single_strand,
                 regions_5to3prime,
             )
-            valid_base_counts[
-                subregion_start_idx : subregion_end_idx
-            ] += valid_base_subregion
-            modified_base_counts[
-                subregion_start_idx : subregion_end_idx
-            ] += modified_base_subregion
+            valid_base_counts[subregion_start_idx:subregion_end_idx] += (
+                valid_base_subregion
+            )
+            modified_base_counts[subregion_start_idx:subregion_end_idx] += (
+                modified_base_subregion
+            )
     else:
         # Initialize shared memory as numpy arrays to make it easy to map to buffer in subprocesses
         shm_valid = shared_memory.SharedMemory(
@@ -348,7 +359,9 @@ def pileup_vectors_from_bedmethyl(
         manager = multiprocessing.Manager()
         lock = manager.Lock()
 
-        with concurrent.futures.ProcessPoolExecutor(max_workers=cores_to_run) as executor:
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=cores_to_run
+        ) as executor:
             futures = [
                 executor.submit(
                     pileup_vectors_process_chunk_parallel,
@@ -486,11 +499,17 @@ def pileup_vectors_process_chunk(
                     modified_base_subregion[pileup_coord_in_subregion] += (
                         modified_in_row
                     )
-    
+
     subregion_start_idx = subregion_offset
     subregion_end_idx = subregion_offset + abs(subregion_end - subregion_start)
 
-    return subregion_start_idx, subregion_end_idx, modified_base_subregion, valid_base_subregion
+    return (
+        subregion_start_idx,
+        subregion_end_idx,
+        modified_base_subregion,
+        valid_base_subregion,
+    )
+
 
 def pileup_vectors_process_chunk_parallel(
     bedmethyl_file,
@@ -530,7 +549,12 @@ def pileup_vectors_process_chunk_parallel(
         (region_len,), dtype=np.int32, buffer=existing_modified.buf
     )
 
-    subregion_start_idx, subregion_end_idx, modified_base_subregion, valid_base_subregion = pileup_vectors_process_chunk(
+    (
+        subregion_start_idx,
+        subregion_end_idx,
+        modified_base_subregion,
+        valid_base_subregion,
+    ) = pileup_vectors_process_chunk(
         bedmethyl_file,
         parsed_motif,
         chunk,
@@ -540,12 +564,10 @@ def pileup_vectors_process_chunk_parallel(
     )
 
     with lock:
-        valid_base_counts[
-            subregion_start_idx : subregion_end_idx
-        ] += valid_base_subregion
-        modified_base_counts[
-            subregion_start_idx : subregion_end_idx
-        ] += modified_base_subregion
+        valid_base_counts[subregion_start_idx:subregion_end_idx] += valid_base_subregion
+        modified_base_counts[subregion_start_idx:subregion_end_idx] += (
+            modified_base_subregion
+        )
     # Close the file descriptor/handle to the shared memory
     existing_modified.close()
     existing_valid.close()
@@ -604,6 +626,7 @@ def pileup_counts_process_chunk(
 
     return modified_base_subregion_counts, valid_base_subregion_counts
 
+
 def pileup_counts_process_chunk_parallel(
     bedmethyl_file,
     parsed_motif,
@@ -637,11 +660,13 @@ def pileup_counts_process_chunk_parallel(
         (1,), dtype=np.int32, buffer=existing_modified.buf
     )
 
-    modified_base_subregion_counts, valid_base_subregion_counts = pileup_counts_process_chunk(
-        bedmethyl_file,
-        parsed_motif,
-        chunk,
-        single_strand,
+    modified_base_subregion_counts, valid_base_subregion_counts = (
+        pileup_counts_process_chunk(
+            bedmethyl_file,
+            parsed_motif,
+            chunk,
+            single_strand,
+        )
     )
 
     with lock:
