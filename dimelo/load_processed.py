@@ -174,8 +174,6 @@ def pileup_counts_from_bedmethyl(
     # If one core requested, do not spawn processes
     # This removes unnecessary overhead and avoids nested process generation (i.e. from regions_to_list)
     if cores_to_run == 1:
-        # TODO: This is a quick and dirty version as a proof of concept; should refactor proces_chunks_from_regions_dict instead
-        source_tabix = pysam.TabixFile(str(bedmethyl_file))
         valid_base_count = 0
         modified_base_count = 0
         for chunk in tqdm(
@@ -185,34 +183,12 @@ def pileup_counts_from_bedmethyl(
             desc="Loading data",
             leave=False
         ):
-            chromosome = chunk["chromosome"]
-            subregion_start = chunk["subregion_start"]
-            subregion_end = chunk["subregion_end"]
-            strand = chunk["strand"]
-
-            valid_base_subregion_counts = 0
-            modified_base_subregion_counts = 0
-        
-            # tabix throws and error if the contig is not present
-            # by the current design, this should be silent
-            if chromosome in source_tabix.contigs:
-                for row in source_tabix.fetch(
-                    chromosome, max(subregion_start, 0), subregion_end
-                ):
-                    (
-                        keep_basemod,
-                        _,
-                        modified_in_row,
-                        valid_in_row,
-                    ) = process_pileup_row(
-                        row=row,
-                        parsed_motif=parsed_motif,
-                        region_strand=strand,
-                        single_strand=single_strand,
-                    )
-                    if keep_basemod:
-                        valid_base_subregion_counts += valid_in_row
-                        modified_base_subregion_counts += modified_in_row
+            modified_base_subregion_counts, valid_base_subregion_counts = pileup_counts_process_chunk(
+                bedmethyl_file,
+                parsed_motif,
+                chunk,
+                single_strand,
+            )
             valid_base_count += valid_base_subregion_counts
             modified_base_count += modified_base_subregion_counts
     else:
@@ -230,7 +206,7 @@ def pileup_counts_from_bedmethyl(
         with concurrent.futures.ProcessPoolExecutor(max_workers=cores_to_run) as executor:
             futures = [
                 executor.submit(
-                    pileup_counts_process_chunk,
+                    pileup_counts_process_chunk_parallel,
                     bedmethyl_file,
                     parsed_motif,
                     chunk,
@@ -251,7 +227,7 @@ def pileup_counts_from_bedmethyl(
                 try:
                     future.result()
                 except Exception as err:
-                    raise RuntimeError("pileup_counts_process_chunk failed.") from err
+                    raise RuntimeError("pileup_counts_process_chunk_parallel failed.") from err
 
         # Directly convert shared memory buffers to integers
         modified_base_count = int.from_bytes(
@@ -529,6 +505,59 @@ def pileup_counts_process_chunk(
     bedmethyl_file,
     parsed_motif,
     chunk,
+    single_strand,
+) -> tuple[int, int]:
+    """
+    Helper function to allow pileup_counts_from_bedmethyl to operate in a modular fashion.
+
+    Sum up modified and valid counts for a subregion chunk in a bedmethyl file.
+
+    Args:
+        bedmethyl_file: Path to bedmethyl file
+        parsed_motif: ParsedMotif object
+        chunk: a dict containing subregion chunk information
+        single_strand: True if only single-strand mods are desired
+
+    Returns:
+        tuple containing counts of (modified_bases, total_bases) for the requested chunk
+    """
+    source_tabix = pysam.TabixFile(str(bedmethyl_file))
+
+    valid_base_subregion_counts = 0
+    modified_base_subregion_counts = 0
+
+    chromosome = chunk["chromosome"]
+    subregion_start = chunk["subregion_start"]
+    subregion_end = chunk["subregion_end"]
+    strand = chunk["strand"]
+
+    # tabix throws and error if the contig is not present
+    # by the current design, this should be silent
+    if chromosome in source_tabix.contigs:
+        for row in source_tabix.fetch(
+            chromosome, max(subregion_start, 0), subregion_end
+        ):
+            (
+                keep_basemod,
+                _,
+                modified_in_row,
+                valid_in_row,
+            ) = process_pileup_row(
+                row=row,
+                parsed_motif=parsed_motif,
+                region_strand=strand,
+                single_strand=single_strand,
+            )
+            if keep_basemod:
+                valid_base_subregion_counts += valid_in_row
+                modified_base_subregion_counts += modified_in_row
+
+    return modified_base_subregion_counts, valid_base_subregion_counts
+
+def pileup_counts_process_chunk_parallel(
+    bedmethyl_file,
+    parsed_motif,
+    chunk,
     shm_name_modified,
     shm_name_valid,
     lock,
@@ -551,7 +580,6 @@ def pileup_counts_process_chunk(
     Returns:
         None. Counts are added in-place to shared memory.
     """
-    source_tabix = pysam.TabixFile(str(bedmethyl_file))
     existing_valid = shared_memory.SharedMemory(name=shm_name_valid)
     existing_modified = shared_memory.SharedMemory(name=shm_name_modified)
     valid_base_counts = np.ndarray((1,), dtype=np.int32, buffer=existing_valid.buf)
@@ -559,34 +587,12 @@ def pileup_counts_process_chunk(
         (1,), dtype=np.int32, buffer=existing_modified.buf
     )
 
-    chromosome = chunk["chromosome"]
-    subregion_start = chunk["subregion_start"]
-    subregion_end = chunk["subregion_end"]
-    strand = chunk["strand"]
-
-    valid_base_subregion_counts = 0
-    modified_base_subregion_counts = 0
-
-    # tabix throws and error if the contig is not present
-    # by the current design, this should be silent
-    if chromosome in source_tabix.contigs:
-        for row in source_tabix.fetch(
-            chromosome, max(subregion_start, 0), subregion_end
-        ):
-            (
-                keep_basemod,
-                _,
-                modified_in_row,
-                valid_in_row,
-            ) = process_pileup_row(
-                row=row,
-                parsed_motif=parsed_motif,
-                region_strand=strand,
-                single_strand=single_strand,
-            )
-            if keep_basemod:
-                valid_base_subregion_counts += valid_in_row
-                modified_base_subregion_counts += modified_in_row
+    modified_base_subregion_counts, valid_base_subregion_counts = pileup_counts_process_chunk(
+        bedmethyl_file,
+        parsed_motif,
+        chunk,
+        single_strand,
+    )
 
     with lock:
         valid_base_counts[0] += valid_base_subregion_counts
