@@ -165,63 +165,106 @@ def pileup_counts_from_bedmethyl(
     """
 
     parsed_motif = utils.ParsedMotif(motif)
-
     regions_dict = utils.regions_dict_from_input(regions, window_size)
     chunks_list = utils.process_chunks_from_regions_dict(
         regions_dict, chunk_size=chunk_size
     )
-
     cores_to_run = utils.cores_to_run(cores)
 
-    # Initialize shared memory as length-one numpy arrays to make it easy to map to buffer in subprocesses
-    shm_valid = shared_memory.SharedMemory(
-        create=True, size=np.dtype(np.int32).itemsize
-    )
-    shm_modified = shared_memory.SharedMemory(
-        create=True, size=np.dtype(np.int32).itemsize
-    )
-
-    manager = multiprocessing.Manager()
-    lock = manager.Lock()
-
-    with concurrent.futures.ProcessPoolExecutor(max_workers=cores_to_run) as executor:
-        futures = [
-            executor.submit(
-                pileup_counts_process_chunk,
-                bedmethyl_file,
-                parsed_motif,
-                chunk,
-                shm_modified.name,
-                shm_valid.name,
-                lock,
-                single_strand,
-            )
-            for chunk in chunks_list
-        ]
-        for future in tqdm(
-            concurrent.futures.as_completed(futures),
-            total=len(futures),
+    # If one core requested, do not spawn processes
+    # This removes unnecessary overhead and avoids nested process generation (i.e. from regions_to_list)
+    if cores_to_run == 1:
+        # TODO: This is a quick and dirty version as a proof of concept; should refactor proces_chunks_from_regions_dict instead
+        source_tabix = pysam.TabixFile(str(bedmethyl_file))
+        valid_base_count = 0
+        modified_base_count = 0
+        for chunk in tqdm(
+            chunks_list,
+            total=len(chunks_list),
             disable=quiet,
             desc="Loading data",
-            leave=False,
+            leave=False
         ):
-            try:
-                future.result()
-            except Exception as err:
-                raise RuntimeError("pileup_counts_process_chunk failed.") from err
+            chromosome = chunk["chromosome"]
+            subregion_start = chunk["subregion_start"]
+            subregion_end = chunk["subregion_end"]
+            strand = chunk["strand"]
 
-    # Directly convert shared memory buffers to integers
-    modified_base_count = int.from_bytes(
-        shm_modified.buf[:4], byteorder="little", signed=True
-    )
-    valid_base_count = int.from_bytes(
-        shm_valid.buf[:4], byteorder="little", signed=True
-    )
-    # Close and unlink shared memory - not fully handled by garbage collection otherwise
-    shm_modified.close()
-    shm_modified.unlink()
-    shm_valid.close()
-    shm_valid.unlink()
+            valid_base_subregion_counts = 0
+            modified_base_subregion_counts = 0
+        
+            # tabix throws and error if the contig is not present
+            # by the current design, this should be silent
+            if chromosome in source_tabix.contigs:
+                for row in source_tabix.fetch(
+                    chromosome, max(subregion_start, 0), subregion_end
+                ):
+                    (
+                        keep_basemod,
+                        _,
+                        modified_in_row,
+                        valid_in_row,
+                    ) = process_pileup_row(
+                        row=row,
+                        parsed_motif=parsed_motif,
+                        region_strand=strand,
+                        single_strand=single_strand,
+                    )
+                    if keep_basemod:
+                        valid_base_subregion_counts += valid_in_row
+                        modified_base_subregion_counts += modified_in_row
+            valid_base_count += valid_base_subregion_counts
+            modified_base_count += modified_base_subregion_counts
+    else:
+        # Initialize shared memory as length-one numpy arrays to make it easy to map to buffer in subprocesses
+        shm_valid = shared_memory.SharedMemory(
+            create=True, size=np.dtype(np.int32).itemsize
+        )
+        shm_modified = shared_memory.SharedMemory(
+            create=True, size=np.dtype(np.int32).itemsize
+        )
+    
+        manager = multiprocessing.Manager()
+        lock = manager.Lock()
+
+        with concurrent.futures.ProcessPoolExecutor(max_workers=cores_to_run) as executor:
+            futures = [
+                executor.submit(
+                    pileup_counts_process_chunk,
+                    bedmethyl_file,
+                    parsed_motif,
+                    chunk,
+                    shm_modified.name,
+                    shm_valid.name,
+                    lock,
+                    single_strand,
+                )
+                for chunk in chunks_list
+            ]
+            for future in tqdm(
+                concurrent.futures.as_completed(futures),
+                total=len(futures),
+                disable=quiet,
+                desc="Loading data",
+                leave=False,
+            ):
+                try:
+                    future.result()
+                except Exception as err:
+                    raise RuntimeError("pileup_counts_process_chunk failed.") from err
+
+        # Directly convert shared memory buffers to integers
+        modified_base_count = int.from_bytes(
+            shm_modified.buf[:4], byteorder="little", signed=True
+        )
+        valid_base_count = int.from_bytes(
+            shm_valid.buf[:4], byteorder="little", signed=True
+        )
+        # Close and unlink shared memory - not fully handled by garbage collection otherwise
+        shm_modified.close()
+        shm_modified.unlink()
+        shm_valid.close()
+        shm_valid.unlink()
 
     return modified_base_count, valid_base_count
 
