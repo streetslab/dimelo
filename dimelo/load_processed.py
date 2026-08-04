@@ -196,10 +196,10 @@ def pileup_counts_from_bedmethyl(
     else:
         # Initialize shared memory as length-one numpy arrays to make it easy to map to buffer in subprocesses
         shm_valid = shared_memory.SharedMemory(
-            create=True, size=np.dtype(np.int32).itemsize
+            create=True, size=np.dtype(np.int64).itemsize
         )
         shm_modified = shared_memory.SharedMemory(
-            create=True, size=np.dtype(np.int32).itemsize
+            create=True, size=np.dtype(np.int64).itemsize
         )
 
         manager = multiprocessing.Manager()
@@ -655,9 +655,9 @@ def pileup_counts_process_chunk_parallel(
     """
     existing_valid = shared_memory.SharedMemory(name=shm_name_valid)
     existing_modified = shared_memory.SharedMemory(name=shm_name_modified)
-    valid_base_counts = np.ndarray((1,), dtype=np.int32, buffer=existing_valid.buf)
+    valid_base_counts = np.ndarray((1,), dtype=np.int64, buffer=existing_valid.buf)
     modified_base_counts = np.ndarray(
-        (1,), dtype=np.int32, buffer=existing_modified.buf
+        (1,), dtype=np.int64, buffer=existing_modified.buf
     )
 
     modified_base_subregion_counts, valid_base_subregion_counts = (
