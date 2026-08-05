@@ -165,63 +165,88 @@ def pileup_counts_from_bedmethyl(
     """
 
     parsed_motif = utils.ParsedMotif(motif)
-
     regions_dict = utils.regions_dict_from_input(regions, window_size)
     chunks_list = utils.process_chunks_from_regions_dict(
         regions_dict, chunk_size=chunk_size
     )
-
     cores_to_run = utils.cores_to_run(cores)
 
-    # Initialize shared memory as length-one numpy arrays to make it easy to map to buffer in subprocesses
-    shm_valid = shared_memory.SharedMemory(
-        create=True, size=np.dtype(np.int32).itemsize
-    )
-    shm_modified = shared_memory.SharedMemory(
-        create=True, size=np.dtype(np.int32).itemsize
-    )
-
-    manager = multiprocessing.Manager()
-    lock = manager.Lock()
-
-    with concurrent.futures.ProcessPoolExecutor(max_workers=cores_to_run) as executor:
-        futures = [
-            executor.submit(
-                pileup_counts_process_chunk,
-                bedmethyl_file,
-                parsed_motif,
-                chunk,
-                shm_modified.name,
-                shm_valid.name,
-                lock,
-                single_strand,
-            )
-            for chunk in chunks_list
-        ]
-        for future in tqdm(
-            concurrent.futures.as_completed(futures),
-            total=len(futures),
+    # If one core requested, do not spawn processes
+    # This removes unnecessary overhead and avoids nested process generation (i.e. from regions_to_list)
+    if cores_to_run == 1:
+        valid_base_count = 0
+        modified_base_count = 0
+        for chunk in tqdm(
+            chunks_list,
+            total=len(chunks_list),
             disable=quiet,
             desc="Loading data",
             leave=False,
         ):
-            try:
-                future.result()
-            except Exception as err:
-                raise RuntimeError("pileup_counts_process_chunk failed.") from err
+            modified_base_subregion_counts, valid_base_subregion_counts = (
+                pileup_counts_process_chunk(
+                    bedmethyl_file,
+                    parsed_motif,
+                    chunk,
+                    single_strand,
+                )
+            )
+            valid_base_count += valid_base_subregion_counts
+            modified_base_count += modified_base_subregion_counts
+    else:
+        # Initialize shared memory as length-one numpy arrays to make it easy to map to buffer in subprocesses
+        shm_valid = shared_memory.SharedMemory(
+            create=True, size=np.dtype(np.int64).itemsize
+        )
+        shm_modified = shared_memory.SharedMemory(
+            create=True, size=np.dtype(np.int64).itemsize
+        )
 
-    # Directly convert shared memory buffers to integers
-    modified_base_count = int.from_bytes(
-        shm_modified.buf[:4], byteorder="little", signed=True
-    )
-    valid_base_count = int.from_bytes(
-        shm_valid.buf[:4], byteorder="little", signed=True
-    )
-    # Close and unlink shared memory - not fully handled by garbage collection otherwise
-    shm_modified.close()
-    shm_modified.unlink()
-    shm_valid.close()
-    shm_valid.unlink()
+        manager = multiprocessing.Manager()
+        lock = manager.Lock()
+
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=cores_to_run
+        ) as executor:
+            futures = [
+                executor.submit(
+                    pileup_counts_process_chunk_parallel,
+                    bedmethyl_file,
+                    parsed_motif,
+                    chunk,
+                    shm_modified.name,
+                    shm_valid.name,
+                    lock,
+                    single_strand,
+                )
+                for chunk in chunks_list
+            ]
+            for future in tqdm(
+                concurrent.futures.as_completed(futures),
+                total=len(futures),
+                disable=quiet,
+                desc="Loading data",
+                leave=False,
+            ):
+                try:
+                    future.result()
+                except Exception as err:
+                    raise RuntimeError(
+                        "pileup_counts_process_chunk_parallel failed."
+                    ) from err
+
+        # Directly convert shared memory buffers to integers
+        modified_base_count = int.from_bytes(
+            shm_modified.buf[:4], byteorder="little", signed=True
+        )
+        valid_base_count = int.from_bytes(
+            shm_valid.buf[:4], byteorder="little", signed=True
+        )
+        # Close and unlink shared memory - not fully handled by garbage collection otherwise
+        shm_modified.close()
+        shm_modified.unlink()
+        shm_valid.close()
+        shm_valid.unlink()
 
     return modified_base_count, valid_base_count
 
@@ -284,66 +309,100 @@ def pileup_vectors_from_bedmethyl(
         regions_dict, chunk_size=chunk_size
     )
 
-    cores_to_run = utils.cores_to_run(cores)
-
     # Peek at a region to figure out what size the vectors should be
     first_key = next(iter(regions_dict))
     first_tuple = regions_dict[first_key][0]
     region_len = first_tuple[1] - first_tuple[0]
 
-    # Initialize shared memory as numpy arrays to make it easy to map to buffer in subprocesses
-    shm_valid = shared_memory.SharedMemory(
-        create=True, size=(region_len) * np.dtype(np.int32).itemsize
-    )
-    shm_modified = shared_memory.SharedMemory(
-        create=True, size=(region_len) * np.dtype(np.int32).itemsize
-    )
+    cores_to_run = utils.cores_to_run(cores)
 
-    manager = multiprocessing.Manager()
-    lock = manager.Lock()
-
-    with concurrent.futures.ProcessPoolExecutor(max_workers=cores_to_run) as executor:
-        futures = [
-            executor.submit(
-                pileup_vectors_process_chunk,
-                bedmethyl_file,
-                parsed_motif,
-                chunk,
-                region_len,
-                shm_modified.name,
-                shm_valid.name,
-                lock,
-                single_strand,
-                regions_5to3prime,
-            )
-            for chunk in chunks_list
-        ]
-        for future in tqdm(
-            concurrent.futures.as_completed(futures),
-            total=len(futures),
+    # If one core requested, do not spawn processes
+    # This removes unnecessary overhead and avoids nested process generation (i.e. from regions_to_list)
+    if cores_to_run == 1:
+        modified_base_counts = np.zeros(region_len, dtype=int)
+        valid_base_counts = np.zeros(region_len, dtype=int)
+        for chunk in tqdm(
+            chunks_list,
+            total=len(chunks_list),
             disable=quiet,
             desc="Loading data",
             leave=False,
         ):
-            try:
-                future.result()
-            except Exception as err:
-                raise RuntimeError("pileup_vectors_process_chunk failed.") from err
+            (
+                subregion_start_idx,
+                subregion_end_idx,
+                modified_base_subregion,
+                valid_base_subregion,
+            ) = pileup_vectors_process_chunk(
+                bedmethyl_file,
+                parsed_motif,
+                chunk,
+                region_len,
+                single_strand,
+                regions_5to3prime,
+            )
+            valid_base_counts[subregion_start_idx:subregion_end_idx] += (
+                valid_base_subregion
+            )
+            modified_base_counts[subregion_start_idx:subregion_end_idx] += (
+                modified_base_subregion
+            )
+    else:
+        # Initialize shared memory as numpy arrays to make it easy to map to buffer in subprocesses
+        shm_valid = shared_memory.SharedMemory(
+            create=True, size=(region_len) * np.dtype(np.int32).itemsize
+        )
+        shm_modified = shared_memory.SharedMemory(
+            create=True, size=(region_len) * np.dtype(np.int32).itemsize
+        )
 
-    # We need to convert these shared memory buffers to numpy arrays which
-    # we then copy, so that they no longer reference the shared memory which
-    # will soon be de-allocated
-    modified_base_counts = np.copy(
-        np.ndarray((region_len,), dtype=np.int32, buffer=shm_modified.buf)
-    )
-    valid_base_counts = np.copy(
-        np.ndarray((region_len,), dtype=np.int32, buffer=shm_valid.buf)
-    )
-    # Close and unlink shared memory - not fully handled by garbage collection otherwise
-    shm_modified.close()
-    shm_modified.unlink()
-    shm_valid.close()
-    shm_valid.unlink()
+        manager = multiprocessing.Manager()
+        lock = manager.Lock()
+
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=cores_to_run
+        ) as executor:
+            futures = [
+                executor.submit(
+                    pileup_vectors_process_chunk_parallel,
+                    bedmethyl_file,
+                    parsed_motif,
+                    chunk,
+                    region_len,
+                    shm_modified.name,
+                    shm_valid.name,
+                    lock,
+                    single_strand,
+                    regions_5to3prime,
+                )
+                for chunk in chunks_list
+            ]
+            for future in tqdm(
+                concurrent.futures.as_completed(futures),
+                total=len(futures),
+                disable=quiet,
+                desc="Loading data",
+                leave=False,
+            ):
+                try:
+                    future.result()
+                except Exception as err:
+                    raise RuntimeError("pileup_vectors_process_chunk failed.") from err
+
+        # We need to convert these shared memory buffers to numpy arrays which
+        # we then copy, so that they no longer reference the shared memory which
+        # will soon be de-allocated
+        modified_base_counts = np.copy(
+            np.ndarray((region_len,), dtype=np.int32, buffer=shm_modified.buf)
+        )
+        valid_base_counts = np.copy(
+            np.ndarray((region_len,), dtype=np.int32, buffer=shm_valid.buf)
+        )
+        # Close and unlink shared memory - not fully handled by garbage collection otherwise
+        shm_modified.close()
+        shm_modified.unlink()
+        shm_valid.close()
+        shm_valid.unlink()
 
     return modified_base_counts, valid_base_counts
 
@@ -383,39 +442,10 @@ def pileup_vectors_process_chunk(
     parsed_motif,
     chunk,
     region_len,
-    shm_name_modified,
-    shm_name_valid,
-    lock,
     single_strand,
     regions_5to3prime,
-) -> None:
-    """
-    Helper function to allow pileup_vectors_from_bedmethyl to operate in a parallized fashion.
-
-    Sum up modified and valid counts for a subregion chunk in a bedmethyl file.
-
-    Args:
-        bedmethyl_file: Path to bedmethyl file
-        parsed_motif: ParsedMotif object
-        chunk: a dict containing subregion chunk information
-        shm_name_modified: the name string for the shared memory location containing the modified counts array
-        shm_name_valid: the name string for the shared memory location containing the valid counts array
-        lock: a manager.Lock object to allow synchronization in accessing shared memory
-        single_strand: True if only single-strand mods are desired
-        regions_5to3prime: True means negative strand regions get flipped, False means no flipping
-
-    Returns:
-        None. Counts are added to arrays in-place to shared memory.
-    """
+) -> tuple[int, int, np.ndarray, np.ndarray]:
     source_tabix = pysam.TabixFile(str(bedmethyl_file))
-    existing_valid = shared_memory.SharedMemory(name=shm_name_valid)
-    existing_modified = shared_memory.SharedMemory(name=shm_name_modified)
-    valid_base_counts = np.ndarray(
-        (region_len,), dtype=np.int32, buffer=existing_valid.buf
-    )
-    modified_base_counts = np.ndarray(
-        (region_len,), dtype=np.int32, buffer=existing_modified.buf
-    )
 
     chromosome = chunk["chromosome"]
     region_start = chunk["region_start"]
@@ -470,19 +500,134 @@ def pileup_vectors_process_chunk(
                         modified_in_row
                     )
 
+    subregion_start_idx = subregion_offset
+    subregion_end_idx = subregion_offset + abs(subregion_end - subregion_start)
+
+    return (
+        subregion_start_idx,
+        subregion_end_idx,
+        modified_base_subregion,
+        valid_base_subregion,
+    )
+
+
+def pileup_vectors_process_chunk_parallel(
+    bedmethyl_file,
+    parsed_motif,
+    chunk,
+    region_len,
+    shm_name_modified,
+    shm_name_valid,
+    lock,
+    single_strand,
+    regions_5to3prime,
+) -> None:
+    """
+    Helper function to allow pileup_vectors_from_bedmethyl to operate in a parallized fashion.
+
+    Sum up modified and valid counts for a subregion chunk in a bedmethyl file.
+
+    Args:
+        bedmethyl_file: Path to bedmethyl file
+        parsed_motif: ParsedMotif object
+        chunk: a dict containing subregion chunk information
+        shm_name_modified: the name string for the shared memory location containing the modified counts array
+        shm_name_valid: the name string for the shared memory location containing the valid counts array
+        lock: a manager.Lock object to allow synchronization in accessing shared memory
+        single_strand: True if only single-strand mods are desired
+        regions_5to3prime: True means negative strand regions get flipped, False means no flipping
+
+    Returns:
+        None. Counts are added to arrays in-place to shared memory.
+    """
+    existing_valid = shared_memory.SharedMemory(name=shm_name_valid)
+    existing_modified = shared_memory.SharedMemory(name=shm_name_modified)
+    valid_base_counts = np.ndarray(
+        (region_len,), dtype=np.int32, buffer=existing_valid.buf
+    )
+    modified_base_counts = np.ndarray(
+        (region_len,), dtype=np.int32, buffer=existing_modified.buf
+    )
+
+    (
+        subregion_start_idx,
+        subregion_end_idx,
+        modified_base_subregion,
+        valid_base_subregion,
+    ) = pileup_vectors_process_chunk(
+        bedmethyl_file,
+        parsed_motif,
+        chunk,
+        region_len,
+        single_strand,
+        regions_5to3prime,
+    )
+
     with lock:
-        valid_base_counts[
-            subregion_offset : subregion_offset + abs(subregion_end - subregion_start)
-        ] += valid_base_subregion
-        modified_base_counts[
-            subregion_offset : subregion_offset + abs(subregion_end - subregion_start)
-        ] += modified_base_subregion
+        valid_base_counts[subregion_start_idx:subregion_end_idx] += valid_base_subregion
+        modified_base_counts[subregion_start_idx:subregion_end_idx] += (
+            modified_base_subregion
+        )
     # Close the file descriptor/handle to the shared memory
     existing_modified.close()
     existing_valid.close()
 
 
 def pileup_counts_process_chunk(
+    bedmethyl_file,
+    parsed_motif,
+    chunk,
+    single_strand,
+) -> tuple[int, int]:
+    """
+    Helper function to allow pileup_counts_from_bedmethyl to operate in a modular fashion.
+
+    Sum up modified and valid counts for a subregion chunk in a bedmethyl file.
+
+    Args:
+        bedmethyl_file: Path to bedmethyl file
+        parsed_motif: ParsedMotif object
+        chunk: a dict containing subregion chunk information
+        single_strand: True if only single-strand mods are desired
+
+    Returns:
+        tuple containing counts of (modified_bases, total_bases) for the requested chunk
+    """
+    source_tabix = pysam.TabixFile(str(bedmethyl_file))
+
+    valid_base_subregion_counts = 0
+    modified_base_subregion_counts = 0
+
+    chromosome = chunk["chromosome"]
+    subregion_start = chunk["subregion_start"]
+    subregion_end = chunk["subregion_end"]
+    strand = chunk["strand"]
+
+    # tabix throws and error if the contig is not present
+    # by the current design, this should be silent
+    if chromosome in source_tabix.contigs:
+        for row in source_tabix.fetch(
+            chromosome, max(subregion_start, 0), subregion_end
+        ):
+            (
+                keep_basemod,
+                _,
+                modified_in_row,
+                valid_in_row,
+            ) = process_pileup_row(
+                row=row,
+                parsed_motif=parsed_motif,
+                region_strand=strand,
+                single_strand=single_strand,
+            )
+            if keep_basemod:
+                valid_base_subregion_counts += valid_in_row
+                modified_base_subregion_counts += modified_in_row
+
+    return modified_base_subregion_counts, valid_base_subregion_counts
+
+
+def pileup_counts_process_chunk_parallel(
     bedmethyl_file,
     parsed_motif,
     chunk,
@@ -508,42 +653,21 @@ def pileup_counts_process_chunk(
     Returns:
         None. Counts are added in-place to shared memory.
     """
-    source_tabix = pysam.TabixFile(str(bedmethyl_file))
     existing_valid = shared_memory.SharedMemory(name=shm_name_valid)
     existing_modified = shared_memory.SharedMemory(name=shm_name_modified)
-    valid_base_counts = np.ndarray((1,), dtype=np.int32, buffer=existing_valid.buf)
+    valid_base_counts = np.ndarray((1,), dtype=np.int64, buffer=existing_valid.buf)
     modified_base_counts = np.ndarray(
-        (1,), dtype=np.int32, buffer=existing_modified.buf
+        (1,), dtype=np.int64, buffer=existing_modified.buf
     )
 
-    chromosome = chunk["chromosome"]
-    subregion_start = chunk["subregion_start"]
-    subregion_end = chunk["subregion_end"]
-    strand = chunk["strand"]
-
-    valid_base_subregion_counts = 0
-    modified_base_subregion_counts = 0
-
-    # tabix throws and error if the contig is not present
-    # by the current design, this should be silent
-    if chromosome in source_tabix.contigs:
-        for row in source_tabix.fetch(
-            chromosome, max(subregion_start, 0), subregion_end
-        ):
-            (
-                keep_basemod,
-                _,
-                modified_in_row,
-                valid_in_row,
-            ) = process_pileup_row(
-                row=row,
-                parsed_motif=parsed_motif,
-                region_strand=strand,
-                single_strand=single_strand,
-            )
-            if keep_basemod:
-                valid_base_subregion_counts += valid_in_row
-                modified_base_subregion_counts += modified_in_row
+    modified_base_subregion_counts, valid_base_subregion_counts = (
+        pileup_counts_process_chunk(
+            bedmethyl_file,
+            parsed_motif,
+            chunk,
+            single_strand,
+        )
+    )
 
     with lock:
         valid_base_counts[0] += valid_base_subregion_counts
